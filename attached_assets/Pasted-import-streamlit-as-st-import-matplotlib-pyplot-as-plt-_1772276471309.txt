@@ -1,0 +1,127 @@
+import streamlit as st
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Pro-Quote CAD Generator", layout="wide")
+FRAME_WIN = 52
+FRAME_SLIDE = 127
+FRAME_BIFOLD = 70
+
+def draw_unit(ax, x, y, w, h, f_size, type="Fixed", hinge="Left", open_dir="Out", is_solid=False):
+    """The master drawing function for all units."""
+    # 1. Outer Frame
+    ax.add_patch(patches.Rectangle((x, y), w, h, lw=2.5, ec='black', fc='none'))
+    
+    # 2. Inner Sash/Glass Inset
+    ins = f_size * 0.7
+    f_color = '#f2f2f2' if is_solid else 'none'
+    h_style = '///' if is_solid else None
+    ax.add_patch(patches.Rectangle((x+ins, y+ins), w-(ins*2), h-(ins*2), lw=1, ec='black', fc=f_color, hatch=h_style))
+    
+    mid_y, mid_x = y + h/2, x + w/2
+    # Open In = Dashed Line, Open Out = Solid Line
+    line_style = '-' if open_dir == "Out" else '--'
+
+    # 3. Indicators
+    if type == "Awning": # Point at top
+        plt.plot([x+ins, mid_x, x+w-ins], [y+ins, y+h-ins, y+ins], color='black', ls=line_style, lw=1)
+    elif type == "Hinge": # Point at hinge
+        if hinge == "Left":
+            plt.plot([x+w-ins, x+ins, x+w-ins], [y+ins, mid_y, y+h-ins], color='black', ls=line_style, lw=1)
+        else:
+            plt.plot([x+ins, x+w-ins, x+ins], [y+ins, mid_y, y+h-ins], color='black', ls=line_style, lw=1)
+    elif type == "Sliding":
+        plt.arrow(mid_x - (w*0.1), mid_y, w*0.15, 0, head_width=h*0.03, fc='k', ec='k')
+    elif type == "Bifold":
+        # Draw folding 'V' symbol
+        plt.plot([x+ins, mid_x, x+w-ins], [mid_y-50, mid_y, mid_y-50], 'k-', lw=1)
+    
+    return ins
+
+# --- UI SIDEBAR ---
+st.sidebar.title("🪟 Quote Configurator")
+item_id = st.sidebar.text_input("Item ID", "W-01")
+qty = st.sidebar.number_input("Quantity", 1)
+
+cat = st.sidebar.selectbox("Category", [
+    "Windows Standard", "Sliding Window", "Entrance Door", 
+    "Hinge Door", "French Door", "Bi-folding Door", 
+    "Stacker Door", "Bay Window"
+])
+
+# Automated Frame Sizing
+if "Sliding" in cat or "Stacker" in cat:
+    f_size = FRAME_SLIDE
+elif "Bi-folding" in cat:
+    f_size = FRAME_BIFOLD
+else:
+    f_size = FRAME_WIN
+
+W = st.sidebar.number_input("Total Width (mm)", 1200)
+H = st.sidebar.number_input("Total Height (mm)", 2100)
+
+# Open In/Out Logic (Standardized)
+open_mode = st.sidebar.radio("Opening Direction", ["Out (Solid Line)", "In (Dashed Line)"])
+open_val = "Out" if "Out" in open_mode else "In"
+
+# --- DRAWING ENGINE ---
+fig, ax = plt.subplots(figsize=(10, 8))
+ax.set_aspect('equal')
+
+if cat == "Windows Standard":
+    mode = st.sidebar.selectbox("Type", ["Fixed", "Awning", "Mullion Split"])
+    if mode == "Mullion Split":
+        split = st.sidebar.number_input("Split Pos", 0) or W/2
+        draw_unit(ax, 0, 0, split, H, f_size, "Awning", open_dir=open_val)
+        draw_unit(ax, split, 0, W-split, H, f_size, "Fixed")
+    else:
+        draw_unit(ax, 0, 0, W, H, f_size, type=mode, open_dir=open_val)
+
+elif cat == "Sliding Window":
+    draw_unit(ax, 0, 0, W/2, H, f_size, "Fixed")
+    draw_unit(ax, W/2, 0, W/2, H, f_size, "Sliding")
+
+elif cat == "Entrance Door":
+    s_w = st.sidebar.number_input("Sidelight Width (mm)", 400)
+    solid = st.sidebar.checkbox("Solid Bottom Panel")
+    ins = draw_unit(ax, 0, 0, W-s_w, H, f_size, "Hinge", hinge="Left", open_dir=open_val)
+    if solid: ax.add_patch(patches.Rectangle((ins, ins), (W-s_w)-(ins*2), (H/2)-ins, fc='#e0e0e0', hatch='//'))
+    draw_unit(ax, W-s_w, 0, s_w, H, f_size, "Fixed")
+
+elif cat == "Hinge Door":
+    side = st.sidebar.radio("Hinge Side", ["Left", "Right"])
+    draw_unit(ax, 0, 0, W, H, f_size, "Hinge", hinge=side, open_dir=open_val)
+
+elif cat == "French Door":
+    draw_unit(ax, 0, 0, W/2, H, f_size, "Hinge", hinge="Left", open_dir=open_val)
+    draw_unit(ax, W/2, 0, W/2, H, f_size, "Hinge", hinge="Right", open_dir=open_val)
+
+elif cat == "Bi-folding Door":
+    leaf_qty = st.sidebar.slider("Number of Leaves", 2, 5, 3)
+    lw = W / leaf_qty
+    for i in range(leaf_qty):
+        draw_unit(ax, i*lw, 0, lw, H, f_size, "Bifold")
+
+elif cat == "Stacker Door":
+    panels = st.sidebar.slider("Panels", 3, 6, 3)
+    pw = W / panels
+    for i in range(panels):
+        draw_unit(ax, i*pw, 0, pw, H, f_size, "Sliding")
+
+elif cat == "Bay Window":
+    c_w = st.sidebar.number_input("Center Width", W*0.6)
+    f_w = (W - c_w) / 2
+    draw_unit(ax, 0, 0, f_w, H, f_size, "Awning", open_dir=open_val)
+    draw_unit(ax, f_w, 0, c_w, H, f_size, "Fixed")
+    draw_unit(ax, f_w + c_w, 0, f_w, H, f_size, "Awning", open_dir=open_val)
+
+# Dimensions
+plt.annotate('', xy=(0, -100), xytext=(W, -100), arrowprops=dict(arrowstyle='|-|'))
+plt.text(W/2, -220, f"{int(W)}mm", ha='center', fontweight='bold', fontsize=12)
+plt.annotate('', xy=(-100, 0), xytext=(-100, H), arrowprops=dict(arrowstyle='|-|'))
+plt.text(-250, H/2, f"{int(H)}mm", ha='right', rotation=90, fontweight='bold', fontsize=12)
+
+plt.title(f"{item_id} | Qty: {qty} | {cat}", fontsize=18, pad=20)
+plt.axis('off')
+st.pyplot(fig)
