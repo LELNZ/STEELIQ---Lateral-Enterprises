@@ -19,7 +19,8 @@ export type User = typeof users.$inferSelect;
 
 export const customColumnRowSchema = z.object({
   height: z.number().min(0).default(0),
-  type: z.enum(["fixed", "awning"]).default("fixed"),
+  type: z.enum(["fixed", "awning", "sliding"]).default("fixed"),
+  slideDirection: z.enum(["left", "right"]).default("right"),
 });
 
 export const customColumnSchema = z.object({
@@ -48,6 +49,9 @@ export const quoteItemSchema = z.object({
   halfSolid: z.boolean().default(false),
   panels: z.number().int().min(2).max(8).default(3),
   sidelightWidth: z.number().default(400),
+  sidelightSide: z.enum(["left", "right"]).default("right"),
+  doorSplit: z.boolean().default(false),
+  doorSplitHeight: z.number().default(0),
   bifoldLeftCount: z.number().int().min(0).default(0),
   centerWidth: z.number().default(0),
   customColumns: z.array(customColumnSchema).default([

@@ -21,10 +21,11 @@ interface PaneProps {
   halfSolid?: boolean;
   openDirection?: string;
   foldDirection?: string;
+  slideDirection?: string;
   strokeScale: number;
 }
 
-function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = false, openDirection = "out", foldDirection = "right", strokeScale: ss }: PaneProps) {
+function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = false, openDirection = "out", foldDirection = "right", slideDirection = "right", strokeScale: ss }: PaneProps) {
   const inset = frameSize * 0.7;
   const gx = x + inset;
   const gy = y + inset;
@@ -85,12 +86,15 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
       {type === "sliding" && (() => {
         const arrowLen = gw * 0.25;
         const headSize = Math.min(gh * 0.025, 12);
+        const goRight = slideDirection !== "left";
+        const tipX = goRight ? midX + arrowLen : midX - arrowLen;
+        const baseX = goRight ? tipX - headSize * 2 : tipX + headSize * 2;
         return (
           <g>
             <line x1={midX - arrowLen} y1={midY} x2={midX + arrowLen} y2={midY}
               stroke="#2d2d2d" strokeWidth={1.5 * ss} />
             <polyline
-              points={`${midX + arrowLen - headSize * 2},${midY - headSize} ${midX + arrowLen},${midY} ${midX + arrowLen - headSize * 2},${midY + headSize}`}
+              points={`${baseX},${midY - headSize} ${tipX},${midY} ${baseX},${midY + headSize}`}
               fill="#2d2d2d" stroke="#2d2d2d" strokeWidth={1.5 * ss} />
           </g>
         );
@@ -208,7 +212,9 @@ function renderCustomGrid(
         <Pane key={`${ci}-${ri}`}
           x={xOffset} y={yOffset} w={colW} h={rowH}
           frameSize={frameSize} type={pType}
-          openDirection={openDir} strokeScale={ss} />
+          openDirection={openDir}
+          slideDirection={(row as any).slideDirection || "right"}
+          strokeScale={ss} />
       );
       yOffset += rowH;
     }
@@ -218,16 +224,46 @@ function renderCustomGrid(
   return <g>{elements}</g>;
 }
 
+export interface EntranceDoorMetrics {
+  doorW: number;
+  slW: number;
+  doorMmW: number;
+  slMmW: number;
+  splitHeights: number[] | null;
+  splitMmHeights: number[] | null;
+}
+
+function computeEntranceDoorMetrics(config: InsertQuoteItem, frameSize: number): EntranceDoorMetrics {
+  const { width: W, height: H, sidelightWidth, doorSplit, doorSplitHeight } = config;
+  const minPane = frameSize * 2;
+  const rawSl = sidelightWidth > 0 ? sidelightWidth : 400;
+  const maxSl = Math.max(minPane, W - minPane);
+  const slW = clamp(rawSl, minPane, maxSl);
+  const doorW = Math.max(minPane, W - slW);
+  const slMmW = Math.round(slW);
+  const doorMmW = W - slMmW;
+
+  let splitHeights: number[] | null = null;
+  let splitMmHeights: number[] | null = null;
+  if (doorSplit) {
+    const splitSpecs = [doorSplitHeight || 0, 0];
+    splitHeights = distributeSpaces(H, splitSpecs);
+    splitMmHeights = distributeMmLabels(H, splitSpecs);
+  }
+
+  return { doorW, slW, doorMmW, slMmW, splitHeights, splitMmHeights };
+}
+
 function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   const {
     width: W, height: H, category, layout, hingeSide, halfSolid,
-    openDirection, panels, sidelightWidth,
+    openDirection, panels, sidelightWidth, sidelightSide, doorSplit, doorSplitHeight,
     bifoldLeftCount, centerWidth, windowType, customColumns
   } = config;
   const minPane = frameSize * 2;
   const od = openDirection || "out";
 
-  if (layout === "custom") {
+  if (layout === "custom" && category !== "entrance-door") {
     return renderCustomGrid(W, H, customColumns || [], frameSize, od, ss);
   }
 
@@ -247,16 +283,37 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   }
 
   if (category === "entrance-door") {
-    const rawSl = sidelightWidth > 0 ? sidelightWidth : 400;
-    const slW = clamp(rawSl, minPane, W - minPane);
-    const doorW = W - slW;
+    const metrics = computeEntranceDoorMetrics(config, frameSize);
+    const { doorW, slW, splitHeights } = metrics;
+    const slSide = sidelightSide || "right";
+    const doorX = slSide === "left" ? slW : 0;
+    const slX = slSide === "left" ? 0 : doorW;
+
+    const doorElements: JSX.Element[] = [];
+    if (doorSplit && splitHeights) {
+      doorElements.push(
+        <Pane key="door-top" x={doorX} y={0} w={doorW} h={splitHeights[0]}
+          frameSize={frameSize} type="hinge" hingeSide={hingeSide}
+          openDirection={od} strokeScale={ss} />
+      );
+      doorElements.push(
+        <Pane key="door-bottom" x={doorX} y={splitHeights[0]} w={doorW} h={splitHeights[1]}
+          frameSize={frameSize} type="fixed" halfSolid={halfSolid}
+          strokeScale={ss} />
+      );
+    } else {
+      doorElements.push(
+        <Pane key="door" x={doorX} y={0} w={doorW} h={H}
+          frameSize={frameSize} type="hinge" hingeSide={hingeSide}
+          halfSolid={halfSolid} openDirection={od} strokeScale={ss} />
+      );
+    }
+
     return (
       <g>
-        <Pane x={0} y={0} w={doorW} h={H} frameSize={frameSize}
-          type="hinge" hingeSide={hingeSide} halfSolid={halfSolid}
-          openDirection={od} strokeScale={ss} />
-        <Pane x={doorW} y={0} w={slW} h={H} frameSize={frameSize}
-          type="fixed" strokeScale={ss} />
+        {doorElements}
+        <Pane key="sidelight" x={slX} y={0} w={slW} h={H}
+          frameSize={frameSize} type="fixed" strokeScale={ss} />
       </g>
     );
   }
@@ -345,7 +402,7 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
   const dimStroke = 1.2 * ss;
   const extStroke = 0.6 * ss;
 
-  const isCustom = layout === "custom" && customColumns && customColumns.length > 0;
+  const isCustom = layout === "custom" && category !== "entrance-door" && customColumns && customColumns.length > 0;
   const hasMultipleSections = isCustom && (
     customColumns!.length > 1 ||
     customColumns!.some(c => (c.rows || []).length > 1)
@@ -354,6 +411,12 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
   let gridMetrics: GridMetrics | null = null;
   if (isCustom) {
     gridMetrics = computeGridMetrics(W, H, customColumns!);
+  }
+
+  const isEntrance = category === "entrance-door";
+  let entranceMetrics: EntranceDoorMetrics | null = null;
+  if (isEntrance) {
+    entranceMetrics = computeEntranceDoorMetrics(config, frameSize);
   }
 
   const sectionFontSize = fontSize * 0.75;
@@ -490,6 +553,86 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
               }
               xPos += colW;
             }
+            return elements;
+          })()}
+        </g>
+      )}
+
+      {isEntrance && entranceMetrics && (
+        <g data-testid="dimension-entrance-sections">
+          {(() => {
+            const { doorW, slW, doorMmW, slMmW, splitHeights, splitMmHeights } = entranceMetrics;
+            const slSide = config.sidelightSide || "right";
+            const secY = H + dimGap + textGap * 0.6;
+            const elements: JSX.Element[] = [];
+
+            const sections = slSide === "left"
+              ? [{ w: slW, mm: slMmW }, { w: doorW, mm: doorMmW }]
+              : [{ w: doorW, mm: doorMmW }, { w: slW, mm: slMmW }];
+
+            let xPos = 0;
+            sections.forEach((sec, i) => {
+              const x1 = xPos;
+              const x2 = xPos + sec.w;
+              elements.push(
+                <g key={`ew-${i}`}>
+                  <line x1={x1} y1={secY - sectionTickLen} x2={x1} y2={secY + sectionTickLen}
+                    stroke="#888" strokeWidth={sectionExtStroke} />
+                  <line x1={x2} y1={secY - sectionTickLen} x2={x2} y2={secY + sectionTickLen}
+                    stroke="#888" strokeWidth={sectionExtStroke} />
+                  <line x1={x1} y1={secY} x2={x2} y2={secY}
+                    stroke="#888" strokeWidth={sectionDimStroke} />
+                  <line x1={x1 - sectionTickLen} y1={secY + sectionTickLen}
+                    x2={x1 + sectionTickLen} y2={secY - sectionTickLen}
+                    stroke="#888" strokeWidth={sectionDimStroke} />
+                  <line x1={x2 - sectionTickLen} y1={secY + sectionTickLen}
+                    x2={x2 + sectionTickLen} y2={secY - sectionTickLen}
+                    stroke="#888" strokeWidth={sectionDimStroke} />
+                  <text x={(x1 + x2) / 2} y={secY + sectionTextGap * 0.5}
+                    textAnchor="middle" fontSize={sectionFontSize}
+                    fontWeight="500" fill="#666" fontFamily="sans-serif">
+                    {sec.mm}
+                  </text>
+                </g>
+              );
+              xPos += sec.w;
+            });
+
+            if (splitHeights && splitMmHeights) {
+              const doorX = slSide === "left" ? slW : 0;
+              const dimX = doorX + doorW + sectionDimGap;
+              let yPos = 0;
+              for (let ri = 0; ri < splitHeights.length; ri++) {
+                const rh = splitHeights[ri];
+                const mmH = splitMmHeights[ri];
+                const y1 = yPos;
+                const y2 = yPos + rh;
+                const midY = (y1 + y2) / 2;
+                elements.push(
+                  <g key={`eh-${ri}`}>
+                    <line x1={doorX + doorW + 2} y1={y1} x2={dimX + sectionTickLen} y2={y1}
+                      stroke="#888" strokeWidth={sectionExtStroke} />
+                    <line x1={doorX + doorW + 2} y1={y2} x2={dimX + sectionTickLen} y2={y2}
+                      stroke="#888" strokeWidth={sectionExtStroke} />
+                    <line x1={dimX} y1={y1} x2={dimX} y2={y2}
+                      stroke="#888" strokeWidth={sectionDimStroke} />
+                    <line x1={dimX - sectionTickLen} y1={y1 + sectionTickLen}
+                      x2={dimX + sectionTickLen} y2={y1 - sectionTickLen}
+                      stroke="#888" strokeWidth={sectionDimStroke} />
+                    <line x1={dimX - sectionTickLen} y1={y2 + sectionTickLen}
+                      x2={dimX + sectionTickLen} y2={y2 - sectionTickLen}
+                      stroke="#888" strokeWidth={sectionDimStroke} />
+                    <text x={dimX + sectionTextGap * 0.5} y={midY + sectionFontSize * 0.35}
+                      textAnchor="start" fontSize={sectionFontSize}
+                      fontWeight="500" fill="#666" fontFamily="sans-serif">
+                      {mmH}
+                    </text>
+                  </g>
+                );
+                yPos += rh;
+              }
+            }
+
             return elements;
           })()}
         </g>

@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ArrowLeft, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const CATEGORY_OPTIONS = [
@@ -46,7 +46,10 @@ function getLayoutSummary(config: QuoteItem) {
   const cat = config.category;
   if (cat === "windows-standard") return config.windowType === "awning" ? "Awning" : "Fixed";
   if (cat === "sliding-window") return "Fixed + Sliding";
-  if (cat === "entrance-door") return "Door + Sidelight";
+  if (cat === "entrance-door") {
+    const side = config.sidelightSide === "left" ? "Left" : "Right";
+    return `Door + ${side} Sidelight`;
+  }
   if (cat === "hinge-door") return `${config.hingeSide === "left" ? "Left" : "Right"} Hinge`;
   if (cat === "french-door") return "Double Door";
   if (cat === "bifold-door") return `${config.panels} Leaves`;
@@ -58,7 +61,7 @@ function getLayoutSummary(config: QuoteItem) {
 function makeDefaultColumns(count: number): CustomColumn[] {
   return Array.from({ length: count }, () => ({
     width: 0,
-    rows: [{ height: 0, type: "fixed" as const }],
+    rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
   }));
 }
 
@@ -75,6 +78,9 @@ const defaultValues: InsertQuoteItem = {
   halfSolid: false,
   panels: 3,
   sidelightWidth: 400,
+  sidelightSide: "right",
+  doorSplit: false,
+  doorSplitHeight: 0,
   bifoldLeftCount: 0,
   centerWidth: 0,
   customColumns: makeDefaultColumns(2),
@@ -100,9 +106,12 @@ export default function QuoteBuilder() {
     form.setValue("layout", "standard");
     form.setValue("windowType", "fixed");
     form.setValue("hingeSide", "left");
-    form.setValue("openDirection", "out");
+    form.setValue("openDirection", category === "entrance-door" ? "in" : "out");
     form.setValue("halfSolid", false);
     form.setValue("sidelightWidth", 400);
+    form.setValue("sidelightSide", "right");
+    form.setValue("doorSplit", false);
+    form.setValue("doorSplitHeight", 0);
     form.setValue("centerWidth", 0);
     form.setValue("customColumns", makeDefaultColumns(2));
     if (category === "bifold-door") {
@@ -116,16 +125,21 @@ export default function QuoteBuilder() {
     }
   }, [category]);
 
-  const isCustom = layout === "custom";
+  const isEntrance = category === "entrance-door";
+  const isCustom = layout === "custom" && !isEntrance;
+  const isSlidingCategory = ["sliding-window", "stacker-door"].includes(category);
 
   const showWindowType = !isCustom && category === "windows-standard";
-  const showHingeSide = !isCustom && ["entrance-door", "hinge-door"].includes(category);
-  const showHalfSolid = !isCustom && ["entrance-door", "hinge-door"].includes(category);
-  const showSidelightWidth = !isCustom && category === "entrance-door";
+  const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
+  const showHalfSolid = ["entrance-door", "hinge-door"].includes(category);
+  const showSidelightWidth = isEntrance;
+  const showSidelightSide = isEntrance;
+  const showDoorSplit = isEntrance;
   const showPanels = !isCustom && ["bifold-door", "stacker-door"].includes(category);
   const showBifoldSplit = !isCustom && category === "bifold-door";
   const showCenterWidth = !isCustom && category === "bay-window";
   const showOpenDirection = !isCustom && !["sliding-window", "stacker-door"].includes(category);
+  const showLayoutSelect = !isEntrance;
   const showGrid = isCustom;
 
   const customColumns: CustomColumn[] = w.customColumns || makeDefaultColumns(2);
@@ -135,7 +149,7 @@ export default function QuoteBuilder() {
     const current = w.customColumns || [];
     const next: CustomColumn[] = Array.from({ length: count }, (_, i) => {
       if (i < current.length) return current[i];
-      return { width: 0, rows: [{ height: 0, type: "fixed" as const }] };
+      return { width: 0, rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }] };
     });
     form.setValue("customColumns", next);
     setExpandedCols(new Set([0]));
@@ -152,7 +166,7 @@ export default function QuoteBuilder() {
     const currentRows = cols[colIdx].rows || [];
     const next = Array.from({ length: rowCount }, (_, i) => {
       if (i < currentRows.length) return currentRows[i];
-      return { height: 0, type: "fixed" as const };
+      return { height: 0, type: "fixed" as const, slideDirection: "right" as const };
     });
     cols[colIdx] = { ...cols[colIdx], rows: next };
     form.setValue("customColumns", cols);
@@ -169,9 +183,29 @@ export default function QuoteBuilder() {
   function toggleRowType(colIdx: number, rowIdx: number) {
     const cols = [...(w.customColumns || [])];
     const rows = [...(cols[colIdx].rows || [])];
+    if (isSlidingCategory) {
+      const isNowSliding = rows[rowIdx].type !== "sliding";
+      rows[rowIdx] = {
+        ...rows[rowIdx],
+        type: isNowSliding ? "sliding" : "fixed",
+        slideDirection: isNowSliding ? ((rows[rowIdx] as any).slideDirection || "right") : (rows[rowIdx] as any).slideDirection,
+      };
+    } else {
+      rows[rowIdx] = {
+        ...rows[rowIdx],
+        type: rows[rowIdx].type === "awning" ? "fixed" : "awning",
+      };
+    }
+    cols[colIdx] = { ...cols[colIdx], rows };
+    form.setValue("customColumns", cols);
+  }
+
+  function toggleSlideDirection(colIdx: number, rowIdx: number) {
+    const cols = [...(w.customColumns || [])];
+    const rows = [...(cols[colIdx].rows || [])];
     rows[rowIdx] = {
       ...rows[rowIdx],
-      type: rows[rowIdx].type === "awning" ? "fixed" : "awning",
+      slideDirection: (rows[rowIdx] as any).slideDirection === "left" ? "right" : "left",
     };
     cols[colIdx] = { ...cols[colIdx], rows };
     form.setValue("customColumns", cols);
@@ -317,16 +351,18 @@ export default function QuoteBuilder() {
                 Configuration
               </h2>
               <div className="space-y-3">
-                <div>
-                  <Label className="text-xs">Layout</Label>
-                  <Select value={layout} onValueChange={(v) => form.setValue("layout", v as any)}>
-                    <SelectTrigger data-testid="select-layout"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="standard">Standard</SelectItem>
-                      <SelectItem value="custom">Custom (Grid)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {showLayoutSelect && (
+                  <div>
+                    <Label className="text-xs">Layout</Label>
+                    <Select value={layout} onValueChange={(v) => form.setValue("layout", v as any)}>
+                      <SelectTrigger data-testid="select-layout"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="custom">Custom (Grid)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {showWindowType && (
                   <div>
@@ -378,6 +414,19 @@ export default function QuoteBuilder() {
                   </div>
                 )}
 
+                {showSidelightSide && (
+                  <div>
+                    <Label className="text-xs">Sidelight Position</Label>
+                    <Select value={w.sidelightSide || "right"} onValueChange={(v) => form.setValue("sidelightSide", v as any)}>
+                      <SelectTrigger data-testid="select-sidelight-side"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="left">Left</SelectItem>
+                        <SelectItem value="right">Right</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {showSidelightWidth && (
                   <div>
                     <Label htmlFor="sidelightWidth" className="text-xs">Sidelight Width (mm)</Label>
@@ -385,6 +434,29 @@ export default function QuoteBuilder() {
                       {...form.register("sidelightWidth", { valueAsNumber: true })}
                       data-testid="input-sidelight-width" />
                   </div>
+                )}
+
+                {showDoorSplit && (
+                  <>
+                    <div className="flex items-center gap-2 pt-1">
+                      <Checkbox id="doorSplit" checked={w.doorSplit}
+                        onCheckedChange={(v) => form.setValue("doorSplit", !!v)}
+                        data-testid="checkbox-door-split" />
+                      <Label htmlFor="doorSplit" className="text-xs cursor-pointer">
+                        Door Split (Horizontal)
+                      </Label>
+                    </div>
+                    {w.doorSplit && (
+                      <div>
+                        <Label htmlFor="doorSplitHeight" className="text-xs">Split Top Height (mm)</Label>
+                        <Input id="doorSplitHeight" type="number" min={0}
+                          placeholder="0 = even split"
+                          {...form.register("doorSplitHeight", { valueAsNumber: true })}
+                          data-testid="input-split-height" />
+                        <p className="text-xs text-muted-foreground mt-1">0 = even split of total height</p>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {showPanels && (
@@ -507,15 +579,28 @@ export default function QuoteBuilder() {
                                         onClick={() => toggleRowType(ci, ri)}
                                         className={`
                                           shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
-                                          ${row.type === "awning"
+                                          ${(row.type === "awning" || row.type === "sliding")
                                             ? "bg-primary/15 border-primary/30 text-primary"
                                             : "bg-background border-border text-muted-foreground"
                                           }
                                         `}
                                         data-testid={`button-pane-${ci}-${ri}`}
                                       >
-                                        {row.type === "awning" ? "AWN" : "FIX"}
+                                        {row.type === "awning" ? "AWN" : row.type === "sliding" ? "SLD" : "FIX"}
                                       </button>
+                                      {row.type === "sliding" && (
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleSlideDirection(ci, ri)}
+                                          className="shrink-0 rounded-sm text-xs py-1 px-1.5 border border-primary/30 bg-primary/10 text-primary transition-colors"
+                                          data-testid={`button-slide-dir-${ci}-${ri}`}
+                                        >
+                                          {(row as any).slideDirection === "left"
+                                            ? <ArrowLeft className="w-3 h-3" />
+                                            : <ArrowRight className="w-3 h-3" />
+                                          }
+                                        </button>
+                                      )}
                                       <Input
                                         type="number"
                                         min={0}
@@ -537,7 +622,10 @@ export default function QuoteBuilder() {
                     </div>
 
                     <p className="text-xs text-muted-foreground">
-                      FIX = Fixed, AWN = Awning. Leave widths/heights at 0 for even split.
+                      {isSlidingCategory
+                        ? "FIX = Fixed, SLD = Sliding. Leave widths/heights at 0 for even split."
+                        : "FIX = Fixed, AWN = Awning. Leave widths/heights at 0 for even split."
+                      }
                     </p>
 
                     <div>
