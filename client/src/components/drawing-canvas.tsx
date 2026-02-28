@@ -2,6 +2,13 @@ import type { InsertQuoteItem } from "@shared/schema";
 
 const FRAME_WIN = 52;
 const FRAME_SLIDE = 127;
+const FRAME_BIFOLD = 70;
+
+export function getFrameSize(category: string): number {
+  if (category === "sliding-window" || category === "stacker-door") return FRAME_SLIDE;
+  if (category === "bifold-door") return FRAME_BIFOLD;
+  return FRAME_WIN;
+}
 
 interface PaneProps {
   x: number;
@@ -9,13 +16,15 @@ interface PaneProps {
   w: number;
   h: number;
   frameSize: number;
-  type: "fixed" | "awning" | "hinge" | "sliding";
+  type: "fixed" | "awning" | "hinge" | "sliding" | "bifold";
   hingeSide?: string;
   halfSolid?: boolean;
+  openDirection?: string;
+  foldDirection?: string;
   strokeScale: number;
 }
 
-function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = false, strokeScale }: PaneProps) {
+function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = false, openDirection = "out", foldDirection = "right", strokeScale: ss }: PaneProps) {
   const inset = frameSize * 0.7;
   const gx = x + inset;
   const gy = y + inset;
@@ -26,47 +35,51 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
 
   const midX = x + w / 2;
   const midY = y + h / 2;
+  const dash = openDirection === "in" ? `${8 * ss} ${4 * ss}` : "none";
 
   return (
     <g>
       <rect x={x} y={y} width={w} height={h}
-        fill="#fafafa" stroke="#2d2d2d" strokeWidth={2.5 * strokeScale} />
+        fill="#fafafa" stroke="#2d2d2d" strokeWidth={2.5 * ss} />
       {halfSolid ? (
         <>
           <rect x={gx} y={gy} width={gw} height={gh / 2}
-            fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * strokeScale} />
+            fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * ss} />
           <rect x={gx} y={gy + gh / 2} width={gw} height={gh / 2}
-            fill="url(#hatch)" stroke="#2d2d2d" strokeWidth={1 * strokeScale} />
+            fill="url(#hatch)" stroke="#2d2d2d" strokeWidth={1 * ss} />
           <line x1={gx} y1={gy + gh / 2} x2={gx + gw} y2={gy + gh / 2}
-            stroke="#2d2d2d" strokeWidth={2 * strokeScale} />
+            stroke="#2d2d2d" strokeWidth={2 * ss} />
         </>
       ) : (
         <rect x={gx} y={gy} width={gw} height={gh}
-          fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * strokeScale} />
+          fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * ss} />
       )}
 
       {type === "awning" && (
         <>
           <polyline
             points={`${gx},${gy + gh} ${midX},${gy} ${gx + gw},${gy + gh}`}
-            fill="none" stroke="#2d2d2d" strokeWidth={1 * strokeScale} />
+            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            strokeDasharray={dash} />
           <line
             x1={midX - Math.min(gw * 0.08, 20)} y1={gy + gh - inset * 0.3}
             x2={midX + Math.min(gw * 0.08, 20)} y2={gy + gh - inset * 0.3}
-            stroke="#2d2d2d" strokeWidth={2.5 * strokeScale} strokeLinecap="round" />
+            stroke="#2d2d2d" strokeWidth={2.5 * ss} strokeLinecap="round" />
         </>
       )}
 
       {type === "hinge" && hingeSide === "left" && (
         <polyline
           points={`${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`}
-          fill="none" stroke="#2d2d2d" strokeWidth={1 * strokeScale} />
+          fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+          strokeDasharray={dash} />
       )}
 
       {type === "hinge" && hingeSide === "right" && (
         <polyline
           points={`${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`}
-          fill="none" stroke="#2d2d2d" strokeWidth={1 * strokeScale} />
+          fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+          strokeDasharray={dash} />
       )}
 
       {type === "sliding" && (() => {
@@ -75,11 +88,28 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
         return (
           <g>
             <line x1={midX - arrowLen} y1={midY} x2={midX + arrowLen} y2={midY}
-              stroke="#2d2d2d" strokeWidth={1.5 * strokeScale} />
+              stroke="#2d2d2d" strokeWidth={1.5 * ss} />
             <polyline
               points={`${midX + arrowLen - headSize * 2},${midY - headSize} ${midX + arrowLen},${midY} ${midX + arrowLen - headSize * 2},${midY + headSize}`}
-              fill="#2d2d2d" stroke="#2d2d2d" strokeWidth={1.5 * strokeScale} />
+              fill="#2d2d2d" stroke="#2d2d2d" strokeWidth={1.5 * ss} />
           </g>
+        );
+      })()}
+
+      {type === "bifold" && (() => {
+        const cw = gw * 0.15;
+        const ch = gh * 0.18;
+        if (foldDirection === "left") {
+          return (
+            <polyline
+              points={`${midX + cw},${midY - ch} ${midX - cw},${midY} ${midX + cw},${midY + ch}`}
+              fill="none" stroke="#2d2d2d" strokeWidth={1.2 * ss} />
+          );
+        }
+        return (
+          <polyline
+            points={`${midX - cw},${midY - ch} ${midX + cw},${midY} ${midX - cw},${midY + ch}`}
+            fill="none" stroke="#2d2d2d" strokeWidth={1.2 * ss} />
         );
       })()}
     </g>
@@ -90,143 +120,138 @@ function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
 }
 
-function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
-  const { width: W, height: H, category, layout, hingeSide, splitPosition, halfSolid, pane1Type, pane2Type, panels } = config;
-  const minPane = frameSize * 2;
+function renderCustomGrid(
+  W: number, H: number, rows: number, cols: number,
+  paneTypes: string[], frameSize: number, openDir: string, ss: number
+) {
+  const cellW = W / cols;
+  const cellH = H / rows;
+  const elements = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      const pType = (paneTypes[idx] || "fixed") as PaneProps["type"];
+      elements.push(
+        <Pane key={`${r}-${c}`}
+          x={c * cellW} y={r * cellH} w={cellW} h={cellH}
+          frameSize={frameSize} type={pType}
+          openDirection={openDir} strokeScale={ss} />
+      );
+    }
+  }
+  return <g>{elements}</g>;
+}
 
-  if (category === "window") {
-    if (layout === "fixed") {
-      return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
-    }
-    if (layout === "awning") {
-      return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="awning" strokeScale={ss} />;
-    }
-    if (layout === "mullion-2") {
-      const splitX = clamp(splitPosition > 0 ? splitPosition : W / 2, minPane, W - minPane);
-      return (
-        <g>
-          <Pane x={0} y={0} w={splitX} h={H} frameSize={frameSize}
-            type={pane1Type === "awning" ? "awning" : "fixed"} strokeScale={ss} />
-          <Pane x={splitX} y={0} w={W - splitX} h={H} frameSize={frameSize}
-            type={pane2Type === "awning" ? "awning" : "fixed"} strokeScale={ss} />
-        </g>
-      );
-    }
-    if (layout === "transom-2") {
-      const splitY = clamp(splitPosition > 0 ? splitPosition : H / 2, minPane, H - minPane);
-      return (
-        <g>
-          <Pane x={0} y={0} w={W} h={splitY} frameSize={frameSize}
-            type={pane1Type === "awning" ? "awning" : "fixed"} strokeScale={ss} />
-          <Pane x={0} y={splitY} w={W} h={H - splitY} frameSize={frameSize}
-            type={pane2Type === "awning" ? "awning" : "fixed"} strokeScale={ss} />
-        </g>
-      );
-    }
+function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
+  const {
+    width: W, height: H, category, layout, hingeSide, halfSolid,
+    openDirection, panels, sidelightWidth, rows, columns, paneTypes,
+    bifoldLeftCount, centerWidth, windowType
+  } = config;
+  const minPane = frameSize * 2;
+  const od = openDirection || "out";
+
+  if (layout === "custom") {
+    return renderCustomGrid(W, H, rows || 1, columns || 1, paneTypes || [], frameSize, od, ss);
+  }
+
+  if (category === "windows-standard") {
+    const wt = windowType === "awning" ? "awning" : "fixed";
+    return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
+      type={wt} openDirection={od} strokeScale={ss} />;
+  }
+
+  if (category === "sliding-window") {
+    return (
+      <g>
+        <Pane x={0} y={0} w={W / 2} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />
+        <Pane x={W / 2} y={0} w={W / 2} h={H} frameSize={frameSize} type="sliding" strokeScale={ss} />
+      </g>
+    );
+  }
+
+  if (category === "entrance-door") {
+    const rawSl = sidelightWidth > 0 ? sidelightWidth : 400;
+    const slW = clamp(rawSl, minPane, W - minPane);
+    const doorW = W - slW;
+    return (
+      <g>
+        <Pane x={0} y={0} w={doorW} h={H} frameSize={frameSize}
+          type="hinge" hingeSide={hingeSide} halfSolid={halfSolid}
+          openDirection={od} strokeScale={ss} />
+        <Pane x={doorW} y={0} w={slW} h={H} frameSize={frameSize}
+          type="fixed" strokeScale={ss} />
+      </g>
+    );
   }
 
   if (category === "hinge-door") {
-    if (layout === "single") {
-      return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
-        type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />;
-    }
-    if (layout === "with-sidelight") {
-      const rawSl = splitPosition > 0 ? splitPosition : Math.min(W * 0.3, 500);
-      const slWidth = clamp(rawSl, minPane, W - minPane);
-      const doorWidth = W - slWidth;
-      const slOnRight = hingeSide === "left";
-      return (
-        <g>
-          {slOnRight ? (
-            <>
-              <Pane x={0} y={0} w={doorWidth} h={H} frameSize={frameSize}
-                type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />
-              <Pane x={doorWidth} y={0} w={slWidth} h={H} frameSize={frameSize}
-                type="fixed" strokeScale={ss} />
-            </>
-          ) : (
-            <>
-              <Pane x={0} y={0} w={slWidth} h={H} frameSize={frameSize}
-                type="fixed" strokeScale={ss} />
-              <Pane x={slWidth} y={0} w={doorWidth} h={H} frameSize={frameSize}
-                type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />
-            </>
-          )}
-        </g>
-      );
-    }
-    if (layout === "with-transom") {
-      const transomH = clamp(splitPosition > 0 ? splitPosition : H * 0.25, minPane, H - minPane);
-      return (
-        <g>
-          <Pane x={0} y={0} w={W} h={transomH} frameSize={frameSize}
-            type="fixed" strokeScale={ss} />
-          <Pane x={0} y={transomH} w={W} h={H - transomH} frameSize={frameSize}
-            type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />
-        </g>
-      );
-    }
+    return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
+      type="hinge" hingeSide={hingeSide} halfSolid={halfSolid}
+      openDirection={od} strokeScale={ss} />;
   }
 
-  if (category === "sliding-door") {
-    const panelCount = panels || 2;
-    const pw = W / panelCount;
+  if (category === "french-door") {
     return (
       <g>
-        {Array.from({ length: panelCount }).map((_, i) => (
-          <Pane key={i} x={i * pw} y={0} w={pw} h={H} frameSize={frameSize}
-            type="sliding" strokeScale={ss} />
+        <Pane x={0} y={0} w={W / 2} h={H} frameSize={frameSize}
+          type="hinge" hingeSide="left" openDirection={od} strokeScale={ss} />
+        <Pane x={W / 2} y={0} w={W / 2} h={H} frameSize={frameSize}
+          type="hinge" hingeSide="right" openDirection={od} strokeScale={ss} />
+      </g>
+    );
+  }
+
+  if (category === "bifold-door") {
+    const leafCount = panels || 3;
+    const leftCount = bifoldLeftCount ?? Math.floor(leafCount / 2);
+    const lw = W / leafCount;
+    return (
+      <g>
+        {Array.from({ length: leafCount }).map((_, i) => (
+          <Pane key={i} x={i * lw} y={0} w={lw} h={H}
+            frameSize={frameSize} type="bifold"
+            foldDirection={i < leftCount ? "left" : "right"}
+            strokeScale={ss} />
         ))}
       </g>
     );
   }
 
-  if (category === "entry-door") {
-    const slConfig = config.sidelightConfig || "none";
-    if (slConfig === "none") {
-      return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
-        type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />;
-    }
-    const rawSl = splitPosition > 0 ? splitPosition : Math.min(W * 0.25, 400);
-    const maxSl = slConfig === "both" ? (W - minPane) / 2 : W - minPane;
-    const slWidth = clamp(rawSl, minPane, maxSl);
-    if (slConfig === "left") {
-      return (
-        <g>
-          <Pane x={0} y={0} w={slWidth} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />
-          <Pane x={slWidth} y={0} w={W - slWidth} h={H} frameSize={frameSize}
-            type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />
-        </g>
-      );
-    }
-    if (slConfig === "right") {
-      return (
-        <g>
-          <Pane x={0} y={0} w={W - slWidth} h={H} frameSize={frameSize}
-            type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />
-          <Pane x={W - slWidth} y={0} w={slWidth} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />
-        </g>
-      );
-    }
-    if (slConfig === "both") {
-      const doorW = W - slWidth * 2;
-      return (
-        <g>
-          <Pane x={0} y={0} w={slWidth} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />
-          <Pane x={slWidth} y={0} w={doorW} h={H} frameSize={frameSize}
-            type="hinge" hingeSide={hingeSide} halfSolid={halfSolid} strokeScale={ss} />
-          <Pane x={slWidth + doorW} y={0} w={slWidth} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />
-        </g>
-      );
-    }
+  if (category === "stacker-door") {
+    const panelCount = panels || 3;
+    const pw = W / panelCount;
+    return (
+      <g>
+        {Array.from({ length: panelCount }).map((_, i) => (
+          <Pane key={i} x={i * pw} y={0} w={pw} h={H}
+            frameSize={frameSize} type="sliding" strokeScale={ss} />
+        ))}
+      </g>
+    );
+  }
+
+  if (category === "bay-window") {
+    const cw = clamp(centerWidth > 0 ? centerWidth : W * 0.6, minPane, W - minPane * 2);
+    const sideW = (W - cw) / 2;
+    return (
+      <g>
+        <Pane x={0} y={0} w={sideW} h={H} frameSize={frameSize}
+          type="awning" openDirection={od} strokeScale={ss} />
+        <Pane x={sideW} y={0} w={cw} h={H} frameSize={frameSize}
+          type="fixed" strokeScale={ss} />
+        <Pane x={sideW + cw} y={0} w={sideW} h={H} frameSize={frameSize}
+          type="awning" openDirection={od} strokeScale={ss} />
+      </g>
+    );
   }
 
   return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
 }
 
 export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
-  const { width: W, height: H, category, name, quantity } = config;
-  const frameSize = category === "sliding-door" ? FRAME_SLIDE : FRAME_WIN;
+  const { width: W, height: H, name, quantity, category } = config;
+  const frameSize = getFrameSize(category);
   const maxDim = Math.max(W, H);
 
   const ss = maxDim / 1500;
@@ -270,13 +295,9 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
         <line x1={0} y1={H + 2} x2={0} y2={H + dimGap + tickLen} stroke="#555" strokeWidth={extStroke} />
         <line x1={W} y1={H + 2} x2={W} y2={H + dimGap + tickLen} stroke="#555" strokeWidth={extStroke} />
         <line x1={0} y1={H + dimGap} x2={W} y2={H + dimGap} stroke="#555" strokeWidth={dimStroke} />
-        <line
-          x1={-tickLen} y1={H + dimGap + tickLen}
-          x2={tickLen} y2={H + dimGap - tickLen}
+        <line x1={-tickLen} y1={H + dimGap + tickLen} x2={tickLen} y2={H + dimGap - tickLen}
           stroke="#555" strokeWidth={dimStroke} />
-        <line
-          x1={W - tickLen} y1={H + dimGap + tickLen}
-          x2={W + tickLen} y2={H + dimGap - tickLen}
+        <line x1={W - tickLen} y1={H + dimGap + tickLen} x2={W + tickLen} y2={H + dimGap - tickLen}
           stroke="#555" strokeWidth={dimStroke} />
         <text x={W / 2} y={H + textGap + fontSize * 0.35} textAnchor="middle"
           fontSize={fontSize} fontWeight="bold" fill="#2d2d2d" fontFamily="sans-serif">
@@ -288,13 +309,9 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
         <line x1={-2} y1={0} x2={-dimGap - tickLen} y2={0} stroke="#555" strokeWidth={extStroke} />
         <line x1={-2} y1={H} x2={-dimGap - tickLen} y2={H} stroke="#555" strokeWidth={extStroke} />
         <line x1={-dimGap} y1={0} x2={-dimGap} y2={H} stroke="#555" strokeWidth={dimStroke} />
-        <line
-          x1={-dimGap - tickLen} y1={tickLen}
-          x2={-dimGap + tickLen} y2={-tickLen}
+        <line x1={-dimGap - tickLen} y1={tickLen} x2={-dimGap + tickLen} y2={-tickLen}
           stroke="#555" strokeWidth={dimStroke} />
-        <line
-          x1={-dimGap - tickLen} y1={H + tickLen}
-          x2={-dimGap + tickLen} y2={H - tickLen}
+        <line x1={-dimGap - tickLen} y1={H + tickLen} x2={-dimGap + tickLen} y2={H - tickLen}
           stroke="#555" strokeWidth={dimStroke} />
         <text x={-textGap} y={H / 2} textAnchor="middle"
           fontSize={fontSize} fontWeight="bold" fill="#2d2d2d" fontFamily="sans-serif"

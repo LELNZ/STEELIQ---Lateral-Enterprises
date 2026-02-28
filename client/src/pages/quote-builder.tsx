@@ -2,88 +2,70 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem } from "@shared/schema";
-import DrawingCanvas from "@/components/drawing-canvas";
+import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const CATEGORY_OPTIONS = [
-  { value: "window", label: "Window" },
+  { value: "windows-standard", label: "Windows Standard" },
+  { value: "sliding-window", label: "Sliding Window" },
+  { value: "entrance-door", label: "Entrance Door" },
   { value: "hinge-door", label: "Hinge Door" },
-  { value: "sliding-door", label: "Sliding/Stacking Door" },
-  { value: "entry-door", label: "Entry Door" },
-];
-
-const WINDOW_LAYOUTS = [
-  { value: "fixed", label: "Fixed" },
-  { value: "awning", label: "Awning (Top-Hung)" },
-  { value: "mullion-2", label: "2-Pane Vertical (Mullion)" },
-  { value: "transom-2", label: "2-Pane Horizontal (Transom)" },
-];
-
-const HINGE_DOOR_LAYOUTS = [
-  { value: "single", label: "Single Door" },
-  { value: "with-sidelight", label: "Door with Sidelight" },
-  { value: "with-transom", label: "Door with Transom" },
-];
-
-const SIDELIGHT_OPTIONS = [
-  { value: "none", label: "No Sidelights" },
-  { value: "left", label: "Left Sidelight" },
-  { value: "right", label: "Right Sidelight" },
-  { value: "both", label: "Both Sidelights" },
-];
-
-const PANE_TYPES = [
-  { value: "fixed", label: "Fixed" },
-  { value: "awning", label: "Awning" },
+  { value: "french-door", label: "French Door" },
+  { value: "bifold-door", label: "Bi-folding Door" },
+  { value: "stacker-door", label: "Stacker Door" },
+  { value: "bay-window", label: "Bay Window" },
 ];
 
 function getCategoryLabel(cat: string) {
   return CATEGORY_OPTIONS.find((c) => c.value === cat)?.label || cat;
 }
 
-function getLayoutLabel(cat: string, layout: string, sidelightConfig?: string) {
-  if (cat === "window") return WINDOW_LAYOUTS.find((l) => l.value === layout)?.label || layout;
-  if (cat === "hinge-door") return HINGE_DOOR_LAYOUTS.find((l) => l.value === layout)?.label || layout;
-  if (cat === "sliding-door") return "Sliding/Stacking";
-  if (cat === "entry-door") {
-    const sl = SIDELIGHT_OPTIONS.find((s) => s.value === sidelightConfig)?.label || "";
-    return sl ? `Entry Door - ${sl}` : "Entry Door";
+function getLayoutSummary(config: QuoteItem) {
+  if (config.layout === "custom") {
+    return `Custom ${config.rows}x${config.columns}`;
   }
-  return layout;
+  const cat = config.category;
+  if (cat === "windows-standard") return config.windowType === "awning" ? "Awning" : "Fixed";
+  if (cat === "sliding-window") return "Fixed + Sliding";
+  if (cat === "entrance-door") return "Door + Sidelight";
+  if (cat === "hinge-door") return `${config.hingeSide === "left" ? "Left" : "Right"} Hinge`;
+  if (cat === "french-door") return "Double Door";
+  if (cat === "bifold-door") return `${config.panels} Leaves`;
+  if (cat === "stacker-door") return `${config.panels} Panels`;
+  if (cat === "bay-window") return "Bay (3 Panel)";
+  return "Standard";
 }
 
 const defaultValues: InsertQuoteItem = {
   name: "W-01",
   quantity: 1,
-  category: "window",
+  category: "windows-standard",
   width: 1200,
   height: 1500,
-  layout: "fixed",
+  layout: "standard",
+  windowType: "fixed",
   hingeSide: "left",
-  splitPosition: 0,
+  openDirection: "out",
   halfSolid: false,
-  pane1Type: "fixed",
-  pane2Type: "fixed",
-  panels: 2,
-  sidelightConfig: "none",
+  panels: 3,
+  sidelightWidth: 400,
+  rows: 1,
+  columns: 2,
+  paneTypes: ["fixed", "fixed"],
+  bifoldLeftCount: 0,
+  centerWidth: 0,
 };
 
 export default function QuoteBuilder() {
@@ -96,37 +78,55 @@ export default function QuoteBuilder() {
     defaultValues,
   });
 
-  const watchAll = form.watch();
-  const category = watchAll.category;
-  const layout = watchAll.layout;
+  const w = form.watch();
+  const category = w.category;
+  const layout = w.layout;
+  const frameSize = getFrameSize(category);
 
   useEffect(() => {
-    if (category === "window") {
-      form.setValue("layout", "fixed");
-      form.setValue("hingeSide", "left");
-    } else if (category === "hinge-door") {
-      form.setValue("layout", "single");
-    } else if (category === "sliding-door") {
-      form.setValue("layout", "sliding");
-    } else if (category === "entry-door") {
-      form.setValue("layout", "single");
-      form.setValue("sidelightConfig", "none");
+    form.setValue("layout", "standard");
+    form.setValue("windowType", "fixed");
+    form.setValue("hingeSide", "left");
+    form.setValue("openDirection", "out");
+    form.setValue("halfSolid", false);
+    form.setValue("sidelightWidth", 400);
+    form.setValue("centerWidth", 0);
+    form.setValue("rows", 1);
+    form.setValue("columns", 2);
+    form.setValue("paneTypes", ["fixed", "fixed"]);
+    if (category === "bifold-door") {
+      form.setValue("panels", 3);
+      form.setValue("bifoldLeftCount", 1);
+    } else if (category === "stacker-door") {
+      form.setValue("panels", 3);
+    } else {
+      form.setValue("panels", 3);
+      form.setValue("bifoldLeftCount", 0);
     }
-    form.setValue("splitPosition", 0);
   }, [category]);
 
-  const showHingeSide = category === "hinge-door" || category === "entry-door";
-  const showHalfSolid = category === "hinge-door" || category === "entry-door";
-  const showLayout = category === "window" || category === "hinge-door";
-  const showPanels = category === "sliding-door";
-  const showSidelightConfig = category === "entry-door";
-  const showSplit =
-    (category === "window" && (layout === "mullion-2" || layout === "transom-2")) ||
-    (category === "hinge-door" && (layout === "with-sidelight" || layout === "with-transom")) ||
-    (category === "entry-door" && watchAll.sidelightConfig !== "none");
-  const showPaneTypes = category === "window" && (layout === "mullion-2" || layout === "transom-2");
+  useEffect(() => {
+    if (layout === "custom") {
+      const total = (w.rows || 1) * (w.columns || 1);
+      const current = w.paneTypes || [];
+      if (current.length !== total) {
+        const next = Array.from({ length: total }, (_, i) => current[i] || "fixed");
+        form.setValue("paneTypes", next);
+      }
+    }
+  }, [w.rows, w.columns, layout]);
 
-  const frameSize = category === "sliding-door" ? 127 : 52;
+  const isCustom = layout === "custom";
+
+  const showWindowType = !isCustom && category === "windows-standard";
+  const showHingeSide = !isCustom && ["entrance-door", "hinge-door"].includes(category);
+  const showHalfSolid = !isCustom && ["entrance-door", "hinge-door"].includes(category);
+  const showSidelightWidth = !isCustom && category === "entrance-door";
+  const showPanels = !isCustom && ["bifold-door", "stacker-door"].includes(category);
+  const showBifoldSplit = !isCustom && category === "bifold-door";
+  const showCenterWidth = !isCustom && category === "bay-window";
+  const showOpenDirection = !isCustom && !["sliding-window", "stacker-door"].includes(category);
+  const showGrid = isCustom;
 
   function onSubmit(data: InsertQuoteItem) {
     if (editingId) {
@@ -150,16 +150,13 @@ export default function QuoteBuilder() {
   function duplicateItem(item: QuoteItem) {
     const newItem: QuoteItem = { ...item, id: crypto.randomUUID(), name: `${item.name} (copy)` };
     setItems([...items, newItem]);
-    toast({ title: "Item duplicated", description: `${newItem.name} added to quote.` });
+    toast({ title: "Item duplicated" });
   }
 
   function deleteItem(id: string) {
     setItems(items.filter((item) => item.id !== id));
-    if (editingId === id) {
-      setEditingId(null);
-      form.reset(defaultValues);
-    }
-    toast({ title: "Item removed", description: "Item has been removed from the quote." });
+    if (editingId === id) { setEditingId(null); form.reset(defaultValues); }
+    toast({ title: "Item removed" });
   }
 
   function cancelEdit() {
@@ -167,24 +164,22 @@ export default function QuoteBuilder() {
     form.reset(defaultValues);
   }
 
-  const splitLabel =
-    category === "window" && layout === "mullion-2"
-      ? "Split Position - Left Pane Width (mm)"
-      : category === "window" && layout === "transom-2"
-        ? "Split Position - Top Pane Height (mm)"
-        : category === "hinge-door" && layout === "with-sidelight"
-          ? "Sidelight Width (mm)"
-          : category === "hinge-door" && layout === "with-transom"
-            ? "Transom Height (mm)"
-            : "Sidelight Width (mm)";
+  function togglePaneType(index: number) {
+    const current = [...(w.paneTypes || [])];
+    current[index] = current[index] === "awning" ? "fixed" : "awning";
+    form.setValue("paneTypes", current);
+  }
 
   const drawingConfig: InsertQuoteItem = {
-    ...watchAll,
-    width: watchAll.width || 1200,
-    height: watchAll.height || 1500,
-    quantity: watchAll.quantity || 1,
-    name: watchAll.name || "Untitled",
+    ...w,
+    width: w.width || 1200,
+    height: w.height || 1500,
+    quantity: w.quantity || 1,
+    name: w.name || "Untitled",
   };
+
+  const gridRows = w.rows || 1;
+  const gridCols = w.columns || 1;
 
   return (
     <div className="flex flex-col h-screen bg-background" data-testid="quote-builder">
@@ -195,35 +190,32 @@ export default function QuoteBuilder() {
           </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight" data-testid="text-app-title">
-              Window & Door Quote Tool
+              Pro-Quote CAD Generator
             </h1>
-            <p className="text-xs text-muted-foreground">Configure and quote windows and doors</p>
+            <p className="text-xs text-muted-foreground">Configure and quote windows & doors</p>
           </div>
         </div>
         {items.length > 0 && (
           <Badge variant="secondary" data-testid="badge-item-count">
-            {items.length} item{items.length !== 1 ? "s" : ""} in quote
+            {items.length} item{items.length !== 1 ? "s" : ""}
           </Badge>
         )}
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         <ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0">
-          <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-5">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-4">
             <div>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
                 <Ruler className="w-3.5 h-3.5" /> Item Details
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div>
-                  <Label htmlFor="name">Item Name / Reference</Label>
+                  <Label htmlFor="name" className="text-xs">Item ID / Reference</Label>
                   <Input id="name" {...form.register("name")} data-testid="input-item-name" />
-                  {form.formState.errors.name && (
-                    <p className="text-xs text-destructive mt-1">{form.formState.errors.name.message}</p>
-                  )}
                 </div>
                 <div>
-                  <Label htmlFor="quantity">Quantity</Label>
+                  <Label htmlFor="quantity" className="text-xs">Quantity</Label>
                   <Input id="quantity" type="number" min={1}
                     {...form.register("quantity", { valueAsNumber: true })}
                     data-testid="input-quantity" />
@@ -234,16 +226,14 @@ export default function QuoteBuilder() {
             <Separator />
 
             <div>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 Type & Dimensions
               </h2>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div>
-                  <Label>Category</Label>
+                  <Label className="text-xs">Category</Label>
                   <Select value={category} onValueChange={(v) => form.setValue("category", v as any)}>
-                    <SelectTrigger data-testid="select-category">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger data-testid="select-category"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {CATEGORY_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
@@ -251,80 +241,65 @@ export default function QuoteBuilder() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label htmlFor="width">Width (mm)</Label>
+                    <Label htmlFor="width" className="text-xs">Width (mm)</Label>
                     <Input id="width" type="number" min={200}
                       {...form.register("width", { valueAsNumber: true })}
                       data-testid="input-width" />
                   </div>
                   <div>
-                    <Label htmlFor="height">Height (mm)</Label>
+                    <Label htmlFor="height" className="text-xs">Height (mm)</Label>
                     <Input id="height" type="number" min={200}
                       {...form.register("height", { valueAsNumber: true })}
                       data-testid="input-height" />
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    {frameSize}mm Frame
-                  </Badge>
-                </div>
+                <Badge variant="outline" className="text-xs" data-testid="badge-frame-size">
+                  {frameSize}mm Frame
+                </Badge>
               </div>
             </div>
 
             <Separator />
 
             <div>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 Configuration
               </h2>
               <div className="space-y-3">
-                {showLayout && (
+                <div>
+                  <Label className="text-xs">Layout</Label>
+                  <Select value={layout} onValueChange={(v) => form.setValue("layout", v as any)}>
+                    <SelectTrigger data-testid="select-layout"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="custom">Custom (Grid)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {showWindowType && (
                   <div>
-                    <Label>Layout</Label>
-                    <Select value={layout} onValueChange={(v) => form.setValue("layout", v)}>
-                      <SelectTrigger data-testid="select-layout">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Label className="text-xs">Window Type</Label>
+                    <Select value={w.windowType} onValueChange={(v) => form.setValue("windowType", v as any)}>
+                      <SelectTrigger data-testid="select-window-type"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {(category === "window" ? WINDOW_LAYOUTS : HINGE_DOOR_LAYOUTS).map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                        ))}
+                        <SelectItem value="fixed">Fixed</SelectItem>
+                        <SelectItem value="awning">Awning (Top-Hung)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 )}
 
-                {showPanels && (
+                {showOpenDirection && (
                   <div>
-                    <Label>Number of Panels</Label>
-                    <Select value={String(watchAll.panels)} onValueChange={(v) => form.setValue("panels", parseInt(v))}>
-                      <SelectTrigger data-testid="select-panels">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Label className="text-xs">Opening Direction</Label>
+                    <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>
+                      <SelectTrigger data-testid="select-open-direction"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="2">2 Panels</SelectItem>
-                        <SelectItem value="3">3 Panels</SelectItem>
-                        <SelectItem value="4">4 Panels</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {showSidelightConfig && (
-                  <div>
-                    <Label>Sidelights</Label>
-                    <Select value={watchAll.sidelightConfig} onValueChange={(v) => form.setValue("sidelightConfig", v as any)}>
-                      <SelectTrigger data-testid="select-sidelight">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SIDELIGHT_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                        ))}
+                        <SelectItem value="out">Out (Solid Line)</SelectItem>
+                        <SelectItem value="in">In (Dashed Line)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -332,11 +307,9 @@ export default function QuoteBuilder() {
 
                 {showHingeSide && (
                   <div>
-                    <Label>Hinge Side</Label>
-                    <Select value={watchAll.hingeSide} onValueChange={(v) => form.setValue("hingeSide", v as any)}>
-                      <SelectTrigger data-testid="select-hinge-side">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Label className="text-xs">Hinge Side</Label>
+                    <Select value={w.hingeSide} onValueChange={(v) => form.setValue("hingeSide", v as any)}>
+                      <SelectTrigger data-testid="select-hinge-side"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="left">Left</SelectItem>
                         <SelectItem value="right">Right</SelectItem>
@@ -347,54 +320,140 @@ export default function QuoteBuilder() {
 
                 {showHalfSolid && (
                   <div className="flex items-center gap-2 pt-1">
-                    <Checkbox
-                      id="halfSolid"
-                      checked={watchAll.halfSolid}
+                    <Checkbox id="halfSolid" checked={w.halfSolid}
                       onCheckedChange={(v) => form.setValue("halfSolid", !!v)}
-                      data-testid="checkbox-half-solid"
-                    />
-                    <Label htmlFor="halfSolid" className="text-sm cursor-pointer">
-                      Half-Solid Panel (Bottom)
+                      data-testid="checkbox-half-solid" />
+                    <Label htmlFor="halfSolid" className="text-xs cursor-pointer">
+                      Solid Bottom Panel
                     </Label>
                   </div>
                 )}
 
-                {showSplit && (
+                {showSidelightWidth && (
                   <div>
-                    <Label htmlFor="splitPosition">{splitLabel}</Label>
-                    <Input id="splitPosition" type="number" min={0}
-                      placeholder="0 = even split"
-                      {...form.register("splitPosition", { valueAsNumber: true })}
-                      data-testid="input-split-position" />
-                    <p className="text-xs text-muted-foreground mt-1">Leave at 0 for an even split</p>
+                    <Label htmlFor="sidelightWidth" className="text-xs">Sidelight Width (mm)</Label>
+                    <Input id="sidelightWidth" type="number" min={100}
+                      {...form.register("sidelightWidth", { valueAsNumber: true })}
+                      data-testid="input-sidelight-width" />
                   </div>
                 )}
 
-                {showPaneTypes && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label>{layout === "mullion-2" ? "Left Pane" : "Top Pane"}</Label>
-                      <Select value={watchAll.pane1Type} onValueChange={(v) => form.setValue("pane1Type", v as any)}>
-                        <SelectTrigger data-testid="select-pane1-type">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PANE_TYPES.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                {showPanels && (
+                  <div>
+                    <Label className="text-xs">
+                      {category === "bifold-door" ? "Number of Leaves" : "Number of Panels"}
+                    </Label>
+                    <Select value={String(w.panels)} onValueChange={(v) => {
+                      const num = parseInt(v);
+                      form.setValue("panels", num);
+                      if (category === "bifold-door") {
+                        form.setValue("bifoldLeftCount", Math.floor(num / 2));
+                      }
+                    }}>
+                      <SelectTrigger data-testid="select-panels"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {(category === "bifold-door"
+                          ? [2, 3, 4, 5, 6, 7, 8]
+                          : [3, 4, 5, 6]
+                        ).map((n) => (
+                          <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {showBifoldSplit && (
+                  <div>
+                    <Label className="text-xs">Fold Left Count</Label>
+                    <Select value={String(w.bifoldLeftCount)}
+                      onValueChange={(v) => form.setValue("bifoldLeftCount", parseInt(v))}>
+                      <SelectTrigger data-testid="select-bifold-left"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: (w.panels || 3) + 1 }, (_, i) => (
+                          <SelectItem key={i} value={String(i)}>
+                            {i} left, {(w.panels || 3) - i} right
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {showCenterWidth && (
+                  <div>
+                    <Label htmlFor="centerWidth" className="text-xs">Center Panel Width (mm)</Label>
+                    <Input id="centerWidth" type="number" min={0}
+                      placeholder="0 = 60% of total"
+                      {...form.register("centerWidth", { valueAsNumber: true })}
+                      data-testid="input-center-width" />
+                    <p className="text-xs text-muted-foreground mt-1">0 = default 60% of total width</p>
+                  </div>
+                )}
+
+                {showGrid && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Rows</Label>
+                        <Select value={String(gridRows)} onValueChange={(v) => form.setValue("rows", parseInt(v))}>
+                          <SelectTrigger data-testid="select-rows"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4, 5, 6].map((n) => (
+                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Columns</Label>
+                        <Select value={String(gridCols)} onValueChange={(v) => form.setValue("columns", parseInt(v))}>
+                          <SelectTrigger data-testid="select-columns"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4, 5, 6].map((n) => (
+                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+
                     <div>
-                      <Label>{layout === "mullion-2" ? "Right Pane" : "Bottom Pane"}</Label>
-                      <Select value={watchAll.pane2Type} onValueChange={(v) => form.setValue("pane2Type", v as any)}>
-                        <SelectTrigger data-testid="select-pane2-type">
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Label className="text-xs mb-1.5 block">Pane Types (click to toggle)</Label>
+                      <div className="border rounded-md p-2 bg-muted/30"
+                        style={{ display: "grid", gridTemplateColumns: `repeat(${gridCols}, 1fr)`, gap: "4px" }}>
+                        {Array.from({ length: gridRows * gridCols }, (_, idx) => {
+                          const pType = (w.paneTypes || [])[idx] || "fixed";
+                          const isAwning = pType === "awning";
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => togglePaneType(idx)}
+                              className={`
+                                rounded-sm text-xs font-mono py-2 px-1 border transition-colors
+                                ${isAwning
+                                  ? "bg-primary/15 border-primary/30 text-primary"
+                                  : "bg-background border-border text-muted-foreground"
+                                }
+                              `}
+                              data-testid={`button-pane-${idx}`}
+                            >
+                              {isAwning ? "AWN" : "FIX"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">FIX = Fixed, AWN = Awning</p>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Opening Direction</Label>
+                      <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>
+                        <SelectTrigger data-testid="select-custom-open-dir"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {PANE_TYPES.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                          ))}
+                          <SelectItem value="out">Out (Solid Line)</SelectItem>
+                          <SelectItem value="in">In (Dashed Line)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -408,13 +467,9 @@ export default function QuoteBuilder() {
             <div className="flex gap-2">
               <Button type="submit" className="flex-1" data-testid="button-add-item">
                 {editingId ? (
-                  <>
-                    <Pencil className="w-4 h-4 mr-2" /> Update Item
-                  </>
+                  <><Pencil className="w-4 h-4 mr-2" /> Update Item</>
                 ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" /> Add to Quote
-                  </>
+                  <><Plus className="w-4 h-4 mr-2" /> Add to Quote</>
                 )}
               </Button>
               {editingId && (
@@ -436,7 +491,7 @@ export default function QuoteBuilder() {
 
           {items.length > 0 && (
             <div className="border-t bg-card shrink-0">
-              <div className="px-4 py-2 flex items-center justify-between">
+              <div className="px-4 py-2">
                 <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
                   Quote Items ({items.length})
                 </h3>
@@ -447,7 +502,8 @@ export default function QuoteBuilder() {
                     <TableRow>
                       <TableHead className="w-10">#</TableHead>
                       <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Layout</TableHead>
                       <TableHead>Dimensions</TableHead>
                       <TableHead className="text-center">Qty</TableHead>
                       <TableHead className="text-right w-28">Actions</TableHead>
@@ -458,13 +514,9 @@ export default function QuoteBuilder() {
                       <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
                         <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
                         <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-sm">{getCategoryLabel(item.category)}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {getLayoutLabel(item.category, item.layout, item.sidelightConfig)}
-                            </span>
-                          </div>
+                        <TableCell className="text-sm">{getCategoryLabel(item.category)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {getLayoutSummary(item)}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{item.width} x {item.height}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>

@@ -1,29 +1,42 @@
-# Window & Door Quote Tool
+# Pro-Quote CAD Generator
 
 ## Overview
-A professional window and door quotation tool with live SVG technical drawings. Users configure items via a side panel and see an instant preview of the drawing with dimension lines, labels, and opening indicators.
+A professional window and door quotation tool with live SVG technical drawings. Users configure items via a side panel and see an instant preview with dimension lines, labels, and opening indicators.
 
 ## Architecture
 - **Frontend**: React + TypeScript with Shadcn UI components
 - **Drawing Engine**: SVG-based rendering in `client/src/components/drawing-canvas.tsx`
-- **State Management**: Client-side React state (no database needed for this tool)
-- **Routing**: Wouter
+- **State Management**: Client-side React state
+- **Routing**: Wouter (single page at `/`)
 
 ## Key Files
 - `shared/schema.ts` - Zod schemas for QuoteItem types
-- `client/src/components/drawing-canvas.tsx` - SVG drawing component with all window/door configurations
-- `client/src/pages/quote-builder.tsx` - Main page with config form, drawing preview, and quote items table
+- `client/src/components/drawing-canvas.tsx` - SVG drawing component with all configurations
+- `client/src/pages/quote-builder.tsx` - Main page with config form, drawing preview, quote items table
 - `client/src/App.tsx` - Route setup
 
-## Supported Types
-- **Window**: Fixed, Awning (top-hung), 2-Pane Vertical (Mullion), 2-Pane Horizontal (Transom)
-- **Hinge Door**: Single, Door with Sidelight, Door with Transom
-- **Sliding/Stacking Door**: 2, 3, or 4 panels (127mm frame)
-- **Entry Door**: Single with optional sidelights (left, right, or both)
+## Supported Categories
+- **Windows Standard**: Fixed or Awning (52mm frame)
+- **Sliding Window**: Fixed + Sliding panels (127mm frame)
+- **Entrance Door**: Door + Sidelight with configurable width (52mm frame)
+- **Hinge Door**: Single hinged door, left/right (52mm frame)
+- **French Door**: Two opposite-hinged doors (52mm frame)
+- **Bi-folding Door**: 2-8 leaves with configurable fold direction split (70mm frame)
+- **Stacker Door**: 3-6 sliding panels (127mm frame)
+- **Bay Window**: Center fixed + two side awning panels (52mm frame)
+
+## Features
+- **Custom Grid Layout**: Available for ALL categories. Select "Custom (Grid)" layout to specify rows and columns. Each pane in the grid can be individually set to Fixed or Awning.
+- **Opening Direction**: In (dashed line) / Out (solid line) for hinged and awning types
+- **Bi-fold Fold Direction**: Configurable left/right split (e.g., 3 left + 3 right for 6 leaves)
+- **Frame Sizes**: 52mm standard, 70mm bi-fold, 127mm sliding/stacker
+- **Dimension Lines**: All drawings show total Width and Height with architectural tick marks
+- **Quote Management**: Add, edit, duplicate, delete items in a quote list
 
 ## Business Rules
-- Standard windows and hinge doors use a 52mm frame
-- Sliding/Stacking doors use a 127mm frame
-- All dimensions are in mm
-- For multi-pane windows, split position of 0 defaults to even split
+- Standard windows and doors use 52mm frame
+- Bi-folding doors use 70mm frame
+- Sliding/Stacker doors use 127mm frame
+- Custom grid split positions default to even distribution
 - Opening indicator triangle point = hinge location
+- Bi-fold V chevron indicates fold direction (< = left, > = right)
