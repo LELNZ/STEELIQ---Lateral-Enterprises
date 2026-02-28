@@ -17,6 +17,19 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const customColumnRowSchema = z.object({
+  height: z.number().min(0).default(0),
+  type: z.enum(["fixed", "awning"]).default("fixed"),
+});
+
+export const customColumnSchema = z.object({
+  width: z.number().min(0).default(0),
+  rows: z.array(customColumnRowSchema).default([{ height: 0, type: "fixed" }]),
+});
+
+export type CustomColumnRow = z.infer<typeof customColumnRowSchema>;
+export type CustomColumn = z.infer<typeof customColumnSchema>;
+
 export const quoteItemSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Item name is required"),
@@ -35,11 +48,12 @@ export const quoteItemSchema = z.object({
   halfSolid: z.boolean().default(false),
   panels: z.number().int().min(2).max(8).default(3),
   sidelightWidth: z.number().default(400),
-  rows: z.number().int().min(1).max(6).default(1),
-  columns: z.number().int().min(1).max(6).default(2),
-  paneTypes: z.array(z.string()).default([]),
   bifoldLeftCount: z.number().int().min(0).default(0),
   centerWidth: z.number().default(0),
+  customColumns: z.array(customColumnSchema).default([
+    { width: 0, rows: [{ height: 0, type: "fixed" }] },
+    { width: 0, rows: [{ height: 0, type: "fixed" }] },
+  ]),
 });
 
 export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem } from "@shared/schema";
+import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn } from "@shared/schema";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const CATEGORY_OPTIONS = [
@@ -34,7 +34,14 @@ function getCategoryLabel(cat: string) {
 
 function getLayoutSummary(config: QuoteItem) {
   if (config.layout === "custom") {
-    return `Custom ${config.rows}x${config.columns}`;
+    const cols = config.customColumns || [];
+    const colCount = cols.length;
+    const rowCounts = cols.map(c => (c.rows || []).length);
+    const allSame = rowCounts.every(r => r === rowCounts[0]);
+    if (allSame && rowCounts.length > 0) {
+      return `Custom ${rowCounts[0]}×${colCount}`;
+    }
+    return `Custom ${colCount}-col (${rowCounts.join("/")})`;
   }
   const cat = config.category;
   if (cat === "windows-standard") return config.windowType === "awning" ? "Awning" : "Fixed";
@@ -46,6 +53,13 @@ function getLayoutSummary(config: QuoteItem) {
   if (cat === "stacker-door") return `${config.panels} Panels`;
   if (cat === "bay-window") return "Bay (3 Panel)";
   return "Standard";
+}
+
+function makeDefaultColumns(count: number): CustomColumn[] {
+  return Array.from({ length: count }, () => ({
+    width: 0,
+    rows: [{ height: 0, type: "fixed" as const }],
+  }));
 }
 
 const defaultValues: InsertQuoteItem = {
@@ -61,16 +75,15 @@ const defaultValues: InsertQuoteItem = {
   halfSolid: false,
   panels: 3,
   sidelightWidth: 400,
-  rows: 1,
-  columns: 2,
-  paneTypes: ["fixed", "fixed"],
   bifoldLeftCount: 0,
   centerWidth: 0,
+  customColumns: makeDefaultColumns(2),
 };
 
 export default function QuoteBuilder() {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedCols, setExpandedCols] = useState<Set<number>>(new Set([0]));
   const { toast } = useToast();
 
   const form = useForm<InsertQuoteItem>({
@@ -91,9 +104,7 @@ export default function QuoteBuilder() {
     form.setValue("halfSolid", false);
     form.setValue("sidelightWidth", 400);
     form.setValue("centerWidth", 0);
-    form.setValue("rows", 1);
-    form.setValue("columns", 2);
-    form.setValue("paneTypes", ["fixed", "fixed"]);
+    form.setValue("customColumns", makeDefaultColumns(2));
     if (category === "bifold-door") {
       form.setValue("panels", 3);
       form.setValue("bifoldLeftCount", 1);
@@ -104,17 +115,6 @@ export default function QuoteBuilder() {
       form.setValue("bifoldLeftCount", 0);
     }
   }, [category]);
-
-  useEffect(() => {
-    if (layout === "custom") {
-      const total = (w.rows || 1) * (w.columns || 1);
-      const current = w.paneTypes || [];
-      if (current.length !== total) {
-        const next = Array.from({ length: total }, (_, i) => current[i] || "fixed");
-        form.setValue("paneTypes", next);
-      }
-    }
-  }, [w.rows, w.columns, layout]);
 
   const isCustom = layout === "custom";
 
@@ -127,6 +127,64 @@ export default function QuoteBuilder() {
   const showCenterWidth = !isCustom && category === "bay-window";
   const showOpenDirection = !isCustom && !["sliding-window", "stacker-door"].includes(category);
   const showGrid = isCustom;
+
+  const customColumns: CustomColumn[] = w.customColumns || makeDefaultColumns(2);
+  const numColumns = customColumns.length;
+
+  function setColumnCount(count: number) {
+    const current = w.customColumns || [];
+    const next: CustomColumn[] = Array.from({ length: count }, (_, i) => {
+      if (i < current.length) return current[i];
+      return { width: 0, rows: [{ height: 0, type: "fixed" as const }] };
+    });
+    form.setValue("customColumns", next);
+    setExpandedCols(new Set([0]));
+  }
+
+  function setColumnWidth(colIdx: number, width: number) {
+    const cols = [...(w.customColumns || [])];
+    cols[colIdx] = { ...cols[colIdx], width };
+    form.setValue("customColumns", cols);
+  }
+
+  function setColumnRowCount(colIdx: number, rowCount: number) {
+    const cols = [...(w.customColumns || [])];
+    const currentRows = cols[colIdx].rows || [];
+    const next = Array.from({ length: rowCount }, (_, i) => {
+      if (i < currentRows.length) return currentRows[i];
+      return { height: 0, type: "fixed" as const };
+    });
+    cols[colIdx] = { ...cols[colIdx], rows: next };
+    form.setValue("customColumns", cols);
+  }
+
+  function setRowHeight(colIdx: number, rowIdx: number, height: number) {
+    const cols = [...(w.customColumns || [])];
+    const rows = [...(cols[colIdx].rows || [])];
+    rows[rowIdx] = { ...rows[rowIdx], height };
+    cols[colIdx] = { ...cols[colIdx], rows };
+    form.setValue("customColumns", cols);
+  }
+
+  function toggleRowType(colIdx: number, rowIdx: number) {
+    const cols = [...(w.customColumns || [])];
+    const rows = [...(cols[colIdx].rows || [])];
+    rows[rowIdx] = {
+      ...rows[rowIdx],
+      type: rows[rowIdx].type === "awning" ? "fixed" : "awning",
+    };
+    cols[colIdx] = { ...cols[colIdx], rows };
+    form.setValue("customColumns", cols);
+  }
+
+  function toggleColumnExpanded(colIdx: number) {
+    setExpandedCols(prev => {
+      const next = new Set(prev);
+      if (next.has(colIdx)) next.delete(colIdx);
+      else next.add(colIdx);
+      return next;
+    });
+  }
 
   function onSubmit(data: InsertQuoteItem) {
     if (editingId) {
@@ -164,12 +222,6 @@ export default function QuoteBuilder() {
     form.reset(defaultValues);
   }
 
-  function togglePaneType(index: number) {
-    const current = [...(w.paneTypes || [])];
-    current[index] = current[index] === "awning" ? "fixed" : "awning";
-    form.setValue("paneTypes", current);
-  }
-
   const drawingConfig: InsertQuoteItem = {
     ...w,
     width: w.width || 1200,
@@ -177,9 +229,6 @@ export default function QuoteBuilder() {
     quantity: w.quantity || 1,
     name: w.name || "Untitled",
   };
-
-  const gridRows = w.rows || 1;
-  const gridCols = w.columns || 1;
 
   return (
     <div className="flex flex-col h-screen bg-background" data-testid="quote-builder">
@@ -393,59 +442,103 @@ export default function QuoteBuilder() {
 
                 {showGrid && (
                   <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-xs">Rows</Label>
-                        <Select value={String(gridRows)} onValueChange={(v) => form.setValue("rows", parseInt(v))}>
-                          <SelectTrigger data-testid="select-rows"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {[1, 2, 3, 4, 5, 6].map((n) => (
-                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Columns</Label>
-                        <Select value={String(gridCols)} onValueChange={(v) => form.setValue("columns", parseInt(v))}>
-                          <SelectTrigger data-testid="select-columns"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {[1, 2, 3, 4, 5, 6].map((n) => (
-                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div>
+                      <Label className="text-xs">Number of Columns</Label>
+                      <Select value={String(numColumns)} onValueChange={(v) => setColumnCount(parseInt(v))}>
+                        <SelectTrigger data-testid="select-columns"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                            <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
-                    <div>
-                      <Label className="text-xs mb-1.5 block">Pane Types (click to toggle)</Label>
-                      <div className="border rounded-md p-2 bg-muted/30"
-                        style={{ display: "grid", gridTemplateColumns: `repeat(${gridCols}, 1fr)`, gap: "4px" }}>
-                        {Array.from({ length: gridRows * gridCols }, (_, idx) => {
-                          const pType = (w.paneTypes || [])[idx] || "fixed";
-                          const isAwning = pType === "awning";
-                          return (
+                    <div className="space-y-2">
+                      {customColumns.map((col, ci) => {
+                        const colRows = col.rows || [{ height: 0, type: "fixed" as const }];
+                        const isExpanded = expandedCols.has(ci);
+                        return (
+                          <div key={ci} className="border rounded-md bg-muted/20 overflow-hidden" data-testid={`column-config-${ci}`}>
                             <button
-                              key={idx}
                               type="button"
-                              onClick={() => togglePaneType(idx)}
-                              className={`
-                                rounded-sm text-xs font-mono py-2 px-1 border transition-colors
-                                ${isAwning
-                                  ? "bg-primary/15 border-primary/30 text-primary"
-                                  : "bg-background border-border text-muted-foreground"
-                                }
-                              `}
-                              data-testid={`button-pane-${idx}`}
+                              onClick={() => toggleColumnExpanded(ci)}
+                              className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium hover:bg-muted/40 transition-colors"
+                              data-testid={`button-toggle-col-${ci}`}
                             >
-                              {isAwning ? "AWN" : "FIX"}
+                              <span>Column {ci + 1} ({colRows.length} row{colRows.length !== 1 ? "s" : ""})</span>
+                              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                             </button>
-                          );
-                        })}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">FIX = Fixed, AWN = Awning</p>
+
+                            {isExpanded && (
+                              <div className="px-3 pb-3 space-y-2 border-t">
+                                <div className="pt-2">
+                                  <Label className="text-xs">Width (mm)</Label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={col.width || ""}
+                                    placeholder="Auto (even split)"
+                                    onChange={(e) => setColumnWidth(ci, parseFloat(e.target.value) || 0)}
+                                    data-testid={`input-col-width-${ci}`}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label className="text-xs">Rows in Column</Label>
+                                  <Select value={String(colRows.length)} onValueChange={(v) => setColumnRowCount(ci, parseInt(v))}>
+                                    <SelectTrigger data-testid={`select-col-rows-${ci}`} className="h-8 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {[1, 2, 3, 4, 5, 6].map((n) => (
+                                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                <div className="space-y-1">
+                                  {colRows.map((row, ri) => (
+                                    <div key={ri} className="flex items-center gap-1.5" data-testid={`row-config-${ci}-${ri}`}>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleRowType(ci, ri)}
+                                        className={`
+                                          shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
+                                          ${row.type === "awning"
+                                            ? "bg-primary/15 border-primary/30 text-primary"
+                                            : "bg-background border-border text-muted-foreground"
+                                          }
+                                        `}
+                                        data-testid={`button-pane-${ci}-${ri}`}
+                                      >
+                                        {row.type === "awning" ? "AWN" : "FIX"}
+                                      </button>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        value={row.height || ""}
+                                        placeholder="Auto"
+                                        onChange={(e) => setRowHeight(ci, ri, parseFloat(e.target.value) || 0)}
+                                        data-testid={`input-row-height-${ci}-${ri}`}
+                                        className="h-7 text-xs flex-1"
+                                      />
+                                      <span className="text-xs text-muted-foreground shrink-0">mm</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      FIX = Fixed, AWN = Awning. Leave widths/heights at 0 for even split.
+                    </p>
 
                     <div>
                       <Label className="text-xs">Opening Direction</Label>

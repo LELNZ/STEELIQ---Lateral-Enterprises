@@ -1,4 +1,4 @@
-import type { InsertQuoteItem } from "@shared/schema";
+import type { InsertQuoteItem, CustomColumn } from "@shared/schema";
 
 const FRAME_WIN = 52;
 const FRAME_SLIDE = 127;
@@ -121,38 +121,69 @@ function clamp(val: number, min: number, max: number) {
 }
 
 function renderCustomGrid(
-  W: number, H: number, rows: number, cols: number,
-  paneTypes: string[], frameSize: number, openDir: string, ss: number
+  W: number, H: number, customColumns: CustomColumn[],
+  frameSize: number, openDir: string, ss: number
 ) {
-  const cellW = W / cols;
-  const cellH = H / rows;
-  const elements = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const idx = r * cols + c;
-      const pType = (paneTypes[idx] || "fixed") as PaneProps["type"];
+  if (!customColumns || customColumns.length === 0) {
+    return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
+  }
+
+  const totalSpecifiedWidth = customColumns.reduce((s, c) => s + (c.width || 0), 0);
+  const colWidths = customColumns.map(c => {
+    if (totalSpecifiedWidth > 0 && c.width > 0) return (c.width / totalSpecifiedWidth) * W;
+    return W / customColumns.length;
+  });
+  if (totalSpecifiedWidth === 0) {
+    colWidths.fill(W / customColumns.length);
+  }
+
+  const elements: JSX.Element[] = [];
+  let xOffset = 0;
+
+  for (let ci = 0; ci < customColumns.length; ci++) {
+    const col = customColumns[ci];
+    const colW = colWidths[ci];
+    const colRows = col.rows || [{ height: 0, type: "fixed" as const }];
+
+    const totalSpecifiedHeight = colRows.reduce((s, r) => s + (r.height || 0), 0);
+    const rowHeights = colRows.map(r => {
+      if (totalSpecifiedHeight > 0 && r.height > 0) return (r.height / totalSpecifiedHeight) * H;
+      return H / colRows.length;
+    });
+    if (totalSpecifiedHeight === 0) {
+      rowHeights.fill(H / colRows.length);
+    }
+
+    let yOffset = 0;
+    for (let ri = 0; ri < colRows.length; ri++) {
+      const row = colRows[ri];
+      const rowH = rowHeights[ri];
+      const pType = (row.type || "fixed") as PaneProps["type"];
       elements.push(
-        <Pane key={`${r}-${c}`}
-          x={c * cellW} y={r * cellH} w={cellW} h={cellH}
+        <Pane key={`${ci}-${ri}`}
+          x={xOffset} y={yOffset} w={colW} h={rowH}
           frameSize={frameSize} type={pType}
           openDirection={openDir} strokeScale={ss} />
       );
+      yOffset += rowH;
     }
+    xOffset += colW;
   }
+
   return <g>{elements}</g>;
 }
 
 function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   const {
     width: W, height: H, category, layout, hingeSide, halfSolid,
-    openDirection, panels, sidelightWidth, rows, columns, paneTypes,
-    bifoldLeftCount, centerWidth, windowType
+    openDirection, panels, sidelightWidth,
+    bifoldLeftCount, centerWidth, windowType, customColumns
   } = config;
   const minPane = frameSize * 2;
   const od = openDirection || "out";
 
   if (layout === "custom") {
-    return renderCustomGrid(W, H, rows || 1, columns || 1, paneTypes || [], frameSize, od, ss);
+    return renderCustomGrid(W, H, customColumns || [], frameSize, od, ss);
   }
 
   if (category === "windows-standard") {
