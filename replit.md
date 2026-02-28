@@ -18,6 +18,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 ## Supported Categories
 - **Windows Standard**: Fixed or Awning (52mm frame)
 - **Sliding Window**: Fixed + Sliding panels (127mm frame)
+- **Sliding Door**: Fixed + Sliding panels (127mm frame) — same rendering as Sliding Window
 - **Entrance Door**: Door + Sidelight with dedicated controls (52mm frame)
 - **Hinge Door**: Single hinged door, left/right (52mm frame)
 - **French Door**: Two opposite-hinged doors (52mm frame)
@@ -31,9 +32,10 @@ A professional window and door quotation tool with live SVG technical drawings. 
   - Per-column width in mm (0 = auto even split)
   - Per-column row count (1-6)
   - Per-row height in mm (0 = auto even split within column)
-  - Per-pane type toggle:
-    - Standard categories: Fixed or Awning
-    - Sliding/Stacker categories: Fixed or Sliding (with L/R direction toggle)
+  - Per-pane type toggle (category-specific):
+    - Windows (standard, bay): FIX/AWN toggle
+    - Sliding (sliding-window, sliding-door, stacker-door): FIX/SLD toggle + separate L/R direction buttons
+    - Doors (hinge-door, french-door, entrance-door): FIX/AWN/HNG cycle + per-pane In/Out + hinge side L/R
 - **Entrance Door**: Dedicated controls (no custom grid):
   - Sidelight position: Left or Right (default right)
   - Sidelight width in mm
@@ -51,7 +53,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 
 ## Data Model
 - `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, customColumns
-- `customColumns`: Array of `{ width: number, rows: [{ height: number, type: "fixed"|"awning"|"sliding", slideDirection: "left"|"right" }] }`
+- `customColumns`: Array of `{ width: number, rows: [{ height: number, type: "fixed"|"awning"|"sliding"|"hinge", slideDirection: "left"|"right", hingeSide: "left"|"right", openDirection: "in"|"out" }] }`
 - Width/height of 0 means auto (even split)
 - Mixed sizing: specified values (>0) treated as absolute mm capped to total; remaining space distributed evenly to auto (0) entries
 - Mm labels on drawing are rounded and adjusted so they always sum exactly to the total dimension
@@ -59,7 +61,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 ## Business Rules
 - Standard windows and doors use 52mm frame
 - Bi-folding doors use 70mm frame
-- Sliding/Stacker doors use 127mm frame
+- Sliding/Stacker/Sliding doors use 127mm frame
 - Custom grid widths/heights default to even distribution when set to 0
 - Opening indicator triangle point = hinge location
 - Bi-fold V chevron indicates fold direction (< = left, > = right)

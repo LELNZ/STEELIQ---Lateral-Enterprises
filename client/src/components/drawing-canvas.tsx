@@ -5,7 +5,7 @@ const FRAME_SLIDE = 127;
 const FRAME_BIFOLD = 70;
 
 export function getFrameSize(category: string): number {
-  if (category === "sliding-window" || category === "stacker-door") return FRAME_SLIDE;
+  if (category === "sliding-window" || category === "sliding-door" || category === "stacker-door") return FRAME_SLIDE;
   if (category === "bifold-door") return FRAME_BIFOLD;
   return FRAME_WIN;
 }
@@ -212,8 +212,9 @@ function renderCustomGrid(
         <Pane key={`${ci}-${ri}`}
           x={xOffset} y={yOffset} w={colW} h={rowH}
           frameSize={frameSize} type={pType}
-          openDirection={openDir}
-          slideDirection={(row as any).slideDirection || "right"}
+          hingeSide={row.hingeSide || "left"}
+          openDirection={pType === "hinge" ? (row.openDirection || "out") : openDir}
+          slideDirection={row.slideDirection || "right"}
           strokeScale={ss} />
       );
       yOffset += rowH;
@@ -273,7 +274,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
       type={wt} openDirection={od} strokeScale={ss} />;
   }
 
-  if (category === "sliding-window") {
+  if (category === "sliding-window" || category === "sliding-door") {
     return (
       <g>
         <Pane x={0} y={0} w={W / 2} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />

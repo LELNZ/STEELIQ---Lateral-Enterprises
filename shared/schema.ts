@@ -19,8 +19,10 @@ export type User = typeof users.$inferSelect;
 
 export const customColumnRowSchema = z.object({
   height: z.number().min(0).default(0),
-  type: z.enum(["fixed", "awning", "sliding"]).default("fixed"),
+  type: z.enum(["fixed", "awning", "sliding", "hinge"]).default("fixed"),
   slideDirection: z.enum(["left", "right"]).default("right"),
+  hingeSide: z.enum(["left", "right"]).default("left"),
+  openDirection: z.enum(["in", "out"]).default("out"),
 });
 
 export const customColumnSchema = z.object({
@@ -36,9 +38,9 @@ export const quoteItemSchema = z.object({
   name: z.string().min(1, "Item name is required"),
   quantity: z.number().int().min(1),
   category: z.enum([
-    "windows-standard", "sliding-window", "entrance-door",
-    "hinge-door", "french-door", "bifold-door",
-    "stacker-door", "bay-window"
+    "windows-standard", "sliding-window", "sliding-door",
+    "entrance-door", "hinge-door", "french-door",
+    "bifold-door", "stacker-door", "bay-window"
   ]),
   width: z.number().min(200, "Minimum width is 200mm"),
   height: z.number().min(200, "Minimum height is 200mm"),

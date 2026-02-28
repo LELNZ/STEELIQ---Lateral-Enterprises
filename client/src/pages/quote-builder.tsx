@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Windows Standard" },
   { value: "sliding-window", label: "Sliding Window" },
+  { value: "sliding-door", label: "Sliding Door" },
   { value: "entrance-door", label: "Entrance Door" },
   { value: "hinge-door", label: "Hinge Door" },
   { value: "french-door", label: "French Door" },
@@ -45,7 +46,7 @@ function getLayoutSummary(config: QuoteItem) {
   }
   const cat = config.category;
   if (cat === "windows-standard") return config.windowType === "awning" ? "Awning" : "Fixed";
-  if (cat === "sliding-window") return "Fixed + Sliding";
+  if (cat === "sliding-window" || cat === "sliding-door") return "Fixed + Sliding";
   if (cat === "entrance-door") {
     const side = config.sidelightSide === "left" ? "Left" : "Right";
     return `Door + ${side} Sidelight`;
@@ -61,7 +62,7 @@ function getLayoutSummary(config: QuoteItem) {
 function makeDefaultColumns(count: number): CustomColumn[] {
   return Array.from({ length: count }, () => ({
     width: 0,
-    rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const, hingeSide: "left" as const, openDirection: "out" as const }],
   }));
 }
 
@@ -119,6 +120,9 @@ export default function QuoteBuilder() {
       form.setValue("bifoldLeftCount", 1);
     } else if (category === "stacker-door") {
       form.setValue("panels", 3);
+    } else if (category === "sliding-door") {
+      form.setValue("panels", 2);
+      form.setValue("bifoldLeftCount", 0);
     } else {
       form.setValue("panels", 3);
       form.setValue("bifoldLeftCount", 0);
@@ -127,7 +131,8 @@ export default function QuoteBuilder() {
 
   const isEntrance = category === "entrance-door";
   const isCustom = layout === "custom" && !isEntrance;
-  const isSlidingCategory = ["sliding-window", "stacker-door"].includes(category);
+  const isSlidingCategory = ["sliding-window", "sliding-door", "stacker-door"].includes(category);
+  const isDoorCategory = ["hinge-door", "french-door", "entrance-door"].includes(category);
 
   const showWindowType = !isCustom && category === "windows-standard";
   const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
@@ -138,7 +143,7 @@ export default function QuoteBuilder() {
   const showPanels = !isCustom && ["bifold-door", "stacker-door"].includes(category);
   const showBifoldSplit = !isCustom && category === "bifold-door";
   const showCenterWidth = !isCustom && category === "bay-window";
-  const showOpenDirection = !isCustom && !["sliding-window", "stacker-door"].includes(category);
+  const showOpenDirection = !isCustom && !["sliding-window", "sliding-door", "stacker-door"].includes(category);
   const showLayoutSelect = !isEntrance;
   const showGrid = isCustom;
 
@@ -149,7 +154,7 @@ export default function QuoteBuilder() {
     const current = w.customColumns || [];
     const next: CustomColumn[] = Array.from({ length: count }, (_, i) => {
       if (i < current.length) return current[i];
-      return { width: 0, rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }] };
+      return { width: 0, rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const, hingeSide: "left" as const, openDirection: "out" as const }] };
     });
     form.setValue("customColumns", next);
     setExpandedCols(new Set([0]));
@@ -166,7 +171,7 @@ export default function QuoteBuilder() {
     const currentRows = cols[colIdx].rows || [];
     const next = Array.from({ length: rowCount }, (_, i) => {
       if (i < currentRows.length) return currentRows[i];
-      return { height: 0, type: "fixed" as const, slideDirection: "right" as const };
+      return { height: 0, type: "fixed" as const, slideDirection: "right" as const, hingeSide: "left" as const, openDirection: "out" as const };
     });
     cols[colIdx] = { ...cols[colIdx], rows: next };
     form.setValue("customColumns", cols);
@@ -183,30 +188,48 @@ export default function QuoteBuilder() {
   function toggleRowType(colIdx: number, rowIdx: number) {
     const cols = [...(w.customColumns || [])];
     const rows = [...(cols[colIdx].rows || [])];
+    const current = rows[rowIdx].type || "fixed";
     if (isSlidingCategory) {
-      const isNowSliding = rows[rowIdx].type !== "sliding";
       rows[rowIdx] = {
         ...rows[rowIdx],
-        type: isNowSliding ? "sliding" : "fixed",
-        slideDirection: isNowSliding ? ((rows[rowIdx] as any).slideDirection || "right") : (rows[rowIdx] as any).slideDirection,
+        type: current === "sliding" ? "fixed" : "sliding",
+      };
+    } else if (isDoorCategory) {
+      const cycle: Record<string, "fixed" | "awning" | "hinge"> = { fixed: "awning", awning: "hinge", hinge: "fixed" };
+      rows[rowIdx] = {
+        ...rows[rowIdx],
+        type: cycle[current] || "fixed",
       };
     } else {
       rows[rowIdx] = {
         ...rows[rowIdx],
-        type: rows[rowIdx].type === "awning" ? "fixed" : "awning",
+        type: current === "awning" ? "fixed" : "awning",
       };
     }
     cols[colIdx] = { ...cols[colIdx], rows };
     form.setValue("customColumns", cols);
   }
 
-  function toggleSlideDirection(colIdx: number, rowIdx: number) {
+  function setSlideDirection(colIdx: number, rowIdx: number, dir: "left" | "right") {
     const cols = [...(w.customColumns || [])];
     const rows = [...(cols[colIdx].rows || [])];
-    rows[rowIdx] = {
-      ...rows[rowIdx],
-      slideDirection: (rows[rowIdx] as any).slideDirection === "left" ? "right" : "left",
-    };
+    rows[rowIdx] = { ...rows[rowIdx], slideDirection: dir };
+    cols[colIdx] = { ...cols[colIdx], rows };
+    form.setValue("customColumns", cols);
+  }
+
+  function setRowHingeSide(colIdx: number, rowIdx: number, side: "left" | "right") {
+    const cols = [...(w.customColumns || [])];
+    const rows = [...(cols[colIdx].rows || [])];
+    rows[rowIdx] = { ...rows[rowIdx], hingeSide: side };
+    cols[colIdx] = { ...cols[colIdx], rows };
+    form.setValue("customColumns", cols);
+  }
+
+  function setRowOpenDirection(colIdx: number, rowIdx: number, dir: "in" | "out") {
+    const cols = [...(w.customColumns || [])];
+    const rows = [...(cols[colIdx].rows || [])];
+    rows[rowIdx] = { ...rows[rowIdx], openDirection: dir };
     cols[colIdx] = { ...cols[colIdx], rows };
     form.setValue("customColumns", cols);
   }
@@ -572,47 +595,105 @@ export default function QuoteBuilder() {
                                 </div>
 
                                 <div className="space-y-1">
-                                  {colRows.map((row, ri) => (
-                                    <div key={ri} className="flex items-center gap-1.5" data-testid={`row-config-${ci}-${ri}`}>
-                                      <button
-                                        type="button"
-                                        onClick={() => toggleRowType(ci, ri)}
-                                        className={`
-                                          shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
-                                          ${(row.type === "awning" || row.type === "sliding")
-                                            ? "bg-primary/15 border-primary/30 text-primary"
-                                            : "bg-background border-border text-muted-foreground"
-                                          }
-                                        `}
-                                        data-testid={`button-pane-${ci}-${ri}`}
-                                      >
-                                        {row.type === "awning" ? "AWN" : row.type === "sliding" ? "SLD" : "FIX"}
-                                      </button>
-                                      {row.type === "sliding" && (
-                                        <button
-                                          type="button"
-                                          onClick={() => toggleSlideDirection(ci, ri)}
-                                          className="shrink-0 rounded-sm text-xs py-1 px-1.5 border border-primary/30 bg-primary/10 text-primary transition-colors"
-                                          data-testid={`button-slide-dir-${ci}-${ri}`}
-                                        >
-                                          {(row as any).slideDirection === "left"
-                                            ? <ArrowLeft className="w-3 h-3" />
-                                            : <ArrowRight className="w-3 h-3" />
-                                          }
-                                        </button>
-                                      )}
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        value={row.height || ""}
-                                        placeholder="Auto"
-                                        onChange={(e) => setRowHeight(ci, ri, parseFloat(e.target.value) || 0)}
-                                        data-testid={`input-row-height-${ci}-${ri}`}
-                                        className="h-7 text-xs flex-1"
-                                      />
-                                      <span className="text-xs text-muted-foreground shrink-0">mm</span>
-                                    </div>
-                                  ))}
+                                  {colRows.map((row, ri) => {
+                                    const typeLabel = row.type === "awning" ? "AWN" : row.type === "sliding" ? "SLD" : row.type === "hinge" ? "HNG" : "FIX";
+                                    const isActive = row.type !== "fixed";
+                                    return (
+                                      <div key={ri} className="space-y-1" data-testid={`row-config-${ci}-${ri}`}>
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleRowType(ci, ri)}
+                                            className={`
+                                              shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
+                                              ${isActive
+                                                ? "bg-primary/15 border-primary/30 text-primary"
+                                                : "bg-background border-border text-muted-foreground"
+                                              }
+                                            `}
+                                            data-testid={`button-pane-${ci}-${ri}`}
+                                          >
+                                            {typeLabel}
+                                          </button>
+                                          {isSlidingCategory && row.type === "sliding" && (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => setSlideDirection(ci, ri, "left")}
+                                                className={`shrink-0 rounded-sm text-xs py-1 px-1.5 border transition-colors ${
+                                                  row.slideDirection === "left"
+                                                    ? "bg-primary/15 border-primary/30 text-primary"
+                                                    : "bg-background border-border text-muted-foreground"
+                                                }`}
+                                                data-testid={`button-slide-left-${ci}-${ri}`}
+                                              >
+                                                <ArrowLeft className="w-3 h-3" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setSlideDirection(ci, ri, "right")}
+                                                className={`shrink-0 rounded-sm text-xs py-1 px-1.5 border transition-colors ${
+                                                  row.slideDirection !== "left"
+                                                    ? "bg-primary/15 border-primary/30 text-primary"
+                                                    : "bg-background border-border text-muted-foreground"
+                                                }`}
+                                                data-testid={`button-slide-right-${ci}-${ri}`}
+                                              >
+                                                <ArrowRight className="w-3 h-3" />
+                                              </button>
+                                            </>
+                                          )}
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            value={row.height || ""}
+                                            placeholder="Auto"
+                                            onChange={(e) => setRowHeight(ci, ri, parseFloat(e.target.value) || 0)}
+                                            data-testid={`input-row-height-${ci}-${ri}`}
+                                            className="h-7 text-xs flex-1"
+                                          />
+                                          <span className="text-xs text-muted-foreground shrink-0">mm</span>
+                                        </div>
+                                        {isDoorCategory && row.type === "hinge" && (
+                                          <div className="flex items-center gap-1.5 pl-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => setRowOpenDirection(ci, ri, row.openDirection === "in" ? "out" : "in")}
+                                              className="shrink-0 rounded-sm text-xs font-mono py-0.5 px-2 border border-primary/30 bg-primary/10 text-primary transition-colors"
+                                              data-testid={`button-open-dir-${ci}-${ri}`}
+                                            >
+                                              {row.openDirection === "in" ? "IN" : "OUT"}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setRowHingeSide(ci, ri, "left")}
+                                              className={`shrink-0 rounded-sm text-xs py-0.5 px-1.5 border transition-colors ${
+                                                row.hingeSide !== "right"
+                                                  ? "bg-primary/15 border-primary/30 text-primary"
+                                                  : "bg-background border-border text-muted-foreground"
+                                              }`}
+                                              data-testid={`button-hinge-left-${ci}-${ri}`}
+                                            >
+                                              <ArrowLeft className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setRowHingeSide(ci, ri, "right")}
+                                              className={`shrink-0 rounded-sm text-xs py-0.5 px-1.5 border transition-colors ${
+                                                row.hingeSide === "right"
+                                                  ? "bg-primary/15 border-primary/30 text-primary"
+                                                  : "bg-background border-border text-muted-foreground"
+                                              }`}
+                                              data-testid={`button-hinge-right-${ci}-${ri}`}
+                                            >
+                                              <ArrowRight className="w-3 h-3" />
+                                            </button>
+                                            <span className="text-xs text-muted-foreground">Hinge</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
@@ -623,21 +704,25 @@ export default function QuoteBuilder() {
 
                     <p className="text-xs text-muted-foreground">
                       {isSlidingCategory
-                        ? "FIX = Fixed, SLD = Sliding. Leave widths/heights at 0 for even split."
+                        ? "FIX = Fixed, SLD = Sliding. Arrow buttons set slide direction. 0 = even split."
+                        : isDoorCategory
+                        ? "FIX / AWN / HNG cycle. HNG shows open direction & hinge side. 0 = even split."
                         : "FIX = Fixed, AWN = Awning. Leave widths/heights at 0 for even split."
                       }
                     </p>
 
-                    <div>
-                      <Label className="text-xs">Opening Direction</Label>
-                      <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>
-                        <SelectTrigger data-testid="select-custom-open-dir"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="out">Out (Solid Line)</SelectItem>
-                          <SelectItem value="in">In (Dashed Line)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {!isSlidingCategory && !isDoorCategory && (
+                      <div>
+                        <Label className="text-xs">Opening Direction</Label>
+                        <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>
+                          <SelectTrigger data-testid="select-custom-open-dir"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="out">Out (Solid Line)</SelectItem>
+                            <SelectItem value="in">In (Dashed Line)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
