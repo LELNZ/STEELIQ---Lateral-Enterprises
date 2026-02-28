@@ -120,6 +120,66 @@ function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
 }
 
+function distributeSpaces(total: number, specs: number[]): number[] {
+  const specifiedSum = specs.reduce((s, v) => s + (v > 0 ? v : 0), 0);
+  const autoCount = specs.filter(v => v <= 0).length;
+
+  if (autoCount === specs.length) {
+    return specs.map(() => total / specs.length);
+  }
+
+  if (autoCount === 0) {
+    if (specifiedSum === 0) return specs.map(() => total / specs.length);
+    return specs.map(v => (v / specifiedSum) * total);
+  }
+
+  const cappedSum = Math.min(specifiedSum, total);
+  const remaining = total - cappedSum;
+  const autoSize = autoCount > 0 ? remaining / autoCount : 0;
+
+  return specs.map(v => {
+    if (v <= 0) return autoSize;
+    return (v / specifiedSum) * cappedSum;
+  });
+}
+
+export interface GridMetrics {
+  colWidths: number[];
+  colMmWidths: number[];
+  colRowHeights: number[][];
+  colRowMmHeights: number[][];
+}
+
+function distributeMmLabels(total: number, specs: number[]): number[] {
+  const distributed = distributeSpaces(total, specs);
+  const raw = distributed.map(v => Math.round(v));
+  const diff = total - raw.reduce((s, v) => s + v, 0);
+  if (diff !== 0 && raw.length > 0) {
+    raw[raw.length - 1] += diff;
+  }
+  return raw;
+}
+
+function computeGridMetrics(
+  W: number, H: number, customColumns: CustomColumn[]
+): GridMetrics {
+  const widthSpecs = customColumns.map(c => c.width || 0);
+  const colWidths = distributeSpaces(W, widthSpecs);
+  const colMmWidths = distributeMmLabels(W, widthSpecs);
+
+  const colRowHeights: number[][] = [];
+  const colRowMmHeights: number[][] = [];
+
+  for (let ci = 0; ci < customColumns.length; ci++) {
+    const colRows = customColumns[ci].rows || [{ height: 0, type: "fixed" as const }];
+    const heightSpecs = colRows.map(r => r.height || 0);
+    colRowHeights.push(distributeSpaces(H, heightSpecs));
+    colRowMmHeights.push(distributeMmLabels(H, heightSpecs));
+  }
+
+  return { colWidths, colMmWidths, colRowHeights, colRowMmHeights };
+}
+
 function renderCustomGrid(
   W: number, H: number, customColumns: CustomColumn[],
   frameSize: number, openDir: string, ss: number
@@ -128,14 +188,7 @@ function renderCustomGrid(
     return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
   }
 
-  const totalSpecifiedWidth = customColumns.reduce((s, c) => s + (c.width || 0), 0);
-  const colWidths = customColumns.map(c => {
-    if (totalSpecifiedWidth > 0 && c.width > 0) return (c.width / totalSpecifiedWidth) * W;
-    return W / customColumns.length;
-  });
-  if (totalSpecifiedWidth === 0) {
-    colWidths.fill(W / customColumns.length);
-  }
+  const { colWidths, colRowHeights } = computeGridMetrics(W, H, customColumns);
 
   const elements: JSX.Element[] = [];
   let xOffset = 0;
@@ -144,15 +197,7 @@ function renderCustomGrid(
     const col = customColumns[ci];
     const colW = colWidths[ci];
     const colRows = col.rows || [{ height: 0, type: "fixed" as const }];
-
-    const totalSpecifiedHeight = colRows.reduce((s, r) => s + (r.height || 0), 0);
-    const rowHeights = colRows.map(r => {
-      if (totalSpecifiedHeight > 0 && r.height > 0) return (r.height / totalSpecifiedHeight) * H;
-      return H / colRows.length;
-    });
-    if (totalSpecifiedHeight === 0) {
-      rowHeights.fill(H / colRows.length);
-    }
+    const rowHeights = colRowHeights[ci];
 
     let yOffset = 0;
     for (let ri = 0; ri < colRows.length; ri++) {
@@ -281,7 +326,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
 }
 
 export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
-  const { width: W, height: H, name, quantity, category } = config;
+  const { width: W, height: H, name, quantity, category, layout, customColumns } = config;
   const frameSize = getFrameSize(category);
   const maxDim = Math.max(W, H);
 
@@ -299,6 +344,26 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
   const tickLen = maxDim * 0.012;
   const dimStroke = 1.2 * ss;
   const extStroke = 0.6 * ss;
+
+  const isCustom = layout === "custom" && customColumns && customColumns.length > 0;
+  const hasMultipleSections = isCustom && (
+    customColumns!.length > 1 ||
+    customColumns!.some(c => (c.rows || []).length > 1)
+  );
+
+  let gridMetrics: GridMetrics | null = null;
+  if (isCustom) {
+    gridMetrics = computeGridMetrics(W, H, customColumns!);
+  }
+
+  const sectionFontSize = fontSize * 0.75;
+  const sectionDimGap = dimGap * 0.55;
+  const sectionTextGap = dimGap * 0.9;
+  const sectionTickLen = tickLen * 0.8;
+  const sectionDimStroke = dimStroke * 0.7;
+  const sectionExtStroke = extStroke * 0.7;
+
+  const anyColHasMultipleRows = isCustom && customColumns!.some(c => (c.rows || []).length > 1);
 
   return (
     <svg
@@ -350,6 +415,85 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
           {H}
         </text>
       </g>
+
+      {hasMultipleSections && gridMetrics && gridMetrics.colWidths.length > 1 && (
+        <g data-testid="dimension-section-widths">
+          {(() => {
+            const secY = H + dimGap + textGap * 0.6;
+            const elements: JSX.Element[] = [];
+            let xPos = 0;
+            for (let ci = 0; ci < gridMetrics.colWidths.length; ci++) {
+              const cw = gridMetrics.colWidths[ci];
+              const mmW = gridMetrics.colMmWidths[ci];
+              const x1 = xPos;
+              const x2 = xPos + cw;
+              elements.push(
+                <g key={`sw-${ci}`}>
+                  <line x1={x1} y1={secY - sectionTickLen} x2={x1} y2={secY + sectionTickLen}
+                    stroke="#888" strokeWidth={sectionExtStroke} />
+                  <line x1={x2} y1={secY - sectionTickLen} x2={x2} y2={secY + sectionTickLen}
+                    stroke="#888" strokeWidth={sectionExtStroke} />
+                  <line x1={x1} y1={secY} x2={x2} y2={secY}
+                    stroke="#888" strokeWidth={sectionDimStroke} />
+                  <line x1={x1 - sectionTickLen} y1={secY + sectionTickLen}
+                    x2={x1 + sectionTickLen} y2={secY - sectionTickLen}
+                    stroke="#888" strokeWidth={sectionDimStroke} />
+                  <line x1={x2 - sectionTickLen} y1={secY + sectionTickLen}
+                    x2={x2 + sectionTickLen} y2={secY - sectionTickLen}
+                    stroke="#888" strokeWidth={sectionDimStroke} />
+                  <text x={(x1 + x2) / 2} y={secY + sectionTextGap * 0.5}
+                    textAnchor="middle" fontSize={sectionFontSize}
+                    fontWeight="500" fill="#666" fontFamily="sans-serif">
+                    {mmW}
+                  </text>
+                </g>
+              );
+              xPos += cw;
+            }
+            return elements;
+          })()}
+        </g>
+      )}
+
+      {anyColHasMultipleRows && gridMetrics && (
+        <g data-testid="dimension-section-heights">
+          {(() => {
+            const elements: JSX.Element[] = [];
+            let xPos = 0;
+            for (let ci = 0; ci < gridMetrics.colWidths.length; ci++) {
+              const colW = gridMetrics.colWidths[ci];
+              const rowHeights = gridMetrics.colRowHeights[ci];
+              const mmHeights = gridMetrics.colRowMmHeights[ci];
+              if (rowHeights.length <= 1) {
+                xPos += colW;
+                continue;
+              }
+              const secX = xPos + colW / 2;
+              let yPos = 0;
+              for (let ri = 0; ri < rowHeights.length; ri++) {
+                const rh = rowHeights[ri];
+                const mmH = mmHeights[ri];
+                const y1 = yPos;
+                const y2 = yPos + rh;
+                const midY = (y1 + y2) / 2;
+                elements.push(
+                  <g key={`sh-${ci}-${ri}`}>
+                    <text x={secX} y={midY + sectionFontSize * 0.35}
+                      textAnchor="middle" fontSize={sectionFontSize}
+                      fontWeight="500" fill="#666" fontFamily="sans-serif"
+                      opacity={0.8}>
+                      {mmH}
+                    </text>
+                  </g>
+                );
+                yPos += rh;
+              }
+              xPos += colW;
+            }
+            return elements;
+          })()}
+        </g>
+      )}
 
       <text x={W} y={-padTop * 0.35} textAnchor="end"
         fontSize={fontSize * 0.7} fill="#888" fontFamily="sans-serif">

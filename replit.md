@@ -42,7 +42,10 @@ A professional window and door quotation tool with live SVG technical drawings. 
 ## Data Model (Custom Grid)
 - `customColumns`: Array of `{ width: number, rows: [{ height: number, type: "fixed"|"awning" }] }`
 - Width/height of 0 means auto (even split)
-- Proportional scaling: if some widths/heights are specified and others are 0, the specified values are used as ratios
+- Mixed sizing: specified values (>0) treated as absolute mm capped to total; remaining space distributed evenly to auto (0) entries
+- If all specified values exceed the total, they are proportionally scaled down to fit
+- Mm labels on drawing are rounded and adjusted so they always sum exactly to the total dimension
+- Per-section dimension lines: column widths shown below main width dimension; row heights shown as labels centered in each pane for multi-row columns
 
 ## Business Rules
 - Standard windows and doors use 52mm frame
