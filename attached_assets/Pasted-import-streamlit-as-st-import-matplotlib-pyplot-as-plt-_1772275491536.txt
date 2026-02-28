@@ -1,0 +1,119 @@
+import streamlit as st
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Window & Door Quote Tool", layout="wide")
+
+FRAME_WIN = 52
+FRAME_SLIDE = 127
+
+def draw_frame_and_glass(ax, x, y, w, h, f_size, is_solid=False):
+    """Draws the outer frame and the inner glass/panel line."""
+    # Outer Frame
+    ax.add_patch(patches.Rectangle((x, y), w, h, lw=2.5, ec='black', fc='none'))
+    # Inner Sash/Glass line
+    inset = f_size * 0.7
+    fill_color = '#e0e0e0' if is_solid else 'none'
+    hatch_pattern = '///' if is_solid else None
+    ax.add_patch(patches.Rectangle((x+inset, y+inset), w-(inset*2), h-(inset*2), 
+                                   lw=1, ec='black', fc=fill_color, hatch=hatch_pattern))
+    return inset
+
+def draw_indicators(ax, x, y, w, h, inset, type, hinge_side="Left"):
+    """Draws opening triangles or sliding arrows."""
+    mid_y = y + h/2
+    mid_x = x + w/2
+    
+    if type == "Awning": # Point at top
+        plt.plot([x+inset, mid_x, x+w-inset], [y+inset, y+h-inset, y+inset], 'k-', lw=1)
+        # Handle Icon
+        plt.plot([mid_x-15, mid_x+15], [y+inset+10, y+inset+10], 'k-', lw=2)
+    
+    elif type == "Hinge": # Point at hinge
+        if hinge_side == "Left":
+            plt.plot([x+w-inset, x+inset, x+w-inset], [y+inset, mid_y, y+h-inset], 'k-', lw=1)
+        else:
+            plt.plot([x+inset, x+w-inset, x+inset], [y+inset, mid_y, y+h-inset], 'k-', lw=1)
+            
+    elif type == "Sliding":
+        plt.arrow(mid_x - (w*0.1), mid_y, w*0.15, 0, head_width=h*0.03, fc='k', ec='k')
+
+# --- SIDEBAR UI ---
+st.sidebar.header("1. Item Details")
+item_name = st.sidebar.text_input("Item Name / Reference", "W-01 Kitchen")
+qty = st.sidebar.number_input("Quantity", 1)
+
+st.sidebar.header("2. Type & Dimensions")
+cat = st.sidebar.selectbox("Category", ["Window", "Hinge Door", "Sliding/Stacking Door"])
+W = st.sidebar.number_input("Total Width (mm)", 1200)
+H = st.sidebar.number_input("Total Height (mm)", 1500)
+
+st.sidebar.header("3. Configuration")
+# Logic based on Category
+f_size = FRAME_SLIDE if "Sliding" in cat else FRAME_WIN
+
+if cat == "Window":
+    config = st.sidebar.selectbox("Layout", ["Single Fixed", "Single Awning", "2-Pane Vertical (Mullion)", "2-Pane Horizontal (Transom)"])
+    split_val = st.sidebar.number_input("Split Position (mm) - 0 for Center", 0)
+    
+elif cat == "Hinge Door":
+    config = st.sidebar.selectbox("Layout", ["Single Door", "Door with Sidelight", "Door with Transom"])
+    hinge = st.sidebar.radio("Hinge Side", ["Left", "Right"])
+    is_half_solid = st.sidebar.checkbox("Half-Solid Panel (Bottom)")
+    split_val = st.sidebar.number_input("Sidelight/Transom Size (mm)", 0)
+
+else: # Sliding
+    panels = st.sidebar.slider("Number of Panels", 2, 4, 2)
+    config = "Sliding"
+
+# --- DRAWING EXECUTION ---
+fig, ax = plt.subplots(figsize=(10, 8))
+ax.set_aspect('equal')
+
+if cat == "Window":
+    if config == "Single Fixed":
+        draw_frame_and_glass(ax, 0, 0, W, H, f_size)
+    elif config == "Single Awning":
+        ins = draw_frame_and_glass(ax, 0, 0, W, H, f_size)
+        draw_indicators(ax, 0, 0, W, H, ins, "Awning")
+    elif config == "2-Pane Vertical (Mullion)":
+        m_x = split_val if split_val > 0 else W/2
+        ins1 = draw_frame_and_glass(ax, 0, 0, m_x, H, f_size)
+        draw_indicators(ax, 0, 0, m_x, H, ins1, "Awning")
+        draw_frame_and_glass(ax, m_x, 0, W-m_x, H, f_size)
+    elif config == "2-Pane Horizontal (Transom)":
+        t_y = split_val if split_val > 0 else H/2
+        draw_frame_and_glass(ax, 0, H-t_y, W, t_y, f_size) # Top
+        ins2 = draw_frame_and_glass(ax, 0, 0, W, H-t_y, f_size) # Bottom
+        draw_indicators(ax, 0, 0, W, H-t_y, ins2, "Awning")
+
+elif cat == "Hinge Door":
+    if config == "Single Door":
+        ins = draw_frame_and_glass(ax, 0, 0, W, H, f_size, is_solid=False)
+        if is_half_solid:
+            # Draw a middle rail and shade the bottom
+            ax.add_patch(patches.Rectangle((ins, ins), W-(ins*2), (H/2)-ins, fc='#e0e0e0', hatch='//'))
+        draw_indicators(ax, 0, 0, W, H, ins, "Hinge", hinge_side=hinge)
+    # (Additional logic for sidelights would go here)
+
+elif cat == "Sliding/Stacking Door":
+    pw = W / panels
+    for i in range(panels):
+        ins = draw_frame_and_glass(ax, i*pw, 0, pw, H, f_size)
+        draw_indicators(ax, i*pw, 0, pw, H, ins, "Sliding")
+
+# Dimensions
+plt.annotate('', xy=(0, -80), xytext=(W, -80), arrowprops=dict(arrowstyle='|-|'))
+plt.text(W/2, -150, f"{W}", ha='center', fontsize=12, fontweight='bold')
+plt.annotate('', xy=(-80, 0), xytext=(-80, H), arrowprops=dict(arrowstyle='|-|'))
+plt.text(-150, H/2, f"{H}", ha='right', va='center', rotation=90, fontsize=12, fontweight='bold')
+
+plt.title(f"{item_name} (Qty: {qty})", fontsize=16, pad=20)
+plt.axis('off')
+st.pyplot(fig)
+
+# Download Button
+st.sidebar.markdown("---")
+st.sidebar.write("Ready to quote?")
+st.sidebar.button("Generate Quote PDF (Coming Soon)")
