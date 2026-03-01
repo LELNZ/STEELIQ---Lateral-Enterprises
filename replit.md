@@ -8,19 +8,22 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Backend**: Express.js with PostgreSQL (Drizzle ORM, node-postgres adapter)
 - **Drawing Engine**: SVG-based rendering in `client/src/components/drawing-canvas.tsx` with forwardRef for PNG export
 - **State Management**: Client-side React state + TanStack Query for API data fetching
-- **Routing**: Wouter — `/` = Jobs List, `/job/new` = New Job, `/job/:id` = Edit Job
+- **Settings**: Global app settings via React context (`client/src/lib/settings-context.tsx`) with localStorage persistence
+- **Routing**: Wouter — `/` = Jobs List, `/job/new` = New Job, `/job/:id` = Edit Job, `/settings` = Settings
 - **PNG Export**: Client-side SVG→Canvas→PNG at 3x resolution (`client/src/lib/export-png.ts`)
 - **Photo Storage**: Base64 JPEG data URLs compressed client-side (max 1200px, 80% quality), stored in database `job_items.photo` column
 
 ## Key Files
 - `shared/schema.ts` - Zod schemas for QuoteItem, Drizzle tables for jobs + job_items
 - `server/storage.ts` - DatabaseStorage class with PostgreSQL CRUD via Drizzle
-- `server/routes.ts` - REST API routes for jobs and job items
+- `server/routes.ts` - REST API routes for jobs and job items (includes totalSqm calculation)
 - `client/src/components/drawing-canvas.tsx` - SVG drawing component with forwardRef
 - `client/src/pages/quote-builder.tsx` - Main page with config form, drawing preview, quote items table, job header
-- `client/src/pages/jobs-list.tsx` - Jobs listing page
+- `client/src/pages/jobs-list.tsx` - Jobs listing page with m² badges
+- `client/src/pages/settings.tsx` - Global settings page (legend default, quote list position)
+- `client/src/lib/settings-context.tsx` - Settings context provider with localStorage
 - `client/src/lib/export-png.ts` - PNG export + image compression utilities
-- `client/src/App.tsx` - Route setup
+- `client/src/App.tsx` - Route setup with SettingsProvider wrapper
 
 ## Database Tables
 - `jobs`: id (uuid PK), name (text, required), address (text), date (text), created_at (timestamp)
@@ -29,7 +32,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 
 ## API Routes
 - `POST /api/jobs` — create job (validated with insertJobSchema)
-- `GET /api/jobs` — list jobs with item counts
+- `GET /api/jobs` — list jobs with item counts + totalSqm (calculated from item configs)
 - `GET /api/jobs/:id` — get job with items (ordered by sort_order)
 - `PATCH /api/jobs/:id` — update job metadata (validated with insertJobSchema.partial())
 - `DELETE /api/jobs/:id` — delete job + all items
@@ -52,11 +55,19 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Job System**: Create, save, list, re-open, delete jobs. Each job has name (required), address, date, and a list of quote items with photos
 - **PNG Export**: Download drawings as high-res PNG (3x scale). Available per-item and for the current drawing view
 - **Site Photos**: Capture photos per item via camera (mobile) or file upload (desktop). Compressed to JPEG, shown as thumbnails in items list, expandable in modal
-- **Quote Item Actions**: View (load to drawing), Download PNG, Take Photo, Edit, Duplicate, Delete
+- **Quote Item Actions**: Download PNG, Take Photo, Edit, Duplicate, Delete
 - **Save Job**: Validates job name required + at least one item. Persists all items with photos to database
+- **Unsaved Changes Warning**: beforeunload browser prompt + in-app dialog (Cancel/Discard/Save & Leave) when navigating away with unsaved changes
+- **Square Meters**: Per-item m² (width × height × qty / 1,000,000) in items table + total m² in section header + m² badge on job cards
+- **Expand/Collapse Items**: Toggle between 1/3 height (33vh) and 1/2 height (50vh) for the quote items section
+- **Settings Page**: Global preferences stored in localStorage — legend default on/off, quote list position (bottom or right side)
 - **Custom Grid Layout**: Column-based system available for all categories except Entrance Door and Hinge Door
 - **Drawing Legend**: Positioned to the LEFT of the height dimension line, toggleable on/off. Shows frame size, window/door type info
 - **Item ID / Reference**: Combobox with room dropdown (14 rooms: KIT, LNG, DIN, BED, MBR, ENS, BTH, WC, LDY, GAR, HWY, STD, RMP, ENT). Floor selector (G, 1, 2, 3, B). Auto-generates CODE-FLOOR## format
+
+## Settings (localStorage: proquote-settings)
+- `showLegendDefault` (boolean, default true) — whether legend is shown by default on new items
+- `quoteListPosition` ("bottom" | "right", default "bottom") — where items list renders relative to drawing
 
 ## Data Model
 - `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, showLegend, customColumns
@@ -76,3 +87,4 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - ALL awning indicators always show solid line — only hinge triangles respond to open direction setting
 - Dashed lines (Open In) on hinge triangles use pronounced pattern (14/6 dash/gap) with 1.5x stroke weight
 - JSON body size limit: 10MB (for photo uploads)
+- editItem uses skipCategoryResetRef to prevent category-change useEffect from overwriting saved config values

@@ -24,7 +24,14 @@ export async function registerRoutes(
       const jobsWithCounts = await Promise.all(
         allJobs.map(async (job) => {
           const items = await storage.getJobItems(job.id);
-          return { ...job, itemCount: items.length };
+          let totalSqm = 0;
+          for (const it of items) {
+            const cfg = it.config as any;
+            if (cfg && cfg.width && cfg.height) {
+              totalSqm += (cfg.width * cfg.height * (cfg.quantity || 1)) / 1_000_000;
+            }
+          }
+          return { ...job, itemCount: items.length, totalSqm: Math.round(totalSqm * 100) / 100 };
         })
       );
       res.json(jobsWithCounts);

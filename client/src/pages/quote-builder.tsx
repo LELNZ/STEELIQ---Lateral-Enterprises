@@ -15,7 +15,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, Settings } from "lucide-react";
+import { useSettings } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -156,6 +157,8 @@ export default function QuoteBuilder() {
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [itemsExpanded, setItemsExpanded] = useState(false);
+  const { showLegendDefault, quoteListPosition } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
@@ -208,7 +211,7 @@ export default function QuoteBuilder() {
 
   const form = useForm<InsertQuoteItem>({
     resolver: zodResolver(insertQuoteItemSchema),
-    defaultValues,
+    defaultValues: { ...defaultValues, showLegend: showLegendDefault },
   });
 
   const w = form.watch();
@@ -481,7 +484,7 @@ export default function QuoteBuilder() {
       toast({ title: "Item added", description: `${data.name} added to quote.` });
     }
     setHasUnsavedChanges(true);
-    form.reset(defaultValues);
+    form.reset({ ...defaultValues, showLegend: showLegendDefault });
   }
 
   function editItem(iwp: ItemWithPhoto) {
@@ -500,14 +503,14 @@ export default function QuoteBuilder() {
 
   function deleteItem(id: string) {
     setItems(items.filter((iwp) => iwp.item.id !== id));
-    if (editingId === id) { setEditingId(null); form.reset(defaultValues); }
+    if (editingId === id) { setEditingId(null); form.reset({ ...defaultValues, showLegend: showLegendDefault }); }
     setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
   }
 
   function cancelEdit() {
     setEditingId(null);
-    form.reset(defaultValues);
+    form.reset({ ...defaultValues, showLegend: showLegendDefault });
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -601,6 +604,14 @@ export default function QuoteBuilder() {
     }
   }
 
+  function calcSqm(width: number, height: number, quantity: number): string {
+    return ((width * height * quantity) / 1_000_000).toFixed(2);
+  }
+
+  const totalSqm = items.reduce((sum, iwp) => {
+    return sum + (iwp.item.width * iwp.item.height * (iwp.item.quantity || 1)) / 1_000_000;
+  }, 0).toFixed(2);
+
   const drawingConfig: InsertQuoteItem = {
     ...w,
     width: w.width || 1200,
@@ -655,6 +666,9 @@ export default function QuoteBuilder() {
                 {items.length} item{items.length !== 1 ? "s" : ""}
               </Badge>
             )}
+            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} data-testid="button-settings">
+              <Settings className="w-4 h-4" />
+            </Button>
             <Button onClick={handleDownloadCurrentPng} variant="outline" size="sm" data-testid="button-download-current-png">
               <Download className="w-4 h-4 mr-1.5" /> PNG
             </Button>
@@ -1472,7 +1486,7 @@ export default function QuoteBuilder() {
           </form>
         </ScrollArea>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={`flex-1 flex ${quoteListPosition === "right" ? "flex-row" : "flex-col"} overflow-hidden`}>
           <div className="flex-1 flex items-center justify-center p-4 min-h-0"
             style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)" }}>
             <div className="w-full h-full max-w-3xl max-h-[600px]" data-testid="drawing-preview">
@@ -1481,11 +1495,26 @@ export default function QuoteBuilder() {
           </div>
 
           {items.length > 0 && (
-            <div className="border-t bg-card flex flex-col shrink-0 overflow-hidden max-h-44 lg:max-h-56">
-              <div className="px-4 py-2 shrink-0">
+            <div className={`${quoteListPosition === "right"
+              ? "border-l bg-card flex flex-col shrink-0 overflow-hidden w-80 xl:w-96"
+              : `border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "max-h-[50vh]" : "max-h-[33vh]"}`
+            }`}>
+              <div className="px-4 py-2 shrink-0 flex items-center justify-between">
                 <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
-                  Quote Items ({items.length})
+                  Quote Items ({items.length}) — {totalSqm} m²
                 </h3>
+                {quoteListPosition === "bottom" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setItemsExpanded(!itemsExpanded)}
+                    title={itemsExpanded ? "Collapse" : "Expand"}
+                    data-testid="button-toggle-items-expand"
+                  >
+                    {itemsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </Button>
+                )}
               </div>
               <ScrollArea className="flex-1 min-h-0">
                 <Table>
@@ -1496,6 +1525,7 @@ export default function QuoteBuilder() {
                       <TableHead>Category</TableHead>
                       <TableHead>Layout</TableHead>
                       <TableHead>Dimensions</TableHead>
+                      <TableHead className="text-center">m²</TableHead>
                       <TableHead className="text-center">Qty</TableHead>
                       <TableHead className="text-center w-12">Photo</TableHead>
                       <TableHead className="text-right w-36">Actions</TableHead>
@@ -1511,6 +1541,9 @@ export default function QuoteBuilder() {
                           {getLayoutSummary(iwp.item)}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{iwp.item.width} x {iwp.item.height}</TableCell>
+                        <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.item.id}`}>
+                          {calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity)}
+                        </TableCell>
                         <TableCell className="text-center">{iwp.item.quantity}</TableCell>
                         <TableCell className="text-center">
                           {iwp.photo ? (

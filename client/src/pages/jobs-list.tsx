@@ -4,11 +4,11 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { LayoutGrid, Plus, Trash2, FolderOpen, Calendar, MapPin } from "lucide-react";
+import { LayoutGrid, Plus, Trash2, FolderOpen, Calendar, MapPin, Settings, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Job } from "@shared/schema";
 
-type JobWithCount = Job & { itemCount: number };
+type JobWithCount = Job & { itemCount: number; totalSqm: number };
 
 export default function JobsList() {
   const { toast } = useToast();
@@ -40,11 +40,18 @@ export default function JobsList() {
             <p className="text-xs text-muted-foreground">Manage your quotation jobs</p>
           </div>
         </div>
-        <Link href="/job/new">
-          <Button data-testid="button-new-job">
-            <Plus className="w-4 h-4 mr-2" /> New Job
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/settings">
+            <Button variant="ghost" size="icon" data-testid="button-settings">
+              <Settings className="w-5 h-5" />
+            </Button>
+          </Link>
+          <Link href="/job/new">
+            <Button data-testid="button-new-job">
+              <Plus className="w-4 h-4 mr-2" /> New Job
+            </Button>
+          </Link>
+        </div>
       </header>
 
       <div className="flex-1 overflow-auto p-6">
@@ -71,9 +78,17 @@ export default function JobsList() {
                     <CardTitle className="text-base" data-testid={`text-job-name-${job.id}`}>
                       {job.name}
                     </CardTitle>
-                    <Badge variant="secondary" data-testid={`badge-item-count-${job.id}`}>
-                      {job.itemCount} item{job.itemCount !== 1 ? "s" : ""}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {job.totalSqm > 0 && (
+                        <Badge variant="outline" data-testid={`badge-sqm-${job.id}`}>
+                          <Square className="w-3 h-3 mr-1" />
+                          {job.totalSqm} m²
+                        </Badge>
+                      )}
+                      <Badge variant="secondary" data-testid={`badge-item-count-${job.id}`}>
+                        {job.itemCount} item{job.itemCount !== 1 ? "s" : ""}
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
