@@ -1,0 +1,34 @@
+EnergySaverTM IGU (Entry-level Low-E)
+Clear plus $10 4/4 5/4 5/5 6/5 6/6
+Clear // EnergySaverTM 96.29 102.33 108.37 121.57 134.76
+Clear // EnergySaverTM - Toughened any one side 147.18 153.22 157.25 170.45 182.96
+Clear Toughened // EnergySaverTM Toughened 198.08 202.11 206.14 218.63 231.14
+Tint // EnergySaverTM 113.05 115.00 121.04 144.50 157.70
+Tint // EnergySaverTM Toughened 163.94 165.89 169.91 193.38 205.88
+Tint Toughened // EnergySaverTM 160.21 166.81 172.86 189.45 202.65
+Tint Toughened // EnergySaverTM Toughened 211.11 217.71 221.73 238.33 250.84
+Obscure // EnergySaverTM 110.91 116.95 131.69 144.89 166.05
+Obscure Toughened // EnergySaverTM 154.30 160.35 166.99 180.17 201.04
+Obscure // EnergySaverTM Toughened 161.81 165.83 180.56 193.07 214.24
+Obscure Toughened // EnergySaverTM Toughened 205.21 209.23 215.86 228.37 249.22
+Etchlite // EnergySaverTM 147.60 153.64 165.01 178.20 186.91
+Etchlite Toughened // EnergySaverTM 200.39 206.43 217.42 230.61 239.03
+Etchlite // EnergySaverTM Toughened 198.50 202.52 213.88 226.39 235.10
+Etchlite Toughened // EnergySaverTM Toughened 251.28 255.31 266.30 278.80 287.22
+LightBridgeTM IGU (High Performance Low-E with FREE argon gas & FREE thermal spacer)
+Clear plus $40 4/4 5/4 5/5 6/5 6/6 8/8
+Clear // LightBridgeTM 126.29 132.33 138.37 151.57 164.76 207.30
+Clear // LightBridgeTM - Toughened any one side 177.18 183.22 187.25 200.45 212.96 289.12
+Clear Toughened // LightBridgeTM Toughened 228.08 232.11 236.14 248.63 261.14 370.94
+Tint // LightBridgeTM 143.05 145.00 151.04 174.50 187.70
+Tint // LightBridgeTM Toughened 193.94 195.89 199.91 223.38 235.88
+Tint Toughened // LightBridgeTM 190.21 196.81 202.86 219.45 232.65
+Tint Toughened // LightBridgeTM Toughened 241.11 247.71 251.73 268.33 280.84
+Obscure // LightBridgeTM 140.91 146.95 161.69 174.89 196.05
+Obscure Toughened // LightBridgeTM 184.30 190.35 196.99 210.17 231.04
+Obscure // LightBridgeTM Toughened 191.81 195.83 210.56 223.07 244.24
+Obscure Toughened // LightBridgeTM Toughened 235.21 239.23 245.86 258.37 279.22
+Etchlite // LightBridgeTM 177.60 183.64 195.01 208.20 216.91
+Etchlite Toughened // LightBridgeTM 230.39 236.43 247.42 260.61 269.03
+Etchlite // LightBridgeTM Toughened 228.50 232.52 243.88 256.39 265.10
+Etchlite Toughened // LightBridgeTM Toughened 281.28 285.31 296.30 308.80 317.22
