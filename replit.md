@@ -16,10 +16,10 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - `client/src/App.tsx` - Route setup
 
 ## Supported Categories
-- **Windows Standard**: Fixed or Awning (52mm frame)
+- **Windows Standard**: Fixed or Awning (52mm frame) — NO Opening Direction control (awnings always open out)
 - **Sliding Window**: Fixed + Sliding panels (127mm frame)
 - **Sliding Door**: Fixed + Sliding panels (127mm frame) — same rendering as Sliding Window
-- **Entrance Door**: Door + Sidelight with dedicated controls (52mm frame)
+- **Entrance Door**: Door + configurable Sidelights with dedicated controls (52mm frame)
 - **Hinge Door**: Single hinged door, left/right (52mm frame)
 - **French Door**: Two opposite-hinged doors (52mm frame)
 - **Bi-folding Door**: 2-8 leaves with configurable fold direction split (70mm frame)
@@ -34,17 +34,19 @@ A professional window and door quotation tool with live SVG technical drawings. 
   - Per-row height in mm (0 = auto even split within column)
   - Per-pane type toggle (category-specific):
     - Windows (standard, bay): FIX/AWN toggle
-    - Sliding (sliding-window, sliding-door, stacker-door): FIX/SLD toggle + separate L/R direction buttons
-    - Doors (hinge-door, french-door, entrance-door): FIX/AWN/HNG cycle + per-pane In/Out + hinge side L/R
+    - Sliding (sliding-window, sliding-door, stacker-door): FIX/SLD/AWN three-way cycle + separate L/R direction buttons when SLD
+    - Doors (hinge-door, french-door): FIX/AWN/HNG cycle + per-pane In/Out + hinge side L/R
 - **Entrance Door**: Dedicated controls (no custom grid):
-  - Sidelight position: Left or Right (default right)
-  - Sidelight width in mm
-  - Door split: horizontal split with configurable top height (0 = even)
+  - Sidelight toggle: on/off (default on)
+  - Sidelight position: Left, Right, or Both (default right)
+  - Sidelight width in mm (applies to each sidelight)
+  - Door panel rows (1-4): FIX/AWN per row, height in mm
+  - Sidelight rows (1-4): FIX/AWN per row, height in mm
+  - When sidelight position is "Both": independent left and right sidelight row controls
+  - ONE full-height hinge triangle spanning entire door column, controlled by hinge side dropdown
   - Hinge side: Left or Right
   - Opening direction: defaults to "In" (dashed) for entrance doors
-  - Solid bottom panel option
-  - Per-section dimension lines: door width + sidelight width below main dim; split heights as dimension lines on the side
-- **Sliding Pane Type in Custom Grid**: For sliding-window and stacker-door categories, pane type cycles Fixed/Sliding with direction arrow toggle (left/right)
+  - Per-section dimension lines: section widths below main dim; row height labels when multiple rows
 - **Opening Direction**: In (dashed line) / Out (solid line) for hinged and awning types
 - **Bi-fold Fold Direction**: Configurable left/right split
 - **Frame Sizes**: 52mm standard, 70mm bi-fold, 127mm sliding/stacker
@@ -52,7 +54,9 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Quote Management**: Add, edit, duplicate, delete items in a quote list
 
 ## Data Model
-- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, customColumns
+- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, customColumns
+- `entranceDoorRows` / `entranceSidelightRows` / `entranceSidelightLeftRows`: Arrays of `{ height: number, type: "fixed"|"awning" }` for entrance door panel/sidelight row splits
+- `sidelightSide`: "left" | "right" | "both" — when "both", left sidelight uses entranceSidelightLeftRows, right uses entranceSidelightRows
 - `customColumns`: Array of `{ width: number, rows: [{ height: number, type: "fixed"|"awning"|"sliding"|"hinge", slideDirection: "left"|"right", hingeSide: "left"|"right", openDirection: "in"|"out" }] }`
 - Width/height of 0 means auto (even split)
 - Mixed sizing: specified values (>0) treated as absolute mm capped to total; remaining space distributed evenly to auto (0) entries
@@ -64,6 +68,10 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - Sliding/Stacker/Sliding doors use 127mm frame
 - Custom grid widths/heights default to even distribution when set to 0
 - Opening indicator triangle point = hinge location
+- Windows Standard awnings always show solid line (out), no opening direction control
 - Bi-fold V chevron indicates fold direction (< = left, > = right)
 - Sliding arrow direction: configurable per pane in custom grid; default right
-- Entrance door: no custom grid option; layout forced to "standard"; openDirection defaults to "in"
+- Entrance door: no custom grid option; layout forced to "standard"; openDirection defaults to "in"; sidelightEnabled defaults to true
+- Entrance door hinge: ONE full-height triangle spanning entire door column height, not per-row
+- Entrance door: no solid bottom panel, no door split
+- Hinge door only: has solid bottom panel option

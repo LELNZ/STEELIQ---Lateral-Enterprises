@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn } from "@shared/schema";
+import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow } from "@shared/schema";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,8 +48,9 @@ function getLayoutSummary(config: QuoteItem) {
   if (cat === "windows-standard") return config.windowType === "awning" ? "Awning" : "Fixed";
   if (cat === "sliding-window" || cat === "sliding-door") return "Fixed + Sliding";
   if (cat === "entrance-door") {
-    const side = config.sidelightSide === "left" ? "Left" : "Right";
-    return `Door + ${side} Sidelight`;
+    if (!config.sidelightEnabled) return "Door (No Sidelight)";
+    const side = config.sidelightSide === "both" ? "Both Sidelights" : config.sidelightSide === "left" ? "Left Sidelight" : "Right Sidelight";
+    return `Door + ${side}`;
   }
   if (cat === "hinge-door") return `${config.hingeSide === "left" ? "Left" : "Right"} Hinge`;
   if (cat === "french-door") return "Double Door";
@@ -66,6 +67,8 @@ function makeDefaultColumns(count: number): CustomColumn[] {
   }));
 }
 
+const defaultEntranceDoorRows: EntranceDoorRow[] = [{ height: 0, type: "fixed" }];
+
 const defaultValues: InsertQuoteItem = {
   name: "W-01",
   quantity: 1,
@@ -79,11 +82,15 @@ const defaultValues: InsertQuoteItem = {
   halfSolid: false,
   panels: 3,
   sidelightWidth: 400,
+  sidelightEnabled: true,
   sidelightSide: "right",
   doorSplit: false,
   doorSplitHeight: 0,
   bifoldLeftCount: 0,
   centerWidth: 0,
+  entranceDoorRows: [...defaultEntranceDoorRows],
+  entranceSidelightRows: [...defaultEntranceDoorRows],
+  entranceSidelightLeftRows: [...defaultEntranceDoorRows],
   customColumns: makeDefaultColumns(2),
 };
 
@@ -110,10 +117,14 @@ export default function QuoteBuilder() {
     form.setValue("openDirection", category === "entrance-door" ? "in" : "out");
     form.setValue("halfSolid", false);
     form.setValue("sidelightWidth", 400);
+    form.setValue("sidelightEnabled", true);
     form.setValue("sidelightSide", "right");
     form.setValue("doorSplit", false);
     form.setValue("doorSplitHeight", 0);
     form.setValue("centerWidth", 0);
+    form.setValue("entranceDoorRows", [...defaultEntranceDoorRows]);
+    form.setValue("entranceSidelightRows", [...defaultEntranceDoorRows]);
+    form.setValue("entranceSidelightLeftRows", [...defaultEntranceDoorRows]);
     form.setValue("customColumns", makeDefaultColumns(2));
     if (category === "bifold-door") {
       form.setValue("panels", 3);
@@ -132,18 +143,16 @@ export default function QuoteBuilder() {
   const isEntrance = category === "entrance-door";
   const isCustom = layout === "custom" && !isEntrance;
   const isSlidingCategory = ["sliding-window", "sliding-door", "stacker-door"].includes(category);
-  const isDoorCategory = ["hinge-door", "french-door", "entrance-door"].includes(category);
+  const isDoorCategory = ["hinge-door", "french-door"].includes(category);
 
   const showWindowType = !isCustom && category === "windows-standard";
   const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
-  const showHalfSolid = ["entrance-door", "hinge-door"].includes(category);
-  const showSidelightWidth = isEntrance;
-  const showSidelightSide = isEntrance;
-  const showDoorSplit = isEntrance;
+  const showHalfSolid = category === "hinge-door";
+  const showSidelightControls = isEntrance && w.sidelightEnabled;
   const showPanels = !isCustom && ["bifold-door", "stacker-door"].includes(category);
   const showBifoldSplit = !isCustom && category === "bifold-door";
   const showCenterWidth = !isCustom && category === "bay-window";
-  const showOpenDirection = !isCustom && !["sliding-window", "sliding-door", "stacker-door"].includes(category);
+  const showOpenDirection = !isCustom && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category);
   const showLayoutSelect = !isEntrance;
   const showGrid = isCustom;
 
@@ -190,9 +199,10 @@ export default function QuoteBuilder() {
     const rows = [...(cols[colIdx].rows || [])];
     const current = rows[rowIdx].type || "fixed";
     if (isSlidingCategory) {
+      const cycle: Record<string, "fixed" | "sliding" | "awning"> = { fixed: "sliding", sliding: "awning", awning: "fixed" };
       rows[rowIdx] = {
         ...rows[rowIdx],
-        type: current === "sliding" ? "fixed" : "sliding",
+        type: cycle[current] || "fixed",
       };
     } else if (isDoorCategory) {
       const cycle: Record<string, "fixed" | "awning" | "hinge"> = { fixed: "awning", awning: "hinge", hinge: "fixed" };
@@ -232,6 +242,27 @@ export default function QuoteBuilder() {
     rows[rowIdx] = { ...rows[rowIdx], openDirection: dir };
     cols[colIdx] = { ...cols[colIdx], rows };
     form.setValue("customColumns", cols);
+  }
+
+  function setEntranceDoorRowCount(field: "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows", count: number) {
+    const current = w[field] || defaultEntranceDoorRows;
+    const next: EntranceDoorRow[] = Array.from({ length: count }, (_, i) => {
+      if (i < current.length) return current[i];
+      return { height: 0, type: "fixed" as const };
+    });
+    form.setValue(field, next);
+  }
+
+  function setEntranceDoorRowHeight(field: "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows", rowIdx: number, height: number) {
+    const current = [...(w[field] || defaultEntranceDoorRows)];
+    current[rowIdx] = { ...current[rowIdx], height };
+    form.setValue(field, current);
+  }
+
+  function toggleEntranceDoorRowType(field: "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows", rowIdx: number) {
+    const current = [...(w[field] || defaultEntranceDoorRows)];
+    current[rowIdx] = { ...current[rowIdx], type: current[rowIdx].type === "awning" ? "fixed" : "awning" };
+    form.setValue(field, current);
   }
 
   function toggleColumnExpanded(colIdx: number) {
@@ -437,50 +468,119 @@ export default function QuoteBuilder() {
                   </div>
                 )}
 
-                {showSidelightSide && (
-                  <div>
-                    <Label className="text-xs">Sidelight Position</Label>
-                    <Select value={w.sidelightSide || "right"} onValueChange={(v) => form.setValue("sidelightSide", v as any)}>
-                      <SelectTrigger data-testid="select-sidelight-side"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="left">Left</SelectItem>
-                        <SelectItem value="right">Right</SelectItem>
-                      </SelectContent>
-                    </Select>
+                {isEntrance && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Checkbox id="sidelightEnabled" checked={w.sidelightEnabled}
+                      onCheckedChange={(v) => form.setValue("sidelightEnabled", !!v)}
+                      data-testid="checkbox-sidelight-enabled" />
+                    <Label htmlFor="sidelightEnabled" className="text-xs cursor-pointer">
+                      Sidelight
+                    </Label>
                   </div>
                 )}
 
-                {showSidelightWidth && (
-                  <div>
-                    <Label htmlFor="sidelightWidth" className="text-xs">Sidelight Width (mm)</Label>
-                    <Input id="sidelightWidth" type="number" min={100}
-                      {...form.register("sidelightWidth", { valueAsNumber: true })}
-                      data-testid="input-sidelight-width" />
-                  </div>
-                )}
-
-                {showDoorSplit && (
+                {showSidelightControls && (
                   <>
-                    <div className="flex items-center gap-2 pt-1">
-                      <Checkbox id="doorSplit" checked={w.doorSplit}
-                        onCheckedChange={(v) => form.setValue("doorSplit", !!v)}
-                        data-testid="checkbox-door-split" />
-                      <Label htmlFor="doorSplit" className="text-xs cursor-pointer">
-                        Door Split (Horizontal)
-                      </Label>
+                    <div>
+                      <Label className="text-xs">Sidelight Position</Label>
+                      <Select value={w.sidelightSide || "right"} onValueChange={(v) => form.setValue("sidelightSide", v as any)}>
+                        <SelectTrigger data-testid="select-sidelight-side"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="left">Left</SelectItem>
+                          <SelectItem value="right">Right</SelectItem>
+                          <SelectItem value="both">Both</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    {w.doorSplit && (
-                      <div>
-                        <Label htmlFor="doorSplitHeight" className="text-xs">Split Top Height (mm)</Label>
-                        <Input id="doorSplitHeight" type="number" min={0}
-                          placeholder="0 = even split"
-                          {...form.register("doorSplitHeight", { valueAsNumber: true })}
-                          data-testid="input-split-height" />
-                        <p className="text-xs text-muted-foreground mt-1">0 = even split of total height</p>
-                      </div>
-                    )}
+                    <div>
+                      <Label htmlFor="sidelightWidth" className="text-xs">Sidelight Width (mm)</Label>
+                      <Input id="sidelightWidth" type="number" min={100}
+                        {...form.register("sidelightWidth", { valueAsNumber: true })}
+                        data-testid="input-sidelight-width" />
+                    </div>
                   </>
                 )}
+
+                {isEntrance && (() => {
+                  const doorRows: EntranceDoorRow[] = w.entranceDoorRows || defaultEntranceDoorRows;
+                  const slSide = w.sidelightSide || "right";
+                  const slEnabled = w.sidelightEnabled;
+                  const slRows: EntranceDoorRow[] = w.entranceSidelightRows || defaultEntranceDoorRows;
+                  const slLeftRows: EntranceDoorRow[] = w.entranceSidelightLeftRows || defaultEntranceDoorRows;
+
+                  function renderRowControls(
+                    label: string,
+                    rows: EntranceDoorRow[],
+                    field: "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows",
+                    prefix: string
+                  ) {
+                    return (
+                      <div className="border rounded-md bg-muted/20 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold">{label}</Label>
+                          <Select value={String(rows.length)} onValueChange={(v) => setEntranceDoorRowCount(field, parseInt(v))}>
+                            <SelectTrigger data-testid={`select-${prefix}-rows`} className="h-7 text-xs w-16">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[1, 2, 3, 4].map((n) => (
+                                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          {rows.map((row, ri) => {
+                            const typeLabel = row.type === "awning" ? "AWN" : "FIX";
+                            const isActive = row.type !== "fixed";
+                            return (
+                              <div key={ri} className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleEntranceDoorRowType(field, ri)}
+                                  className={`
+                                    shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
+                                    ${isActive
+                                      ? "bg-primary/15 border-primary/30 text-primary"
+                                      : "bg-background border-border text-muted-foreground"
+                                    }
+                                  `}
+                                  data-testid={`button-${prefix}-row-type-${ri}`}
+                                >
+                                  {typeLabel}
+                                </button>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={row.height || ""}
+                                  placeholder="Auto"
+                                  onChange={(e) => setEntranceDoorRowHeight(field, ri, parseFloat(e.target.value) || 0)}
+                                  data-testid={`input-${prefix}-row-height-${ri}`}
+                                  className="h-7 text-xs flex-1"
+                                />
+                                <span className="text-xs text-muted-foreground shrink-0">mm</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground">FIX = Fixed, AWN = Awning. 0 = even split.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {renderRowControls("Door Panel", doorRows, "entranceDoorRows", "door")}
+                      {slEnabled && slSide !== "both" && renderRowControls("Sidelight", slRows, "entranceSidelightRows", "sl")}
+                      {slEnabled && slSide === "both" && (
+                        <>
+                          {renderRowControls("Left Sidelight", slLeftRows, "entranceSidelightLeftRows", "sl-left")}
+                          {renderRowControls("Right Sidelight", slRows, "entranceSidelightRows", "sl-right")}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {showPanels && (
                   <div>
@@ -704,7 +804,7 @@ export default function QuoteBuilder() {
 
                     <p className="text-xs text-muted-foreground">
                       {isSlidingCategory
-                        ? "FIX = Fixed, SLD = Sliding. Arrow buttons set slide direction. 0 = even split."
+                        ? "FIX / SLD / AWN cycle. Arrow buttons set slide direction. 0 = even split."
                         : isDoorCategory
                         ? "FIX / AWN / HNG cycle. HNG shows open direction & hinge side. 0 = even split."
                         : "FIX = Fixed, AWN = Awning. Leave widths/heights at 0 for even split."

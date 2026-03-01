@@ -1,4 +1,4 @@
-import type { InsertQuoteItem, CustomColumn } from "@shared/schema";
+import type { InsertQuoteItem, CustomColumn, EntranceDoorRow } from "@shared/schema";
 
 const FRAME_WIN = 52;
 const FRAME_SLIDE = 127;
@@ -226,33 +226,59 @@ function renderCustomGrid(
 }
 
 export interface EntranceDoorMetrics {
-  doorW: number;
-  slW: number;
-  doorMmW: number;
-  slMmW: number;
-  splitHeights: number[] | null;
-  splitMmHeights: number[] | null;
+  sections: { x: number; w: number; mmW: number; role: "door" | "sidelight-left" | "sidelight-right" | "sidelight" }[];
+  doorRowHeights: number[];
+  doorRowMmHeights: number[];
+  slRowHeights: number[];
+  slRowMmHeights: number[];
+  slLeftRowHeights: number[];
+  slLeftRowMmHeights: number[];
 }
 
 function computeEntranceDoorMetrics(config: InsertQuoteItem, frameSize: number): EntranceDoorMetrics {
-  const { width: W, height: H, sidelightWidth, doorSplit, doorSplitHeight } = config;
+  const { width: W, height: H, sidelightWidth, sidelightEnabled, sidelightSide } = config;
   const minPane = frameSize * 2;
   const rawSl = sidelightWidth > 0 ? sidelightWidth : 400;
-  const maxSl = Math.max(minPane, W - minPane);
-  const slW = clamp(rawSl, minPane, maxSl);
-  const doorW = Math.max(minPane, W - slW);
-  const slMmW = Math.round(slW);
-  const doorMmW = W - slMmW;
+  const doorRows: EntranceDoorRow[] = config.entranceDoorRows || [{ height: 0, type: "fixed" }];
+  const slRows: EntranceDoorRow[] = config.entranceSidelightRows || [{ height: 0, type: "fixed" }];
+  const slLeftRows: EntranceDoorRow[] = config.entranceSidelightLeftRows || [{ height: 0, type: "fixed" }];
 
-  let splitHeights: number[] | null = null;
-  let splitMmHeights: number[] | null = null;
-  if (doorSplit) {
-    const splitSpecs = [doorSplitHeight || 0, 0];
-    splitHeights = distributeSpaces(H, splitSpecs);
-    splitMmHeights = distributeMmLabels(H, splitSpecs);
+  const doorRowHeights = distributeSpaces(H, doorRows.map(r => r.height || 0));
+  const doorRowMmHeights = distributeMmLabels(H, doorRows.map(r => r.height || 0));
+  const slRowHeights = distributeSpaces(H, slRows.map(r => r.height || 0));
+  const slRowMmHeights = distributeMmLabels(H, slRows.map(r => r.height || 0));
+  const slLeftRowHeights = distributeSpaces(H, slLeftRows.map(r => r.height || 0));
+  const slLeftRowMmHeights = distributeMmLabels(H, slLeftRows.map(r => r.height || 0));
+
+  type SectionInfo = EntranceDoorMetrics["sections"][0];
+  const sections: SectionInfo[] = [];
+
+  if (!sidelightEnabled) {
+    sections.push({ x: 0, w: W, mmW: W, role: "door" });
+  } else if (sidelightSide === "both") {
+    const slEachW = clamp(rawSl, minPane, Math.max(minPane, (W - minPane) / 2));
+    const doorW = Math.max(minPane, W - slEachW * 2);
+    const slMmW = Math.round(slEachW);
+    const doorMmW = W - slMmW * 2;
+    sections.push({ x: 0, w: slEachW, mmW: slMmW, role: "sidelight-left" });
+    sections.push({ x: slEachW, w: doorW, mmW: doorMmW, role: "door" });
+    sections.push({ x: slEachW + doorW, w: slEachW, mmW: slMmW, role: "sidelight-right" });
+  } else {
+    const maxSl = Math.max(minPane, W - minPane);
+    const slW = clamp(rawSl, minPane, maxSl);
+    const doorW = Math.max(minPane, W - slW);
+    const slMmW = Math.round(slW);
+    const doorMmW = W - slMmW;
+    if (sidelightSide === "left") {
+      sections.push({ x: 0, w: slW, mmW: slMmW, role: "sidelight" });
+      sections.push({ x: slW, w: doorW, mmW: doorMmW, role: "door" });
+    } else {
+      sections.push({ x: 0, w: doorW, mmW: doorMmW, role: "door" });
+      sections.push({ x: doorW, w: slW, mmW: slMmW, role: "sidelight" });
+    }
   }
 
-  return { doorW, slW, doorMmW, slMmW, splitHeights, splitMmHeights };
+  return { sections, doorRowHeights, doorRowMmHeights, slRowHeights, slRowMmHeights, slLeftRowHeights, slLeftRowMmHeights };
 }
 
 function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
@@ -271,7 +297,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   if (category === "windows-standard") {
     const wt = windowType === "awning" ? "awning" : "fixed";
     return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
-      type={wt} openDirection={od} strokeScale={ss} />;
+      type={wt} openDirection="out" strokeScale={ss} />;
   }
 
   if (category === "sliding-window" || category === "sliding-door") {
@@ -285,38 +311,66 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
 
   if (category === "entrance-door") {
     const metrics = computeEntranceDoorMetrics(config, frameSize);
-    const { doorW, slW, splitHeights } = metrics;
-    const slSide = sidelightSide || "right";
-    const doorX = slSide === "left" ? slW : 0;
-    const slX = slSide === "left" ? 0 : doorW;
+    const { sections, doorRowHeights, slRowHeights, slLeftRowHeights } = metrics;
+    const doorRows: import("@shared/schema").EntranceDoorRow[] = config.entranceDoorRows || [{ height: 0, type: "fixed" }];
+    const slRows: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightRows || [{ height: 0, type: "fixed" }];
+    const slLeftRowsDef: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightLeftRows || [{ height: 0, type: "fixed" }];
+    const elements: JSX.Element[] = [];
 
-    const doorElements: JSX.Element[] = [];
-    if (doorSplit && splitHeights) {
-      doorElements.push(
-        <Pane key="door-top" x={doorX} y={0} w={doorW} h={splitHeights[0]}
-          frameSize={frameSize} type="hinge" hingeSide={hingeSide}
-          openDirection={od} strokeScale={ss} />
-      );
-      doorElements.push(
-        <Pane key="door-bottom" x={doorX} y={splitHeights[0]} w={doorW} h={splitHeights[1]}
-          frameSize={frameSize} type="fixed" halfSolid={halfSolid}
-          strokeScale={ss} />
-      );
-    } else {
-      doorElements.push(
-        <Pane key="door" x={doorX} y={0} w={doorW} h={H}
-          frameSize={frameSize} type="hinge" hingeSide={hingeSide}
-          halfSolid={halfSolid} openDirection={od} strokeScale={ss} />
-      );
+    for (const sec of sections) {
+      if (sec.role === "door") {
+        let yOff = 0;
+        for (let ri = 0; ri < doorRows.length; ri++) {
+          const rh = doorRowHeights[ri];
+          const pType = doorRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
+          elements.push(
+            <Pane key={`door-${ri}`} x={sec.x} y={yOff} w={sec.w} h={rh}
+              frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+          );
+          yOff += rh;
+        }
+        const inset = frameSize * 0.7;
+        const gx = sec.x + inset;
+        const gy = inset;
+        const gw = sec.w - inset * 2;
+        const gh = H - inset * 2;
+        if (gw > 0 && gh > 0) {
+          const dash = od === "in" ? `${8 * ss} ${4 * ss}` : "none";
+          const midY = gy + gh / 2;
+          if (hingeSide === "left") {
+            elements.push(
+              <polyline key="hinge-tri"
+                points={`${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`}
+                fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+                strokeDasharray={dash} />
+            );
+          } else {
+            elements.push(
+              <polyline key="hinge-tri"
+                points={`${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`}
+                fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+                strokeDasharray={dash} />
+            );
+          }
+        }
+      } else {
+        const isSidelightLeft = sec.role === "sidelight-left";
+        const rowDefs = isSidelightLeft ? slLeftRowsDef : slRows;
+        const rowH = isSidelightLeft ? slLeftRowHeights : slRowHeights;
+        let yOff = 0;
+        for (let ri = 0; ri < rowDefs.length; ri++) {
+          const rh = rowH[ri];
+          const pType = rowDefs[ri].type === "awning" ? "awning" as const : "fixed" as const;
+          elements.push(
+            <Pane key={`${sec.role}-${ri}`} x={sec.x} y={yOff} w={sec.w} h={rh}
+              frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+          );
+          yOff += rh;
+        }
+      }
     }
 
-    return (
-      <g>
-        {doorElements}
-        <Pane key="sidelight" x={slX} y={0} w={slW} h={H}
-          frameSize={frameSize} type="fixed" strokeScale={ss} />
-      </g>
-    );
+    return <g>{elements}</g>;
   }
 
   if (category === "hinge-door") {
@@ -562,77 +616,72 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
       {isEntrance && entranceMetrics && (
         <g data-testid="dimension-entrance-sections">
           {(() => {
-            const { doorW, slW, doorMmW, slMmW, splitHeights, splitMmHeights } = entranceMetrics;
-            const slSide = config.sidelightSide || "right";
+            const { sections, doorRowHeights, doorRowMmHeights, slRowHeights, slRowMmHeights, slLeftRowHeights, slLeftRowMmHeights } = entranceMetrics;
             const secY = H + dimGap + textGap * 0.6;
             const elements: JSX.Element[] = [];
 
-            const sections = slSide === "left"
-              ? [{ w: slW, mm: slMmW }, { w: doorW, mm: doorMmW }]
-              : [{ w: doorW, mm: doorMmW }, { w: slW, mm: slMmW }];
-
-            let xPos = 0;
-            sections.forEach((sec, i) => {
-              const x1 = xPos;
-              const x2 = xPos + sec.w;
-              elements.push(
-                <g key={`ew-${i}`}>
-                  <line x1={x1} y1={secY - sectionTickLen} x2={x1} y2={secY + sectionTickLen}
-                    stroke="#888" strokeWidth={sectionExtStroke} />
-                  <line x1={x2} y1={secY - sectionTickLen} x2={x2} y2={secY + sectionTickLen}
-                    stroke="#888" strokeWidth={sectionExtStroke} />
-                  <line x1={x1} y1={secY} x2={x2} y2={secY}
-                    stroke="#888" strokeWidth={sectionDimStroke} />
-                  <line x1={x1 - sectionTickLen} y1={secY + sectionTickLen}
-                    x2={x1 + sectionTickLen} y2={secY - sectionTickLen}
-                    stroke="#888" strokeWidth={sectionDimStroke} />
-                  <line x1={x2 - sectionTickLen} y1={secY + sectionTickLen}
-                    x2={x2 + sectionTickLen} y2={secY - sectionTickLen}
-                    stroke="#888" strokeWidth={sectionDimStroke} />
-                  <text x={(x1 + x2) / 2} y={secY + sectionTextGap * 0.5}
-                    textAnchor="middle" fontSize={sectionFontSize}
-                    fontWeight="500" fill="#666" fontFamily="sans-serif">
-                    {sec.mm}
-                  </text>
-                </g>
-              );
-              xPos += sec.w;
-            });
-
-            if (splitHeights && splitMmHeights) {
-              const doorX = slSide === "left" ? slW : 0;
-              const dimX = doorX + doorW + sectionDimGap;
-              let yPos = 0;
-              for (let ri = 0; ri < splitHeights.length; ri++) {
-                const rh = splitHeights[ri];
-                const mmH = splitMmHeights[ri];
-                const y1 = yPos;
-                const y2 = yPos + rh;
-                const midY = (y1 + y2) / 2;
+            if (sections.length > 1) {
+              sections.forEach((sec, i) => {
+                const x1 = sec.x;
+                const x2 = sec.x + sec.w;
                 elements.push(
-                  <g key={`eh-${ri}`}>
-                    <line x1={doorX + doorW + 2} y1={y1} x2={dimX + sectionTickLen} y2={y1}
+                  <g key={`ew-${i}`}>
+                    <line x1={x1} y1={secY - sectionTickLen} x2={x1} y2={secY + sectionTickLen}
                       stroke="#888" strokeWidth={sectionExtStroke} />
-                    <line x1={doorX + doorW + 2} y1={y2} x2={dimX + sectionTickLen} y2={y2}
+                    <line x1={x2} y1={secY - sectionTickLen} x2={x2} y2={secY + sectionTickLen}
                       stroke="#888" strokeWidth={sectionExtStroke} />
-                    <line x1={dimX} y1={y1} x2={dimX} y2={y2}
+                    <line x1={x1} y1={secY} x2={x2} y2={secY}
                       stroke="#888" strokeWidth={sectionDimStroke} />
-                    <line x1={dimX - sectionTickLen} y1={y1 + sectionTickLen}
-                      x2={dimX + sectionTickLen} y2={y1 - sectionTickLen}
+                    <line x1={x1 - sectionTickLen} y1={secY + sectionTickLen}
+                      x2={x1 + sectionTickLen} y2={secY - sectionTickLen}
                       stroke="#888" strokeWidth={sectionDimStroke} />
-                    <line x1={dimX - sectionTickLen} y1={y2 + sectionTickLen}
-                      x2={dimX + sectionTickLen} y2={y2 - sectionTickLen}
+                    <line x1={x2 - sectionTickLen} y1={secY + sectionTickLen}
+                      x2={x2 + sectionTickLen} y2={secY - sectionTickLen}
                       stroke="#888" strokeWidth={sectionDimStroke} />
-                    <text x={dimX + sectionTextGap * 0.5} y={midY + sectionFontSize * 0.35}
-                      textAnchor="start" fontSize={sectionFontSize}
+                    <text x={(x1 + x2) / 2} y={secY + sectionTextGap * 0.5}
+                      textAnchor="middle" fontSize={sectionFontSize}
                       fontWeight="500" fill="#666" fontFamily="sans-serif">
-                      {mmH}
+                      {sec.mmW}
                     </text>
                   </g>
                 );
-                yPos += rh;
-              }
+              });
             }
+
+            sections.forEach((sec) => {
+              let rowH: number[];
+              let rowMmH: number[];
+              if (sec.role === "door") {
+                rowH = doorRowHeights;
+                rowMmH = doorRowMmHeights;
+              } else if (sec.role === "sidelight-left") {
+                rowH = slLeftRowHeights;
+                rowMmH = slLeftRowMmHeights;
+              } else {
+                rowH = slRowHeights;
+                rowMmH = slRowMmHeights;
+              }
+              if (rowH.length > 1) {
+                const secX = sec.x + sec.w / 2;
+                let yPos = 0;
+                for (let ri = 0; ri < rowH.length; ri++) {
+                  const rh = rowH[ri];
+                  const mmH = rowMmH[ri];
+                  const midY = yPos + rh / 2;
+                  elements.push(
+                    <g key={`eh-${sec.role}-${ri}`}>
+                      <text x={secX} y={midY + sectionFontSize * 0.35}
+                        textAnchor="middle" fontSize={sectionFontSize}
+                        fontWeight="500" fill="#666" fontFamily="sans-serif"
+                        opacity={0.8}>
+                        {mmH}
+                      </text>
+                    </g>
+                  );
+                  yPos += rh;
+                }
+              }
+            });
 
             return elements;
           })()}

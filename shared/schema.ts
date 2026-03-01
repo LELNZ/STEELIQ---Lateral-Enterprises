@@ -33,6 +33,13 @@ export const customColumnSchema = z.object({
 export type CustomColumnRow = z.infer<typeof customColumnRowSchema>;
 export type CustomColumn = z.infer<typeof customColumnSchema>;
 
+export const entranceDoorRowSchema = z.object({
+  height: z.number().min(0).default(0),
+  type: z.enum(["fixed", "awning"]).default("fixed"),
+});
+
+export type EntranceDoorRow = z.infer<typeof entranceDoorRowSchema>;
+
 export const quoteItemSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Item name is required"),
@@ -51,11 +58,15 @@ export const quoteItemSchema = z.object({
   halfSolid: z.boolean().default(false),
   panels: z.number().int().min(2).max(8).default(3),
   sidelightWidth: z.number().default(400),
-  sidelightSide: z.enum(["left", "right"]).default("right"),
+  sidelightEnabled: z.boolean().default(true),
+  sidelightSide: z.enum(["left", "right", "both"]).default("right"),
   doorSplit: z.boolean().default(false),
   doorSplitHeight: z.number().default(0),
   bifoldLeftCount: z.number().int().min(0).default(0),
   centerWidth: z.number().default(0),
+  entranceDoorRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
+  entranceSidelightRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
+  entranceSidelightLeftRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   customColumns: z.array(customColumnSchema).default([
     { width: 0, rows: [{ height: 0, type: "fixed" }] },
     { width: 0, rows: [{ height: 0, type: "fixed" }] },
