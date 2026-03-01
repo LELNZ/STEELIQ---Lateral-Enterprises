@@ -7,7 +7,9 @@ export interface FrameTypeOption {
 
 export const FRAME_TYPES: FrameTypeOption[] = [
   { value: "ES52-Window", label: "ES52 Window", categories: ["windows-standard", "bay-window"], pricePerKg: null },
-  { value: "ES52-HingeDoor", label: "ES52 Hinge Door", categories: ["hinge-door", "entrance-door", "french-door"], pricePerKg: null },
+  { value: "ES52-HingeDoor", label: "ES52 Hinge Door", categories: ["hinge-door"], pricePerKg: null },
+  { value: "EntranceDoor", label: "Entrance Door", categories: ["entrance-door"], pricePerKg: null },
+  { value: "FrenchDoor", label: "French Door", categories: ["french-door"], pricePerKg: null },
   { value: "ES70-BifoldDoor", label: "ES70 Bifold Door", categories: ["bifold-door"], pricePerKg: null },
   { value: "ES127-SlidingWindow", label: "ES127 Sliding Window", categories: ["sliding-window"], pricePerKg: null },
   { value: "ES127-SlidingDoor", label: "ES127 Sliding Door", categories: ["sliding-door", "stacker-door"], pricePerKg: null },

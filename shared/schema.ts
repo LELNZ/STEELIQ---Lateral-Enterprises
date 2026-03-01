@@ -89,6 +89,7 @@ export const quoteItemSchema = z.object({
   wallThickness: z.number().default(0),
   heightFromFloor: z.number().default(0),
   handleType: z.string().default(""),
+  configurationId: z.string().default(""),
 });
 
 export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });
@@ -130,3 +131,61 @@ export const libraryEntries = pgTable("library_entries", {
 export const insertLibraryEntrySchema = createInsertSchema(libraryEntries).omit({ id: true });
 export type InsertLibraryEntry = z.infer<typeof insertLibraryEntrySchema>;
 export type LibraryEntry = typeof libraryEntries.$inferSelect;
+
+export const frameConfigurations = pgTable("frame_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  frameTypeId: varchar("frame_type_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description").default(""),
+  defaultSalePricePerSqm: integer("default_sale_price_per_sqm").default(550),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const insertFrameConfigurationSchema = createInsertSchema(frameConfigurations).omit({ id: true });
+export type InsertFrameConfiguration = z.infer<typeof insertFrameConfigurationSchema>;
+export type FrameConfiguration = typeof frameConfigurations.$inferSelect;
+
+export const configurationProfiles = pgTable("configuration_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  configurationId: varchar("configuration_id").notNull(),
+  mouldNumber: text("mould_number").notNull(),
+  role: text("role").notNull(),
+  kgPerMetre: text("kg_per_metre").notNull(),
+  pricePerKgUsd: text("price_per_kg_usd").notNull(),
+  quantityPerSet: integer("quantity_per_set").default(1),
+  lengthFormula: text("length_formula").default("perimeter"),
+  surface: text("surface").default(""),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const insertConfigurationProfileSchema = createInsertSchema(configurationProfiles).omit({ id: true });
+export type InsertConfigurationProfile = z.infer<typeof insertConfigurationProfileSchema>;
+export type ConfigurationProfile = typeof configurationProfiles.$inferSelect;
+
+export const configurationAccessories = pgTable("configuration_accessories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  configurationId: varchar("configuration_id").notNull(),
+  name: text("name").notNull(),
+  code: text("code").default(""),
+  colour: text("colour").default(""),
+  priceUsd: text("price_usd").notNull(),
+  quantityPerSet: text("quantity_per_set").default("1"),
+  scalingType: text("scaling_type").default("fixed"),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const insertConfigurationAccessorySchema = createInsertSchema(configurationAccessories).omit({ id: true });
+export type InsertConfigurationAccessory = z.infer<typeof insertConfigurationAccessorySchema>;
+export type ConfigurationAccessory = typeof configurationAccessories.$inferSelect;
+
+export const configurationLabor = pgTable("configuration_labor", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  configurationId: varchar("configuration_id").notNull(),
+  taskName: text("task_name").notNull(),
+  costNzd: text("cost_nzd").default("0"),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const insertConfigurationLaborSchema = createInsertSchema(configurationLabor).omit({ id: true });
+export type InsertConfigurationLabor = z.infer<typeof insertConfigurationLaborSchema>;
+export type ConfigurationLabor = typeof configurationLabor.$inferSelect;

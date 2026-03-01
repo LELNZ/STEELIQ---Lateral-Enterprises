@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Settings as SettingsIcon } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 
 export default function Settings() {
-  const { showLegendDefault, quoteListPosition, updateSetting } = useSettings();
+  const { showLegendDefault, quoteListPosition, usdToNzdRate, updateSetting } = useSettings();
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="settings-page">
@@ -67,6 +68,30 @@ export default function Settings() {
                     Right Side
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Pricing</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">USD to NZD Conversion Rate</Label>
+                <p className="text-xs text-muted-foreground mb-2">Applied to material prices stored in USD (profiles and accessories)</p>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.1"
+                  max="5"
+                  value={usdToNzdRate}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (!isNaN(v) && v > 0) updateSetting("usdToNzdRate", v);
+                  }}
+                  className="w-32"
+                  data-testid="input-usd-nzd-rate"
+                />
               </div>
             </CardContent>
           </Card>

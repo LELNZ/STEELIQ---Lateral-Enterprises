@@ -85,6 +85,17 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - `showLegendDefault` (boolean, default true) — whether legend is shown by default on new items
 - `quoteListPosition` ("bottom" | "right", default "bottom") — where items list renders relative to drawing
 
+## Configuration & Pricing System
+- **Tables**: `frame_configurations` (per frame type), `configuration_profiles` (aluminium profiles), `configuration_accessories` (hardware/seals), `configuration_labor` (cutting/milling/assembly tasks)
+- **API**: CRUD at `/api/frame-types/:id/configurations`, `/api/configurations/:id/profiles|accessories|labor`
+- **Seed**: POST `/api/frame-types/seed-configurations` — ES52 Window (3 configs), ES52 Hinge Door (1), ES127 Sliding Door (1)
+- **Pricing utility**: `client/src/lib/pricing.ts` — `calculatePricing()` returns profiles/accessories/labor costs (NZD), net cost, sale price, margin
+- **USD→NZD rate**: Configurable in Settings (default 1.7), stored in `proquote-settings` localStorage
+- **Sale price**: $500–$750/m² in $5 increments, default set by configuration's `defaultSalePricePerSqm`
+- **Quote builder integration**: Configuration dropdown auto-populates when frame type selected; pricing breakdown panel shows net cost vs sale price with margin
+- **Executive Summary**: `/job/:id/exec-summary` — job-level financial totals + expandable per-item breakdown (materials, labor, margin %, profit)
+- **Frame types**: ES52 Window, ES52 Hinge Door (hinge-door only), Entrance Door (entrance-door only), French Door (french-door only), ES70 Bifold, ES127 Sliding Window, ES127 Sliding Door
+
 ## Data Model
 - `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, showLegend, customColumns, pricePerSqm, frameType, frameColor, flashingSize, windZone, linerType, glassIguType, glassType, glassThickness, wanzBar, wallThickness, heightFromFloor, handleType
 - `entranceDoorRows` / `entranceSidelightRows` / `entranceSidelightLeftRows`: Arrays of `{ height: number, type: "fixed"|"awning" }`

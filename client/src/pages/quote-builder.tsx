@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem } from "@shared/schema";
+import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue, IGU_INFO } from "@shared/glass-library";
 import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, getFrameTypesForCategory, getHandlesForCategory } from "@shared/item-options";
 import type { LibraryEntry } from "@shared/schema";
+import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
+import {
+  Collapsible, CollapsibleContent, CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,6 +152,7 @@ const defaultValues: InsertQuoteItem = {
   wallThickness: 0,
   heightFromFloor: 0,
   handleType: "",
+  configurationId: "",
 };
 
 interface ItemWithPhoto {
@@ -179,7 +184,7 @@ export default function QuoteBuilder() {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [formTab, setFormTab] = useState<string>("drawing");
-  const { showLegendDefault, quoteListPosition } = useSettings();
+  const { showLegendDefault, quoteListPosition, usdToNzdRate } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
@@ -242,6 +247,10 @@ export default function QuoteBuilder() {
     return getGlassPrice(iguType, combo, thickness);
   };
 
+  const findFrameTypeLibId = (frameTypeValue: string) => {
+    return libFrameTypes.find((e) => (e.data as any).value === frameTypeValue)?.id || "";
+  };
+
   useEffect(() => {
     if (existingJob) {
       setJobName(existingJob.name);
@@ -286,6 +295,59 @@ export default function QuoteBuilder() {
   const layout = w.layout;
   const frameSize = getFrameSize(category);
   const formIsDirty = form.formState.isDirty;
+
+  const currentFrameTypeLibId = findFrameTypeLibId(w.frameType || "");
+  const { data: configurations = [] } = useQuery<FrameConfiguration[]>({
+    queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"],
+    queryFn: async () => {
+      if (!currentFrameTypeLibId) return [];
+      const res = await fetch(`/api/frame-types/${currentFrameTypeLibId}/configurations`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!currentFrameTypeLibId,
+  });
+
+  const currentConfigId = w.configurationId || "";
+  const { data: configProfiles = [] } = useQuery<ConfigurationProfile[]>({
+    queryKey: ["/api/configurations", currentConfigId, "profiles"],
+    queryFn: async () => {
+      if (!currentConfigId) return [];
+      const res = await fetch(`/api/configurations/${currentConfigId}/profiles`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!currentConfigId,
+  });
+  const { data: configAccessories = [] } = useQuery<ConfigurationAccessory[]>({
+    queryKey: ["/api/configurations", currentConfigId, "accessories"],
+    queryFn: async () => {
+      if (!currentConfigId) return [];
+      const res = await fetch(`/api/configurations/${currentConfigId}/accessories`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!currentConfigId,
+  });
+  const { data: configLabor = [] } = useQuery<ConfigurationLabor[]>({
+    queryKey: ["/api/configurations", currentConfigId, "labor"],
+    queryFn: async () => {
+      if (!currentConfigId) return [];
+      const res = await fetch(`/api/configurations/${currentConfigId}/labor`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!currentConfigId,
+  });
+
+  const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
+  const currentPricing: PricingBreakdown | null = hasConfigData
+    ? calculatePricing(
+        w.width || 0, w.height || 0, w.quantity || 1,
+        configProfiles, configAccessories, configLabor,
+        usdToNzdRate, w.pricePerSqm || 500
+      )
+    : null;
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -332,7 +394,15 @@ export default function QuoteBuilder() {
     const frameTypes = libFrameTypesForCategory(category);
     if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
     form.setValue("handleType", "");
+    form.setValue("configurationId", "");
   }, [category]);
+
+  useEffect(() => {
+    if (configurations.length > 0 && !configurations.find((c) => c.id === w.configurationId)) {
+      form.setValue("configurationId", configurations[0].id);
+      form.setValue("pricePerSqm", configurations[0].defaultSalePricePerSqm || 550);
+    }
+  }, [configurations, w.frameType]);
 
   const isEntrance = category === "entrance-door";
   const isHingeDoor = category === "hinge-door";
@@ -865,9 +935,14 @@ export default function QuoteBuilder() {
               </DropdownMenuContent>
             </DropdownMenu>
             {savedJobId && items.length > 0 && (
-              <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
-                <FileText className="w-4 h-4 mr-1.5" /> Summary
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
+                  <FileText className="w-4 h-4 mr-1.5" /> Summary
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-exec-summary">
+                  <FileText className="w-4 h-4 mr-1.5" /> Exec Summary
+                </Button>
+              </>
             )}
             <Button onClick={saveJob} disabled={isSaving} data-testid="button-save-job">
               <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save Job"}
@@ -1680,38 +1755,12 @@ export default function QuoteBuilder() {
               <TabsContent value="specifics" className="space-y-4 mt-0">
                 <div>
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Pricing
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Price per m² (${w.pricePerSqm || 500}/m²)</Label>
-                      <Slider
-                        value={[w.pricePerSqm || 500]}
-                        onValueChange={([v]) => form.setValue("pricePerSqm", v)}
-                        min={500}
-                        max={750}
-                        step={10}
-                        data-testid="slider-price-per-sqm"
-                      />
-                      <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
-                        <span>$500</span>
-                        <span className="font-medium">${((w.pricePerSqm || 500) * parseFloat(calcSqm(w.width || 0, w.height || 0, w.quantity || 1))).toFixed(2)}</span>
-                        <span>$750</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                     Frame & Finish
                   </h2>
                   <div className="space-y-2">
                     <div>
                       <Label className="text-xs">Frame Type</Label>
-                      <Select value={w.frameType || ""} onValueChange={(v) => form.setValue("frameType", v)}>
+                      <Select value={w.frameType || ""} onValueChange={(v) => { form.setValue("frameType", v); form.setValue("configurationId", ""); }}>
                         <SelectTrigger data-testid="select-frame-type"><SelectValue placeholder="Select frame type" /></SelectTrigger>
                         <SelectContent>
                           {libFrameTypesForCategory(w.category || "windows-standard").map((ft) => (
@@ -1720,6 +1769,26 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                    {configurations.length > 0 && (
+                      <div>
+                        <Label className="text-xs">Configuration</Label>
+                        <Select
+                          value={w.configurationId || ""}
+                          onValueChange={(v) => {
+                            form.setValue("configurationId", v);
+                            const cfg = configurations.find((c) => c.id === v);
+                            if (cfg) form.setValue("pricePerSqm", cfg.defaultSalePricePerSqm || 550);
+                          }}
+                        >
+                          <SelectTrigger data-testid="select-configuration"><SelectValue placeholder="Select configuration" /></SelectTrigger>
+                          <SelectContent>
+                            {configurations.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div>
                       <Label className="text-xs">Frame Color</Label>
                       <Select value={w.frameColor || ""} onValueChange={(v) => form.setValue("frameColor", v)}>
@@ -1743,6 +1812,65 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Pricing
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Sale Price per m² (${w.pricePerSqm || 500}/m²)</Label>
+                      <Slider
+                        value={[w.pricePerSqm || 500]}
+                        onValueChange={([v]) => form.setValue("pricePerSqm", v)}
+                        min={500}
+                        max={750}
+                        step={5}
+                        data-testid="slider-price-per-sqm"
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
+                        <span>$500</span>
+                        <span className="font-medium">
+                          Sale: ${((w.pricePerSqm || 500) * parseFloat(calcSqm(w.width || 0, w.height || 0, w.quantity || 1))).toFixed(2)}
+                        </span>
+                        <span>$750</span>
+                      </div>
+                    </div>
+
+                    {currentPricing && (
+                      <div className="rounded-md border p-3 space-y-2 bg-muted/30" data-testid="pricing-breakdown">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <span className="text-muted-foreground">Profiles (NZD)</span>
+                          <span className="text-right font-medium" data-testid="text-profiles-cost">${currentPricing.profilesCostNzd.toFixed(2)}</span>
+                          <span className="text-muted-foreground">Accessories (NZD)</span>
+                          <span className="text-right font-medium" data-testid="text-accessories-cost">${currentPricing.accessoriesCostNzd.toFixed(2)}</span>
+                          <span className="text-muted-foreground">Labor (NZD)</span>
+                          <span className="text-right font-medium" data-testid="text-labor-cost">${currentPricing.laborCostNzd.toFixed(2)}</span>
+                        </div>
+                        <Separator />
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <span className="text-muted-foreground font-semibold">Net Cost</span>
+                          <span className="text-right font-bold" data-testid="text-net-cost">${currentPricing.netCostNzd.toFixed(2)}</span>
+                          <span className="text-muted-foreground">Actual $/m²</span>
+                          <span className="text-right font-medium" data-testid="text-actual-cost-sqm">${currentPricing.actualCostPerSqm.toFixed(0)}/m²</span>
+                          <span className="text-muted-foreground font-semibold">Sale Price</span>
+                          <span className="text-right font-bold text-primary" data-testid="text-sale-price">${currentPricing.salePriceNzd.toFixed(2)}</span>
+                        </div>
+                        <Separator />
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <span className="text-muted-foreground">Margin</span>
+                          <span className={`text-right font-bold ${currentPricing.marginNzd >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-margin">
+                            ${currentPricing.marginNzd.toFixed(2)} ({currentPricing.marginPercent.toFixed(1)}%)
+                          </span>
+                          <span className="text-muted-foreground">Weight</span>
+                          <span className="text-right font-medium" data-testid="text-weight">{currentPricing.totalWeightKg.toFixed(2)} kg</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

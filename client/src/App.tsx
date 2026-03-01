@@ -11,6 +11,7 @@ import JobsList from "@/pages/jobs-list";
 import QuoteBuilder from "@/pages/quote-builder";
 import Settings from "@/pages/settings";
 import QuoteSummary from "@/pages/quote-summary";
+import ExecSummary from "@/pages/exec-summary";
 import Library from "@/pages/library";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/" component={JobsList} />
       <Route path="/job/new" component={QuoteBuilder} />
       <Route path="/job/:id/summary" component={QuoteSummary} />
+      <Route path="/job/:id/exec-summary" component={ExecSummary} />
       <Route path="/job/:id" component={QuoteBuilder} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />

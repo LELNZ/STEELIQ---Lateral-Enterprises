@@ -5,6 +5,7 @@ export type QuoteListPosition = "bottom" | "right";
 interface AppSettings {
   showLegendDefault: boolean;
   quoteListPosition: QuoteListPosition;
+  usdToNzdRate: number;
 }
 
 interface SettingsContextValue extends AppSettings {
@@ -16,6 +17,7 @@ const STORAGE_KEY = "proquote-settings";
 const defaults: AppSettings = {
   showLegendDefault: true,
   quoteListPosition: "bottom",
+  usdToNzdRate: 1.7,
 };
 
 function loadSettings(): AppSettings {
