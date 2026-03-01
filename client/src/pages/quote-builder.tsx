@@ -15,13 +15,15 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, Settings } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { downloadPng, compressImage } from "@/lib/export-png";
+import { downloadPng, compressImage, svgToPngBlob, downloadBlob, sanitizeFilename } from "@/lib/export-png";
+import { jsPDF } from "jspdf";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Windows Standard" },
@@ -530,12 +532,18 @@ export default function QuoteBuilder() {
     if (photoInputRef.current) photoInputRef.current.value = "";
   }
 
-  async function handleDownloadPng(config: InsertQuoteItem) {
+  function buildFilename(itemName: string, itemId?: string): string {
+    const jobPart = sanitizeFilename(jobName || "Job");
+    const itemPart = sanitizeFilename(itemName || itemId || "drawing");
+    return `${jobPart}_${itemPart}.png`;
+  }
+
+  async function handleDownloadPng(config: InsertQuoteItem, itemId?: string) {
     setOffscreenConfig(config);
     setTimeout(async () => {
       if (offscreenDrawingRef.current) {
         try {
-          await downloadPng(offscreenDrawingRef.current, `${config.name || "drawing"}.png`);
+          await downloadPng(offscreenDrawingRef.current, buildFilename(config.name || "", itemId));
         } catch {
           toast({ title: "Failed to download PNG", variant: "destructive" });
         }
@@ -547,10 +555,100 @@ export default function QuoteBuilder() {
   async function handleDownloadCurrentPng() {
     if (drawingRef.current) {
       try {
-        await downloadPng(drawingRef.current, `${w.name || "drawing"}.png`);
+        await downloadPng(drawingRef.current, buildFilename(w.name || ""));
       } catch {
         toast({ title: "Failed to download PNG", variant: "destructive" });
       }
+    }
+  }
+
+  function renderOffscreenAndCapture(config: InsertQuoteItem): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      setOffscreenConfig(config);
+      setTimeout(async () => {
+        if (offscreenDrawingRef.current) {
+          try {
+            const blob = await svgToPngBlob(offscreenDrawingRef.current, 3);
+            resolve(blob);
+          } catch (e) {
+            reject(e);
+          }
+        } else {
+          reject(new Error("Offscreen canvas not ready"));
+        }
+        setOffscreenConfig(null);
+      }, 300);
+    });
+  }
+
+  async function handleDownloadAllPngs() {
+    if (items.length === 0) {
+      toast({ title: "No items to download", variant: "destructive" });
+      return;
+    }
+    toast({ title: `Downloading ${items.length} item(s)...` });
+    for (const iwp of items) {
+      try {
+        const blob = await renderOffscreenAndCapture(iwp.item);
+        downloadBlob(blob, buildFilename(iwp.item.name || "", iwp.item.id));
+        await new Promise((r) => setTimeout(r, 100));
+      } catch {
+        toast({ title: `Failed to download ${iwp.item.name || "item"}`, variant: "destructive" });
+      }
+    }
+  }
+
+  async function handleDownloadPdf() {
+    if (items.length === 0) {
+      toast({ title: "No items to download", variant: "destructive" });
+      return;
+    }
+    toast({ title: `Generating PDF with ${items.length} item(s)...` });
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      for (let i = 0; i < items.length; i++) {
+        if (i > 0) pdf.addPage();
+        const iwp = items[i];
+        const blob = await renderOffscreenAndCapture(iwp.item);
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("Image load failed"));
+          img.src = dataUrl;
+        });
+
+        const imgAspect = img.width / img.height;
+        const margin = 20;
+        const availW = pageWidth - margin * 2;
+        const availH = pageHeight - margin * 2;
+        let drawW: number, drawH: number;
+        if (imgAspect > availW / availH) {
+          drawW = availW;
+          drawH = availW / imgAspect;
+        } else {
+          drawH = availH;
+          drawW = availH * imgAspect;
+        }
+        const x = (pageWidth - drawW) / 2;
+        const y = (pageHeight - drawH) / 2;
+
+        pdf.addImage(dataUrl, "PNG", x, y, drawW, drawH);
+      }
+
+      const pdfFilename = `${sanitizeFilename(jobName || "Job")}.pdf`;
+      pdf.save(pdfFilename);
+      toast({ title: "PDF downloaded successfully" });
+    } catch {
+      toast({ title: "Failed to generate PDF", variant: "destructive" });
     }
   }
 
@@ -669,9 +767,25 @@ export default function QuoteBuilder() {
             <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} data-testid="button-settings">
               <Settings className="w-4 h-4" />
             </Button>
-            <Button onClick={handleDownloadCurrentPng} variant="outline" size="sm" data-testid="button-download-current-png">
-              <Download className="w-4 h-4 mr-1.5" /> PNG
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="button-download-menu">
+                  <Download className="w-4 h-4 mr-1.5" /> Download <ChevronDown className="w-3 h-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-download-current-png">
+                  Current Drawing (PNG)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-download-all-pngs">
+                  All Items (Individual PNGs)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-download-pdf">
+                  All Items (PDF)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={saveJob} disabled={isSaving} data-testid="button-save-job">
               <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save Job"}
             </Button>
@@ -820,9 +934,14 @@ export default function QuoteBuilder() {
                       data-testid="input-height" />
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs" data-testid="badge-frame-size">
-                  {frameSize}mm Frame
-                </Badge>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="text-xs" data-testid="badge-frame-size">
+                    {frameSize}mm Frame
+                  </Badge>
+                  <Badge variant="outline" className="text-xs" data-testid="badge-live-sqm">
+                    {calcSqm(w.width || 0, w.height || 0, w.quantity || 1)} m²
+                  </Badge>
+                </div>
               </div>
             </div>
 
@@ -1563,7 +1682,7 @@ export default function QuoteBuilder() {
                           <div className="flex items-center justify-end gap-0.5">
                             <Button size="icon" variant="ghost" onClick={() => {
                               const { id, ...rest } = iwp.item;
-                              handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "drawing" });
+                              handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "" }, iwp.item.id);
                             }}
                               title="Download PNG" data-testid={`button-download-${iwp.item.id}`}>
                               <Download className="w-3.5 h-3.5" />

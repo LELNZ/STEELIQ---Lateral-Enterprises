@@ -10,7 +10,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **State Management**: Client-side React state + TanStack Query for API data fetching
 - **Settings**: Global app settings via React context (`client/src/lib/settings-context.tsx`) with localStorage persistence
 - **Routing**: Wouter — `/` = Jobs List, `/job/new` = New Job, `/job/:id` = Edit Job, `/settings` = Settings
-- **PNG Export**: Client-side SVG→Canvas→PNG at 3x resolution (`client/src/lib/export-png.ts`)
+- **Export**: Client-side SVG→Canvas→PNG at 3x resolution + jsPDF for multi-page PDF export (`client/src/lib/export-png.ts`)
 - **Photo Storage**: Base64 JPEG data URLs compressed client-side (max 1200px, 80% quality), stored in database `job_items.photo` column
 
 ## Key Files
@@ -53,12 +53,12 @@ A professional window and door quotation tool with live SVG technical drawings. 
 
 ## Features
 - **Job System**: Create, save, list, re-open, delete jobs. Each job has name (required), address, date, and a list of quote items with photos
-- **PNG Export**: Download drawings as high-res PNG (3x scale). Available per-item and for the current drawing view
+- **Download/Export**: Download button in header offers dropdown: "Current Drawing (PNG)", "All Items (Individual PNGs)", "All Items (PDF)". Per-item download available in items table. Filenames use `{JobName}_{ItemID}.png` for PNGs, `{JobName}.pdf` for PDF
 - **Site Photos**: Capture photos per item via camera (mobile) or file upload (desktop). Compressed to JPEG, shown as thumbnails in items list, expandable in modal
 - **Quote Item Actions**: Download PNG, Take Photo, Edit, Duplicate, Delete
 - **Save Job**: Validates job name required + at least one item. Persists all items with photos to database
 - **Unsaved Changes Warning**: beforeunload browser prompt + in-app dialog (Cancel/Discard/Save & Leave) when navigating away with unsaved changes
-- **Square Meters**: Per-item m² (width × height × qty / 1,000,000) in items table + total m² in section header + m² badge on job cards
+- **Square Meters**: Live m² badge in item form panel (during creation/editing) + per-item m² in items table + total m² in section header + m² badge on job cards
 - **Expand/Collapse Items**: Toggle between 1/3 height (33vh) and 1/2 height (50vh) for the quote items section
 - **Settings Page**: Global preferences stored in localStorage — legend default on/off, quote list position (bottom or right side)
 - **Custom Grid Layout**: Column-based system available for all categories except Entrance Door and Hinge Door

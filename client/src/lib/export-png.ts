@@ -1,3 +1,12 @@
+export function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    || "drawing";
+}
+
 export function svgToPngBlob(svgElement: SVGSVGElement, scale = 2): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const svgRect = svgElement.getBoundingClientRect();
@@ -56,16 +65,21 @@ export function svgToPngBlob(svgElement: SVGSVGElement, scale = 2): Promise<Blob
   });
 }
 
-export async function downloadPng(svgElement: SVGSVGElement, filename: string): Promise<void> {
-  const blob = await svgToPngBlob(svgElement, 3);
+export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename.endsWith(".png") ? filename : `${filename}.png`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export async function downloadPng(svgElement: SVGSVGElement, filename: string): Promise<void> {
+  const blob = await svgToPngBlob(svgElement, 3);
+  const safeName = filename.endsWith(".png") ? filename : `${filename}.png`;
+  downloadBlob(blob, safeName);
 }
 
 export async function compressImage(file: File, maxWidth = 1200, quality = 0.8): Promise<string> {
