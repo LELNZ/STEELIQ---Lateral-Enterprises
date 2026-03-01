@@ -36,7 +36,9 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
 
   const midX = x + w / 2;
   const midY = y + h / 2;
-  const dash = openDirection === "in" ? `${8 * ss} ${4 * ss}` : "none";
+  const isDashed = openDirection === "in";
+  const dash = isDashed ? `${14 * ss} ${6 * ss}` : "none";
+  const indicatorStroke = isDashed ? 1.5 * ss : 1 * ss;
 
   return (
     <g>
@@ -60,7 +62,7 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
         <>
           <polyline
             points={`${gx},${gy + gh} ${midX},${gy} ${gx + gw},${gy + gh}`}
-            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            fill="none" stroke="#2d2d2d" strokeWidth={indicatorStroke}
             strokeDasharray={dash} />
           <line
             x1={midX - Math.min(gw * 0.08, 20)} y1={gy + gh - inset * 0.3}
@@ -72,14 +74,14 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
       {type === "hinge" && hingeSide === "left" && (
         <polyline
           points={`${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`}
-          fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+          fill="none" stroke="#2d2d2d" strokeWidth={indicatorStroke}
           strokeDasharray={dash} />
       )}
 
       {type === "hinge" && hingeSide === "right" && (
         <polyline
           points={`${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`}
-          fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+          fill="none" stroke="#2d2d2d" strokeWidth={indicatorStroke}
           strokeDasharray={dash} />
       )}
 
@@ -301,7 +303,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const gy = inset;
     const gw = W - inset * 2;
     const gh = H - inset * 2;
-    const dash = od === "in" ? `${8 * ss} ${4 * ss}` : "none";
+    const isDashed = od === "in";
+    const dash = isDashed ? `${14 * ss} ${6 * ss}` : "none";
+    const triStroke = isDashed ? 1.5 * ss : 1 * ss;
     const midY = gy + gh / 2;
     const triPoints = hingeSide === "left"
       ? `${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`
@@ -311,7 +315,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
         {grid}
         {gw > 0 && gh > 0 && (
           <polyline points={triPoints}
-            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            fill="none" stroke="#2d2d2d" strokeWidth={triStroke}
             strokeDasharray={dash} />
         )}
       </g>
@@ -359,20 +363,22 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
         const gw = sec.w - inset * 2;
         const gh = H - inset * 2;
         if (gw > 0 && gh > 0) {
-          const dash = od === "in" ? `${8 * ss} ${4 * ss}` : "none";
+          const isDashed = od === "in";
+          const dash = isDashed ? `${14 * ss} ${6 * ss}` : "none";
+          const triStroke = isDashed ? 1.5 * ss : 1 * ss;
           const midY = gy + gh / 2;
           if (hingeSide === "left") {
             elements.push(
               <polyline key="hinge-tri"
                 points={`${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`}
-                fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+                fill="none" stroke="#2d2d2d" strokeWidth={triStroke}
                 strokeDasharray={dash} />
             );
           } else {
             elements.push(
               <polyline key="hinge-tri"
                 points={`${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`}
-                fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+                fill="none" stroke="#2d2d2d" strokeWidth={triStroke}
                 strokeDasharray={dash} />
             );
           }
@@ -417,20 +423,22 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const gw = W - inset * 2;
     const gh = H - inset * 2;
     if (gw > 0 && gh > 0) {
-      const dash = od === "in" ? `${8 * ss} ${4 * ss}` : "none";
+      const isDashed = od === "in";
+      const dash = isDashed ? `${14 * ss} ${6 * ss}` : "none";
+      const triStroke = isDashed ? 1.5 * ss : 1 * ss;
       const midY = gy + gh / 2;
       if (hingeSide === "left") {
         elements.push(
           <polyline key="hinge-tri"
             points={`${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`}
-            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            fill="none" stroke="#2d2d2d" strokeWidth={triStroke}
             strokeDasharray={dash} />
         );
       } else {
         elements.push(
           <polyline key="hinge-tri"
             points={`${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`}
-            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            fill="none" stroke="#2d2d2d" strokeWidth={triStroke}
             strokeDasharray={dash} />
         );
       }
@@ -779,10 +787,34 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
         </g>
       )}
 
-      <text x={W} y={-padTop * 0.35} textAnchor="end"
-        fontSize={fontSize * 0.7} fill="#888" fontFamily="sans-serif">
-        {frameSize}mm frame
-      </text>
+      <g data-testid="text-legend">
+        {(() => {
+          const legendFs = fontSize * 0.7;
+          const lineH = legendFs * 1.3;
+          const baseY = -padTop * 0.35;
+          const lines: string[] = [`${frameSize}mm frame`];
+
+          const hasHinge = ["entrance-door", "hinge-door"].includes(category);
+          if (hasHinge) {
+            lines.push(`Hinge: ${(config.hingeSide || "left") === "left" ? "Left" : "Right"}`);
+          }
+
+          const hasOpenDir = ["entrance-door", "hinge-door", "french-door", "bifold-door"].includes(category) ||
+            (category === "bay-window") ||
+            (layout === "custom" && category !== "windows-standard" && !["sliding-window", "sliding-door", "stacker-door"].includes(category));
+          if (hasOpenDir && category !== "windows-standard") {
+            const od = config.openDirection || "out";
+            lines.push(od === "in" ? "Open In (dashed)" : "Open Out (solid)");
+          }
+
+          return lines.map((line, i) => (
+            <text key={i} x={W} y={baseY + i * lineH} textAnchor="end"
+              fontSize={legendFs} fill="#888" fontFamily="sans-serif">
+              {line}
+            </text>
+          ));
+        })()}
+      </g>
     </svg>
   );
 }

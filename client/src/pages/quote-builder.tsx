@@ -150,14 +150,13 @@ export default function QuoteBuilder() {
 
   const showWindowType = !isCustom && category === "windows-standard";
   const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
-  const isHingeDoorCustom = isHingeDoor && layout === "custom";
   const showSidelightControls = isEntrance && w.sidelightEnabled;
   const showPanels = !isCustom && ["bifold-door", "stacker-door"].includes(category);
   const showBifoldSplit = !isCustom && category === "bifold-door";
   const showCenterWidth = !isCustom && category === "bay-window";
-  const showOpenDirection = (!isCustom || isHingeDoor) && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category);
-  const showLayoutSelect = !isEntrance;
-  const showGrid = isCustom;
+  const showOpenDirection = !isCustom && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category);
+  const showLayoutSelect = !isEntrance && !isHingeDoor;
+  const showGrid = isCustom && !isHingeDoor;
 
   const customColumns: CustomColumn[] = w.customColumns || makeDefaultColumns(2);
   const numColumns = customColumns.length;
@@ -576,7 +575,7 @@ export default function QuoteBuilder() {
                   );
                 })()}
 
-                {isHingeDoor && !isHingeDoorCustom && (() => {
+                {isHingeDoor && (() => {
                   const hingeDoorRows: EntranceDoorRow[] = w.hingeDoorRows || defaultEntranceDoorRows;
                   return (
                     <div className="border rounded-md bg-muted/20 p-3 space-y-2">
@@ -861,7 +860,7 @@ export default function QuoteBuilder() {
                       }
                     </p>
 
-                    {!isSlidingCategory && !isDoorCategory && !isHingeDoor && (
+                    {!isSlidingCategory && !isDoorCategory && (
                       <div>
                         <Label className="text-xs">Opening Direction</Label>
                         <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>

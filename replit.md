@@ -27,7 +27,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Bay Window**: Center fixed + two side awning panels (52mm frame)
 
 ## Features
-- **Custom Grid Layout**: Column-based system available for all categories except Entrance Door. Each column independently configurable:
+- **Custom Grid Layout**: Column-based system available for all categories except Entrance Door and Hinge Door. Each column independently configurable:
   - Number of columns (1-6)
   - Per-column width in mm (0 = auto even split)
   - Per-column row count (1-6)
@@ -36,7 +36,6 @@ A professional window and door quotation tool with live SVG technical drawings. 
     - Windows (standard, bay): FIX/AWN toggle
     - Sliding (sliding-window, sliding-door, stacker-door): FIX/SLD/AWN three-way cycle + separate L/R direction buttons when SLD
     - French Door: FIX/AWN/HNG cycle + per-pane In/Out + hinge side L/R
-    - Hinge Door: FIX/AWN only + full-height triangle overlay; hinge side + opening direction always visible
 - **Entrance Door**: Dedicated controls (no custom grid):
   - Sidelight toggle: on/off (default on)
   - Sidelight position: Left, Right, or Both (default right)
@@ -48,7 +47,8 @@ A professional window and door quotation tool with live SVG technical drawings. 
   - Hinge side: Left or Right
   - Opening direction: defaults to "In" (dashed) for entrance doors
   - Per-section dimension lines: section widths below main dim; row height labels when multiple rows
-- **Opening Direction**: In (dashed line) / Out (solid line) for hinged and awning types
+- **Drawing Legend**: Top-right corner shows frame size, hinge side (when applicable), and opening direction (when applicable)
+- **Opening Direction**: In (dashed line, pronounced thick dash) / Out (solid line) for hinged and awning types
 - **Bi-fold Fold Direction**: Configurable left/right split
 - **Frame Sizes**: 52mm standard, 70mm bi-fold, 127mm sliding/stacker
 - **Dimension Lines**: All drawings show total Width and Height with architectural tick marks
@@ -76,6 +76,6 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - Entrance door: no custom grid option; layout forced to "standard"; openDirection defaults to "in"; sidelightEnabled defaults to true
 - Entrance door hinge: ONE full-height triangle spanning entire door column height, not per-row
 - Entrance door: no solid bottom panel, no door split
-- Hinge door: entrance-door-style row controls (1-4 rows FIX/AWN), ONE full-height hinge triangle, no solid bottom panel
-- Hinge door custom: FIX/AWN-only grid + full-height triangle overlay; hinge side + opening direction always visible
+- Hinge door: no custom grid option; layout forced to "standard"; entrance-door-style row controls (1-4 rows FIX/AWN), ONE full-height hinge triangle, no solid bottom panel
+- Dashed lines (Open In) use pronounced pattern (14/6 dash/gap) with 1.5x stroke weight for clear visual distinction
 - `isDoorCategory` = `["french-door"]` only (hinge-door uses FIX/AWN toggle, not FIX/AWN/HNG cycle)
