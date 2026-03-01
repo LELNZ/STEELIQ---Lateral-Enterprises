@@ -9,7 +9,8 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Drawing Engine**: SVG-based rendering in `client/src/components/drawing-canvas.tsx` with forwardRef for PNG export
 - **State Management**: Client-side React state + TanStack Query for API data fetching
 - **Settings**: Global app settings via React context (`client/src/lib/settings-context.tsx`) with localStorage persistence
-- **Routing**: Wouter — `/` = Jobs List, `/job/new` = New Job, `/job/:id` = Edit Job, `/job/:id/summary` = Quote Summary, `/settings` = Settings
+- **Navigation**: Collapsible sidebar (shadcn Sidebar component) with Jobs, Library, Settings links
+- **Routing**: Wouter — `/` = Jobs List, `/job/new` = New Job, `/job/:id` = Edit Job, `/job/:id/summary` = Quote Summary, `/library` = Item Library, `/settings` = Settings
 - **Export**: Client-side SVG→Canvas→PNG at 3x resolution + jsPDF for multi-page PDF export (`client/src/lib/export-png.ts`)
 - **Photo Storage**: Base64 JPEG data URLs compressed client-side (max 1200px, 80% quality), stored in database `job_items.photo` column
 
@@ -24,13 +25,16 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - `client/src/lib/settings-context.tsx` - Settings context provider with localStorage
 - `client/src/lib/export-png.ts` - PNG export, PDF export, image compression, filename sanitization utilities
 - `client/src/pages/quote-summary.tsx` - Quote Summary page with pricing breakdown
-- `shared/glass-library.ts` - Glass pricing library (EnergySaver + LightBridge IGU data)
-- `shared/item-options.ts` - Frame types, colors, handles, flashing, wind zones, liner types
-- `client/src/App.tsx` - Route setup with SettingsProvider wrapper
+- `client/src/pages/library.tsx` - Library CRUD page (glass, frame types, colors, handles, liners)
+- `client/src/components/app-sidebar.tsx` - Sidebar navigation component (Jobs, Library, Settings)
+- `shared/glass-library.ts` - Glass pricing library (EnergySaver + LightBridge IGU data) — fallback/seed data
+- `shared/item-options.ts` - Frame types, colors, handles, flashing, wind zones, liner types — fallback/seed data
+- `client/src/App.tsx` - Route setup with SidebarProvider + SettingsProvider wrapper
 
 ## Database Tables
 - `jobs`: id (uuid PK), name (text, required), address (text), date (text), created_at (timestamp)
 - `job_items`: id (uuid PK), job_id (varchar FK), config (jsonb — full QuoteItem), photo (text, nullable — base64), sort_order (integer)
+- `library_entries`: id (uuid PK), type (text — "glass", "frame_type", "frame_color", "window_handle", "door_handle", "liner_type"), data (jsonb), sort_order (integer). Auto-seeded from hardcoded defaults on first run if empty.
 - `users`: id (uuid PK), username (text), password (text) — boilerplate, not currently used
 
 ## API Routes
@@ -42,6 +46,11 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - `POST /api/jobs/:id/items` — add item (validated with quoteItemSchema + photo + sortOrder)
 - `PATCH /api/jobs/:id/items/:itemId` — update item
 - `DELETE /api/jobs/:id/items/:itemId` — delete item
+- `GET /api/library?type=X` — get library entries (optional type filter)
+- `POST /api/library` — create library entry
+- `PATCH /api/library/:id` — update library entry
+- `DELETE /api/library/:id` — delete library entry
+- `POST /api/library/seed` — reset library to hardcoded defaults
 
 ## Supported Categories
 - **Windows Standard**: Fixed or Awning (52mm frame) — NO Opening Direction control (awnings always open out)

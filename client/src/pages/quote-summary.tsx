@@ -47,7 +47,7 @@ export default function QuoteSummary() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Loading summary...</p>
       </div>
     );
@@ -55,7 +55,7 @@ export default function QuoteSummary() {
 
   if (!job) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Job not found</p>
       </div>
     );
@@ -67,7 +67,7 @@ export default function QuoteSummary() {
   const avgPricePerSqm = totalSqm > 0 ? totalPrice / totalSqm : 0;
 
   return (
-    <div className="min-h-screen bg-background" data-testid="quote-summary">
+    <div className="min-h-full bg-background" data-testid="quote-summary">
       <header className="border-b bg-card px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

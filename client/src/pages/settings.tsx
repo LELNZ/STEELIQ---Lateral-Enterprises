@@ -2,20 +2,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeftCircle, Settings as SettingsIcon } from "lucide-react";
-import { useLocation } from "wouter";
+import { Settings as SettingsIcon } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 
 export default function Settings() {
-  const [, navigate] = useLocation();
   const { showLegendDefault, quoteListPosition, updateSetting } = useSettings();
 
   return (
-    <div className="flex flex-col h-screen bg-background" data-testid="settings-page">
+    <div className="flex flex-col h-full bg-background" data-testid="settings-page">
       <header className="border-b px-6 py-3 flex items-center gap-3 bg-card shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/")} data-testid="button-back-from-settings">
-          <ArrowLeftCircle className="w-5 h-5" />
-        </Button>
         <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
           <SettingsIcon className="w-5 h-5 text-primary-foreground" />
         </div>

@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { LayoutGrid, Plus, Trash2, FolderOpen, Calendar, MapPin, Settings, Square } from "lucide-react";
+import { LayoutGrid, Plus, Trash2, FolderOpen, Calendar, MapPin, Square } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Job } from "@shared/schema";
 
@@ -27,7 +27,7 @@ export default function JobsList() {
   });
 
   return (
-    <div className="flex flex-col h-screen bg-background" data-testid="jobs-list">
+    <div className="flex flex-col h-full bg-background" data-testid="jobs-list">
       <header className="border-b px-6 py-3 flex items-center justify-between gap-4 bg-card shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
@@ -41,11 +41,6 @@ export default function JobsList() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/settings">
-            <Button variant="ghost" size="icon" data-testid="button-settings">
-              <Settings className="w-5 h-5" />
-            </Button>
-          </Link>
           <Link href="/job/new">
             <Button data-testid="button-new-job">
               <Plus className="w-4 h-4 mr-2" /> New Job

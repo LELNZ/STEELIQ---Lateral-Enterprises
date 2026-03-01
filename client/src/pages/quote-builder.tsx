@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem } from "@shared/schema";
-import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
-import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, getFrameTypesForCategory, getHandlesForCategory, DOOR_CATEGORIES } from "@shared/item-options";
+import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue, IGU_INFO } from "@shared/glass-library";
+import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, getFrameTypesForCategory, getHandlesForCategory } from "@shared/item-options";
+import type { LibraryEntry } from "@shared/schema";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, Settings, FileText } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
@@ -195,6 +196,52 @@ export default function QuoteBuilder() {
     enabled: !!jobId,
   });
 
+  const fetchLib = (type: string) => async () => {
+    const res = await fetch(`/api/library?type=${type}`);
+    if (!res.ok) throw new Error("Failed");
+    return res.json() as Promise<LibraryEntry[]>;
+  };
+  const { data: libFrameTypes = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "frame_type"], queryFn: fetchLib("frame_type") });
+  const { data: libFrameColors = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "frame_color"], queryFn: fetchLib("frame_color") });
+  const { data: libGlass = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "glass"], queryFn: fetchLib("glass") });
+  const { data: libWindowHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "window_handle"], queryFn: fetchLib("window_handle") });
+  const { data: libDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "door_handle"], queryFn: fetchLib("door_handle") });
+  const { data: libLiners = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "liner_type"], queryFn: fetchLib("liner_type") });
+
+  const libFrameTypesForCategory = (cat: string) => {
+    const fromDb = libFrameTypes.filter((e) => {
+      const d = e.data as any;
+      return d.categories?.includes(cat);
+    }).map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }));
+    if (fromDb.length > 0) return fromDb;
+    return getFrameTypesForCategory(cat).map((ft) => ({ value: ft.value, label: ft.label }));
+  };
+  const libFrameColorOptions = libFrameColors.length > 0
+    ? libFrameColors.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
+    : FRAME_COLORS.map((fc) => ({ value: fc.value, label: fc.label }));
+  const libLinerOptions = libLiners.length > 0
+    ? libLiners.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
+    : LINER_TYPES.map((lt) => ({ value: lt.value, label: lt.label }));
+  const libHandlesForCategory = (cat: string) => {
+    const handles = DOOR_CATEGORIES.includes(cat) ? libDoorHandles : libWindowHandles;
+    if (handles.length > 0) return handles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }));
+    return getHandlesForCategory(cat).map((h) => ({ value: h.value, label: h.label }));
+  };
+  const libGlassCombos = (iguType: string) => {
+    const fromDb = libGlass.filter((e) => (e.data as any).iguType === iguType).map((e) => (e.data as any).combo as string);
+    return fromDb.length > 0 ? fromDb : getGlassCombos(iguType);
+  };
+  const libGlassThicknesses = (iguType: string, combo: string) => {
+    const entry = libGlass.find((e) => (e.data as any).iguType === iguType && (e.data as any).combo === combo);
+    if (entry) return Object.keys((entry.data as any).prices || {});
+    return getAvailableThicknesses(iguType, combo);
+  };
+  const libGlassPrice = (iguType: string, combo: string, thickness: string) => {
+    const entry = libGlass.find((e) => (e.data as any).iguType === iguType && (e.data as any).combo === combo);
+    if (entry) return (entry.data as any).prices?.[thickness] ?? null;
+    return getGlassPrice(iguType, combo, thickness);
+  };
+
   useEffect(() => {
     if (existingJob) {
       setJobName(existingJob.name);
@@ -282,7 +329,7 @@ export default function QuoteBuilder() {
     }
     const doorCats = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door", "sliding-door"];
     form.setValue("heightFromFloor", doorCats.includes(category) ? 30 : 800);
-    const frameTypes = getFrameTypesForCategory(category);
+    const frameTypes = libFrameTypesForCategory(category);
     if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
     form.setValue("handleType", "");
   }, [category]);
@@ -754,14 +801,14 @@ export default function QuoteBuilder() {
 
   if (jobLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Loading job...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background" data-testid="quote-builder">
+    <div className="flex flex-col h-full bg-background" data-testid="quote-builder">
       <input
         ref={photoInputRef}
         type="file"
@@ -798,9 +845,6 @@ export default function QuoteBuilder() {
                 {items.length} item{items.length !== 1 ? "s" : ""}
               </Badge>
             )}
-            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} data-testid="button-settings">
-              <Settings className="w-4 h-4" />
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" data-testid="button-download-menu">
@@ -1670,7 +1714,7 @@ export default function QuoteBuilder() {
                       <Select value={w.frameType || ""} onValueChange={(v) => form.setValue("frameType", v)}>
                         <SelectTrigger data-testid="select-frame-type"><SelectValue placeholder="Select frame type" /></SelectTrigger>
                         <SelectContent>
-                          {getFrameTypesForCategory(w.category || "windows-standard").map((ft) => (
+                          {libFrameTypesForCategory(w.category || "windows-standard").map((ft) => (
                             <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>
                           ))}
                         </SelectContent>
@@ -1681,7 +1725,7 @@ export default function QuoteBuilder() {
                       <Select value={w.frameColor || ""} onValueChange={(v) => form.setValue("frameColor", v)}>
                         <SelectTrigger data-testid="select-frame-color"><SelectValue placeholder="Select color" /></SelectTrigger>
                         <SelectContent>
-                          {FRAME_COLORS.map((fc) => (
+                          {libFrameColorOptions.map((fc) => (
                             <SelectItem key={fc.value} value={fc.value}>{fc.label}</SelectItem>
                           ))}
                         </SelectContent>
@@ -1750,7 +1794,7 @@ export default function QuoteBuilder() {
                       <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
                         <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
                         <SelectContent>
-                          {LINER_TYPES.map((lt) => (
+                          {libLinerOptions.map((lt) => (
                             <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
                           ))}
                         </SelectContent>
@@ -1789,7 +1833,7 @@ export default function QuoteBuilder() {
                         }}>
                           <SelectTrigger data-testid="select-glass-type"><SelectValue placeholder="Select glass" /></SelectTrigger>
                           <SelectContent>
-                            {getGlassCombos(w.glassIguType).map((combo) => (
+                            {libGlassCombos(w.glassIguType).map((combo) => (
                               <SelectItem key={combo} value={combo}>{combo}</SelectItem>
                             ))}
                           </SelectContent>
@@ -1802,7 +1846,7 @@ export default function QuoteBuilder() {
                         <Select value={w.glassThickness || ""} onValueChange={(v) => form.setValue("glassThickness", v)}>
                           <SelectTrigger data-testid="select-glass-thickness"><SelectValue placeholder="Select thickness" /></SelectTrigger>
                           <SelectContent>
-                            {getAvailableThicknesses(w.glassIguType, w.glassType).map((t) => (
+                            {libGlassThicknesses(w.glassIguType, w.glassType).map((t) => (
                               <SelectItem key={t} value={t}>{t}</SelectItem>
                             ))}
                           </SelectContent>
@@ -1812,7 +1856,7 @@ export default function QuoteBuilder() {
                     {w.glassIguType && w.glassType && w.glassThickness && (
                       <div className="flex gap-2">
                         <Badge variant="outline" className="text-xs" data-testid="badge-glass-price">
-                          ${getGlassPrice(w.glassIguType, w.glassType, w.glassThickness)?.toFixed(2) ?? "—"}/m²
+                          ${libGlassPrice(w.glassIguType, w.glassType, w.glassThickness)?.toFixed(2) ?? "—"}/m²
                         </Badge>
                         <Badge variant="outline" className="text-xs" data-testid="badge-glass-rvalue">
                           R-Value: {getGlassRValue(w.glassIguType) ?? "—"}
@@ -1834,7 +1878,7 @@ export default function QuoteBuilder() {
                       <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
                         <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
                         <SelectContent>
-                          {getHandlesForCategory(w.category || "windows-standard").map((h) => (
+                          {libHandlesForCategory(w.category || "windows-standard").map((h) => (
                             <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
                           ))}
                         </SelectContent>

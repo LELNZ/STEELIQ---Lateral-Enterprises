@@ -2,7 +2,8 @@ import {
   type User, type InsertUser,
   type Job, type InsertJob,
   type JobItem, type InsertJobItem,
-  users, jobs, jobItems,
+  type LibraryEntry, type InsertLibraryEntry,
+  users, jobs, jobItems, libraryEntries,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc } from "drizzle-orm";
@@ -27,6 +28,11 @@ export interface IStorage {
   updateJobItem(id: string, data: Partial<InsertJobItem>): Promise<JobItem | undefined>;
   deleteJobItem(id: string): Promise<void>;
   deleteJobItems(jobId: string): Promise<void>;
+
+  getLibraryEntries(type?: string): Promise<LibraryEntry[]>;
+  createLibraryEntry(entry: InsertLibraryEntry): Promise<LibraryEntry>;
+  updateLibraryEntry(id: string, data: Partial<InsertLibraryEntry>): Promise<LibraryEntry | undefined>;
+  deleteLibraryEntry(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -89,6 +95,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteJobItems(jobId: string): Promise<void> {
     await db.delete(jobItems).where(eq(jobItems.jobId, jobId));
+  }
+
+  async getLibraryEntries(type?: string): Promise<LibraryEntry[]> {
+    if (type) {
+      return db.select().from(libraryEntries).where(eq(libraryEntries.type, type)).orderBy(asc(libraryEntries.sortOrder));
+    }
+    return db.select().from(libraryEntries).orderBy(asc(libraryEntries.sortOrder));
+  }
+
+  async createLibraryEntry(entry: InsertLibraryEntry): Promise<LibraryEntry> {
+    const [created] = await db.insert(libraryEntries).values(entry).returning();
+    return created;
+  }
+
+  async updateLibraryEntry(id: string, data: Partial<InsertLibraryEntry>): Promise<LibraryEntry | undefined> {
+    const [updated] = await db.update(libraryEntries).set(data).where(eq(libraryEntries.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLibraryEntry(id: string): Promise<void> {
+    await db.delete(libraryEntries).where(eq(libraryEntries.id, id));
   }
 }
 

@@ -119,3 +119,14 @@ export const jobItems = pgTable("job_items", {
 export const insertJobItemSchema = createInsertSchema(jobItems).omit({ id: true });
 export type InsertJobItem = z.infer<typeof insertJobItemSchema>;
 export type JobItem = typeof jobItems.$inferSelect;
+
+export const libraryEntries = pgTable("library_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(),
+  data: jsonb("data").notNull(),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const insertLibraryEntrySchema = createInsertSchema(libraryEntries).omit({ id: true });
+export type InsertLibraryEntry = z.infer<typeof insertLibraryEntrySchema>;
+export type LibraryEntry = typeof libraryEntries.$inferSelect;
