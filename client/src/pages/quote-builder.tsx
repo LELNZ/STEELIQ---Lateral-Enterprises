@@ -15,9 +15,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ArrowLeft, ArrowRight, Save, Eye, Download, Camera, X, ArrowLeftCircle } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useRoute, useLocation, Link } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { downloadPng, compressImage } from "@/lib/export-png";
@@ -154,6 +154,8 @@ export default function QuoteBuilder() {
   const [savedJobId, setSavedJobId] = useState<string | null>(jobId || null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
@@ -193,6 +195,16 @@ export default function QuoteBuilder() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
   const form = useForm<InsertQuoteItem>({
     resolver: zodResolver(insertQuoteItemSchema),
     defaultValues,
@@ -202,6 +214,11 @@ export default function QuoteBuilder() {
   const category = w.category;
   const layout = w.layout;
   const frameSize = getFrameSize(category);
+  const formIsDirty = form.formState.isDirty;
+
+  useEffect(() => {
+    if (formIsDirty) setHasUnsavedChanges(true);
+  }, [formIsDirty]);
 
   useEffect(() => {
     form.setValue("layout", "standard");
@@ -458,6 +475,7 @@ export default function QuoteBuilder() {
       setItems([...items, { item: newItem }]);
       toast({ title: "Item added", description: `${data.name} added to quote.` });
     }
+    setHasUnsavedChanges(true);
     form.reset(defaultValues);
   }
 
@@ -467,21 +485,17 @@ export default function QuoteBuilder() {
     setEditingId(id);
   }
 
-  function selectItem(iwp: ItemWithPhoto) {
-    const { id, ...rest } = iwp.item;
-    form.reset(rest);
-    setEditingId(null);
-  }
-
   function duplicateItem(iwp: ItemWithPhoto) {
     const newItem: QuoteItem = { ...iwp.item, id: crypto.randomUUID(), name: `${iwp.item.name} (copy)` };
     setItems([...items, { item: newItem }]);
+    setHasUnsavedChanges(true);
     toast({ title: "Item duplicated" });
   }
 
   function deleteItem(id: string) {
     setItems(items.filter((iwp) => iwp.item.id !== id));
     if (editingId === id) { setEditingId(null); form.reset(defaultValues); }
+    setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
   }
 
@@ -498,6 +512,7 @@ export default function QuoteBuilder() {
       setItems(prev => prev.map(iwp =>
         iwp.item.id === photoTargetItemId ? { ...iwp, photo: compressed } : iwp
       ));
+      setHasUnsavedChanges(true);
       toast({ title: "Photo added" });
     } catch {
       toast({ title: "Failed to process photo", variant: "destructive" });
@@ -568,6 +583,7 @@ export default function QuoteBuilder() {
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      setHasUnsavedChanges(false);
       toast({ title: "Job saved successfully" });
       if (isNewJob) {
         navigate(`/job/${currentJobId}`, { replace: true });
@@ -610,11 +626,11 @@ export default function QuoteBuilder() {
       <header className="border-b px-6 py-3 bg-card shrink-0">
         <div className="flex items-center justify-between gap-4 mb-3">
           <div className="flex items-center gap-3">
-            <Link href="/">
-              <Button variant="ghost" size="icon" data-testid="button-back-to-jobs">
-                <ArrowLeftCircle className="w-5 h-5" />
-              </Button>
-            </Link>
+            <Button variant="ghost" size="icon" data-testid="button-back-to-jobs" onClick={() => {
+              if (hasUnsavedChanges) { setShowLeaveDialog(true); } else { navigate("/"); }
+            }}>
+              <ArrowLeftCircle className="w-5 h-5" />
+            </Button>
             <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
               <LayoutGrid className="w-5 h-5 text-primary-foreground" />
             </div>
@@ -646,7 +662,7 @@ export default function QuoteBuilder() {
             <Label className="text-xs">Job Name *</Label>
             <Input
               value={jobName}
-              onChange={(e) => setJobName(e.target.value)}
+              onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
               placeholder="e.g. Smith Residence"
               data-testid="input-job-name"
             />
@@ -655,7 +671,7 @@ export default function QuoteBuilder() {
             <Label className="text-xs">Address</Label>
             <Input
               value={jobAddress}
-              onChange={(e) => setJobAddress(e.target.value)}
+              onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
               placeholder="e.g. 123 Main St"
               data-testid="input-job-address"
             />
@@ -665,7 +681,7 @@ export default function QuoteBuilder() {
             <Input
               type="date"
               value={jobDate}
-              onChange={(e) => setJobDate(e.target.value)}
+              onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
               data-testid="input-job-date"
             />
           </div>
@@ -1459,13 +1475,13 @@ export default function QuoteBuilder() {
           </div>
 
           {items.length > 0 && (
-            <div className="border-t bg-card shrink-0">
-              <div className="px-4 py-2">
+            <div className="border-t bg-card flex flex-col min-h-0 flex-1">
+              <div className="px-4 py-2 shrink-0">
                 <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
                   Quote Items ({items.length})
                 </h3>
               </div>
-              <ScrollArea className="max-h-52">
+              <ScrollArea className="flex-1 min-h-0 max-h-80">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1476,7 +1492,7 @@ export default function QuoteBuilder() {
                       <TableHead>Dimensions</TableHead>
                       <TableHead className="text-center">Qty</TableHead>
                       <TableHead className="text-center w-12">Photo</TableHead>
-                      <TableHead className="text-right w-44">Actions</TableHead>
+                      <TableHead className="text-right w-36">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1506,10 +1522,6 @@ export default function QuoteBuilder() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
-                            <Button size="icon" variant="ghost" onClick={() => selectItem(iwp)}
-                              title="View" data-testid={`button-select-${iwp.item.id}`}>
-                              <Eye className="w-3.5 h-3.5" />
-                            </Button>
                             <Button size="icon" variant="ghost" onClick={() => {
                               const { id, ...rest } = iwp.item;
                               handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "drawing" });
@@ -1525,15 +1537,15 @@ export default function QuoteBuilder() {
                               <Camera className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => editItem(iwp)}
-                              data-testid={`button-edit-${iwp.item.id}`}>
+                              title="Edit" data-testid={`button-edit-${iwp.item.id}`}>
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => duplicateItem(iwp)}
-                              data-testid={`button-duplicate-${iwp.item.id}`}>
+                              title="Duplicate" data-testid={`button-duplicate-${iwp.item.id}`}>
                               <Copy className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => deleteItem(iwp.item.id)}
-                              data-testid={`button-delete-${iwp.item.id}`}>
+                              title="Delete" data-testid={`button-delete-${iwp.item.id}`}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
@@ -1553,6 +1565,31 @@ export default function QuoteBuilder() {
           <DrawingCanvas ref={offscreenDrawingRef} config={offscreenConfig} />
         </div>
       )}
+
+      <Dialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-500" />
+              Unsaved Changes
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground" data-testid="text-unsaved-warning">
+            You have unsaved changes. Would you like to save before leaving?
+          </p>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" onClick={() => setShowLeaveDialog(false)} data-testid="button-leave-cancel">
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => { setShowLeaveDialog(false); setHasUnsavedChanges(false); navigate("/"); }} data-testid="button-leave-discard">
+              Discard
+            </Button>
+            <Button onClick={async () => { setShowLeaveDialog(false); await saveJob(); if (jobName.trim() && items.length > 0) navigate("/"); }} data-testid="button-leave-save">
+              <Save className="w-4 h-4 mr-1.5" /> Save & Leave
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!photoPreview} onOpenChange={() => setPhotoPreview(null)}>
         <DialogContent className="max-w-lg">
