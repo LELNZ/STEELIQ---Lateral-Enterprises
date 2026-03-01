@@ -1481,13 +1481,13 @@ export default function QuoteBuilder() {
           </div>
 
           {items.length > 0 && (
-            <div className="border-t bg-card flex flex-col min-h-0 flex-1">
+            <div className="border-t bg-card flex flex-col shrink-0 overflow-hidden max-h-44 lg:max-h-56">
               <div className="px-4 py-2 shrink-0">
                 <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
                   Quote Items ({items.length})
                 </h3>
               </div>
-              <ScrollArea className="flex-1 min-h-0 max-h-80">
+              <ScrollArea className="flex-1 min-h-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
