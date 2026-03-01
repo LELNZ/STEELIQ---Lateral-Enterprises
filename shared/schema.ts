@@ -71,6 +71,7 @@ export const quoteItemSchema = z.object({
   frenchDoorLeftRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   frenchDoorRightRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   panelRows: z.array(z.array(entranceDoorRowSchema)).default([]),
+  showLegend: z.boolean().default(true),
   customColumns: z.array(customColumnSchema).default([
     { width: 0, rows: [{ height: 0, type: "fixed" }] },
     { width: 0, rows: [{ height: 0, type: "fixed" }] },

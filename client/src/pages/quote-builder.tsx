@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow } from "@shared/schema";
@@ -69,6 +69,31 @@ function makeDefaultColumns(count: number): CustomColumn[] {
 
 const defaultEntranceDoorRows: EntranceDoorRow[] = [{ height: 0, type: "fixed" }];
 
+const ROOM_OPTIONS = [
+  { label: "Kitchen", code: "KIT" },
+  { label: "Lounge", code: "LNG" },
+  { label: "Dining", code: "DIN" },
+  { label: "Bedroom", code: "BED" },
+  { label: "Master Bedroom", code: "MBR" },
+  { label: "Ensuite", code: "ENS" },
+  { label: "Bathroom", code: "BTH" },
+  { label: "WC / Toilet", code: "WC" },
+  { label: "Laundry", code: "LDY" },
+  { label: "Garage", code: "GAR" },
+  { label: "Hallway", code: "HWY" },
+  { label: "Study", code: "STD" },
+  { label: "Rumpus", code: "RMP" },
+  { label: "Entrance", code: "ENT" },
+];
+
+const FLOOR_OPTIONS = [
+  { label: "Ground", code: "G" },
+  { label: "1st Floor", code: "1" },
+  { label: "2nd Floor", code: "2" },
+  { label: "3rd Floor", code: "3" },
+  { label: "Basement", code: "B" },
+];
+
 const defaultValues: InsertQuoteItem = {
   name: "W-01",
   quantity: 1,
@@ -95,6 +120,7 @@ const defaultValues: InsertQuoteItem = {
   frenchDoorLeftRows: [...defaultEntranceDoorRows],
   frenchDoorRightRows: [...defaultEntranceDoorRows],
   panelRows: [],
+  showLegend: true,
   customColumns: makeDefaultColumns(2),
 };
 
@@ -102,7 +128,21 @@ export default function QuoteBuilder() {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedCols, setExpandedCols] = useState<Set<number>>(new Set([0]));
+  const [selectedFloor, setSelectedFloor] = useState("G");
+  const [roomDropdownOpen, setRoomDropdownOpen] = useState(false);
+  const [roomFilter, setRoomFilter] = useState("");
+  const roomDropdownRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (roomDropdownRef.current && !roomDropdownRef.current.contains(e.target as Node)) {
+        setRoomDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const form = useForm<InsertQuoteItem>({
     resolver: zodResolver(insertQuoteItemSchema),
@@ -339,6 +379,26 @@ export default function QuoteBuilder() {
     form.setValue("panelRows", current);
   }
 
+  function generateRoomCode(roomCode: string, floorCode: string): string {
+    const prefix = `${roomCode}-${floorCode}`;
+    const existingNums = items
+      .filter(item => item.name.startsWith(prefix))
+      .map(item => {
+        const match = item.name.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)$`));
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter(n => n > 0);
+    const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 1;
+    return `${prefix}${String(nextNum).padStart(2, "0")}`;
+  }
+
+  function selectRoom(roomCode: string) {
+    const code = generateRoomCode(roomCode, selectedFloor);
+    form.setValue("name", code);
+    setRoomDropdownOpen(false);
+    setRoomFilter("");
+  }
+
   function onSubmit(data: InsertQuoteItem) {
     if (editingId) {
       setItems(items.map((item) => (item.id === editingId ? { ...data, id: editingId } : item)));
@@ -413,8 +473,67 @@ export default function QuoteBuilder() {
               </h2>
               <div className="space-y-2">
                 <div>
-                  <Label htmlFor="name" className="text-xs">Item ID / Reference</Label>
-                  <Input id="name" {...form.register("name")} data-testid="input-item-name" />
+                  <Label className="text-xs">Item ID / Reference</Label>
+                  <div className="relative" ref={roomDropdownRef}>
+                    <div className="flex gap-1.5">
+                      <div className="relative flex-1">
+                        <Input
+                          {...form.register("name")}
+                          value={w.name || ""}
+                          onChange={(e) => {
+                            form.setValue("name", e.target.value, { shouldValidate: true });
+                            setRoomFilter(e.target.value);
+                            if (!roomDropdownOpen) setRoomDropdownOpen(true);
+                          }}
+                          onFocus={() => setRoomDropdownOpen(true)}
+                          placeholder="Type or select room..."
+                          data-testid="input-item-name"
+                          className="pr-8"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setRoomDropdownOpen(!roomDropdownOpen)}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                          data-testid="button-room-dropdown"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <Select value={selectedFloor} onValueChange={setSelectedFloor}>
+                        <SelectTrigger data-testid="select-floor-level" className="w-20 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FLOOR_OPTIONS.map((f) => (
+                            <SelectItem key={f.code} value={f.code}>{f.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {roomDropdownOpen && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 border rounded-md bg-popover shadow-md max-h-48 overflow-y-auto" data-testid="room-dropdown-list">
+                        {ROOM_OPTIONS
+                          .filter(r => !roomFilter || r.label.toLowerCase().includes(roomFilter.toLowerCase()) || r.code.toLowerCase().includes(roomFilter.toLowerCase()))
+                          .map((room) => (
+                            <button
+                              key={room.code}
+                              type="button"
+                              onClick={() => selectRoom(room.code)}
+                              className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-between"
+                              data-testid={`option-room-${room.code}`}
+                            >
+                              <span>{room.label}</span>
+                              <span className="text-xs text-muted-foreground font-mono">{room.code}</span>
+                            </button>
+                          ))
+                        }
+                        {ROOM_OPTIONS.filter(r => !roomFilter || r.label.toLowerCase().includes(roomFilter.toLowerCase()) || r.code.toLowerCase().includes(roomFilter.toLowerCase())).length === 0 && (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">No matching rooms</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Select room or type custom ID. Format: CODE-FLOOR## (e.g. BED-G01)</p>
                 </div>
                 <div>
                   <Label htmlFor="quantity" className="text-xs">Quantity</Label>
@@ -482,6 +601,15 @@ export default function QuoteBuilder() {
                     </Select>
                   </div>
                 )}
+
+                <div className="flex items-center gap-2">
+                  <Checkbox id="showLegend" checked={w.showLegend !== false}
+                    onCheckedChange={(v) => form.setValue("showLegend", !!v)}
+                    data-testid="checkbox-show-legend" />
+                  <Label htmlFor="showLegend" className="text-xs cursor-pointer">
+                    Show Drawing Legend
+                  </Label>
+                </div>
 
                 {showWindowType && (
                   <div>

@@ -47,7 +47,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
   - Hinge side: Left or Right
   - Opening direction: defaults to "In" (dashed) for entrance doors
   - Per-section dimension lines: section widths below main dim; row height labels when multiple rows
-- **Drawing Legend**: Left-aligned below title in white space above drawing. Shows per-category info:
+- **Drawing Legend**: Positioned to the LEFT of the height dimension line, right-aligned (textAnchor="end"), outside the drawing. Toggleable on/off via "Show Drawing Legend" checkbox. padLeft increases to 0.32*maxDim when legend visible (0.16 when off). Shows per-category info:
   - Always: frame size (e.g. "52mm frame")
   - Windows Standard: window type (Fixed/Awning)
   - Entrance/Hinge Door: hinge side (Left/Right) + door open direction (Open In/Open Out)
@@ -62,7 +62,8 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Quote Management**: Add, edit, duplicate, delete items in a quote list
 
 ## Data Model
-- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, customColumns
+- **Item ID / Reference**: Combobox with room dropdown (14 industry-standard rooms: KIT, LNG, DIN, BED, MBR, ENS, BTH, WC, LDY, GAR, HWY, STD, RMP, ENT). Floor level selector (G, 1, 2, 3, B). Auto-generates CODE-FLOOR## format (e.g. BED-G01, KIT-102). Auto-increments sequence number based on existing items. User can also type any custom name.
+- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, showLegend, customColumns
 - `entranceDoorRows` / `entranceSidelightRows` / `entranceSidelightLeftRows`: Arrays of `{ height: number, type: "fixed"|"awning" }` for entrance door panel/sidelight row splits
 - `hingeDoorRows`: Array of `{ height: number, type: "fixed"|"awning" }` for hinge door panel row splits (standard layout)
 - `frenchDoorLeftRows` / `frenchDoorRightRows`: Arrays of `{ height: number, type: "fixed"|"awning" }` for french door independent left/right panel row splits
