@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow } from "@shared/schema";
+import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem } from "@shared/schema";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,13 @@ import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ArrowLeft, ArrowRight } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ArrowLeft, ArrowRight, Save, Eye, Download, Camera, X, ArrowLeftCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useRoute, useLocation, Link } from "wouter";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { downloadPng, compressImage } from "@/lib/export-png";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Windows Standard" },
@@ -124,15 +129,59 @@ const defaultValues: InsertQuoteItem = {
   customColumns: makeDefaultColumns(2),
 };
 
+interface ItemWithPhoto {
+  item: QuoteItem;
+  photo?: string | null;
+  dbId?: string;
+}
+
 export default function QuoteBuilder() {
-  const [items, setItems] = useState<QuoteItem[]>([]);
+  const [, matchResult] = useRoute("/job/:id");
+  const rawId = matchResult?.id;
+  const jobId = rawId === "new" ? undefined : rawId;
+  const isNewJob = !jobId;
+  const [, navigate] = useLocation();
+
+  const [items, setItems] = useState<ItemWithPhoto[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedCols, setExpandedCols] = useState<Set<number>>(new Set([0]));
   const [selectedFloor, setSelectedFloor] = useState("G");
   const [roomDropdownOpen, setRoomDropdownOpen] = useState(false);
   const [roomFilter, setRoomFilter] = useState("");
+  const [jobName, setJobName] = useState("");
+  const [jobAddress, setJobAddress] = useState("");
+  const [jobDate, setJobDate] = useState(new Date().toISOString().split("T")[0]);
+  const [savedJobId, setSavedJobId] = useState<string | null>(jobId || null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const roomDropdownRef = useRef<HTMLDivElement>(null);
+  const drawingRef = useRef<SVGSVGElement>(null);
+  const offscreenDrawingRef = useRef<SVGSVGElement>(null);
+  const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoTargetItemId, setPhotoTargetItemId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const { data: existingJob, isLoading: jobLoading } = useQuery<{
+    id: string; name: string; address: string | null; date: string | null; items: JobItem[];
+  }>({
+    queryKey: ["/api/jobs", jobId],
+    enabled: !!jobId,
+  });
+
+  useEffect(() => {
+    if (existingJob) {
+      setJobName(existingJob.name);
+      setJobAddress(existingJob.address || "");
+      setJobDate(existingJob.date || "");
+      setSavedJobId(existingJob.id);
+      setItems(existingJob.items.map((ji) => ({
+        item: ji.config as QuoteItem,
+        photo: ji.photo,
+        dbId: ji.id,
+      })));
+    }
+  }, [existingJob]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -382,9 +431,9 @@ export default function QuoteBuilder() {
   function generateRoomCode(roomCode: string, floorCode: string): string {
     const prefix = `${roomCode}-${floorCode}`;
     const existingNums = items
-      .filter(item => item.name.startsWith(prefix))
-      .map(item => {
-        const match = item.name.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)$`));
+      .filter(iwp => iwp.item.name.startsWith(prefix))
+      .map(iwp => {
+        const match = iwp.item.name.match(new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)$`));
         return match ? parseInt(match[1], 10) : 0;
       })
       .filter(n => n > 0);
@@ -401,31 +450,37 @@ export default function QuoteBuilder() {
 
   function onSubmit(data: InsertQuoteItem) {
     if (editingId) {
-      setItems(items.map((item) => (item.id === editingId ? { ...data, id: editingId } : item)));
+      setItems(items.map((iwp) => (iwp.item.id === editingId ? { ...iwp, item: { ...data, id: editingId } } : iwp)));
       setEditingId(null);
       toast({ title: "Item updated", description: `${data.name} has been updated.` });
     } else {
       const newItem: QuoteItem = { ...data, id: crypto.randomUUID() };
-      setItems([...items, newItem]);
+      setItems([...items, { item: newItem }]);
       toast({ title: "Item added", description: `${data.name} added to quote.` });
     }
     form.reset(defaultValues);
   }
 
-  function editItem(item: QuoteItem) {
-    const { id, ...rest } = item;
+  function editItem(iwp: ItemWithPhoto) {
+    const { id, ...rest } = iwp.item;
     form.reset(rest);
     setEditingId(id);
   }
 
-  function duplicateItem(item: QuoteItem) {
-    const newItem: QuoteItem = { ...item, id: crypto.randomUUID(), name: `${item.name} (copy)` };
-    setItems([...items, newItem]);
+  function selectItem(iwp: ItemWithPhoto) {
+    const { id, ...rest } = iwp.item;
+    form.reset(rest);
+    setEditingId(null);
+  }
+
+  function duplicateItem(iwp: ItemWithPhoto) {
+    const newItem: QuoteItem = { ...iwp.item, id: crypto.randomUUID(), name: `${iwp.item.name} (copy)` };
+    setItems([...items, { item: newItem }]);
     toast({ title: "Item duplicated" });
   }
 
   function deleteItem(id: string) {
-    setItems(items.filter((item) => item.id !== id));
+    setItems(items.filter((iwp) => iwp.item.id !== id));
     if (editingId === id) { setEditingId(null); form.reset(defaultValues); }
     toast({ title: "Item removed" });
   }
@@ -433,6 +488,95 @@ export default function QuoteBuilder() {
   function cancelEdit() {
     setEditingId(null);
     form.reset(defaultValues);
+  }
+
+  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !photoTargetItemId) return;
+    try {
+      const compressed = await compressImage(file);
+      setItems(prev => prev.map(iwp =>
+        iwp.item.id === photoTargetItemId ? { ...iwp, photo: compressed } : iwp
+      ));
+      toast({ title: "Photo added" });
+    } catch {
+      toast({ title: "Failed to process photo", variant: "destructive" });
+    }
+    setPhotoTargetItemId(null);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
+
+  async function handleDownloadPng(config: InsertQuoteItem) {
+    setOffscreenConfig(config);
+    setTimeout(async () => {
+      if (offscreenDrawingRef.current) {
+        try {
+          await downloadPng(offscreenDrawingRef.current, `${config.name || "drawing"}.png`);
+        } catch {
+          toast({ title: "Failed to download PNG", variant: "destructive" });
+        }
+      }
+      setOffscreenConfig(null);
+    }, 200);
+  }
+
+  async function handleDownloadCurrentPng() {
+    if (drawingRef.current) {
+      try {
+        await downloadPng(drawingRef.current, `${w.name || "drawing"}.png`);
+      } catch {
+        toast({ title: "Failed to download PNG", variant: "destructive" });
+      }
+    }
+  }
+
+  async function saveJob() {
+    if (!jobName.trim()) {
+      toast({ title: "Job name is required", variant: "destructive" });
+      return;
+    }
+    if (items.length === 0) {
+      toast({ title: "Add at least one item before saving", variant: "destructive" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      let currentJobId = savedJobId;
+      if (!currentJobId) {
+        const res = await apiRequest("POST", "/api/jobs", {
+          name: jobName, address: jobAddress, date: jobDate,
+        });
+        const job = await res.json();
+        currentJobId = job.id;
+        setSavedJobId(job.id);
+      } else {
+        await apiRequest("PATCH", `/api/jobs/${currentJobId}`, {
+          name: jobName, address: jobAddress, date: jobDate,
+        });
+        const existingItems = await fetch(`/api/jobs/${currentJobId}`).then(r => r.json());
+        for (const ei of (existingItems.items || [])) {
+          await apiRequest("DELETE", `/api/jobs/${currentJobId}/items/${ei.id}`);
+        }
+      }
+
+      for (let i = 0; i < items.length; i++) {
+        await apiRequest("POST", `/api/jobs/${currentJobId}/items`, {
+          config: items[i].item,
+          photo: items[i].photo || null,
+          sortOrder: i,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Job saved successfully" });
+      if (isNewJob) {
+        navigate(`/job/${currentJobId}`, { replace: true });
+      }
+    } catch (e: any) {
+      toast({ title: "Failed to save job", description: e.message, variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   const drawingConfig: InsertQuoteItem = {
@@ -443,25 +587,89 @@ export default function QuoteBuilder() {
     name: w.name || "Untitled",
   };
 
+  if (jobLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-muted-foreground">Loading job...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen bg-background" data-testid="quote-builder">
-      <header className="border-b px-6 py-3 flex items-center justify-between gap-4 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
-            <LayoutGrid className="w-5 h-5 text-primary-foreground" />
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handlePhotoCapture}
+        data-testid="input-photo-capture"
+      />
+
+      <header className="border-b px-6 py-3 bg-card shrink-0">
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <div className="flex items-center gap-3">
+            <Link href="/">
+              <Button variant="ghost" size="icon" data-testid="button-back-to-jobs">
+                <ArrowLeftCircle className="w-5 h-5" />
+              </Button>
+            </Link>
+            <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
+              <LayoutGrid className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight" data-testid="text-app-title">
+                Pro-Quote CAD Generator
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                {savedJobId ? "Editing Job" : "New Job"}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight" data-testid="text-app-title">
-              Pro-Quote CAD Generator
-            </h1>
-            <p className="text-xs text-muted-foreground">Configure and quote windows & doors</p>
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <Badge variant="secondary" data-testid="badge-item-count">
+                {items.length} item{items.length !== 1 ? "s" : ""}
+              </Badge>
+            )}
+            <Button onClick={handleDownloadCurrentPng} variant="outline" size="sm" data-testid="button-download-current-png">
+              <Download className="w-4 h-4 mr-1.5" /> PNG
+            </Button>
+            <Button onClick={saveJob} disabled={isSaving} data-testid="button-save-job">
+              <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save Job"}
+            </Button>
           </div>
         </div>
-        {items.length > 0 && (
-          <Badge variant="secondary" data-testid="badge-item-count">
-            {items.length} item{items.length !== 1 ? "s" : ""}
-          </Badge>
-        )}
+        <div className="flex items-end gap-3">
+          <div className="flex-1 min-w-0">
+            <Label className="text-xs">Job Name *</Label>
+            <Input
+              value={jobName}
+              onChange={(e) => setJobName(e.target.value)}
+              placeholder="e.g. Smith Residence"
+              data-testid="input-job-name"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <Label className="text-xs">Address</Label>
+            <Input
+              value={jobAddress}
+              onChange={(e) => setJobAddress(e.target.value)}
+              placeholder="e.g. 123 Main St"
+              data-testid="input-job-address"
+            />
+          </div>
+          <div className="w-40 shrink-0">
+            <Label className="text-xs">Date</Label>
+            <Input
+              type="date"
+              value={jobDate}
+              onChange={(e) => setJobDate(e.target.value)}
+              data-testid="input-job-date"
+            />
+          </div>
+        </div>
       </header>
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -1246,7 +1454,7 @@ export default function QuoteBuilder() {
           <div className="flex-1 flex items-center justify-center p-4 min-h-0"
             style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)" }}>
             <div className="w-full h-full max-w-3xl max-h-[600px]" data-testid="drawing-preview">
-              <DrawingCanvas config={drawingConfig} />
+              <DrawingCanvas ref={drawingRef} config={drawingConfig} />
             </div>
           </div>
 
@@ -1267,32 +1475,65 @@ export default function QuoteBuilder() {
                       <TableHead>Layout</TableHead>
                       <TableHead>Dimensions</TableHead>
                       <TableHead className="text-center">Qty</TableHead>
-                      <TableHead className="text-right w-28">Actions</TableHead>
+                      <TableHead className="text-center w-12">Photo</TableHead>
+                      <TableHead className="text-right w-44">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {items.map((item, index) => (
-                      <TableRow key={item.id} data-testid={`row-item-${item.id}`}>
+                    {items.map((iwp, index) => (
+                      <TableRow key={iwp.item.id} data-testid={`row-item-${iwp.item.id}`}>
                         <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell className="text-sm">{getCategoryLabel(item.category)}</TableCell>
+                        <TableCell className="font-medium">{iwp.item.name}</TableCell>
+                        <TableCell className="text-sm">{getCategoryLabel(iwp.item.category)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {getLayoutSummary(item)}
+                          {getLayoutSummary(iwp.item)}
                         </TableCell>
-                        <TableCell className="font-mono text-sm">{item.width} x {item.height}</TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
+                        <TableCell className="font-mono text-sm">{iwp.item.width} x {iwp.item.height}</TableCell>
+                        <TableCell className="text-center">{iwp.item.quantity}</TableCell>
+                        <TableCell className="text-center">
+                          {iwp.photo ? (
+                            <button
+                              type="button"
+                              onClick={() => setPhotoPreview(iwp.photo!)}
+                              className="inline-block"
+                              data-testid={`button-view-photo-${iwp.item.id}`}
+                            >
+                              <img src={iwp.photo} alt="Site photo" className="w-8 h-8 rounded object-cover border" />
+                            </button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button size="icon" variant="ghost" onClick={() => editItem(item)}
-                              data-testid={`button-edit-${item.id}`}>
+                          <div className="flex items-center justify-end gap-0.5">
+                            <Button size="icon" variant="ghost" onClick={() => selectItem(iwp)}
+                              title="View" data-testid={`button-select-${iwp.item.id}`}>
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => {
+                              const { id, ...rest } = iwp.item;
+                              handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "drawing" });
+                            }}
+                              title="Download PNG" data-testid={`button-download-${iwp.item.id}`}>
+                              <Download className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => {
+                              setPhotoTargetItemId(iwp.item.id);
+                              photoInputRef.current?.click();
+                            }}
+                              title="Take Photo" data-testid={`button-photo-${iwp.item.id}`}>
+                              <Camera className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => editItem(iwp)}
+                              data-testid={`button-edit-${iwp.item.id}`}>
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" onClick={() => duplicateItem(item)}
-                              data-testid={`button-duplicate-${item.id}`}>
+                            <Button size="icon" variant="ghost" onClick={() => duplicateItem(iwp)}
+                              data-testid={`button-duplicate-${iwp.item.id}`}>
                               <Copy className="w-3.5 h-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" onClick={() => deleteItem(item.id)}
-                              data-testid={`button-delete-${item.id}`}>
+                            <Button size="icon" variant="ghost" onClick={() => deleteItem(iwp.item.id)}
+                              data-testid={`button-delete-${iwp.item.id}`}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
@@ -1306,6 +1547,23 @@ export default function QuoteBuilder() {
           )}
         </div>
       </div>
+
+      {offscreenConfig && (
+        <div style={{ position: "absolute", left: "-9999px", top: "-9999px", width: "1200px", height: "900px" }}>
+          <DrawingCanvas ref={offscreenDrawingRef} config={offscreenConfig} />
+        </div>
+      )}
+
+      <Dialog open={!!photoPreview} onOpenChange={() => setPhotoPreview(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Site Photo</DialogTitle>
+          </DialogHeader>
+          {photoPreview && (
+            <img src={photoPreview} alt="Site photo" className="w-full rounded" data-testid="img-photo-preview" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

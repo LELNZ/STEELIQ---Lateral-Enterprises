@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -82,3 +82,27 @@ export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });
 
 export type QuoteItem = z.infer<typeof quoteItemSchema>;
 export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
+
+export const jobs = pgTable("jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  address: text("address").default(""),
+  date: text("date").default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true });
+export type InsertJob = z.infer<typeof insertJobSchema>;
+export type Job = typeof jobs.$inferSelect;
+
+export const jobItems = pgTable("job_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id").notNull(),
+  config: jsonb("config").notNull().$type<QuoteItem>(),
+  photo: text("photo"),
+  sortOrder: integer("sort_order").default(0),
+});
+
+export const insertJobItemSchema = createInsertSchema(jobItems).omit({ id: true });
+export type InsertJobItem = z.infer<typeof insertJobItemSchema>;
+export type JobItem = typeof jobItems.$inferSelect;

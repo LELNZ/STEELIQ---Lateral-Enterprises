@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import type { InsertQuoteItem, CustomColumn, EntranceDoorRow } from "@shared/schema";
 
 const FRAME_WIN = 52;
@@ -632,7 +633,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
 }
 
-export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
+const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ config }, ref) => {
   const { width: W, height: H, name, quantity, category, layout, customColumns } = config;
   const showLegend = config.showLegend !== false;
   const frameSize = getFrameSize(category);
@@ -709,6 +710,7 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
 
   return (
     <svg
+      ref={ref}
       viewBox={`${-padLeft} ${-padTop} ${W + padLeft + padRight} ${H + padTop + padBottom}`}
       className="w-full h-full"
       style={{ maxHeight: "100%", background: "white" }}
@@ -1067,4 +1069,6 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
       )}
     </svg>
   );
-}
+});
+
+export default DrawingCanvas;
