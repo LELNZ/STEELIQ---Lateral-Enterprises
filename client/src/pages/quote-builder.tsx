@@ -2,12 +2,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem } from "@shared/schema";
+import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
+import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, getFrameTypesForCategory, getHandlesForCategory, DOOR_CATEGORIES } from "@shared/item-options";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -15,8 +18,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, Settings } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, Settings, FileText } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
@@ -130,6 +134,19 @@ const defaultValues: InsertQuoteItem = {
   panelRows: [],
   showLegend: true,
   customColumns: makeDefaultColumns(2),
+  pricePerSqm: 500,
+  frameType: "",
+  frameColor: "",
+  flashingSize: 0,
+  windZone: "",
+  linerType: "",
+  glassIguType: "",
+  glassType: "",
+  glassThickness: "",
+  wanzBar: false,
+  wallThickness: 0,
+  heightFromFloor: 0,
+  handleType: "",
 };
 
 interface ItemWithPhoto {
@@ -160,6 +177,7 @@ export default function QuoteBuilder() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
+  const [formTab, setFormTab] = useState<string>("drawing");
   const { showLegendDefault, quoteListPosition } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef<SVGSVGElement>(null);
@@ -262,6 +280,11 @@ export default function QuoteBuilder() {
       form.setValue("panels", 3);
       form.setValue("bifoldLeftCount", 0);
     }
+    const doorCats = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door", "sliding-door"];
+    form.setValue("heightFromFloor", doorCats.includes(category) ? 30 : 800);
+    const frameTypes = getFrameTypesForCategory(category);
+    if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
+    form.setValue("handleType", "");
   }, [category]);
 
   const isEntrance = category === "entrance-door";
@@ -706,9 +729,20 @@ export default function QuoteBuilder() {
     return ((width * height * quantity) / 1_000_000).toFixed(2);
   }
 
+  function calcItemPrice(item: QuoteItem | InsertQuoteItem): number {
+    const sqm = (item.width * item.height * (item.quantity || 1)) / 1_000_000;
+    return sqm * (item.pricePerSqm || 500);
+  }
+
+  function formatPrice(amount: number): string {
+    return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   const totalSqm = items.reduce((sum, iwp) => {
     return sum + (iwp.item.width * iwp.item.height * (iwp.item.quantity || 1)) / 1_000_000;
   }, 0).toFixed(2);
+
+  const totalPrice = items.reduce((sum, iwp) => sum + calcItemPrice(iwp.item), 0);
 
   const drawingConfig: InsertQuoteItem = {
     ...w,
@@ -786,6 +820,11 @@ export default function QuoteBuilder() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            {savedJobId && items.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
+                <FileText className="w-4 h-4 mr-1.5" /> Summary
+              </Button>
+            )}
             <Button onClick={saveJob} disabled={isSaving} data-testid="button-save-job">
               <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save Job"}
             </Button>
@@ -825,6 +864,13 @@ export default function QuoteBuilder() {
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         <ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0">
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-4">
+            <Tabs value={formTab} onValueChange={setFormTab}>
+              <TabsList className="w-full grid grid-cols-2 mb-3">
+                <TabsTrigger value="drawing" data-testid="tab-drawing-config">Drawing Config</TabsTrigger>
+                <TabsTrigger value="specifics" data-testid="tab-item-specifics">Item Specifics</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="drawing" className="space-y-4 mt-0">
             <div>
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
                 <Ruler className="w-3.5 h-3.5" /> Item Details
@@ -1585,6 +1631,225 @@ export default function QuoteBuilder() {
                 )}
               </div>
             </div>
+            </TabsContent>
+
+              <TabsContent value="specifics" className="space-y-4 mt-0">
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Pricing
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Price per m² (${w.pricePerSqm || 500}/m²)</Label>
+                      <Slider
+                        value={[w.pricePerSqm || 500]}
+                        onValueChange={([v]) => form.setValue("pricePerSqm", v)}
+                        min={500}
+                        max={750}
+                        step={10}
+                        data-testid="slider-price-per-sqm"
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
+                        <span>$500</span>
+                        <span className="font-medium">${((w.pricePerSqm || 500) * parseFloat(calcSqm(w.width || 0, w.height || 0, w.quantity || 1))).toFixed(2)}</span>
+                        <span>$750</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Frame & Finish
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Frame Type</Label>
+                      <Select value={w.frameType || ""} onValueChange={(v) => form.setValue("frameType", v)}>
+                        <SelectTrigger data-testid="select-frame-type"><SelectValue placeholder="Select frame type" /></SelectTrigger>
+                        <SelectContent>
+                          {getFrameTypesForCategory(w.category || "windows-standard").map((ft) => (
+                            <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Frame Color</Label>
+                      <Select value={w.frameColor || ""} onValueChange={(v) => form.setValue("frameColor", v)}>
+                        <SelectTrigger data-testid="select-frame-color"><SelectValue placeholder="Select color" /></SelectTrigger>
+                        <SelectContent>
+                          {FRAME_COLORS.map((fc) => (
+                            <SelectItem key={fc.value} value={fc.value}>{fc.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Flashing (Head)</Label>
+                      <Select value={String(w.flashingSize || 0)} onValueChange={(v) => form.setValue("flashingSize", Number(v))}>
+                        <SelectTrigger data-testid="select-flashing"><SelectValue placeholder="None" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">None</SelectItem>
+                          {FLASHING_SIZES.map((s) => (
+                            <SelectItem key={s} value={String(s)}>{s}mm</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Environment
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Wind Zone</Label>
+                      <Select value={w.windZone || ""} onValueChange={(v) => form.setValue("windZone", v)}>
+                        <SelectTrigger data-testid="select-wind-zone"><SelectValue placeholder="Select wind zone" /></SelectTrigger>
+                        <SelectContent>
+                          {WIND_ZONES.map((wz) => (
+                            <SelectItem key={wz} value={wz}>{wz}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Wall Thickness (mm)</Label>
+                      <Input type="number" min={0}
+                        value={w.wallThickness || ""}
+                        onChange={(e) => form.setValue("wallThickness", Number(e.target.value) || 0)}
+                        data-testid="input-wall-thickness" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Height from Floor (mm)</Label>
+                      <Input type="number" min={0}
+                        value={w.heightFromFloor || ""}
+                        onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
+                        placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
+                        data-testid="input-height-from-floor" />
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Liner / Reveal
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Liner Type</Label>
+                      <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
+                        <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
+                        <SelectContent>
+                          {LINER_TYPES.map((lt) => (
+                            <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Glass
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">IGU Type</Label>
+                      <Select value={w.glassIguType || ""} onValueChange={(v) => {
+                        form.setValue("glassIguType", v);
+                        form.setValue("glassType", "");
+                        form.setValue("glassThickness", "");
+                      }}>
+                        <SelectTrigger data-testid="select-glass-igu"><SelectValue placeholder="Select IGU" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="EnergySaver">EnergySaver™ IGU (Entry-level Low-E)</SelectItem>
+                          <SelectItem value="LightBridge">LightBridge™ IGU (High Performance Low-E)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {w.glassIguType && (
+                      <div>
+                        <Label className="text-xs">Glass Type</Label>
+                        <Select value={w.glassType || ""} onValueChange={(v) => {
+                          form.setValue("glassType", v);
+                          form.setValue("glassThickness", "");
+                        }}>
+                          <SelectTrigger data-testid="select-glass-type"><SelectValue placeholder="Select glass" /></SelectTrigger>
+                          <SelectContent>
+                            {getGlassCombos(w.glassIguType).map((combo) => (
+                              <SelectItem key={combo} value={combo}>{combo}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {w.glassIguType && w.glassType && (
+                      <div>
+                        <Label className="text-xs">Glass Thickness</Label>
+                        <Select value={w.glassThickness || ""} onValueChange={(v) => form.setValue("glassThickness", v)}>
+                          <SelectTrigger data-testid="select-glass-thickness"><SelectValue placeholder="Select thickness" /></SelectTrigger>
+                          <SelectContent>
+                            {getAvailableThicknesses(w.glassIguType, w.glassType).map((t) => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {w.glassIguType && w.glassType && w.glassThickness && (
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-price">
+                          ${getGlassPrice(w.glassIguType, w.glassType, w.glassThickness)?.toFixed(2) ?? "—"}/m²
+                        </Badge>
+                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-rvalue">
+                          R-Value: {getGlassRValue(w.glassIguType) ?? "—"}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Hardware & Components
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Handle</Label>
+                      <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
+                        <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
+                        <SelectContent>
+                          {getHandlesForCategory(w.category || "windows-standard").map((h) => (
+                            <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="wanzBar" checked={w.wanzBar === true}
+                        onCheckedChange={(v) => form.setValue("wanzBar", !!v)}
+                        data-testid="checkbox-wanz-bar" />
+                      <Label htmlFor="wanzBar" className="text-xs cursor-pointer">Wanz Bar (Lower Support)</Label>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
 
             <Separator />
 
@@ -1620,7 +1885,7 @@ export default function QuoteBuilder() {
             }`}>
               <div className="px-4 py-2 shrink-0 flex items-center justify-between">
                 <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
-                  Quote Items ({items.length}) — {totalSqm} m²
+                  Quote Items ({items.length}) — {totalSqm} m² — ${formatPrice(totalPrice)}
                 </h3>
                 {quoteListPosition === "bottom" && (
                   <Button
@@ -1645,6 +1910,7 @@ export default function QuoteBuilder() {
                       <TableHead>Layout</TableHead>
                       <TableHead>Dimensions</TableHead>
                       <TableHead className="text-center">m²</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
                       <TableHead className="text-center">Qty</TableHead>
                       <TableHead className="text-center w-12">Photo</TableHead>
                       <TableHead className="text-right w-36">Actions</TableHead>
@@ -1662,6 +1928,9 @@ export default function QuoteBuilder() {
                         <TableCell className="font-mono text-sm">{iwp.item.width} x {iwp.item.height}</TableCell>
                         <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.item.id}`}>
                           {calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm" data-testid={`text-price-${iwp.item.id}`}>
+                          ${formatPrice(calcItemPrice(iwp.item))}
                         </TableCell>
                         <TableCell className="text-center">{iwp.item.quantity}</TableCell>
                         <TableCell className="text-center">

@@ -9,7 +9,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Drawing Engine**: SVG-based rendering in `client/src/components/drawing-canvas.tsx` with forwardRef for PNG export
 - **State Management**: Client-side React state + TanStack Query for API data fetching
 - **Settings**: Global app settings via React context (`client/src/lib/settings-context.tsx`) with localStorage persistence
-- **Routing**: Wouter — `/` = Jobs List, `/job/new` = New Job, `/job/:id` = Edit Job, `/settings` = Settings
+- **Routing**: Wouter — `/` = Jobs List, `/job/new` = New Job, `/job/:id` = Edit Job, `/job/:id/summary` = Quote Summary, `/settings` = Settings
 - **Export**: Client-side SVG→Canvas→PNG at 3x resolution + jsPDF for multi-page PDF export (`client/src/lib/export-png.ts`)
 - **Photo Storage**: Base64 JPEG data URLs compressed client-side (max 1200px, 80% quality), stored in database `job_items.photo` column
 
@@ -22,7 +22,10 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - `client/src/pages/jobs-list.tsx` - Jobs listing page with m² badges
 - `client/src/pages/settings.tsx` - Global settings page (legend default, quote list position)
 - `client/src/lib/settings-context.tsx` - Settings context provider with localStorage
-- `client/src/lib/export-png.ts` - PNG export + image compression utilities
+- `client/src/lib/export-png.ts` - PNG export, PDF export, image compression, filename sanitization utilities
+- `client/src/pages/quote-summary.tsx` - Quote Summary page with pricing breakdown
+- `shared/glass-library.ts` - Glass pricing library (EnergySaver + LightBridge IGU data)
+- `shared/item-options.ts` - Frame types, colors, handles, flashing, wind zones, liner types
 - `client/src/App.tsx` - Route setup with SettingsProvider wrapper
 
 ## Database Tables
@@ -59,18 +62,22 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Save Job**: Validates job name required + at least one item. Persists all items with photos to database
 - **Unsaved Changes Warning**: beforeunload browser prompt + in-app dialog (Cancel/Discard/Save & Leave) when navigating away with unsaved changes
 - **Square Meters**: Live m² badge in item form panel (during creation/editing) + per-item m² in items table + total m² in section header + m² badge on job cards
+- **Pricing**: Per-item $/m² rate ($500–$750 slider), item price shown in items table + total price in header, Quote Summary page with full breakdown + average $/m²
+- **Item Specifics Tab**: Tab toggle in form panel (Drawing Config / Item Specifics) with: price per m², frame type (filtered by category), frame color (4 Dulux colors), flashing (35–95mm), wind zone, liner/reveal, glass (IGU type → glass combo → thickness with price + R-value display), handle (window vs door handles), wanz bar, wall thickness, height from floor
+- **Quote Summary Page**: Separate page at `/job/:id/summary` with items table, pricing breakdown, total items/m²/price, average $/m²
 - **Expand/Collapse Items**: Toggle between 1/3 height (33vh) and 1/2 height (50vh) for the quote items section
 - **Settings Page**: Global preferences stored in localStorage — legend default on/off, quote list position (bottom or right side)
 - **Custom Grid Layout**: Column-based system available for all categories except Entrance Door and Hinge Door
 - **Drawing Legend**: Positioned to the LEFT of the height dimension line, toggleable on/off. Shows frame size, window/door type info
 - **Item ID / Reference**: Combobox with room dropdown (14 rooms: KIT, LNG, DIN, BED, MBR, ENS, BTH, WC, LDY, GAR, HWY, STD, RMP, ENT). Floor selector (G, 1, 2, 3, B). Auto-generates CODE-FLOOR## format
+- **Glass Library**: Full pricing table for EnergySaver™ (R=0.37) and LightBridge™ (R=0.46) IGU types with 16 glass combinations each × 5-6 thickness options
 
 ## Settings (localStorage: proquote-settings)
 - `showLegendDefault` (boolean, default true) — whether legend is shown by default on new items
 - `quoteListPosition` ("bottom" | "right", default "bottom") — where items list renders relative to drawing
 
 ## Data Model
-- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, showLegend, customColumns
+- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, showLegend, customColumns, pricePerSqm, frameType, frameColor, flashingSize, windZone, linerType, glassIguType, glassType, glassThickness, wanzBar, wallThickness, heightFromFloor, handleType
 - `entranceDoorRows` / `entranceSidelightRows` / `entranceSidelightLeftRows`: Arrays of `{ height: number, type: "fixed"|"awning" }`
 - `hingeDoorRows`: Array of `{ height: number, type: "fixed"|"awning" }`
 - `frenchDoorLeftRows` / `frenchDoorRightRows`: Arrays of `{ height: number, type: "fixed"|"awning" }`

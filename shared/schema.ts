@@ -76,6 +76,19 @@ export const quoteItemSchema = z.object({
     { width: 0, rows: [{ height: 0, type: "fixed" }] },
     { width: 0, rows: [{ height: 0, type: "fixed" }] },
   ]),
+  pricePerSqm: z.number().min(500).max(750).default(500),
+  frameType: z.string().default(""),
+  frameColor: z.string().default(""),
+  flashingSize: z.number().default(0),
+  windZone: z.string().default(""),
+  linerType: z.string().default(""),
+  glassIguType: z.string().default(""),
+  glassType: z.string().default(""),
+  glassThickness: z.string().default(""),
+  wanzBar: z.boolean().default(false),
+  wallThickness: z.number().default(0),
+  heightFromFloor: z.number().default(0),
+  handleType: z.string().default(""),
 });
 
 export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });
