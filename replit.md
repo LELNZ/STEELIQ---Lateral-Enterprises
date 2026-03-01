@@ -62,9 +62,11 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Quote Management**: Add, edit, duplicate, delete items in a quote list
 
 ## Data Model
-- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, customColumns
+- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, customColumns
 - `entranceDoorRows` / `entranceSidelightRows` / `entranceSidelightLeftRows`: Arrays of `{ height: number, type: "fixed"|"awning" }` for entrance door panel/sidelight row splits
 - `hingeDoorRows`: Array of `{ height: number, type: "fixed"|"awning" }` for hinge door panel row splits (standard layout)
+- `frenchDoorLeftRows` / `frenchDoorRightRows`: Arrays of `{ height: number, type: "fixed"|"awning" }` for french door independent left/right panel row splits
+- `panelRows`: Array of arrays `[{ height: number, type: "fixed"|"awning" }][]` for per-panel/leaf row splits on bifold-door and stacker-door; indexed by panel number
 - `sidelightSide`: "left" | "right" | "both" — when "both", left sidelight uses entranceSidelightLeftRows, right uses entranceSidelightRows
 - `customColumns`: Array of `{ width: number, rows: [{ height: number, type: "fixed"|"awning"|"sliding"|"hinge", slideDirection: "left"|"right", hingeSide: "left"|"right", openDirection: "in"|"out" }] }`
 - Width/height of 0 means auto (even split)
@@ -81,6 +83,9 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - Windows Standard: no opening direction control (awnings always solid)
 - Bi-fold V chevron indicates fold direction (< = left, > = right)
 - Sliding arrow direction: configurable per pane in custom grid; default right
+- French door: no custom grid option; standard layout with independent left/right panel row controls (1-4 rows FIX/AWN each); TWO full-height hinge triangles (left hinges left, right hinges right)
+- Bifold door: no custom grid option; standard layout with per-leaf collapsible row controls (1-4 rows FIX/AWN each); bifold chevron overlay per leaf
+- Stacker door: no custom grid option; standard layout with per-panel collapsible row controls (1-4 rows FIX/AWN each); sliding arrow overlay per panel
 - Entrance door: no custom grid option; layout forced to "standard"; openDirection defaults to "in"; sidelightEnabled defaults to true
 - Entrance door hinge: ONE full-height triangle spanning entire door column height, not per-row
 - Entrance door: no solid bottom panel, no door split

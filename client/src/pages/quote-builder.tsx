@@ -92,6 +92,9 @@ const defaultValues: InsertQuoteItem = {
   entranceSidelightRows: [...defaultEntranceDoorRows],
   entranceSidelightLeftRows: [...defaultEntranceDoorRows],
   hingeDoorRows: [...defaultEntranceDoorRows],
+  frenchDoorLeftRows: [...defaultEntranceDoorRows],
+  frenchDoorRightRows: [...defaultEntranceDoorRows],
+  panelRows: [],
   customColumns: makeDefaultColumns(2),
 };
 
@@ -127,6 +130,9 @@ export default function QuoteBuilder() {
     form.setValue("entranceSidelightRows", [...defaultEntranceDoorRows]);
     form.setValue("entranceSidelightLeftRows", [...defaultEntranceDoorRows]);
     form.setValue("hingeDoorRows", [...defaultEntranceDoorRows]);
+    form.setValue("frenchDoorLeftRows", [...defaultEntranceDoorRows]);
+    form.setValue("frenchDoorRightRows", [...defaultEntranceDoorRows]);
+    form.setValue("panelRows", []);
     form.setValue("customColumns", makeDefaultColumns(2));
     if (category === "bifold-door") {
       form.setValue("panels", 3);
@@ -143,20 +149,24 @@ export default function QuoteBuilder() {
   }, [category]);
 
   const isEntrance = category === "entrance-door";
-  const isCustom = layout === "custom" && !isEntrance;
-  const isSlidingCategory = ["sliding-window", "sliding-door", "stacker-door"].includes(category);
-  const isDoorCategory = ["french-door"].includes(category);
   const isHingeDoor = category === "hinge-door";
+  const isFrench = category === "french-door";
+  const isBifold = category === "bifold-door";
+  const isStacker = category === "stacker-door";
+  const noCustomCategories = isEntrance || isHingeDoor || isFrench || isBifold || isStacker;
+  const isCustom = layout === "custom" && !noCustomCategories;
+  const isSlidingCategory = ["sliding-window", "sliding-door"].includes(category);
+  const isDoorCategory = ["french-door"].includes(category);
 
   const showWindowType = !isCustom && category === "windows-standard";
   const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
   const showSidelightControls = isEntrance && w.sidelightEnabled;
-  const showPanels = !isCustom && ["bifold-door", "stacker-door"].includes(category);
-  const showBifoldSplit = !isCustom && category === "bifold-door";
+  const showPanels = ["bifold-door", "stacker-door"].includes(category);
+  const showBifoldSplit = category === "bifold-door";
   const showCenterWidth = !isCustom && category === "bay-window";
   const showOpenDirection = !isCustom && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category);
-  const showLayoutSelect = !isEntrance && !isHingeDoor;
-  const showGrid = isCustom && !isHingeDoor;
+  const showLayoutSelect = !noCustomCategories;
+  const showGrid = isCustom;
 
   const customColumns: CustomColumn[] = w.customColumns || makeDefaultColumns(2);
   const numColumns = customColumns.length;
@@ -246,7 +256,7 @@ export default function QuoteBuilder() {
     form.setValue("customColumns", cols);
   }
 
-  type DoorRowField = "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows" | "hingeDoorRows";
+  type DoorRowField = "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows" | "hingeDoorRows" | "frenchDoorLeftRows" | "frenchDoorRightRows";
 
   function setEntranceDoorRowCount(field: DoorRowField, count: number) {
     const current = w[field] || defaultEntranceDoorRows;
@@ -276,6 +286,57 @@ export default function QuoteBuilder() {
       else next.add(colIdx);
       return next;
     });
+  }
+
+  const [expandedPanels, setExpandedPanels] = useState<Set<number>>(new Set([0]));
+
+  function togglePanelExpanded(panelIdx: number) {
+    setExpandedPanels(prev => {
+      const next = new Set(prev);
+      if (next.has(panelIdx)) next.delete(panelIdx);
+      else next.add(panelIdx);
+      return next;
+    });
+  }
+
+  function ensurePanelRows(count: number) {
+    const current = w.panelRows || [];
+    if (current.length === count) return;
+    const next: EntranceDoorRow[][] = Array.from({ length: count }, (_, i) => {
+      if (i < current.length) return current[i];
+      return [{ height: 0, type: "fixed" as const }];
+    });
+    form.setValue("panelRows", next);
+  }
+
+  function setPanelRowCount(panelIdx: number, count: number) {
+    const current = [...(w.panelRows || [])];
+    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
+    const panelCurrent = current[panelIdx] || [{ height: 0, type: "fixed" }];
+    const next: EntranceDoorRow[] = Array.from({ length: count }, (_, i) => {
+      if (i < panelCurrent.length) return panelCurrent[i];
+      return { height: 0, type: "fixed" as const };
+    });
+    current[panelIdx] = next;
+    form.setValue("panelRows", current);
+  }
+
+  function setPanelRowHeight(panelIdx: number, rowIdx: number, height: number) {
+    const current = [...(w.panelRows || [])];
+    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
+    const rows = [...(current[panelIdx] || [{ height: 0, type: "fixed" }])];
+    rows[rowIdx] = { ...rows[rowIdx], height };
+    current[panelIdx] = rows;
+    form.setValue("panelRows", current);
+  }
+
+  function togglePanelRowType(panelIdx: number, rowIdx: number) {
+    const current = [...(w.panelRows || [])];
+    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
+    const rows = [...(current[panelIdx] || [{ height: 0, type: "fixed" }])];
+    rows[rowIdx] = { ...rows[rowIdx], type: rows[rowIdx].type === "awning" ? "fixed" : "awning" };
+    current[panelIdx] = rows;
+    form.setValue("panelRows", current);
   }
 
   function onSubmit(data: InsertQuoteItem) {
@@ -631,17 +692,174 @@ export default function QuoteBuilder() {
                   );
                 })()}
 
+                {isFrench && (() => {
+                  const leftRows: EntranceDoorRow[] = w.frenchDoorLeftRows || defaultEntranceDoorRows;
+                  const rightRows: EntranceDoorRow[] = w.frenchDoorRightRows || defaultEntranceDoorRows;
+
+                  function renderFrenchRowControls(
+                    label: string,
+                    rows: EntranceDoorRow[],
+                    field: DoorRowField,
+                    prefix: string
+                  ) {
+                    return (
+                      <div className="border rounded-md bg-muted/20 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold">{label}</Label>
+                          <Select value={String(rows.length)} onValueChange={(v) => setEntranceDoorRowCount(field, parseInt(v))}>
+                            <SelectTrigger data-testid={`select-${prefix}-rows`} className="h-7 text-xs w-16">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[1, 2, 3, 4].map((n) => (
+                                <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          {rows.map((row, ri) => {
+                            const typeLabel = row.type === "awning" ? "AWN" : "FIX";
+                            const isActive = row.type !== "fixed";
+                            return (
+                              <div key={ri} className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleEntranceDoorRowType(field, ri)}
+                                  className={`
+                                    shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
+                                    ${isActive
+                                      ? "bg-primary/15 border-primary/30 text-primary"
+                                      : "bg-background border-border text-muted-foreground"
+                                    }
+                                  `}
+                                  data-testid={`button-${prefix}-row-type-${ri}`}
+                                >
+                                  {typeLabel}
+                                </button>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={row.height || ""}
+                                  placeholder="Auto"
+                                  onChange={(e) => setEntranceDoorRowHeight(field, ri, parseFloat(e.target.value) || 0)}
+                                  data-testid={`input-${prefix}-row-height-${ri}`}
+                                  className="h-7 text-xs flex-1"
+                                />
+                                <span className="text-xs text-muted-foreground shrink-0">mm</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground">FIX = Fixed, AWN = Awning. 0 = even split.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {renderFrenchRowControls("Left Panel", leftRows, "frenchDoorLeftRows", "french-left")}
+                      {renderFrenchRowControls("Right Panel", rightRows, "frenchDoorRightRows", "french-right")}
+                    </>
+                  );
+                })()}
+
+                {(isBifold || isStacker) && (() => {
+                  const currentPanels = w.panels || 3;
+                  const pRows = w.panelRows || [];
+                  if (pRows.length !== currentPanels) {
+                    setTimeout(() => ensurePanelRows(currentPanels), 0);
+                  }
+                  const panelLabel = isBifold ? "Leaf" : "Panel";
+
+                  return (
+                    <div className="space-y-2">
+                      {Array.from({ length: currentPanels }).map((_, pi) => {
+                        const panelRowDefs: EntranceDoorRow[] = pRows[pi] || [{ height: 0, type: "fixed" }];
+                        const isExpanded = expandedPanels.has(pi);
+                        return (
+                          <div key={pi} className="border rounded-md bg-muted/20 overflow-hidden" data-testid={`panel-config-${pi}`}>
+                            <button
+                              type="button"
+                              onClick={() => togglePanelExpanded(pi)}
+                              className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium hover:bg-muted/40 transition-colors"
+                              data-testid={`button-toggle-panel-${pi}`}
+                            >
+                              <span>{panelLabel} {pi + 1} ({panelRowDefs.length} row{panelRowDefs.length !== 1 ? "s" : ""})</span>
+                              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                            </button>
+
+                            {isExpanded && (
+                              <div className="px-3 pb-3 space-y-2 border-t">
+                                <div className="pt-2 flex items-center justify-between">
+                                  <Label className="text-xs font-semibold">Rows</Label>
+                                  <Select value={String(panelRowDefs.length)} onValueChange={(v) => setPanelRowCount(pi, parseInt(v))}>
+                                    <SelectTrigger data-testid={`select-panel-rows-${pi}`} className="h-7 text-xs w-16">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {[1, 2, 3, 4].map((n) => (
+                                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-1">
+                                  {panelRowDefs.map((row, ri) => {
+                                    const typeLabel = row.type === "awning" ? "AWN" : "FIX";
+                                    const isActive = row.type !== "fixed";
+                                    return (
+                                      <div key={ri} className="flex items-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => togglePanelRowType(pi, ri)}
+                                          className={`
+                                            shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
+                                            ${isActive
+                                              ? "bg-primary/15 border-primary/30 text-primary"
+                                              : "bg-background border-border text-muted-foreground"
+                                            }
+                                          `}
+                                          data-testid={`button-panel-row-type-${pi}-${ri}`}
+                                        >
+                                          {typeLabel}
+                                        </button>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          value={row.height || ""}
+                                          placeholder="Auto"
+                                          onChange={(e) => setPanelRowHeight(pi, ri, parseFloat(e.target.value) || 0)}
+                                          data-testid={`input-panel-row-height-${pi}-${ri}`}
+                                          className="h-7 text-xs flex-1"
+                                        />
+                                        <span className="text-xs text-muted-foreground shrink-0">mm</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <p className="text-xs text-muted-foreground">FIX = Fixed, AWN = Awning. 0 = even split.</p>
+                    </div>
+                  );
+                })()}
+
                 {showPanels && (
                   <div>
                     <Label className="text-xs">
-                      {category === "bifold-door" ? "Number of Leaves" : "Number of Panels"}
+                      {isBifold ? "Number of Leaves" : "Number of Panels"}
                     </Label>
                     <Select value={String(w.panels)} onValueChange={(v) => {
                       const num = parseInt(v);
                       form.setValue("panels", num);
-                      if (category === "bifold-door") {
+                      if (isBifold) {
                         form.setValue("bifoldLeftCount", Math.floor(num / 2));
                       }
+                      ensurePanelRows(num);
                     }}>
                       <SelectTrigger data-testid="select-panels"><SelectValue /></SelectTrigger>
                       <SelectContent>

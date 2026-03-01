@@ -291,7 +291,8 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   const minPane = frameSize * 2;
   const od = openDirection || "out";
 
-  if (layout === "custom" && category !== "entrance-door" && category !== "hinge-door") {
+  const noCustomCats = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"];
+  if (layout === "custom" && !noCustomCats.includes(category)) {
     return renderCustomGrid(W, H, customColumns || [], frameSize, od, ss);
   }
 
@@ -446,43 +447,171 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   }
 
   if (category === "french-door") {
-    return (
-      <g>
-        <Pane x={0} y={0} w={W / 2} h={H} frameSize={frameSize}
-          type="hinge" hingeSide="left" openDirection={od} strokeScale={ss} />
-        <Pane x={W / 2} y={0} w={W / 2} h={H} frameSize={frameSize}
-          type="hinge" hingeSide="right" openDirection={od} strokeScale={ss} />
-      </g>
-    );
+    const leftRows: EntranceDoorRow[] = config.frenchDoorLeftRows || [{ height: 0, type: "fixed" }];
+    const rightRows: EntranceDoorRow[] = config.frenchDoorRightRows || [{ height: 0, type: "fixed" }];
+    const halfW = W / 2;
+    const leftRowHeights = distributeSpaces(H, leftRows.map(r => r.height || 0));
+    const rightRowHeights = distributeSpaces(H, rightRows.map(r => r.height || 0));
+    const elements: JSX.Element[] = [];
+
+    let yOff = 0;
+    for (let ri = 0; ri < leftRows.length; ri++) {
+      const rh = leftRowHeights[ri];
+      const pType = leftRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
+      elements.push(
+        <Pane key={`fl-${ri}`} x={0} y={yOff} w={halfW} h={rh}
+          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+      );
+      yOff += rh;
+    }
+
+    yOff = 0;
+    for (let ri = 0; ri < rightRows.length; ri++) {
+      const rh = rightRowHeights[ri];
+      const pType = rightRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
+      elements.push(
+        <Pane key={`fr-${ri}`} x={halfW} y={yOff} w={halfW} h={rh}
+          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+      );
+      yOff += rh;
+    }
+
+    const inset = frameSize * 0.7;
+    const isDashed = od === "in";
+    const dash = isDashed ? `${14 * ss} ${6 * ss}` : "none";
+    const triStroke = isDashed ? 1.5 * ss : 1 * ss;
+
+    const lgx = inset;
+    const lgy = inset;
+    const lgw = halfW - inset * 2;
+    const lgh = H - inset * 2;
+    if (lgw > 0 && lgh > 0) {
+      const midY = lgy + lgh / 2;
+      elements.push(
+        <polyline key="hinge-left"
+          points={`${lgx + lgw},${lgy} ${lgx},${midY} ${lgx + lgw},${lgy + lgh}`}
+          fill="none" stroke="#2d2d2d" strokeWidth={triStroke}
+          strokeDasharray={dash} />
+      );
+    }
+
+    const rgx = halfW + inset;
+    const rgy = inset;
+    const rgw = halfW - inset * 2;
+    const rgh = H - inset * 2;
+    if (rgw > 0 && rgh > 0) {
+      const midY = rgy + rgh / 2;
+      elements.push(
+        <polyline key="hinge-right"
+          points={`${rgx},${rgy} ${rgx + rgw},${midY} ${rgx},${rgy + rgh}`}
+          fill="none" stroke="#2d2d2d" strokeWidth={triStroke}
+          strokeDasharray={dash} />
+      );
+    }
+
+    return <g>{elements}</g>;
   }
 
   if (category === "bifold-door") {
     const leafCount = panels || 3;
     const leftCount = bifoldLeftCount ?? Math.floor(leafCount / 2);
     const lw = W / leafCount;
-    return (
-      <g>
-        {Array.from({ length: leafCount }).map((_, i) => (
-          <Pane key={i} x={i * lw} y={0} w={lw} h={H}
-            frameSize={frameSize} type="bifold"
-            foldDirection={i < leftCount ? "left" : "right"}
-            strokeScale={ss} />
-        ))}
-      </g>
-    );
+    const pRows: EntranceDoorRow[][] = config.panelRows || [];
+    const elements: JSX.Element[] = [];
+
+    for (let i = 0; i < leafCount; i++) {
+      const leafRows = pRows[i] || [{ height: 0, type: "fixed" }];
+      const rowHeights = distributeSpaces(H, leafRows.map(r => r.height || 0));
+      const px = i * lw;
+
+      let yOff = 0;
+      for (let ri = 0; ri < leafRows.length; ri++) {
+        const rh = rowHeights[ri];
+        const pType = leafRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
+        elements.push(
+          <Pane key={`bf-${i}-${ri}`} x={px} y={yOff} w={lw} h={rh}
+            frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+        );
+        yOff += rh;
+      }
+
+      const inset = frameSize * 0.7;
+      const gx = px + inset;
+      const gy = inset;
+      const gw = lw - inset * 2;
+      const gh = H - inset * 2;
+      if (gw > 0 && gh > 0) {
+        const midX = px + lw / 2;
+        const midY = gy + gh / 2;
+        const cw = gw * 0.15;
+        const ch = gh * 0.18;
+        const foldDir = i < leftCount ? "left" : "right";
+        if (foldDir === "left") {
+          elements.push(
+            <polyline key={`bfc-${i}`}
+              points={`${midX + cw},${midY - ch} ${midX - cw},${midY} ${midX + cw},${midY + ch}`}
+              fill="none" stroke="#2d2d2d" strokeWidth={1.2 * ss} />
+          );
+        } else {
+          elements.push(
+            <polyline key={`bfc-${i}`}
+              points={`${midX - cw},${midY - ch} ${midX + cw},${midY} ${midX - cw},${midY + ch}`}
+              fill="none" stroke="#2d2d2d" strokeWidth={1.2 * ss} />
+          );
+        }
+      }
+    }
+
+    return <g>{elements}</g>;
   }
 
   if (category === "stacker-door") {
     const panelCount = panels || 3;
     const pw = W / panelCount;
-    return (
-      <g>
-        {Array.from({ length: panelCount }).map((_, i) => (
-          <Pane key={i} x={i * pw} y={0} w={pw} h={H}
-            frameSize={frameSize} type="sliding" strokeScale={ss} />
-        ))}
-      </g>
-    );
+    const pRows: EntranceDoorRow[][] = config.panelRows || [];
+    const elements: JSX.Element[] = [];
+
+    for (let i = 0; i < panelCount; i++) {
+      const panelRowDefs = pRows[i] || [{ height: 0, type: "fixed" }];
+      const rowHeights = distributeSpaces(H, panelRowDefs.map(r => r.height || 0));
+      const px = i * pw;
+
+      let yOff = 0;
+      for (let ri = 0; ri < panelRowDefs.length; ri++) {
+        const rh = rowHeights[ri];
+        const pType = panelRowDefs[ri].type === "awning" ? "awning" as const : "fixed" as const;
+        elements.push(
+          <Pane key={`st-${i}-${ri}`} x={px} y={yOff} w={pw} h={rh}
+            frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+        );
+        yOff += rh;
+      }
+
+      const inset = frameSize * 0.7;
+      const gx = px + inset;
+      const gy = inset;
+      const gw = pw - inset * 2;
+      const gh = H - inset * 2;
+      if (gw > 0 && gh > 0) {
+        const midX = px + pw / 2;
+        const midY = gy + gh / 2;
+        const arrowLen = gw * 0.25;
+        const headSize = Math.min(gh * 0.025, 12);
+        const tipX = midX + arrowLen;
+        const baseX = tipX - headSize * 2;
+        elements.push(
+          <g key={`sta-${i}`}>
+            <line x1={midX - arrowLen} y1={midY} x2={midX + arrowLen} y2={midY}
+              stroke="#2d2d2d" strokeWidth={1.5 * ss} />
+            <polyline
+              points={`${baseX},${midY - headSize} ${tipX},${midY} ${baseX},${midY + headSize}`}
+              fill="#2d2d2d" stroke="#2d2d2d" strokeWidth={1.5 * ss} />
+          </g>
+        );
+      }
+    }
+
+    return <g>{elements}</g>;
   }
 
   if (category === "bay-window") {
@@ -523,7 +652,8 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
   const dimStroke = 1.2 * ss;
   const extStroke = 0.6 * ss;
 
-  const isCustom = layout === "custom" && category !== "entrance-door" && customColumns && customColumns.length > 0;
+  const noCustomCatsSet = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"];
+  const isCustom = layout === "custom" && !noCustomCatsSet.includes(category) && customColumns && customColumns.length > 0;
   const hasMultipleSections = isCustom && (
     customColumns!.length > 1 ||
     customColumns!.some(c => (c.rows || []).length > 1)
@@ -544,6 +674,28 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
   const hingeDoorRowDefs: EntranceDoorRow[] = config.hingeDoorRows || [{ height: 0, type: "fixed" }];
   const hingeDoorRowHeights = isHingeDoorStd ? distributeSpaces(H, hingeDoorRowDefs.map(r => r.height || 0)) : [];
   const hingeDoorRowMmHeights = isHingeDoorStd ? distributeMmLabels(H, hingeDoorRowDefs.map(r => r.height || 0)) : [];
+
+  const isFrenchDoor = category === "french-door";
+  const frenchLeftRows: EntranceDoorRow[] = config.frenchDoorLeftRows || [{ height: 0, type: "fixed" }];
+  const frenchRightRows: EntranceDoorRow[] = config.frenchDoorRightRows || [{ height: 0, type: "fixed" }];
+  const frenchLeftRowHeights = isFrenchDoor ? distributeSpaces(H, frenchLeftRows.map(r => r.height || 0)) : [];
+  const frenchLeftRowMmHeights = isFrenchDoor ? distributeMmLabels(H, frenchLeftRows.map(r => r.height || 0)) : [];
+  const frenchRightRowHeights = isFrenchDoor ? distributeSpaces(H, frenchRightRows.map(r => r.height || 0)) : [];
+  const frenchRightRowMmHeights = isFrenchDoor ? distributeMmLabels(H, frenchRightRows.map(r => r.height || 0)) : [];
+
+  const isBifoldDoor = category === "bifold-door";
+  const isStackerDoor = category === "stacker-door";
+  const panelRowsDef: EntranceDoorRow[][] = config.panelRows || [];
+  const panelCount = (isBifoldDoor || isStackerDoor) ? (config.panels || 3) : 0;
+  const panelRowHeightsAll: number[][] = [];
+  const panelRowMmHeightsAll: number[][] = [];
+  if (isBifoldDoor || isStackerDoor) {
+    for (let i = 0; i < panelCount; i++) {
+      const pRowDefs = panelRowsDef[i] || [{ height: 0, type: "fixed" }];
+      panelRowHeightsAll.push(distributeSpaces(H, pRowDefs.map(r => r.height || 0)));
+      panelRowMmHeightsAll.push(distributeMmLabels(H, pRowDefs.map(r => r.height || 0)));
+    }
+  }
 
   const sectionFontSize = fontSize * 0.75;
   const sectionDimGap = dimGap * 0.55;
@@ -711,6 +863,87 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
         </g>
       )}
 
+      {isFrenchDoor && (frenchLeftRowHeights.length > 1 || frenchRightRowHeights.length > 1) && (
+        <g data-testid="dimension-french-door-rows">
+          {(() => {
+            const elements: JSX.Element[] = [];
+            const halfW = W / 2;
+            if (frenchLeftRowHeights.length > 1) {
+              const secX = halfW / 2;
+              let yPos = 0;
+              for (let ri = 0; ri < frenchLeftRowHeights.length; ri++) {
+                const rh = frenchLeftRowHeights[ri];
+                const mmH = frenchLeftRowMmHeights[ri];
+                elements.push(
+                  <g key={`fdl-${ri}`}>
+                    <text x={secX} y={yPos + rh / 2 + sectionFontSize * 0.35}
+                      textAnchor="middle" fontSize={sectionFontSize}
+                      fontWeight="500" fill="#666" fontFamily="sans-serif"
+                      opacity={0.8}>
+                      {mmH}
+                    </text>
+                  </g>
+                );
+                yPos += rh;
+              }
+            }
+            if (frenchRightRowHeights.length > 1) {
+              const secX = halfW + halfW / 2;
+              let yPos = 0;
+              for (let ri = 0; ri < frenchRightRowHeights.length; ri++) {
+                const rh = frenchRightRowHeights[ri];
+                const mmH = frenchRightRowMmHeights[ri];
+                elements.push(
+                  <g key={`fdr-${ri}`}>
+                    <text x={secX} y={yPos + rh / 2 + sectionFontSize * 0.35}
+                      textAnchor="middle" fontSize={sectionFontSize}
+                      fontWeight="500" fill="#666" fontFamily="sans-serif"
+                      opacity={0.8}>
+                      {mmH}
+                    </text>
+                  </g>
+                );
+                yPos += rh;
+              }
+            }
+            return elements;
+          })()}
+        </g>
+      )}
+
+      {(isBifoldDoor || isStackerDoor) && panelRowHeightsAll.some(rh => rh.length > 1) && (
+        <g data-testid="dimension-panel-rows">
+          {(() => {
+            const elements: JSX.Element[] = [];
+            const pw = W / panelCount;
+            for (let pi = 0; pi < panelCount; pi++) {
+              const rowH = panelRowHeightsAll[pi];
+              const rowMmH = panelRowMmHeightsAll[pi];
+              if (rowH && rowH.length > 1) {
+                const secX = pi * pw + pw / 2;
+                let yPos = 0;
+                for (let ri = 0; ri < rowH.length; ri++) {
+                  const rh = rowH[ri];
+                  const mmH = rowMmH[ri];
+                  elements.push(
+                    <g key={`pr-${pi}-${ri}`}>
+                      <text x={secX} y={yPos + rh / 2 + sectionFontSize * 0.35}
+                        textAnchor="middle" fontSize={sectionFontSize}
+                        fontWeight="500" fill="#666" fontFamily="sans-serif"
+                        opacity={0.8}>
+                        {mmH}
+                      </text>
+                    </g>
+                  );
+                  yPos += rh;
+                }
+              }
+            }
+            return elements;
+          })()}
+        </g>
+      )}
+
       {isEntrance && entranceMetrics && (
         <g data-testid="dimension-entrance-sections">
           {(() => {
@@ -816,7 +1049,7 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
             lines.push(`Panels: ${config.panels || 3}`);
           }
 
-          if (layout === "custom" && !["entrance-door", "hinge-door"].includes(category)) {
+          if (layout === "custom" && !["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"].includes(category)) {
             lines.push("Custom Layout");
           }
 
