@@ -20,7 +20,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Sliding Window**: Fixed + Sliding panels (127mm frame)
 - **Sliding Door**: Fixed + Sliding panels (127mm frame) — same rendering as Sliding Window
 - **Entrance Door**: Door + configurable Sidelights with dedicated controls (52mm frame)
-- **Hinge Door**: Single hinged door, left/right (52mm frame)
+- **Hinge Door**: Hinged door with row controls (1-4 rows FIX/AWN) + full-height hinge triangle (52mm frame)
 - **French Door**: Two opposite-hinged doors (52mm frame)
 - **Bi-folding Door**: 2-8 leaves with configurable fold direction split (70mm frame)
 - **Stacker Door**: 3-6 sliding panels (127mm frame)
@@ -35,7 +35,8 @@ A professional window and door quotation tool with live SVG technical drawings. 
   - Per-pane type toggle (category-specific):
     - Windows (standard, bay): FIX/AWN toggle
     - Sliding (sliding-window, sliding-door, stacker-door): FIX/SLD/AWN three-way cycle + separate L/R direction buttons when SLD
-    - Doors (hinge-door, french-door): FIX/AWN/HNG cycle + per-pane In/Out + hinge side L/R
+    - French Door: FIX/AWN/HNG cycle + per-pane In/Out + hinge side L/R
+    - Hinge Door: FIX/AWN only + full-height triangle overlay; hinge side + opening direction always visible
 - **Entrance Door**: Dedicated controls (no custom grid):
   - Sidelight toggle: on/off (default on)
   - Sidelight position: Left, Right, or Both (default right)
@@ -54,8 +55,9 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Quote Management**: Add, edit, duplicate, delete items in a quote list
 
 ## Data Model
-- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, customColumns
+- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, customColumns
 - `entranceDoorRows` / `entranceSidelightRows` / `entranceSidelightLeftRows`: Arrays of `{ height: number, type: "fixed"|"awning" }` for entrance door panel/sidelight row splits
+- `hingeDoorRows`: Array of `{ height: number, type: "fixed"|"awning" }` for hinge door panel row splits (standard layout)
 - `sidelightSide`: "left" | "right" | "both" — when "both", left sidelight uses entranceSidelightLeftRows, right uses entranceSidelightRows
 - `customColumns`: Array of `{ width: number, rows: [{ height: number, type: "fixed"|"awning"|"sliding"|"hinge", slideDirection: "left"|"right", hingeSide: "left"|"right", openDirection: "in"|"out" }] }`
 - Width/height of 0 means auto (even split)
@@ -74,4 +76,6 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - Entrance door: no custom grid option; layout forced to "standard"; openDirection defaults to "in"; sidelightEnabled defaults to true
 - Entrance door hinge: ONE full-height triangle spanning entire door column height, not per-row
 - Entrance door: no solid bottom panel, no door split
-- Hinge door only: has solid bottom panel option
+- Hinge door: entrance-door-style row controls (1-4 rows FIX/AWN), ONE full-height hinge triangle, no solid bottom panel
+- Hinge door custom: FIX/AWN-only grid + full-height triangle overlay; hinge side + opening direction always visible
+- `isDoorCategory` = `["french-door"]` only (hinge-door uses FIX/AWN toggle, not FIX/AWN/HNG cycle)

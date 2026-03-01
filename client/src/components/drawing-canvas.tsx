@@ -283,15 +283,39 @@ function computeEntranceDoorMetrics(config: InsertQuoteItem, frameSize: number):
 
 function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   const {
-    width: W, height: H, category, layout, hingeSide, halfSolid,
+    width: W, height: H, category, layout, hingeSide,
     openDirection, panels, sidelightWidth, sidelightSide, doorSplit, doorSplitHeight,
     bifoldLeftCount, centerWidth, windowType, customColumns
   } = config;
   const minPane = frameSize * 2;
   const od = openDirection || "out";
 
-  if (layout === "custom" && category !== "entrance-door") {
+  if (layout === "custom" && category !== "entrance-door" && category !== "hinge-door") {
     return renderCustomGrid(W, H, customColumns || [], frameSize, od, ss);
+  }
+
+  if (layout === "custom" && category === "hinge-door") {
+    const grid = renderCustomGrid(W, H, customColumns || [], frameSize, od, ss);
+    const inset = frameSize * 0.7;
+    const gx = inset;
+    const gy = inset;
+    const gw = W - inset * 2;
+    const gh = H - inset * 2;
+    const dash = od === "in" ? `${8 * ss} ${4 * ss}` : "none";
+    const midY = gy + gh / 2;
+    const triPoints = hingeSide === "left"
+      ? `${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`
+      : `${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`;
+    return (
+      <g>
+        {grid}
+        {gw > 0 && gh > 0 && (
+          <polyline points={triPoints}
+            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            strokeDasharray={dash} />
+        )}
+      </g>
+    );
   }
 
   if (category === "windows-standard") {
@@ -374,9 +398,44 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   }
 
   if (category === "hinge-door") {
-    return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
-      type="hinge" hingeSide={hingeSide} halfSolid={halfSolid}
-      openDirection={od} strokeScale={ss} />;
+    const hdRows: EntranceDoorRow[] = config.hingeDoorRows || [{ height: 0, type: "fixed" }];
+    const rowHeights = distributeSpaces(H, hdRows.map(r => r.height || 0));
+    const elements: JSX.Element[] = [];
+    let yOff = 0;
+    for (let ri = 0; ri < hdRows.length; ri++) {
+      const rh = rowHeights[ri];
+      const pType = hdRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
+      elements.push(
+        <Pane key={`hd-${ri}`} x={0} y={yOff} w={W} h={rh}
+          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+      );
+      yOff += rh;
+    }
+    const inset = frameSize * 0.7;
+    const gx = inset;
+    const gy = inset;
+    const gw = W - inset * 2;
+    const gh = H - inset * 2;
+    if (gw > 0 && gh > 0) {
+      const dash = od === "in" ? `${8 * ss} ${4 * ss}` : "none";
+      const midY = gy + gh / 2;
+      if (hingeSide === "left") {
+        elements.push(
+          <polyline key="hinge-tri"
+            points={`${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`}
+            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            strokeDasharray={dash} />
+        );
+      } else {
+        elements.push(
+          <polyline key="hinge-tri"
+            points={`${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`}
+            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss}
+            strokeDasharray={dash} />
+        );
+      }
+    }
+    return <g>{elements}</g>;
   }
 
   if (category === "french-door") {
@@ -473,6 +532,11 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
   if (isEntrance) {
     entranceMetrics = computeEntranceDoorMetrics(config, frameSize);
   }
+
+  const isHingeDoorStd = category === "hinge-door" && layout !== "custom";
+  const hingeDoorRowDefs: EntranceDoorRow[] = config.hingeDoorRows || [{ height: 0, type: "fixed" }];
+  const hingeDoorRowHeights = isHingeDoorStd ? distributeSpaces(H, hingeDoorRowDefs.map(r => r.height || 0)) : [];
+  const hingeDoorRowMmHeights = isHingeDoorStd ? distributeMmLabels(H, hingeDoorRowDefs.map(r => r.height || 0)) : [];
 
   const sectionFontSize = fontSize * 0.75;
   const sectionDimGap = dimGap * 0.55;
@@ -607,6 +671,33 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
                 yPos += rh;
               }
               xPos += colW;
+            }
+            return elements;
+          })()}
+        </g>
+      )}
+
+      {isHingeDoorStd && hingeDoorRowHeights.length > 1 && (
+        <g data-testid="dimension-hinge-door-rows">
+          {(() => {
+            const elements: JSX.Element[] = [];
+            const secX = W / 2;
+            let yPos = 0;
+            for (let ri = 0; ri < hingeDoorRowHeights.length; ri++) {
+              const rh = hingeDoorRowHeights[ri];
+              const mmH = hingeDoorRowMmHeights[ri];
+              const midY = yPos + rh / 2;
+              elements.push(
+                <g key={`hdr-${ri}`}>
+                  <text x={secX} y={midY + sectionFontSize * 0.35}
+                    textAnchor="middle" fontSize={sectionFontSize}
+                    fontWeight="500" fill="#666" fontFamily="sans-serif"
+                    opacity={0.8}>
+                    {mmH}
+                  </text>
+                </g>
+              );
+              yPos += rh;
             }
             return elements;
           })()}

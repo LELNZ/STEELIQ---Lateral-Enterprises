@@ -91,6 +91,7 @@ const defaultValues: InsertQuoteItem = {
   entranceDoorRows: [...defaultEntranceDoorRows],
   entranceSidelightRows: [...defaultEntranceDoorRows],
   entranceSidelightLeftRows: [...defaultEntranceDoorRows],
+  hingeDoorRows: [...defaultEntranceDoorRows],
   customColumns: makeDefaultColumns(2),
 };
 
@@ -125,6 +126,7 @@ export default function QuoteBuilder() {
     form.setValue("entranceDoorRows", [...defaultEntranceDoorRows]);
     form.setValue("entranceSidelightRows", [...defaultEntranceDoorRows]);
     form.setValue("entranceSidelightLeftRows", [...defaultEntranceDoorRows]);
+    form.setValue("hingeDoorRows", [...defaultEntranceDoorRows]);
     form.setValue("customColumns", makeDefaultColumns(2));
     if (category === "bifold-door") {
       form.setValue("panels", 3);
@@ -143,16 +145,17 @@ export default function QuoteBuilder() {
   const isEntrance = category === "entrance-door";
   const isCustom = layout === "custom" && !isEntrance;
   const isSlidingCategory = ["sliding-window", "sliding-door", "stacker-door"].includes(category);
-  const isDoorCategory = ["hinge-door", "french-door"].includes(category);
+  const isDoorCategory = ["french-door"].includes(category);
+  const isHingeDoor = category === "hinge-door";
 
   const showWindowType = !isCustom && category === "windows-standard";
   const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
-  const showHalfSolid = category === "hinge-door";
+  const isHingeDoorCustom = isHingeDoor && layout === "custom";
   const showSidelightControls = isEntrance && w.sidelightEnabled;
   const showPanels = !isCustom && ["bifold-door", "stacker-door"].includes(category);
   const showBifoldSplit = !isCustom && category === "bifold-door";
   const showCenterWidth = !isCustom && category === "bay-window";
-  const showOpenDirection = !isCustom && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category);
+  const showOpenDirection = (!isCustom || isHingeDoor) && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category);
   const showLayoutSelect = !isEntrance;
   const showGrid = isCustom;
 
@@ -244,7 +247,9 @@ export default function QuoteBuilder() {
     form.setValue("customColumns", cols);
   }
 
-  function setEntranceDoorRowCount(field: "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows", count: number) {
+  type DoorRowField = "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows" | "hingeDoorRows";
+
+  function setEntranceDoorRowCount(field: DoorRowField, count: number) {
     const current = w[field] || defaultEntranceDoorRows;
     const next: EntranceDoorRow[] = Array.from({ length: count }, (_, i) => {
       if (i < current.length) return current[i];
@@ -253,13 +258,13 @@ export default function QuoteBuilder() {
     form.setValue(field, next);
   }
 
-  function setEntranceDoorRowHeight(field: "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows", rowIdx: number, height: number) {
+  function setEntranceDoorRowHeight(field: DoorRowField, rowIdx: number, height: number) {
     const current = [...(w[field] || defaultEntranceDoorRows)];
     current[rowIdx] = { ...current[rowIdx], height };
     form.setValue(field, current);
   }
 
-  function toggleEntranceDoorRowType(field: "entranceDoorRows" | "entranceSidelightRows" | "entranceSidelightLeftRows", rowIdx: number) {
+  function toggleEntranceDoorRowType(field: DoorRowField, rowIdx: number) {
     const current = [...(w[field] || defaultEntranceDoorRows)];
     current[rowIdx] = { ...current[rowIdx], type: current[rowIdx].type === "awning" ? "fixed" : "awning" };
     form.setValue(field, current);
@@ -457,17 +462,6 @@ export default function QuoteBuilder() {
                   </div>
                 )}
 
-                {showHalfSolid && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <Checkbox id="halfSolid" checked={w.halfSolid}
-                      onCheckedChange={(v) => form.setValue("halfSolid", !!v)}
-                      data-testid="checkbox-half-solid" />
-                    <Label htmlFor="halfSolid" className="text-xs cursor-pointer">
-                      Solid Bottom Panel
-                    </Label>
-                  </div>
-                )}
-
                 {isEntrance && (
                   <div className="flex items-center gap-2 pt-1">
                     <Checkbox id="sidelightEnabled" checked={w.sidelightEnabled}
@@ -579,6 +573,62 @@ export default function QuoteBuilder() {
                         </>
                       )}
                     </>
+                  );
+                })()}
+
+                {isHingeDoor && !isHingeDoorCustom && (() => {
+                  const hingeDoorRows: EntranceDoorRow[] = w.hingeDoorRows || defaultEntranceDoorRows;
+                  return (
+                    <div className="border rounded-md bg-muted/20 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Door Panel</Label>
+                        <Select value={String(hingeDoorRows.length)} onValueChange={(v) => setEntranceDoorRowCount("hingeDoorRows", parseInt(v))}>
+                          <SelectTrigger data-testid="select-hinge-door-rows" className="h-7 text-xs w-16">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4].map((n) => (
+                              <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        {hingeDoorRows.map((row, ri) => {
+                          const typeLabel = row.type === "awning" ? "AWN" : "FIX";
+                          const isActive = row.type !== "fixed";
+                          return (
+                            <div key={ri} className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleEntranceDoorRowType("hingeDoorRows", ri)}
+                                className={`
+                                  shrink-0 rounded-sm text-xs font-mono py-1 px-2 border transition-colors
+                                  ${isActive
+                                    ? "bg-primary/15 border-primary/30 text-primary"
+                                    : "bg-background border-border text-muted-foreground"
+                                  }
+                                `}
+                                data-testid={`button-hinge-door-row-type-${ri}`}
+                              >
+                                {typeLabel}
+                              </button>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={row.height || ""}
+                                placeholder="Auto"
+                                onChange={(e) => setEntranceDoorRowHeight("hingeDoorRows", ri, parseFloat(e.target.value) || 0)}
+                                data-testid={`input-hinge-door-row-height-${ri}`}
+                                className="h-7 text-xs flex-1"
+                              />
+                              <span className="text-xs text-muted-foreground shrink-0">mm</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground">FIX = Fixed, AWN = Awning. 0 = even split.</p>
+                    </div>
                   );
                 })()}
 
@@ -811,7 +861,7 @@ export default function QuoteBuilder() {
                       }
                     </p>
 
-                    {!isSlidingCategory && !isDoorCategory && (
+                    {!isSlidingCategory && !isDoorCategory && !isHingeDoor && (
                       <div>
                         <Label className="text-xs">Opening Direction</Label>
                         <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>

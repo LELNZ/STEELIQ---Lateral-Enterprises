@@ -67,6 +67,7 @@ export const quoteItemSchema = z.object({
   entranceDoorRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   entranceSidelightRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   entranceSidelightLeftRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
+  hingeDoorRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   customColumns: z.array(customColumnSchema).default([
     { width: 0, rows: [{ height: 0, type: "fixed" }] },
     { width: 0, rows: [{ height: 0, type: "fixed" }] },
