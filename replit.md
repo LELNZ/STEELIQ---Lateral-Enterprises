@@ -47,8 +47,15 @@ A professional window and door quotation tool with live SVG technical drawings. 
   - Hinge side: Left or Right
   - Opening direction: defaults to "In" (dashed) for entrance doors
   - Per-section dimension lines: section widths below main dim; row height labels when multiple rows
-- **Drawing Legend**: Top-right corner shows frame size, hinge side (when applicable), and opening direction (when applicable)
-- **Opening Direction**: In (dashed line, pronounced thick dash) / Out (solid line) for hinged and awning types
+- **Drawing Legend**: Left-aligned below title in white space above drawing. Shows per-category info:
+  - Always: frame size (e.g. "52mm frame")
+  - Windows Standard: window type (Fixed/Awning)
+  - Entrance/Hinge Door: hinge side (Left/Right) + door open direction (Open In/Open Out)
+  - French Door: door open direction
+  - Bifold Door: leaf count
+  - Stacker Door: panel count
+  - Custom layouts: "Custom Layout" indicator
+- **Opening Direction**: In (dashed line, pronounced thick dash) / Out (solid line) — applies ONLY to hinge triangles on doors. Awning indicators are always solid lines regardless of open direction setting
 - **Bi-fold Fold Direction**: Configurable left/right split
 - **Frame Sizes**: 52mm standard, 70mm bi-fold, 127mm sliding/stacker
 - **Dimension Lines**: All drawings show total Width and Height with architectural tick marks
@@ -70,12 +77,13 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - Sliding/Stacker/Sliding doors use 127mm frame
 - Custom grid widths/heights default to even distribution when set to 0
 - Opening indicator triangle point = hinge location
-- Windows Standard awnings always show solid line (out), no opening direction control
+- ALL awning indicators always show solid line (open out) — only hinge triangles respond to open direction setting
+- Windows Standard: no opening direction control (awnings always solid)
 - Bi-fold V chevron indicates fold direction (< = left, > = right)
 - Sliding arrow direction: configurable per pane in custom grid; default right
 - Entrance door: no custom grid option; layout forced to "standard"; openDirection defaults to "in"; sidelightEnabled defaults to true
 - Entrance door hinge: ONE full-height triangle spanning entire door column height, not per-row
 - Entrance door: no solid bottom panel, no door split
 - Hinge door: no custom grid option; layout forced to "standard"; entrance-door-style row controls (1-4 rows FIX/AWN), ONE full-height hinge triangle, no solid bottom panel
-- Dashed lines (Open In) use pronounced pattern (14/6 dash/gap) with 1.5x stroke weight for clear visual distinction
+- Dashed lines (Open In) on hinge triangles use pronounced pattern (14/6 dash/gap) with 1.5x stroke weight for clear visual distinction
 - `isDoorCategory` = `["french-door"]` only (hinge-door uses FIX/AWN toggle, not FIX/AWN/HNG cycle)

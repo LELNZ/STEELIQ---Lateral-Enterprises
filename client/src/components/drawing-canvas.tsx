@@ -36,9 +36,9 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
 
   const midX = x + w / 2;
   const midY = y + h / 2;
-  const isDashed = openDirection === "in";
-  const dash = isDashed ? `${14 * ss} ${6 * ss}` : "none";
-  const indicatorStroke = isDashed ? 1.5 * ss : 1 * ss;
+  const hingeDashed = openDirection === "in";
+  const hingeDash = hingeDashed ? `${14 * ss} ${6 * ss}` : "none";
+  const hingeStroke = hingeDashed ? 1.5 * ss : 1 * ss;
 
   return (
     <g>
@@ -62,8 +62,7 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
         <>
           <polyline
             points={`${gx},${gy + gh} ${midX},${gy} ${gx + gw},${gy + gh}`}
-            fill="none" stroke="#2d2d2d" strokeWidth={indicatorStroke}
-            strokeDasharray={dash} />
+            fill="none" stroke="#2d2d2d" strokeWidth={1 * ss} />
           <line
             x1={midX - Math.min(gw * 0.08, 20)} y1={gy + gh - inset * 0.3}
             x2={midX + Math.min(gw * 0.08, 20)} y2={gy + gh - inset * 0.3}
@@ -74,15 +73,15 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
       {type === "hinge" && hingeSide === "left" && (
         <polyline
           points={`${gx + gw},${gy} ${gx},${midY} ${gx + gw},${gy + gh}`}
-          fill="none" stroke="#2d2d2d" strokeWidth={indicatorStroke}
-          strokeDasharray={dash} />
+          fill="none" stroke="#2d2d2d" strokeWidth={hingeStroke}
+          strokeDasharray={hingeDash} />
       )}
 
       {type === "hinge" && hingeSide === "right" && (
         <polyline
           points={`${gx},${gy} ${gx + gw},${midY} ${gx},${gy + gh}`}
-          fill="none" stroke="#2d2d2d" strokeWidth={indicatorStroke}
-          strokeDasharray={dash} />
+          fill="none" stroke="#2d2d2d" strokeWidth={hingeStroke}
+          strokeDasharray={hingeDash} />
       )}
 
       {type === "sliding" && (() => {
@@ -791,24 +790,38 @@ export default function DrawingCanvas({ config }: { config: InsertQuoteItem }) {
         {(() => {
           const legendFs = fontSize * 0.7;
           const lineH = legendFs * 1.3;
-          const baseY = -padTop * 0.35;
+          const baseY = -padTop * 0.35 + titleFontSize * 1.1;
           const lines: string[] = [`${frameSize}mm frame`];
+
+          if (category === "windows-standard") {
+            const wt = config.windowType === "awning" ? "Awning" : "Fixed";
+            lines.push(`Type: ${wt}`);
+          }
 
           const hasHinge = ["entrance-door", "hinge-door"].includes(category);
           if (hasHinge) {
             lines.push(`Hinge: ${(config.hingeSide || "left") === "left" ? "Left" : "Right"}`);
           }
 
-          const hasOpenDir = ["entrance-door", "hinge-door", "french-door", "bifold-door"].includes(category) ||
-            (category === "bay-window") ||
-            (layout === "custom" && category !== "windows-standard" && !["sliding-window", "sliding-door", "stacker-door"].includes(category));
-          if (hasOpenDir && category !== "windows-standard") {
+          const hasOpenDir = ["entrance-door", "hinge-door", "french-door"].includes(category);
+          if (hasOpenDir) {
             const od = config.openDirection || "out";
-            lines.push(od === "in" ? "Open In (dashed)" : "Open Out (solid)");
+            lines.push(`Door: ${od === "in" ? "Open In" : "Open Out"}`);
+          }
+
+          if (category === "bifold-door") {
+            lines.push(`Leaves: ${config.panels || 3}`);
+          }
+          if (category === "stacker-door") {
+            lines.push(`Panels: ${config.panels || 3}`);
+          }
+
+          if (layout === "custom" && !["entrance-door", "hinge-door"].includes(category)) {
+            lines.push("Custom Layout");
           }
 
           return lines.map((line, i) => (
-            <text key={i} x={W} y={baseY + i * lineH} textAnchor="end"
+            <text key={i} x={0} y={baseY + i * lineH} textAnchor="start"
               fontSize={legendFs} fill="#888" fontFamily="sans-serif">
               {line}
             </text>
