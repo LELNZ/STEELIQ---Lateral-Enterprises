@@ -160,6 +160,7 @@ export default function QuoteBuilder() {
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
+  const skipCategoryResetRef = useRef(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoTargetItemId, setPhotoTargetItemId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -221,6 +222,10 @@ export default function QuoteBuilder() {
   }, [formIsDirty]);
 
   useEffect(() => {
+    if (skipCategoryResetRef.current) {
+      skipCategoryResetRef.current = false;
+      return;
+    }
     form.setValue("layout", "standard");
     form.setValue("windowType", "fixed");
     form.setValue("hingeSide", "left");
@@ -481,6 +486,7 @@ export default function QuoteBuilder() {
 
   function editItem(iwp: ItemWithPhoto) {
     const { id, ...rest } = iwp.item;
+    skipCategoryResetRef.current = true;
     form.reset(rest);
     setEditingId(id);
   }
