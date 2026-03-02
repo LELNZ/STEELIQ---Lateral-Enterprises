@@ -130,7 +130,7 @@ export default function Library() {
             <HandlesSection />
           </TabsContent>
           <TabsContent value="liner_type">
-            <SimpleSection type="liner_type" title="Liner Types (price per linear metre)" fields={["value", "label", "priceProvision"]} priceUnit="/lin.m" />
+            <LinerTypeSection />
           </TabsContent>
           <TabsContent value="wanz_bar">
             <WanzBarSection />
@@ -1174,9 +1174,26 @@ function FrameTypeDialog({ entry, onClose }: { entry: LibraryEntry | null; onClo
   );
 }
 
+function LinerTypeSection() {
+  const { data: frameTypes = [] } = useLibraryEntries("frame_type");
+  const allFrameTypeLabels = frameTypes.map((ft) => (ft.data as any).label as string).filter(Boolean);
+  return (
+    <SimpleSection
+      type="liner_type"
+      title="Liner Types (price per linear metre)"
+      fields={["value", "label", "priceProvision"]}
+      priceUnit="/lin.m"
+      defaultAllocation="All Frame Types"
+      allFrameTypeLabels={allFrameTypeLabels}
+    />
+  );
+}
+
 function WanzBarSection() {
   const { toast } = useToast();
   const { data: entries = [], isLoading } = useLibraryEntries("wanz_bar");
+  const { data: frameTypes = [] } = useLibraryEntries("frame_type");
+  const allFrameTypeLabels = frameTypes.map((ft) => (ft.data as any).label as string).filter(Boolean);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -1246,7 +1263,7 @@ function WanzBarSection() {
                     <TableCell className="text-right font-mono">{d.kgPerMetre}</TableCell>
                     <TableCell className="text-right font-mono">{d.pricePerKgUsd ? `$${d.pricePerKgUsd}` : "—"}</TableCell>
                     <TableCell className="text-right font-mono">{d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}` : "—"}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">All Windows</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{Array.isArray(d.allocations) && d.allocations.length > 0 ? d.allocations.join(", ") : "All Windows"}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditEntry(entry)}>
@@ -1269,7 +1286,7 @@ function WanzBarSection() {
       </Card>
 
       {(showAdd || editEntry) && (
-        <WanzBarDialog entry={editEntry} onClose={() => { setShowAdd(false); setEditEntry(null); }} />
+        <WanzBarDialog entry={editEntry} allFrameTypeLabels={allFrameTypeLabels} onClose={() => { setShowAdd(false); setEditEntry(null); }} />
       )}
       <DeleteConfirmDialog
         open={!!deleteId}
@@ -1281,7 +1298,7 @@ function WanzBarSection() {
   );
 }
 
-function WanzBarDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function WanzBarDialog({ entry, allFrameTypeLabels, onClose }: { entry: LibraryEntry | null; allFrameTypeLabels: string[]; onClose: () => void }) {
   const { toast } = useToast();
   const d = entry ? (entry.data as any) : {};
   const [values, setValues] = useState({
@@ -1293,15 +1310,25 @@ function WanzBarDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose
     priceNzdPerLinM: d.priceNzdPerLinM?.toString() || "0",
   });
 
+  const initialAllocations: string[] = Array.isArray(d.allocations) && d.allocations.length > 0 ? d.allocations : [];
+  const [selectedAllocations, setSelectedAllocations] = useState<string[]>(initialAllocations);
+
+  function toggleAllocation(label: string) {
+    setSelectedAllocations((prev) =>
+      prev.includes(label) ? prev.filter((a) => a !== label) : [...prev, label]
+    );
+  }
+
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const data = {
+      const data: Record<string, any> = {
         value: values.value || values.sectionNumber,
         label: values.label,
         sectionNumber: values.sectionNumber,
         kgPerMetre: parseFloat(values.kgPerMetre) || 0,
         pricePerKgUsd: parseFloat(values.pricePerKgUsd) || 0,
         priceNzdPerLinM: parseFloat(values.priceNzdPerLinM) || 0,
+        allocations: selectedAllocations,
       };
       if (entry) {
         await apiRequest("PATCH", `/api/library/${entry.id}`, { data });
@@ -1346,6 +1373,29 @@ function WanzBarDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose
               <Input type="number" step="0.01" value={values.priceNzdPerLinM} onChange={(e) => setValues({ ...values, priceNzdPerLinM: e.target.value })} placeholder="0" data-testid="input-wanz-bar-price-nzd" />
             </div>
           </div>
+          {allFrameTypeLabels.length > 0 && (
+            <div>
+              <Label className="mb-2 block">Allocated Frame Types</Label>
+              <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto" data-testid="wanz-allocation-checkboxes">
+                {allFrameTypeLabels.map((ftLabel) => (
+                  <div key={ftLabel} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`wanz-alloc-${ftLabel}`}
+                      checked={selectedAllocations.includes(ftLabel)}
+                      onCheckedChange={() => toggleAllocation(ftLabel)}
+                      data-testid={`checkbox-wanz-alloc-${ftLabel}`}
+                    />
+                    <label htmlFor={`wanz-alloc-${ftLabel}`} className="text-sm cursor-pointer select-none">
+                      {ftLabel}
+                    </label>
+                  </div>
+                ))}
+              </div>
+              {selectedAllocations.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">No frame types selected — defaults to All Windows</p>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
