@@ -41,7 +41,7 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "handles" | "liner_type";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "handles" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery";
 
 function useLibraryEntries(type: string) {
   return useQuery<LibraryEntry[]>({
@@ -56,7 +56,7 @@ function useLibraryEntries(type: string) {
 
 export default function Library() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<LibraryTab>("glass");
+  const [activeTab, setActiveTab] = useState<LibraryTab>("direct_materials");
 
   const seedMutation = useMutation({
     mutationFn: async () => {
@@ -109,12 +109,16 @@ export default function Library() {
       <div className="flex-1 overflow-auto p-6">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LibraryTab)}>
           <TabsList className="mb-4" data-testid="library-tabs">
+            <TabsTrigger value="direct_materials" data-testid="tab-direct-materials">Direct Materials</TabsTrigger>
+            <TabsTrigger value="manufacturing_labour" data-testid="tab-manufacturing-labour">Manufacturing Labour</TabsTrigger>
             <TabsTrigger value="glass" data-testid="tab-glass">Glass</TabsTrigger>
             <TabsTrigger value="frame_type" data-testid="tab-frame-types">Frame Types</TabsTrigger>
             <TabsTrigger value="frame_color" data-testid="tab-frame-colors">Frame Colors</TabsTrigger>
             <TabsTrigger value="handles" data-testid="tab-handles">Handles</TabsTrigger>
             <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
             <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
+            <TabsTrigger value="installation" data-testid="tab-installation">Installation</TabsTrigger>
+            <TabsTrigger value="delivery" data-testid="tab-delivery">Delivery</TabsTrigger>
           </TabsList>
 
           <TabsContent value="glass">
@@ -134,6 +138,18 @@ export default function Library() {
           </TabsContent>
           <TabsContent value="wanz_bar">
             <WanzBarSection />
+          </TabsContent>
+          <TabsContent value="direct_materials">
+            <DirectMaterialsSection />
+          </TabsContent>
+          <TabsContent value="manufacturing_labour">
+            <ManufacturingLabourSection />
+          </TabsContent>
+          <TabsContent value="installation">
+            <InstallationSection />
+          </TabsContent>
+          <TabsContent value="delivery">
+            <DeliverySection />
           </TabsContent>
         </Tabs>
       </div>
@@ -1704,6 +1720,905 @@ function DeleteConfirmDialog({ open, onClose, onConfirm, isPending }: {
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending} data-testid="button-confirm-delete">
             {isPending ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const FAMILY_GROUPS = ["ES52 Window", "ES52 Hinge Door", "ES127 Sliding Door"];
+
+function DirectMaterialsSection() {
+  const { toast } = useToast();
+  const { data: profiles = [], isLoading: pLoading } = useLibraryEntries("direct_profile");
+  const { data: accessories = [], isLoading: aLoading } = useLibraryEntries("direct_accessory");
+  const [editProfile, setEditProfile] = useState<LibraryEntry | null>(null);
+  const [editAccessory, setEditAccessory] = useState<LibraryEntry | null>(null);
+  const [addingProfile, setAddingProfile] = useState(false);
+  const [addingAccessory, setAddingAccessory] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const seedMutation = useMutation({
+    mutationFn: async () => { await apiRequest("POST", "/api/library/seed-direct-materials"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "direct_profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "direct_accessory"] });
+      toast({ title: "Direct materials seeded from configurations" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      setDeleteId(null);
+      toast({ title: "Entry deleted" });
+    },
+  });
+
+  const profilesByFamily = FAMILY_GROUPS.map((family) => ({
+    family,
+    items: profiles.filter((p) => {
+      const fg = (p.data as any).familyGroup;
+      return Array.isArray(fg) ? fg.includes(family) : fg === family;
+    }),
+  }));
+
+  const accessoriesByFamily = FAMILY_GROUPS.map((family) => ({
+    family,
+    items: accessories.filter((a) => {
+      const fg = (a.data as any).familyGroup;
+      return Array.isArray(fg) ? fg.includes(family) : fg === family;
+    }),
+  }));
+
+  if (pLoading || aLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="direct-materials-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Direct Materials Library</h2>
+        <Button variant="outline" size="sm" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-seed-direct-materials">
+          <RotateCcw className="w-4 h-4 mr-1.5" />
+          {seedMutation.isPending ? "Seeding..." : "Seed from Configurations"}
+        </Button>
+      </div>
+
+      {FAMILY_GROUPS.map((family) => {
+        const familyProfiles = profilesByFamily.find((f) => f.family === family)?.items || [];
+        const familyAccessories = accessoriesByFamily.find((f) => f.family === family)?.items || [];
+        return (
+          <DirectMaterialsFamilyGroup
+            key={family}
+            family={family}
+            profiles={familyProfiles}
+            accessories={familyAccessories}
+            onEditProfile={setEditProfile}
+            onEditAccessory={setEditAccessory}
+            onDelete={setDeleteId}
+          />
+        );
+      })}
+
+      <div className="flex gap-2 pt-2">
+        <Button size="sm" onClick={() => setAddingProfile(true)} data-testid="button-add-profile">
+          <Plus className="w-4 h-4 mr-1" /> Add Profile
+        </Button>
+        <Button size="sm" onClick={() => setAddingAccessory(true)} data-testid="button-add-accessory">
+          <Plus className="w-4 h-4 mr-1" /> Add Accessory
+        </Button>
+      </div>
+
+      {(editProfile || addingProfile) && (
+        <DirectProfileDialog
+          entry={editProfile}
+          onClose={() => { setEditProfile(null); setAddingProfile(false); }}
+        />
+      )}
+      {(editAccessory || addingAccessory) && (
+        <DirectAccessoryDialog
+          entry={editAccessory}
+          onClose={() => { setEditAccessory(null); setAddingAccessory(false); }}
+        />
+      )}
+      <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
+    </div>
+  );
+}
+
+function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfile, onEditAccessory, onDelete }: {
+  family: string;
+  profiles: LibraryEntry[];
+  accessories: LibraryEntry[];
+  onEditProfile: (e: LibraryEntry) => void;
+  onEditAccessory: (e: LibraryEntry) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const [profilesOpen, setProfilesOpen] = useState(true);
+  const [accessoriesOpen, setAccessoriesOpen] = useState(false);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              <Package className="w-4 h-4" />
+              {family}
+              <Badge variant="secondary" className="ml-auto">{profiles.length} profiles, {accessories.length} accessories</Badge>
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="space-y-4">
+            <Collapsible open={profilesOpen} onOpenChange={setProfilesOpen}>
+              <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium cursor-pointer hover:text-primary py-1">
+                {profilesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                Aluminium Profiles ({profiles.length})
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mould #</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>kg/m</TableHead>
+                      <TableHead>$/kg USD</TableHead>
+                      <TableHead>Length</TableHead>
+                      <TableHead>Surface</TableHead>
+                      <TableHead className="w-20"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {profiles.map((p) => {
+                      const d = p.data as any;
+                      return (
+                        <TableRow key={p.id} data-testid={`row-profile-${p.id}`}>
+                          <TableCell className="font-mono text-xs">{d.mouldNumber}</TableCell>
+                          <TableCell><Badge variant="outline">{d.role}</Badge></TableCell>
+                          <TableCell>{d.kgPerMetre}</TableCell>
+                          <TableCell>${d.pricePerKgUsd}</TableCell>
+                          <TableCell>{d.lengthFormula}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{d.surface}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditProfile(p)} data-testid={`button-edit-profile-${p.id}`}>
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(p.id)} data-testid={`button-delete-profile-${p.id}`}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {profiles.length === 0 && (
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No profiles</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <Collapsible open={accessoriesOpen} onOpenChange={setAccessoriesOpen}>
+              <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium cursor-pointer hover:text-primary py-1">
+                {accessoriesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                Accessories ({accessories.length})
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Colour</TableHead>
+                      <TableHead>$/USD</TableHead>
+                      <TableHead>Scaling</TableHead>
+                      <TableHead className="w-20"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {accessories.map((a) => {
+                      const d = a.data as any;
+                      return (
+                        <TableRow key={a.id} data-testid={`row-accessory-${a.id}`}>
+                          <TableCell className="text-xs">{d.name}</TableCell>
+                          <TableCell className="font-mono text-xs">{d.code}</TableCell>
+                          <TableCell className="text-xs">{d.colour}</TableCell>
+                          <TableCell>${d.priceUsd}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-xs">{d.scalingType === "per-linear-metre" ? "Per m" : "Fixed"}</Badge></TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditAccessory(a)} data-testid={`button-edit-accessory-${a.id}`}>
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(a.id)} data-testid={`button-delete-accessory-${a.id}`}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {accessories.length === 0 && (
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No accessories</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CollapsibleContent>
+            </Collapsible>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
+function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = entry ? (entry.data as any) : {};
+  const [values, setValues] = useState({
+    mouldNumber: d.mouldNumber || "",
+    role: d.role || "spacer",
+    kgPerMetre: d.kgPerMetre || "",
+    pricePerKgUsd: d.pricePerKgUsd || "",
+    lengthFormula: d.lengthFormula || "perimeter",
+    surface: d.surface || "",
+    familyGroup: d.familyGroup || ["ES52 Window"],
+    description: d.description || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/direct-profiles/${entry!.id}`, { data: values });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "direct_profile", data: values, sortOrder: 0 });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({ title: isEdit ? "Profile updated & synced to configurations" : "Profile added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-direct-profile">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Profile" : "Add Profile"}</DialogTitle>
+          <DialogDescription>{isEdit ? "Changes will sync to all configurations using this mould number." : "Add a new master profile."}</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Mould Number</Label>
+            <Input value={values.mouldNumber} onChange={(e) => setValues({ ...values, mouldNumber: e.target.value })} data-testid="input-mould-number" />
+          </div>
+          <div>
+            <Label>Role</Label>
+            <Select value={values.role} onValueChange={(v) => setValues({ ...values, role: v })}>
+              <SelectTrigger data-testid="select-role"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PROFILE_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>kg/m</Label>
+            <Input value={values.kgPerMetre} onChange={(e) => setValues({ ...values, kgPerMetre: e.target.value })} data-testid="input-kg-per-metre" />
+          </div>
+          <div>
+            <Label>$/kg USD</Label>
+            <Input value={values.pricePerKgUsd} onChange={(e) => setValues({ ...values, pricePerKgUsd: e.target.value })} data-testid="input-price-per-kg" />
+          </div>
+          <div>
+            <Label>Length Formula</Label>
+            <Select value={values.lengthFormula} onValueChange={(v) => setValues({ ...values, lengthFormula: v })}>
+              <SelectTrigger data-testid="select-length-formula"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {LENGTH_FORMULAS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Surface</Label>
+            <Input value={values.surface} onChange={(e) => setValues({ ...values, surface: e.target.value })} data-testid="input-surface" />
+          </div>
+          <div className="col-span-2">
+            <Label>Family Groups</Label>
+            <div className="flex gap-3 mt-1">
+              {FAMILY_GROUPS.map((fg) => (
+                <label key={fg} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox
+                    checked={values.familyGroup.includes(fg)}
+                    onCheckedChange={(checked) => {
+                      const newFg = checked
+                        ? [...values.familyGroup, fg]
+                        : values.familyGroup.filter((g: string) => g !== fg);
+                      setValues({ ...values, familyGroup: newFg });
+                    }}
+                  />
+                  {fg}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.mouldNumber.trim() || saveMutation.isPending} data-testid="button-save-profile">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DirectAccessoryDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = entry ? (entry.data as any) : {};
+  const [values, setValues] = useState({
+    name: d.name || "",
+    code: d.code || "",
+    colour: d.colour || "",
+    priceUsd: d.priceUsd || "",
+    scalingType: d.scalingType || "fixed",
+    familyGroup: d.familyGroup || ["ES52 Window"],
+    description: d.description || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/direct-accessories/${entry!.id}`, { data: values });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "direct_accessory", data: values, sortOrder: 0 });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({ title: isEdit ? "Accessory updated & synced to configurations" : "Accessory added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-direct-accessory">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Accessory" : "Add Accessory"}</DialogTitle>
+          <DialogDescription>{isEdit ? "Changes will sync to all configurations using this code." : "Add a new master accessory."}</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Name</Label>
+            <Input value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} data-testid="input-accessory-name" />
+          </div>
+          <div>
+            <Label>Code</Label>
+            <Input value={values.code} onChange={(e) => setValues({ ...values, code: e.target.value })} data-testid="input-accessory-code" />
+          </div>
+          <div>
+            <Label>Colour</Label>
+            <Input value={values.colour} onChange={(e) => setValues({ ...values, colour: e.target.value })} data-testid="input-accessory-colour" />
+          </div>
+          <div>
+            <Label>Price (USD)</Label>
+            <Input value={values.priceUsd} onChange={(e) => setValues({ ...values, priceUsd: e.target.value })} data-testid="input-accessory-price" />
+          </div>
+          <div>
+            <Label>Scaling Type</Label>
+            <Select value={values.scalingType} onValueChange={(v) => setValues({ ...values, scalingType: v })}>
+              <SelectTrigger data-testid="select-scaling-type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fixed">Fixed</SelectItem>
+                <SelectItem value="per-linear-metre">Per Linear Metre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-2">
+            <Label>Family Groups</Label>
+            <div className="flex gap-3 mt-1">
+              {FAMILY_GROUPS.map((fg) => (
+                <label key={fg} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox
+                    checked={values.familyGroup.includes(fg)}
+                    onCheckedChange={(checked) => {
+                      const newFg = checked
+                        ? [...values.familyGroup, fg]
+                        : values.familyGroup.filter((g: string) => g !== fg);
+                      setValues({ ...values, familyGroup: newFg });
+                    }}
+                  />
+                  {fg}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-accessory">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ManufacturingLabourSection() {
+  const { toast } = useToast();
+  const { data: operations = [], isLoading } = useLibraryEntries("labour_operation");
+  const [editOp, setEditOp] = useState<LibraryEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "labour_operation"] });
+      setDeleteId(null);
+      toast({ title: "Operation deleted" });
+    },
+  });
+
+  const manual = operations.filter((o) => (o.data as any).category === "manual");
+  const cnc = operations.filter((o) => (o.data as any).category === "cnc");
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="manufacturing-labour-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Manufacturing Labour Library</h2>
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="button-add-labour-op">
+          <Plus className="w-4 h-4 mr-1" /> Add Operation
+        </Button>
+      </div>
+
+      <LabourCategoryGroup title="Manual Processes" operations={manual} onEdit={setEditOp} onDelete={setDeleteId} />
+      <LabourCategoryGroup title="CNC Processes" operations={cnc} onEdit={setEditOp} onDelete={setDeleteId} />
+
+      {(editOp || adding) && (
+        <LabourOperationDialog entry={editOp} onClose={() => { setEditOp(null); setAdding(false); }} />
+      )}
+      <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
+    </div>
+  );
+}
+
+function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
+  title: string;
+  operations: LibraryEntry[];
+  onEdit: (e: LibraryEntry) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              <Wrench className="w-4 h-4" />
+              {title}
+              <Badge variant="secondary" className="ml-auto">{operations.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Operation</TableHead>
+                  <TableHead>Time (min)</TableHead>
+                  <TableHead>Rate ($/hr)</TableHead>
+                  <TableHead>Cost/Unit ($)</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {operations.map((o) => {
+                  const d = o.data as any;
+                  const cost = ((parseFloat(d.timeMinutes) || 0) / 60) * (parseFloat(d.ratePerHour) || 0);
+                  return (
+                    <TableRow key={o.id} data-testid={`row-labour-${o.id}`}>
+                      <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell>{d.timeMinutes}</TableCell>
+                      <TableCell>${d.ratePerHour}</TableCell>
+                      <TableCell className="font-semibold">${cost.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(o)} data-testid={`button-edit-labour-${o.id}`}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(o.id)} data-testid={`button-delete-labour-${o.id}`}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {operations.length === 0 && (
+                  <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No operations</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
+function LabourOperationDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = entry ? (entry.data as any) : {};
+  const [values, setValues] = useState({
+    name: d.name || "",
+    category: d.category || "manual",
+    timeMinutes: d.timeMinutes || 15,
+    ratePerHour: d.ratePerHour || 45,
+    description: d.description || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "labour_operation", data: values, sortOrder: 0 });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "labour_operation"] });
+      toast({ title: isEdit ? "Operation updated" : "Operation added" });
+      onClose();
+    },
+  });
+
+  const cost = ((values.timeMinutes || 0) / 60) * (values.ratePerHour || 0);
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-labour-operation">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Operation" : "Add Operation"}</DialogTitle>
+          <DialogDescription>Set time and rate for this manufacturing operation.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Operation Name</Label>
+            <Input value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} data-testid="input-labour-name" />
+          </div>
+          <div>
+            <Label>Category</Label>
+            <Select value={values.category} onValueChange={(v) => setValues({ ...values, category: v })}>
+              <SelectTrigger data-testid="select-labour-category"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="cnc">CNC</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Time (minutes)</Label>
+            <Input type="number" value={values.timeMinutes} onChange={(e) => setValues({ ...values, timeMinutes: parseFloat(e.target.value) || 0 })} data-testid="input-labour-time" />
+          </div>
+          <div>
+            <Label>Rate ($/hr NZD)</Label>
+            <Input type="number" value={values.ratePerHour} onChange={(e) => setValues({ ...values, ratePerHour: parseFloat(e.target.value) || 0 })} data-testid="input-labour-rate" />
+          </div>
+          <div className="col-span-2 text-sm text-muted-foreground">
+            Calculated cost per unit: <span className="font-semibold text-foreground">${cost.toFixed(2)}</span>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-labour">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InstallationSection() {
+  const { toast } = useToast();
+  const { data: rates = [], isLoading } = useLibraryEntries("installation_rate");
+  const [editRate, setEditRate] = useState<LibraryEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "installation_rate"] });
+      setDeleteId(null);
+      toast({ title: "Rate deleted" });
+    },
+  });
+
+  const windowRates = rates.filter((r) => (r.data as any).category === "window");
+  const doorRates = rates.filter((r) => (r.data as any).category === "door");
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="installation-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Installation Labour Rates</h2>
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="button-add-installation-rate">
+          <Plus className="w-4 h-4 mr-1" /> Add Rate
+        </Button>
+      </div>
+
+      {[{ title: "Window Installation", items: windowRates }, { title: "Door Installation", items: doorRates }].map(({ title, items }) => (
+        <Card key={title}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">{title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Size Name</TableHead>
+                  <TableHead>Min m²</TableHead>
+                  <TableHead>Max m²</TableHead>
+                  <TableHead>Price/Unit ($)</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((r) => {
+                  const d = r.data as any;
+                  return (
+                    <TableRow key={r.id} data-testid={`row-installation-${r.id}`}>
+                      <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell>{d.minSqm}</TableCell>
+                      <TableCell>{d.maxSqm >= 999 ? "∞" : d.maxSqm}</TableCell>
+                      <TableCell className="font-semibold">${d.pricePerUnit}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditRate(r)} data-testid={`button-edit-installation-${r.id}`}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(r.id)} data-testid={`button-delete-installation-${r.id}`}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ))}
+
+      {(editRate || adding) && (
+        <InstallationRateDialog entry={editRate} onClose={() => { setEditRate(null); setAdding(false); }} />
+      )}
+      <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
+    </div>
+  );
+}
+
+function InstallationRateDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = entry ? (entry.data as any) : {};
+  const [values, setValues] = useState({
+    name: d.name || "",
+    category: d.category || "window",
+    minSqm: d.minSqm ?? 0,
+    maxSqm: d.maxSqm ?? 1,
+    pricePerUnit: d.pricePerUnit ?? 250,
+    description: d.description || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "installation_rate", data: values, sortOrder: 0 });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "installation_rate"] });
+      toast({ title: isEdit ? "Rate updated" : "Rate added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-installation-rate">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Installation Rate" : "Add Installation Rate"}</DialogTitle>
+          <DialogDescription>Set pricing for a size tier.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Size Name</Label>
+            <Input value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} data-testid="input-installation-name" />
+          </div>
+          <div>
+            <Label>Category</Label>
+            <Select value={values.category} onValueChange={(v) => setValues({ ...values, category: v })}>
+              <SelectTrigger data-testid="select-installation-category"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="window">Window</SelectItem>
+                <SelectItem value="door">Door</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Min m²</Label>
+            <Input type="number" value={values.minSqm} onChange={(e) => setValues({ ...values, minSqm: parseFloat(e.target.value) || 0 })} data-testid="input-installation-min" />
+          </div>
+          <div>
+            <Label>Max m²</Label>
+            <Input type="number" value={values.maxSqm} onChange={(e) => setValues({ ...values, maxSqm: parseFloat(e.target.value) || 0 })} data-testid="input-installation-max" />
+          </div>
+          <div>
+            <Label>Price per Unit ($)</Label>
+            <Input type="number" value={values.pricePerUnit} onChange={(e) => setValues({ ...values, pricePerUnit: parseFloat(e.target.value) || 0 })} data-testid="input-installation-price" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-installation">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeliverySection() {
+  const { toast } = useToast();
+  const { data: rates = [], isLoading } = useLibraryEntries("delivery_rate");
+  const [editRate, setEditRate] = useState<LibraryEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "delivery_rate"] });
+      setDeleteId(null);
+      toast({ title: "Rate deleted" });
+    },
+  });
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="delivery-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Delivery Rates</h2>
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="button-add-delivery-rate">
+          <Plus className="w-4 h-4 mr-1" /> Add Rate
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="pt-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Delivery Method</TableHead>
+                <TableHead>Rate ($ NZD)</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rates.map((r) => {
+                const d = r.data as any;
+                return (
+                  <TableRow key={r.id} data-testid={`row-delivery-${r.id}`}>
+                    <TableCell className="font-medium">{d.name}</TableCell>
+                    <TableCell className="font-semibold">{d.rateNzd > 0 ? `$${d.rateNzd}` : "Custom"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{d.description}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditRate(r)} data-testid={`button-edit-delivery-${r.id}`}>
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(r.id)} data-testid={`button-delete-delivery-${r.id}`}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {rates.length === 0 && (
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No delivery rates</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {(editRate || adding) && (
+        <DeliveryRateDialog entry={editRate} onClose={() => { setEditRate(null); setAdding(false); }} />
+      )}
+      <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
+    </div>
+  );
+}
+
+function DeliveryRateDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = entry ? (entry.data as any) : {};
+  const [values, setValues] = useState({
+    name: d.name || "",
+    vehicle: d.vehicle || "",
+    rateNzd: d.rateNzd ?? 0,
+    description: d.description || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "delivery_rate", data: values, sortOrder: 0 });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "delivery_rate"] });
+      toast({ title: isEdit ? "Rate updated" : "Rate added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-delivery-rate">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Delivery Rate" : "Add Delivery Rate"}</DialogTitle>
+          <DialogDescription>Set pricing for this delivery method.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Method Name</Label>
+            <Input value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} data-testid="input-delivery-name" />
+          </div>
+          <div>
+            <Label>Rate ($ NZD)</Label>
+            <Input type="number" value={values.rateNzd} onChange={(e) => setValues({ ...values, rateNzd: parseFloat(e.target.value) || 0 })} data-testid="input-delivery-rate" />
+          </div>
+          <div className="col-span-2">
+            <Label>Description</Label>
+            <Input value={values.description} onChange={(e) => setValues({ ...values, description: e.target.value })} data-testid="input-delivery-description" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-delivery">
+            {saveMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

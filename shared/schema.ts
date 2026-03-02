@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -104,6 +104,10 @@ export const jobs = pgTable("jobs", {
   name: text("name").notNull(),
   address: text("address").default(""),
   date: text("date").default(""),
+  installationEnabled: boolean("installation_enabled").default(false),
+  installationOverride: real("installation_override"),
+  deliveryMethod: text("delivery_method"),
+  deliveryAmount: real("delivery_amount"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

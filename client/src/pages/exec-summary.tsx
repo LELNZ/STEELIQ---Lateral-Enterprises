@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type QuoteItem, type JobItem, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor, type FrameConfiguration, type LibraryEntry } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
@@ -10,6 +11,12 @@ import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -43,6 +50,10 @@ interface JobData {
   name: string;
   address?: string;
   date?: string;
+  installationEnabled?: boolean;
+  installationOverride?: number | null;
+  deliveryMethod?: string | null;
+  deliveryAmount?: number | null;
   items: JobItem[];
 }
 
@@ -60,6 +71,11 @@ export default function ExecSummary() {
   const [, navigate] = useLocation();
   const { usdToNzdRate } = useSettings();
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+  const [installEnabled, setInstallEnabled] = useState(false);
+  const [installOverride, setInstallOverride] = useState<string>("");
+  const [deliveryMethodId, setDeliveryMethodId] = useState<string>("");
+  const [deliveryCustom, setDeliveryCustom] = useState<string>("");
+  const [initialized, setInitialized] = useState(false);
 
   const { data: job, isLoading: jobLoading } = useQuery<JobData>({
     queryKey: ["/api/jobs", jobId],
@@ -143,6 +159,35 @@ export default function ExecSummary() {
   const { data: libBifoldDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "bifold_door_handle"], queryFn: fetchLib("bifold_door_handle") });
   const { data: libStackerDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "stacker_door_handle"], queryFn: fetchLib("stacker_door_handle") });
   const { data: libWanzBars = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "wanz_bar"], queryFn: fetchLib("wanz_bar") });
+  const { data: masterProfiles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_profile"], queryFn: fetchLib("direct_profile") });
+  const { data: masterAccessories = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_accessory"], queryFn: fetchLib("direct_accessory") });
+  const { data: masterLabour = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "labour_operation"], queryFn: fetchLib("labour_operation") });
+  const { data: installationRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "installation_rate"], queryFn: fetchLib("installation_rate") });
+  const { data: deliveryRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "delivery_rate"], queryFn: fetchLib("delivery_rate") });
+
+  useMemo(() => {
+    if (job && !initialized) {
+      setInstallEnabled(!!job.installationEnabled);
+      setInstallOverride(job.installationOverride != null ? String(job.installationOverride) : "");
+      setDeliveryMethodId(job.deliveryMethod || "");
+      setDeliveryCustom(job.deliveryAmount != null ? String(job.deliveryAmount) : "");
+      setInitialized(true);
+    }
+  }, [job, initialized]);
+
+  const saveJobMutation = useMutation({
+    mutationFn: async (data: Record<string, any>) => {
+      await apiRequest("PATCH", `/api/jobs/${jobId}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+    },
+  });
+
+  const persistJobField = useCallback((field: string, value: any) => {
+    if (!jobId) return;
+    saveJobMutation.mutate({ [field]: value });
+  }, [jobId]);
 
   const handlesByType: Record<string, LibraryEntry[]> = {
     awning_handle: libAwningHandles,
@@ -215,18 +260,68 @@ export default function ExecSummary() {
               handlePriceEach: lookupHandlePrice(item.handleType || "", item.category),
               openingPanelCount: openingPanels,
               wanzBar: wanzBarInput,
-            }
+            },
+            { masterProfiles, masterAccessories, masterLabour }
           );
         }
       }
 
       return { item, sqm, salePrice, pricing, configName };
     });
-  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libWanzBars]);
+  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
+
+  const getInstallationTier = useCallback((category: string, sqm: number): { name: string; price: number } | null => {
+    const isDoor = DOOR_CATEGORIES.includes(category);
+    const cat = isDoor ? "door" : "window";
+    const tiers = installationRates.filter((r) => (r.data as any).category === cat);
+    for (const t of tiers) {
+      const d = t.data as any;
+      if (sqm >= d.minSqm && sqm < d.maxSqm) return { name: d.name, price: d.pricePerUnit };
+    }
+    if (tiers.length > 0) {
+      const last = tiers[tiers.length - 1].data as any;
+      return { name: last.name, price: last.pricePerUnit };
+    }
+    return null;
+  }, [installationRates]);
+
+  const installationItems = useMemo(() => {
+    if (!installEnabled) return [];
+    return itemPricings.map((ip) => {
+      const unitSqm = (ip.item.width * ip.item.height) / 1_000_000;
+      const tier = getInstallationTier(ip.item.category, unitSqm);
+      const qty = ip.item.quantity || 1;
+      return {
+        name: ip.item.name,
+        category: ip.item.category,
+        unitSqm,
+        qty,
+        tierName: tier?.name || "—",
+        pricePerUnit: tier?.price || 0,
+        total: (tier?.price || 0) * qty,
+      };
+    });
+  }, [installEnabled, itemPricings, getInstallationTier]);
+
+  const installationTotal = useMemo(() => {
+    const overrideVal = parseFloat(installOverride);
+    if (installEnabled && overrideVal > 0) return overrideVal;
+    return installationItems.reduce((acc, i) => acc + i.total, 0);
+  }, [installEnabled, installOverride, installationItems]);
+
+  const deliveryTotal = useMemo(() => {
+    const customVal = parseFloat(deliveryCustom);
+    if (customVal > 0) return customVal;
+    if (deliveryMethodId) {
+      const rate = deliveryRates.find((r) => r.id === deliveryMethodId);
+      if (rate) return (rate.data as any).rateNzd || 0;
+    }
+    return 0;
+  }, [deliveryMethodId, deliveryCustom, deliveryRates]);
 
   const totals = useMemo(() => {
     let totalSqm = 0;
-    let totalNetCost = 0;
+    let totalManufCost = 0;
     let totalSalePrice = 0;
     let totalMaterials = 0;
     let totalLabor = 0;
@@ -236,24 +331,27 @@ export default function ExecSummary() {
       totalSqm += ip.sqm;
       totalSalePrice += ip.pricing?.salePriceNzd ?? ip.salePrice;
       if (ip.pricing) {
-        totalNetCost += ip.pricing.netCostNzd;
+        totalManufCost += ip.pricing.netCostNzd;
         totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd + ip.pricing.wanzBarCostNzd;
         totalLabor += ip.pricing.laborCostNzd;
         totalWeight += ip.pricing.totalWeightKg;
       }
     }
 
-    const totalProfit = totalSalePrice - totalNetCost;
+    const installCost = installEnabled ? installationTotal : 0;
+    const delivCost = deliveryTotal;
+    const grandTotal = totalManufCost + installCost + delivCost;
+    const totalProfit = totalSalePrice - grandTotal;
     const grossMarginPct = totalSalePrice > 0 ? (totalProfit / totalSalePrice) * 100 : 0;
-    const avgCostPerSqm = totalSqm > 0 ? totalNetCost / totalSqm : 0;
+    const avgCostPerSqm = totalSqm > 0 ? grandTotal / totalSqm : 0;
     const avgSalePerSqm = totalSqm > 0 ? totalSalePrice / totalSqm : 0;
 
     return {
-      totalSqm, totalNetCost, totalSalePrice, totalMaterials,
+      totalSqm, totalManufCost, totalSalePrice, totalMaterials,
       totalLabor, totalWeight, totalProfit, grossMarginPct,
-      avgCostPerSqm, avgSalePerSqm,
+      avgCostPerSqm, avgSalePerSqm, installCost, delivCost, grandTotal,
     };
-  }, [itemPricings]);
+  }, [itemPricings, installEnabled, installationTotal, deliveryTotal]);
 
   const toggleExpand = (idx: number) => {
     setExpandedItems((prev) => {
@@ -312,13 +410,15 @@ export default function ExecSummary() {
 
       <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="financial-summary">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Financial Summary</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <FinanceRow label="Net Materials (NZD)" value={`$${fmt(totals.totalMaterials)}`} testId="text-total-materials" />
-          <FinanceRow label="Net Labor (NZD)" value={`$${fmt(totals.totalLabor)}`} testId="text-total-labor" />
-          <FinanceRow label="Total Net Cost" value={`$${fmt(totals.totalNetCost)}`} bold testId="text-total-net-cost" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <FinanceRow label="Manufacturing Materials" value={`$${fmt(totals.totalMaterials)}`} testId="text-total-materials" />
+          <FinanceRow label="Manufacturing Labour" value={`$${fmt(totals.totalLabor)}`} testId="text-total-labor" />
+          <FinanceRow label="Manufacturing Total" value={`$${fmt(totals.totalManufCost)}`} bold testId="text-total-manuf-cost" />
+          <FinanceRow label="Installation Labour" value={installEnabled ? `$${fmt(totals.installCost)}` : "—"} testId="text-total-installation" />
+          <FinanceRow label="Delivery" value={totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"} testId="text-total-delivery" />
+          <FinanceRow label="Grand Total Cost" value={`$${fmt(totals.grandTotal)}`} bold testId="text-grand-total" />
           <FinanceRow label="Total Sale Price" value={`$${fmt(totals.totalSalePrice)}`} bold primary testId="text-total-sale-price" />
           <FinanceRow label="Avg Cost/m²" value={`$${fmt(totals.avgCostPerSqm)}`} testId="text-avg-cost-sqm" />
-          <FinanceRow label="Avg Sale/m²" value={`$${fmt(totals.avgSalePerSqm)}`} testId="text-avg-sale-sqm" />
         </div>
         <Separator />
         <div className="flex items-center justify-between">
@@ -334,6 +434,127 @@ export default function ExecSummary() {
               {totals.grossMarginPct.toFixed(1)}%
             </p>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3 print:break-before-page" data-testid="installation-section">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Installation Labour</h2>
+          <div className="flex items-center gap-2 print:hidden">
+            <Label htmlFor="install-toggle" className="text-sm">Enable</Label>
+            <Switch
+              id="install-toggle"
+              checked={installEnabled}
+              onCheckedChange={(v) => {
+                setInstallEnabled(v);
+                persistJobField("installationEnabled", v);
+              }}
+              data-testid="switch-installation"
+            />
+          </div>
+        </div>
+        {installEnabled && (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Unit m²</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead className="text-right">$/Unit</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {installationItems.map((ii, idx) => (
+                  <TableRow key={idx} data-testid={`row-install-${idx}`}>
+                    <TableCell className="text-sm">{ii.name}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ii.category] || ii.category}</Badge></TableCell>
+                    <TableCell className="text-right">{ii.unitSqm.toFixed(2)}</TableCell>
+                    <TableCell><Badge variant="secondary" className="text-xs">{ii.tierName}</Badge></TableCell>
+                    <TableCell className="text-right">${fmt(ii.pricePerUnit)}</TableCell>
+                    <TableCell className="text-right">{ii.qty}</TableCell>
+                    <TableCell className="text-right font-medium">${fmt(ii.total)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="text-sm">
+                <span className="text-muted-foreground">Per-unit total: </span>
+                <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.total, 0))}</span>
+              </div>
+              <div className="flex items-center gap-2 print:hidden">
+                <Label className="text-sm whitespace-nowrap">Subcontractor Lump Sum Override ($)</Label>
+                <Input
+                  type="number"
+                  className="w-32"
+                  placeholder="—"
+                  value={installOverride}
+                  onChange={(e) => {
+                    setInstallOverride(e.target.value);
+                    const val = parseFloat(e.target.value);
+                    persistJobField("installationOverride", val > 0 ? val : null);
+                  }}
+                  data-testid="input-installation-override"
+                />
+              </div>
+            </div>
+            <div className="text-right font-bold text-sm">
+              Installation Total: ${fmt(installationTotal)}
+              {parseFloat(installOverride) > 0 && <Badge variant="outline" className="ml-2">Override</Badge>}
+            </div>
+          </>
+        )}
+        {!installEnabled && (
+          <p className="text-sm text-muted-foreground py-2">Installation pricing is disabled. Toggle to enable per-unit installation costs.</p>
+        )}
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
+        <div className="flex items-center gap-4 print:hidden">
+          <div className="flex-1">
+            <Label className="text-sm">Delivery Method</Label>
+            <Select
+              value={deliveryMethodId}
+              onValueChange={(v) => {
+                setDeliveryMethodId(v);
+                setDeliveryCustom("");
+                persistJobField("deliveryMethod", v);
+                const rate = deliveryRates.find((r) => r.id === v);
+                const rateVal = rate ? (rate.data as any).rateNzd : 0;
+                persistJobField("deliveryAmount", rateVal > 0 ? rateVal : null);
+              }}
+            >
+              <SelectTrigger data-testid="select-delivery-method"><SelectValue placeholder="Select delivery method" /></SelectTrigger>
+              <SelectContent>
+                {deliveryRates.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>{(r.data as any).name} {(r.data as any).rateNzd > 0 ? `($${(r.data as any).rateNzd})` : "(Custom)"}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-40">
+            <Label className="text-sm">Custom Amount ($)</Label>
+            <Input
+              type="number"
+              placeholder="—"
+              value={deliveryCustom}
+              onChange={(e) => {
+                setDeliveryCustom(e.target.value);
+                const val = parseFloat(e.target.value);
+                persistJobField("deliveryAmount", val > 0 ? val : null);
+              }}
+              data-testid="input-delivery-custom"
+            />
+          </div>
+        </div>
+        <div className="text-right font-bold text-sm" data-testid="text-delivery-total">
+          Delivery Total: ${fmt(deliveryTotal)}
         </div>
       </div>
 

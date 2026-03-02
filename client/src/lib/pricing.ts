@@ -1,4 +1,4 @@
-import type { ConfigurationProfile, ConfigurationAccessory, ConfigurationLabor } from "@shared/schema";
+import type { ConfigurationProfile, ConfigurationAccessory, ConfigurationLabor, LibraryEntry } from "@shared/schema";
 
 export interface PricingBreakdown {
   profilesCostUsd: number;
@@ -16,6 +16,12 @@ export interface PricingBreakdown {
   salePriceNzd: number;
   marginNzd: number;
   marginPercent: number;
+}
+
+export interface MasterData {
+  masterProfiles?: LibraryEntry[];
+  masterAccessories?: LibraryEntry[];
+  masterLabour?: LibraryEntry[];
 }
 
 export interface WanzBarPricingInput {
@@ -62,19 +68,46 @@ export function calculatePricing(
   laborTasks: ConfigurationLabor[],
   usdToNzdRate: number,
   salePricePerSqm: number,
-  extras?: PricingExtras
+  extras?: PricingExtras,
+  masterData?: MasterData
 ): PricingBreakdown {
   const sqm = (widthMm * heightMm * quantity) / 1_000_000;
   const perimeterM = 2 * (widthMm / 1000 + heightMm / 1000);
+
+  const masterProfileMap = new Map<string, any>();
+  if (masterData?.masterProfiles) {
+    for (const mp of masterData.masterProfiles) {
+      const d = mp.data as any;
+      if (d.mouldNumber) masterProfileMap.set(d.mouldNumber, d);
+    }
+  }
+
+  const masterAccessoryMap = new Map<string, any>();
+  if (masterData?.masterAccessories) {
+    for (const ma of masterData.masterAccessories) {
+      const d = ma.data as any;
+      if (d.code) masterAccessoryMap.set(d.code, d);
+    }
+  }
+
+  const masterLabourMap = new Map<string, any>();
+  if (masterData?.masterLabour) {
+    for (const ml of masterData.masterLabour) {
+      const d = ml.data as any;
+      if (d.name) masterLabourMap.set(d.name, d);
+    }
+  }
 
   let profilesCostUsd = 0;
   let totalWeightKg = 0;
 
   for (const p of profiles) {
-    const length = calcProfileLength(widthMm, heightMm, p.lengthFormula || "perimeter");
+    const master = masterProfileMap.get(p.mouldNumber);
+    const kgPerM = parseFloat(master?.kgPerMetre ?? p.kgPerMetre) || 0;
+    const pricePerKg = parseFloat(master?.pricePerKgUsd ?? p.pricePerKgUsd) || 0;
+    const formula = master?.lengthFormula ?? p.lengthFormula ?? "perimeter";
+    const length = calcProfileLength(widthMm, heightMm, formula);
     const qty = (p.quantityPerSet || 1) * quantity;
-    const kgPerM = parseFloat(p.kgPerMetre) || 0;
-    const pricePerKg = parseFloat(p.pricePerKgUsd) || 0;
     const weight = length * qty * kgPerM;
     totalWeightKg += weight;
     profilesCostUsd += weight * pricePerKg;
@@ -83,10 +116,12 @@ export function calculatePricing(
   let accessoriesCostUsd = 0;
 
   for (const a of accessories) {
-    const priceUsd = parseFloat(a.priceUsd) || 0;
+    const master = masterAccessoryMap.get(a.code || "");
+    const priceUsd = parseFloat(master?.priceUsd ?? a.priceUsd) || 0;
+    const scalingType = master?.scalingType ?? a.scalingType;
     const qtyPerSet = parseFloat(a.quantityPerSet || "1") || 0;
 
-    if (a.scalingType === "per-linear-metre") {
+    if (scalingType === "per-linear-metre") {
       accessoriesCostUsd += priceUsd * qtyPerSet * perimeterM * quantity;
     } else {
       accessoriesCostUsd += priceUsd * qtyPerSet * quantity;
@@ -95,7 +130,15 @@ export function calculatePricing(
 
   let laborCostNzd = 0;
   for (const l of laborTasks) {
-    laborCostNzd += (parseFloat(l.costNzd || "0") || 0) * quantity;
+    const master = masterLabourMap.get(l.taskName);
+    const configCost = parseFloat(l.costNzd || "0") || 0;
+    if (master && configCost === 0) {
+      const timeMins = parseFloat(master.timeMinutes) || 0;
+      const rate = parseFloat(master.ratePerHour) || 0;
+      laborCostNzd += (timeMins / 60) * rate * quantity;
+    } else {
+      laborCostNzd += configCost * quantity;
+    }
   }
 
   const glassPricePerSqm = extras?.glassPricePerSqm ?? null;

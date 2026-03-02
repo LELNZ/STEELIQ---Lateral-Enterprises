@@ -60,6 +60,11 @@ export interface IStorage {
   deleteConfigurationLabor(id: string): Promise<void>;
 
   deleteConfigurationChildren(configurationId: string): Promise<void>;
+
+  getAllConfigurationProfiles(): Promise<ConfigurationProfile[]>;
+  getAllConfigurationAccessories(): Promise<ConfigurationAccessory[]>;
+  updateProfilesByMouldNumber(mouldNumber: string, data: Partial<InsertConfigurationProfile>): Promise<number>;
+  updateAccessoriesByCode(code: string, data: Partial<InsertConfigurationAccessory>): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -103,7 +108,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addJobItem(item: InsertJobItem): Promise<JobItem> {
-    const [created] = await db.insert(jobItems).values(item).returning();
+    const [created] = await db.insert(jobItems).values(item as any).returning();
     return created;
   }
 
@@ -112,7 +117,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateJobItem(id: string, data: Partial<InsertJobItem>): Promise<JobItem | undefined> {
-    const [updated] = await db.update(jobItems).set(data).where(eq(jobItems.id, id)).returning();
+    const [updated] = await db.update(jobItems).set(data as any).where(eq(jobItems.id, id)).returning();
     return updated;
   }
 
@@ -222,6 +227,24 @@ export class DatabaseStorage implements IStorage {
     await db.delete(configurationProfiles).where(eq(configurationProfiles.configurationId, configurationId));
     await db.delete(configurationAccessories).where(eq(configurationAccessories.configurationId, configurationId));
     await db.delete(configurationLabor).where(eq(configurationLabor.configurationId, configurationId));
+  }
+
+  async getAllConfigurationProfiles(): Promise<ConfigurationProfile[]> {
+    return db.select().from(configurationProfiles).orderBy(asc(configurationProfiles.sortOrder));
+  }
+
+  async getAllConfigurationAccessories(): Promise<ConfigurationAccessory[]> {
+    return db.select().from(configurationAccessories).orderBy(asc(configurationAccessories.sortOrder));
+  }
+
+  async updateProfilesByMouldNumber(mouldNumber: string, data: Partial<InsertConfigurationProfile>): Promise<number> {
+    const result = await db.update(configurationProfiles).set(data).where(eq(configurationProfiles.mouldNumber, mouldNumber)).returning();
+    return result.length;
+  }
+
+  async updateAccessoriesByCode(code: string, data: Partial<InsertConfigurationAccessory>): Promise<number> {
+    const result = await db.update(configurationAccessories).set(data).where(eq(configurationAccessories.code, code)).returning();
+    return result.length;
   }
 }
 
