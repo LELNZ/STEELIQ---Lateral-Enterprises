@@ -40,8 +40,8 @@ export interface LinerTypeOption {
 }
 
 export const LINER_TYPES: LinerTypeOption[] = [
-  { value: "H3-Pine-19mm-Grooved", label: "H3 Paint Quality Pine 19mm Grooved", priceProvision: null },
-  { value: "H3-Pine-19mm-MiterCut", label: "H3 Paint Quality Pine 19mm Miter Cut", priceProvision: null },
+  { value: "H3-Pine-19mm-Grooved", label: "H3 Paint Quality Pine 19mm Grooved", priceProvision: 12.50 },
+  { value: "H3-Pine-19mm-MiterCut", label: "H3 Paint Quality Pine 19mm Miter Cut", priceProvision: 15.00 },
 ];
 
 export interface HandleOption {
@@ -51,13 +51,13 @@ export interface HandleOption {
 }
 
 export const WINDOW_HANDLES: HandleOption[] = [
-  { value: "Helix-Venting-Double-Tongue", label: "Helix Seal - Venting Double Tongue Window Handle", priceProvision: null },
-  { value: "Helix-Low-Profile", label: "Helix Seal - Low Profile Window Handle", priceProvision: null },
-  { value: "Miro-Standard-Wedgeless", label: "Miro - Standard Wedgeless Window Handle", priceProvision: null },
+  { value: "Helix-Venting-Double-Tongue", label: "Helix Seal - Venting Double Tongue Window Handle", priceProvision: 28.50 },
+  { value: "Helix-Low-Profile", label: "Helix Seal - Low Profile Window Handle", priceProvision: 24.00 },
+  { value: "Miro-Standard-Wedgeless", label: "Miro - Standard Wedgeless Window Handle", priceProvision: 22.00 },
 ];
 
 export const DOOR_HANDLES: HandleOption[] = [
-  { value: "Standard-D-Type", label: "Standard D-Type Handle", priceProvision: null },
+  { value: "Standard-D-Type", label: "Standard D-Type Handle", priceProvision: 45.00 },
 ];
 
 export function getFrameTypesForCategory(category: string): FrameTypeOption[] {

@@ -89,11 +89,14 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Tables**: `frame_configurations` (per frame type), `configuration_profiles` (aluminium profiles), `configuration_accessories` (hardware/seals), `configuration_labor` (cutting/milling/assembly tasks)
 - **API**: CRUD at `/api/frame-types/:id/configurations`, `/api/configurations/:id/profiles|accessories|labor`
 - **Seed**: POST `/api/frame-types/seed-configurations` — ES52 Window (3 configs), ES52 Hinge Door (1), ES127 Sliding Door (1)
-- **Pricing utility**: `client/src/lib/pricing.ts` — `calculatePricing()` returns profiles/accessories/labor costs (NZD), net cost, sale price, margin
+- **Pricing utility**: `client/src/lib/pricing.ts` — `calculatePricing()` returns profiles/accessories/labor/glass/liner/handle costs (NZD), net cost, sale price, margin. Accepts optional `PricingExtras` for glass ($/m²), liner ($/m), handle ($/each)
+- **Config signature**: `client/src/lib/config-signature.ts` — `deriveConfigSignature(item)` analyzes drawing layout to produce a signature (e.g., "Awning", "1 Awning + 1 Fixed"). `findMatchingConfiguration(sig, configs[])` matches against existing configurations by name
+- **Auto-detect config**: Quote builder auto-detects configuration from drawing layout via signature matching. Shows "Detected: X" badge near Configuration dropdown. Auto-selects matching config when found
+- **Auto-generate config**: When no matching configuration exists, an "Auto-generate" button appears. Clones the first config for the frame type, adjusts sash-frame quantities and mullion profiles based on the detected layout
 - **USD→NZD rate**: Configurable in Settings (default 1.7), stored in `proquote-settings` localStorage
 - **Sale price**: $500–$750/m² in $5 increments, default set by configuration's `defaultSalePricePerSqm`
-- **Quote builder integration**: Configuration dropdown auto-populates when frame type selected; pricing breakdown panel shows net cost vs sale price with margin
-- **Executive Summary**: `/job/:id/exec-summary` — job-level financial totals + expandable per-item breakdown (materials, labor, margin %, profit)
+- **Quote builder integration**: Configuration dropdown auto-populates when frame type selected; pricing breakdown panel shows net cost vs sale price with margin. Glass/liner/handle costs shown as separate line items when selected
+- **Executive Summary**: `/job/:id/exec-summary` — job-level financial totals + expandable per-item breakdown (materials incl. glass/liner/handle, labor, margin %, profit)
 - **Frame types**: ES52 Window, ES52 Hinge Door (hinge-door only), Entrance Door (entrance-door only), French Door (french-door only), ES70 Bifold, ES127 Sliding Window, ES127 Sliding Door
 
 ## Data Model

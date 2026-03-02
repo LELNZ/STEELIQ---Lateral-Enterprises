@@ -1,8 +1,11 @@
 import { useState, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { type QuoteItem, type JobItem, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor, type FrameConfiguration } from "@shared/schema";
+import { type QuoteItem, type JobItem, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor, type FrameConfiguration, type LibraryEntry } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
+import { deriveConfigSignature } from "@/lib/config-signature";
+import { getGlassPrice } from "@shared/glass-library";
+import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -123,6 +126,37 @@ export default function ExecSummary() {
 
   const configData = configQueries.data || {};
 
+  const fetchLib = (type: string) => async () => {
+    const res = await fetch(`/api/library?type=${type}`);
+    if (!res.ok) return [];
+    return res.json() as Promise<LibraryEntry[]>;
+  };
+  const { data: libGlass = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "glass"], queryFn: fetchLib("glass") });
+  const { data: libLiners = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "liner_type"], queryFn: fetchLib("liner_type") });
+  const { data: libWindowHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "window_handle"], queryFn: fetchLib("window_handle") });
+  const { data: libDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "door_handle"], queryFn: fetchLib("door_handle") });
+
+  const lookupGlassPrice = (iguType: string, combo: string, thickness: string): number | null => {
+    const entry = libGlass.find((e) => (e.data as any).iguType === iguType && (e.data as any).combo === combo);
+    if (entry) return (entry.data as any).prices?.[thickness] ?? null;
+    return getGlassPrice(iguType, combo, thickness);
+  };
+  const lookupLinerPrice = (linerType: string): number | null => {
+    if (!linerType) return null;
+    const entry = libLiners.find((e) => (e.data as any).value === linerType);
+    const dbPrice = entry ? (entry.data as any).priceProvision : null;
+    if (dbPrice != null) return dbPrice;
+    return LINER_TYPES.find((lt) => lt.value === linerType)?.priceProvision ?? null;
+  };
+  const lookupHandlePrice = (handleType: string, cat: string): number | null => {
+    if (!handleType) return null;
+    const handles = DOOR_CATEGORIES.includes(cat) ? libDoorHandles : libWindowHandles;
+    const entry = handles.find((e) => (e.data as any).value === handleType);
+    const dbPrice = entry ? (entry.data as any).priceProvision : null;
+    if (dbPrice != null) return dbPrice;
+    return getHandlesForCategory(cat).find((h) => h.value === handleType)?.priceProvision ?? null;
+  };
+
   const itemPricings: ItemPricingData[] = useMemo(() => {
     if (!job) return [];
     return job.items.map((ji) => {
@@ -137,17 +171,25 @@ export default function ExecSummary() {
         const cd = configData[cid];
         const hasData = cd.profiles.length > 0 || cd.accessories.length > 0 || cd.labor.length > 0;
         if (hasData) {
+          const sig = deriveConfigSignature(item);
+          const openingPanels = Math.max(1, sig.awningCount + sig.hingeCount + sig.slidingCount);
           pricing = calculatePricing(
             item.width, item.height, item.quantity || 1,
             cd.profiles, cd.accessories, cd.labor,
-            usdToNzdRate, item.pricePerSqm || 500
+            usdToNzdRate, item.pricePerSqm || 500,
+            {
+              glassPricePerSqm: lookupGlassPrice(item.glassIguType || "", item.glassType || "", item.glassThickness || ""),
+              linerPricePerM: lookupLinerPrice(item.linerType || ""),
+              handlePriceEach: lookupHandlePrice(item.handleType || "", item.category),
+              openingPanelCount: openingPanels,
+            }
           );
         }
       }
 
       return { item, sqm, salePrice, pricing, configName };
     });
-  }, [job, configData, configNameMap, usdToNzdRate]);
+  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles]);
 
   const totals = useMemo(() => {
     let totalSqm = 0;
@@ -162,7 +204,7 @@ export default function ExecSummary() {
       totalSalePrice += ip.pricing?.salePriceNzd ?? ip.salePrice;
       if (ip.pricing) {
         totalNetCost += ip.pricing.netCostNzd;
-        totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd;
+        totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd;
         totalLabor += ip.pricing.laborCostNzd;
         totalWeight += ip.pricing.totalWeightKg;
       }
@@ -332,8 +374,20 @@ export default function ExecSummary() {
                                 <span className="font-medium">${fmt(ip.pricing.laborCostNzd)}</span>
                               </div>
                               <div>
+                                <span className="text-muted-foreground block">Glass (NZD)</span>
+                                <span className="font-medium">${fmt(ip.pricing.glassCostNzd)}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground block">Liner (NZD)</span>
+                                <span className="font-medium">${fmt(ip.pricing.linerCostNzd)}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground block">Handle (NZD)</span>
+                                <span className="font-medium">${fmt(ip.pricing.handleCostNzd)}</span>
+                              </div>
+                              <div>
                                 <span className="text-muted-foreground block">Materials Total</span>
-                                <span className="font-medium">${fmt(ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd)}</span>
+                                <span className="font-medium">${fmt(ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd)}</span>
                               </div>
                               <div>
                                 <span className="text-muted-foreground block">Actual $/m²</span>

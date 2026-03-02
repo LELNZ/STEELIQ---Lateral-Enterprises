@@ -6,6 +6,7 @@ import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue,
 import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, getFrameTypesForCategory, getHandlesForCategory } from "@shared/item-options";
 import type { LibraryEntry } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
+import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
@@ -340,12 +341,39 @@ export default function QuoteBuilder() {
     enabled: !!currentConfigId,
   });
 
+  const configSignature = deriveConfigSignature(w as QuoteItem);
+
+  const glassPricePerSqm = libGlassPrice(w.glassIguType || "", w.glassType || "", w.glassThickness || "");
+
+  const linerPricePerM = (() => {
+    if (!w.linerType) return null;
+    const linerEntry = libLiners.find((e) => (e.data as any).value === w.linerType);
+    const dbPrice = linerEntry ? (linerEntry.data as any).priceProvision : null;
+    if (dbPrice != null) return dbPrice;
+    const fallback = LINER_TYPES.find((lt) => lt.value === w.linerType);
+    return fallback?.priceProvision ?? null;
+  })();
+
+  const handlePriceEach = (() => {
+    if (!w.handleType) return null;
+    const handles = DOOR_CATEGORIES.includes(w.category || "") ? libDoorHandles : libWindowHandles;
+    const handleEntry = handles.find((e) => (e.data as any).value === w.handleType);
+    const dbPrice = handleEntry ? (handleEntry.data as any).priceProvision : null;
+    if (dbPrice != null) return dbPrice;
+    const allHandles = [...getHandlesForCategory(w.category || "windows-standard")];
+    const fallback = allHandles.find((h) => h.value === w.handleType);
+    return fallback?.priceProvision ?? null;
+  })();
+
+  const openingPanelCount = configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount;
+
   const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
   const currentPricing: PricingBreakdown | null = hasConfigData
     ? calculatePricing(
         w.width || 0, w.height || 0, w.quantity || 1,
         configProfiles, configAccessories, configLabor,
-        usdToNzdRate, w.pricePerSqm || 500
+        usdToNzdRate, w.pricePerSqm || 500,
+        { glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount: Math.max(1, openingPanelCount) }
       )
     : null;
 
@@ -398,11 +426,16 @@ export default function QuoteBuilder() {
   }, [category]);
 
   useEffect(() => {
-    if (configurations.length > 0 && !configurations.find((c) => c.id === w.configurationId)) {
+    if (configurations.length === 0) return;
+    const match = findMatchingConfiguration(configSignature, configurations);
+    if (match && match.id !== w.configurationId) {
+      form.setValue("configurationId", match.id);
+      form.setValue("pricePerSqm", match.defaultSalePricePerSqm || 550);
+    } else if (!match && !w.configurationId) {
       form.setValue("configurationId", configurations[0].id);
       form.setValue("pricePerSqm", configurations[0].defaultSalePricePerSqm || 550);
     }
-  }, [configurations, w.frameType]);
+  }, [configurations, configSignature.signature, w.frameType]);
 
   const isEntrance = category === "entrance-door";
   const isHingeDoor = category === "hinge-door";
@@ -1771,7 +1804,12 @@ export default function QuoteBuilder() {
                     </div>
                     {configurations.length > 0 && (
                       <div>
-                        <Label className="text-xs">Configuration</Label>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <Label className="text-xs">Configuration</Label>
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0" data-testid="badge-detected-config">
+                            Detected: {configSignature.label}
+                          </Badge>
+                        </div>
                         <Select
                           value={w.configurationId || ""}
                           onValueChange={(v) => {
@@ -1787,6 +1825,69 @@ export default function QuoteBuilder() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {!findMatchingConfiguration(configSignature, configurations) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full mt-1.5 text-xs"
+                            data-testid="button-auto-generate-config"
+                            onClick={async () => {
+                              const baseConfig = configurations[0];
+                              if (!baseConfig || !currentFrameTypeLibId) return;
+                              try {
+                                const baseProfiles = await fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []);
+                                const baseAccessories = await fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []);
+                                const baseLabor = await fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []);
+                                const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
+                                  frameTypeId: currentFrameTypeLibId,
+                                  name: configSignature.label,
+                                  description: `Auto-generated: ${configSignature.label}`,
+                                  defaultSalePricePerSqm: baseConfig.defaultSalePricePerSqm || 550,
+                                  sortOrder: configurations.length,
+                                });
+                                const newConfig = await newConfigRes.json();
+                                for (const p of baseProfiles) {
+                                  let qty = p.quantityPerSet || 1;
+                                  if (p.role === "sash-frame") qty = Math.max(1, configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount);
+                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+                                    configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
+                                    kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
+                                    quantityPerSet: qty, lengthFormula: p.lengthFormula, surface: p.surface, sortOrder: p.sortOrder,
+                                  });
+                                }
+                                if (configSignature.mullionCount > 0) {
+                                  const hasMullion = baseProfiles.some((p: any) => p.role === "mullion");
+                                  if (!hasMullion) {
+                                    await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+                                      configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
+                                      kgPerMetre: "0.78", pricePerKgUsd: "5.60",
+                                      quantityPerSet: configSignature.mullionCount, lengthFormula: "height", surface: "", sortOrder: 99,
+                                    });
+                                  }
+                                }
+                                for (const a of baseAccessories) {
+                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
+                                    configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
+                                    priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
+                                  });
+                                }
+                                for (const l of baseLabor) {
+                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
+                                    configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
+                                  });
+                                }
+                                queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });
+                                form.setValue("configurationId", newConfig.id);
+                                form.setValue("pricePerSqm", newConfig.defaultSalePricePerSqm || 550);
+                                toast({ title: "Configuration created", description: `"${configSignature.label}" generated and selected.` });
+                              } catch {
+                                toast({ title: "Error", description: "Failed to generate configuration", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Plus className="w-3 h-3 mr-1" /> Auto-generate "{configSignature.label}"
+                          </Button>
+                        )}
                       </div>
                     )}
                     <div>
@@ -1850,6 +1951,24 @@ export default function QuoteBuilder() {
                           <span className="text-right font-medium" data-testid="text-accessories-cost">${currentPricing.accessoriesCostNzd.toFixed(2)}</span>
                           <span className="text-muted-foreground">Labor (NZD)</span>
                           <span className="text-right font-medium" data-testid="text-labor-cost">${currentPricing.laborCostNzd.toFixed(2)}</span>
+                          {currentPricing.glassCostNzd > 0 && (
+                            <>
+                              <span className="text-muted-foreground">Glass (NZD)</span>
+                              <span className="text-right font-medium" data-testid="text-glass-cost">${currentPricing.glassCostNzd.toFixed(2)}</span>
+                            </>
+                          )}
+                          {currentPricing.linerCostNzd > 0 && (
+                            <>
+                              <span className="text-muted-foreground">Liner (NZD)</span>
+                              <span className="text-right font-medium" data-testid="text-liner-cost">${currentPricing.linerCostNzd.toFixed(2)}</span>
+                            </>
+                          )}
+                          {currentPricing.handleCostNzd > 0 && (
+                            <>
+                              <span className="text-muted-foreground">Handle (NZD)</span>
+                              <span className="text-right font-medium" data-testid="text-handle-cost">${currentPricing.handleCostNzd.toFixed(2)}</span>
+                            </>
+                          )}
                         </div>
                         <Separator />
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">

@@ -6,12 +6,22 @@ export interface PricingBreakdown {
   accessoriesCostUsd: number;
   accessoriesCostNzd: number;
   laborCostNzd: number;
+  glassCostNzd: number;
+  linerCostNzd: number;
+  handleCostNzd: number;
   totalWeightKg: number;
   netCostNzd: number;
   actualCostPerSqm: number;
   salePriceNzd: number;
   marginNzd: number;
   marginPercent: number;
+}
+
+export interface PricingExtras {
+  glassPricePerSqm?: number | null;
+  linerPricePerM?: number | null;
+  handlePriceEach?: number | null;
+  openingPanelCount?: number;
 }
 
 function calcProfileLength(
@@ -41,7 +51,8 @@ export function calculatePricing(
   accessories: ConfigurationAccessory[],
   laborTasks: ConfigurationLabor[],
   usdToNzdRate: number,
-  salePricePerSqm: number
+  salePricePerSqm: number,
+  extras?: PricingExtras
 ): PricingBreakdown {
   const sqm = (widthMm * heightMm * quantity) / 1_000_000;
   const perimeterM = 2 * (widthMm / 1000 + heightMm / 1000);
@@ -77,9 +88,19 @@ export function calculatePricing(
     laborCostNzd += (parseFloat(l.costNzd || "0") || 0) * quantity;
   }
 
+  const glassPricePerSqm = extras?.glassPricePerSqm ?? null;
+  const glassCostNzd = glassPricePerSqm != null ? glassPricePerSqm * sqm : 0;
+
+  const linerPricePerM = extras?.linerPricePerM ?? null;
+  const linerCostNzd = linerPricePerM != null ? linerPricePerM * perimeterM * quantity : 0;
+
+  const handlePriceEach = extras?.handlePriceEach ?? null;
+  const openingPanelCount = extras?.openingPanelCount ?? 1;
+  const handleCostNzd = handlePriceEach != null ? handlePriceEach * openingPanelCount * quantity : 0;
+
   const profilesCostNzd = profilesCostUsd * usdToNzdRate;
   const accessoriesCostNzd = accessoriesCostUsd * usdToNzdRate;
-  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd;
+  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd;
   const actualCostPerSqm = sqm > 0 ? netCostNzd / sqm : 0;
   const salePriceNzd = salePricePerSqm * sqm;
   const marginNzd = salePriceNzd - netCostNzd;
@@ -91,6 +112,9 @@ export function calculatePricing(
     accessoriesCostUsd,
     accessoriesCostNzd,
     laborCostNzd,
+    glassCostNzd,
+    linerCostNzd,
+    handleCostNzd,
     totalWeightKg,
     netCostNzd,
     actualCostPerSqm,
