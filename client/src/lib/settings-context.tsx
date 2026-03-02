@@ -5,6 +5,7 @@ export type QuoteListPosition = "bottom" | "right";
 interface AppSettings {
   quoteListPosition: QuoteListPosition;
   usdToNzdRate: number;
+  gstRate: number;
 }
 
 interface SettingsContextValue extends AppSettings {
@@ -16,6 +17,7 @@ const STORAGE_KEY = "proquote-settings";
 const defaults: AppSettings = {
   quoteListPosition: "bottom",
   usdToNzdRate: 1.7,
+  gstRate: 15,
 };
 
 function loadSettings(): AppSettings {

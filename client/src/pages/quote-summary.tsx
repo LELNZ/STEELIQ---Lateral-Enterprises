@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { type QuoteItem, type JobItem } from "@shared/schema";
+import { type QuoteItem, type JobItem, type LibraryEntry } from "@shared/schema";
+import { DOOR_CATEGORIES } from "@shared/item-options";
+import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -18,7 +20,7 @@ function calcItemPrice(item: QuoteItem): number {
 }
 
 function formatPrice(amount: number): string {
-  return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -33,17 +35,83 @@ const CATEGORY_LABELS: Record<string, string> = {
   "bay-window": "Bay Window",
 };
 
+interface JobData {
+  id: string;
+  name: string;
+  address: string | null;
+  date: string | null;
+  installationEnabled?: boolean;
+  installationOverride?: number | null;
+  installationMarkup?: number | null;
+  deliveryMethod?: string | null;
+  deliveryAmount?: number | null;
+  deliveryMarkup?: number | null;
+  items: JobItem[];
+}
+
 export default function QuoteSummary() {
   const [, params] = useRoute("/job/:id/summary");
   const [, navigate] = useLocation();
   const jobId = params?.id;
+  const { gstRate } = useSettings();
 
-  const { data: job, isLoading } = useQuery<{
-    id: string; name: string; address: string | null; date: string | null; items: JobItem[];
-  }>({
+  const { data: job, isLoading } = useQuery<JobData>({
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
   });
+
+  const fetchLib = (type: string) => async () => {
+    const res = await fetch(`/api/library?type=${type}`);
+    if (!res.ok) return [];
+    return res.json() as Promise<LibraryEntry[]>;
+  };
+  const { data: installationRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "installation_rate"], queryFn: fetchLib("installation_rate") });
+  const { data: deliveryRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "delivery_rate"], queryFn: fetchLib("delivery_rate") });
+
+  const installSellTotal = useMemo(() => {
+    if (!job?.installationEnabled) return 0;
+    const overrideVal = job.installationOverride;
+    if (overrideVal && overrideVal > 0) {
+      const markup = job.installationMarkup ?? 15;
+      return Math.round(overrideVal * (1 + markup / 100) * 100) / 100;
+    }
+    const items = job.items.map((ji) => ji.config as QuoteItem);
+    let total = 0;
+    for (const item of items) {
+      const unitSqm = (item.width * item.height) / 1_000_000;
+      const isDoor = DOOR_CATEGORIES.includes(item.category);
+      const cat = isDoor ? "door" : "window";
+      const tiers = installationRates.filter((r) => (r.data as any).category === cat);
+      let sell = 0;
+      for (const t of tiers) {
+        const d = t.data as any;
+        if (unitSqm >= d.minSqm && unitSqm < d.maxSqm) { sell = d.sellPerUnit ?? d.pricePerUnit ?? 0; break; }
+      }
+      if (sell === 0 && tiers.length > 0) {
+        const last = tiers[tiers.length - 1].data as any;
+        sell = last.sellPerUnit ?? last.pricePerUnit ?? 0;
+      }
+      total += sell * (item.quantity || 1);
+    }
+    return total;
+  }, [job, installationRates]);
+
+  const deliverySellTotal = useMemo(() => {
+    if (!job) return 0;
+    const customVal = job.deliveryAmount;
+    if (customVal && customVal > 0) {
+      const markup = job.deliveryMarkup ?? 15;
+      return Math.round(customVal * (1 + markup / 100) * 100) / 100;
+    }
+    if (job.deliveryMethod) {
+      const rate = deliveryRates.find((r) => r.id === job.deliveryMethod);
+      if (rate) {
+        const d = rate.data as any;
+        return d.sellNzd ?? d.rateNzd ?? 0;
+      }
+    }
+    return 0;
+  }, [job, deliveryRates]);
 
   if (isLoading) {
     return (
@@ -63,8 +131,12 @@ export default function QuoteSummary() {
 
   const items = job.items.map((ji) => ji.config as QuoteItem);
   const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1), 0);
-  const totalPrice = items.reduce((sum, item) => sum + calcItemPrice(item), 0);
-  const avgPricePerSqm = totalSqm > 0 ? totalPrice / totalSqm : 0;
+  const itemsSubtotal = items.reduce((sum, item) => sum + calcItemPrice(item), 0);
+  const hasInstallation = !!job.installationEnabled && installSellTotal > 0;
+  const hasDelivery = deliverySellTotal > 0;
+  const subtotalExGst = itemsSubtotal + (hasInstallation ? installSellTotal : 0) + (hasDelivery ? deliverySellTotal : 0);
+  const gstAmount = subtotalExGst * (gstRate / 100);
+  const totalIncGst = subtotalExGst + gstAmount;
 
   return (
     <div className="min-h-full bg-background" data-testid="quote-summary">
@@ -137,7 +209,40 @@ export default function QuoteSummary() {
           </Table>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-card border rounded-lg p-6 space-y-3">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-muted-foreground">Items Subtotal</span>
+            <span className="font-medium" data-testid="text-items-subtotal">${formatPrice(itemsSubtotal)}</span>
+          </div>
+          {hasInstallation && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Installation</span>
+              <span className="font-medium" data-testid="text-install-sell">${formatPrice(installSellTotal)}</span>
+            </div>
+          )}
+          {hasDelivery && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Delivery</span>
+              <span className="font-medium" data-testid="text-delivery-sell">${formatPrice(deliverySellTotal)}</span>
+            </div>
+          )}
+          <Separator />
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-muted-foreground">Subtotal (excl. GST)</span>
+            <span className="font-semibold" data-testid="text-subtotal-ex-gst">${formatPrice(subtotalExGst)}</span>
+          </div>
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-muted-foreground">GST ({gstRate}%)</span>
+            <span className="font-medium" data-testid="text-gst-amount">${formatPrice(gstAmount)}</span>
+          </div>
+          <Separator />
+          <div className="flex justify-between items-center">
+            <span className="text-base font-bold">Total (incl. GST)</span>
+            <span className="text-xl font-bold text-primary" data-testid="text-total-inc-gst">${formatPrice(totalIncGst)}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-card border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Items</p>
             <p className="text-2xl font-bold" data-testid="text-total-items">{items.length}</p>
@@ -148,11 +253,7 @@ export default function QuoteSummary() {
           </div>
           <div className="bg-card border rounded-lg p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Avg $/m²</p>
-            <p className="text-2xl font-bold" data-testid="text-avg-price-sqm">${formatPrice(avgPricePerSqm)}</p>
-          </div>
-          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Price</p>
-            <p className="text-2xl font-bold text-primary" data-testid="text-total-price">${formatPrice(totalPrice)}</p>
+            <p className="text-2xl font-bold" data-testid="text-avg-price-sqm">${formatPrice(totalSqm > 0 ? itemsSubtotal / totalSqm : 0)}</p>
           </div>
         </div>
       </div>

@@ -106,8 +106,10 @@ export const jobs = pgTable("jobs", {
   date: text("date").default(""),
   installationEnabled: boolean("installation_enabled").default(false),
   installationOverride: real("installation_override"),
+  installationMarkup: real("installation_markup"),
   deliveryMethod: text("delivery_method"),
   deliveryAmount: real("delivery_amount"),
+  deliveryMarkup: real("delivery_markup"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

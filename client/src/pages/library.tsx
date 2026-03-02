@@ -2379,7 +2379,8 @@ function InstallationSection() {
                   <TableHead>Size Name</TableHead>
                   <TableHead>Min m²</TableHead>
                   <TableHead>Max m²</TableHead>
-                  <TableHead>Price/Unit ($)</TableHead>
+                  <TableHead>Cost/Unit ($)</TableHead>
+                  <TableHead>Sell/Unit ($)</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -2391,7 +2392,8 @@ function InstallationSection() {
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell>{d.minSqm}</TableCell>
                       <TableCell>{d.maxSqm >= 999 ? "∞" : d.maxSqm}</TableCell>
-                      <TableCell className="font-semibold">${d.pricePerUnit}</TableCell>
+                      <TableCell className="font-medium">${d.costPerUnit ?? d.pricePerUnit}</TableCell>
+                      <TableCell className="font-semibold">${d.sellPerUnit ?? d.pricePerUnit}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditRate(r)} data-testid={`button-edit-installation-${r.id}`}>
@@ -2428,7 +2430,8 @@ function InstallationRateDialog({ entry, onClose }: { entry: LibraryEntry | null
     category: d.category || "window",
     minSqm: d.minSqm ?? 0,
     maxSqm: d.maxSqm ?? 1,
-    pricePerUnit: d.pricePerUnit ?? 250,
+    costPerUnit: d.costPerUnit ?? (d.pricePerUnit ? Math.round(d.pricePerUnit * 0.75 * 100) / 100 : 187.5),
+    sellPerUnit: d.sellPerUnit ?? d.pricePerUnit ?? 250,
     description: d.description || "",
   });
 
@@ -2478,8 +2481,12 @@ function InstallationRateDialog({ entry, onClose }: { entry: LibraryEntry | null
             <Input type="number" value={values.maxSqm} onChange={(e) => setValues({ ...values, maxSqm: parseFloat(e.target.value) || 0 })} data-testid="input-installation-max" />
           </div>
           <div>
-            <Label>Price per Unit ($)</Label>
-            <Input type="number" value={values.pricePerUnit} onChange={(e) => setValues({ ...values, pricePerUnit: parseFloat(e.target.value) || 0 })} data-testid="input-installation-price" />
+            <Label>Cost per Unit ($)</Label>
+            <Input type="number" value={values.costPerUnit} onChange={(e) => setValues({ ...values, costPerUnit: parseFloat(e.target.value) || 0 })} data-testid="input-installation-cost" />
+          </div>
+          <div>
+            <Label>Sell per Unit ($)</Label>
+            <Input type="number" value={values.sellPerUnit} onChange={(e) => setValues({ ...values, sellPerUnit: parseFloat(e.target.value) || 0 })} data-testid="input-installation-sell" />
           </div>
         </div>
         <DialogFooter>
@@ -2526,7 +2533,8 @@ function DeliverySection() {
             <TableHeader>
               <TableRow>
                 <TableHead>Delivery Method</TableHead>
-                <TableHead>Rate ($ NZD)</TableHead>
+                <TableHead>Cost ($ NZD)</TableHead>
+                <TableHead>Sell ($ NZD)</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
@@ -2537,7 +2545,8 @@ function DeliverySection() {
                 return (
                   <TableRow key={r.id} data-testid={`row-delivery-${r.id}`}>
                     <TableCell className="font-medium">{d.name}</TableCell>
-                    <TableCell className="font-semibold">{d.rateNzd > 0 ? `$${d.rateNzd}` : "Custom"}</TableCell>
+                    <TableCell className="font-medium">{(d.costNzd ?? d.rateNzd) > 0 ? `$${d.costNzd ?? d.rateNzd}` : "Custom"}</TableCell>
+                    <TableCell className="font-semibold">{(d.sellNzd ?? d.rateNzd) > 0 ? `$${d.sellNzd ?? d.rateNzd}` : "Custom"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{d.description}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
@@ -2553,7 +2562,7 @@ function DeliverySection() {
                 );
               })}
               {rates.length === 0 && (
-                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No delivery rates</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No delivery rates</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -2575,7 +2584,8 @@ function DeliveryRateDialog({ entry, onClose }: { entry: LibraryEntry | null; on
   const [values, setValues] = useState({
     name: d.name || "",
     vehicle: d.vehicle || "",
-    rateNzd: d.rateNzd ?? 0,
+    costNzd: d.costNzd ?? (d.rateNzd ? Math.round(d.rateNzd * 0.75 * 100) / 100 : 0),
+    sellNzd: d.sellNzd ?? d.rateNzd ?? 0,
     description: d.description || "",
   });
 
@@ -2607,8 +2617,12 @@ function DeliveryRateDialog({ entry, onClose }: { entry: LibraryEntry | null; on
             <Input value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} data-testid="input-delivery-name" />
           </div>
           <div>
-            <Label>Rate ($ NZD)</Label>
-            <Input type="number" value={values.rateNzd} onChange={(e) => setValues({ ...values, rateNzd: parseFloat(e.target.value) || 0 })} data-testid="input-delivery-rate" />
+            <Label>Cost ($ NZD)</Label>
+            <Input type="number" value={values.costNzd} onChange={(e) => setValues({ ...values, costNzd: parseFloat(e.target.value) || 0 })} data-testid="input-delivery-cost" />
+          </div>
+          <div>
+            <Label>Sell ($ NZD)</Label>
+            <Input type="number" value={values.sellNzd} onChange={(e) => setValues({ ...values, sellNzd: parseFloat(e.target.value) || 0 })} data-testid="input-delivery-sell" />
           </div>
           <div className="col-span-2">
             <Label>Description</Label>

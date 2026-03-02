@@ -6,7 +6,7 @@ import { Settings as SettingsIcon } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 
 export default function Settings() {
-  const { quoteListPosition, usdToNzdRate, updateSetting } = useSettings();
+  const { quoteListPosition, usdToNzdRate, gstRate, updateSetting } = useSettings();
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="settings-page">
@@ -71,6 +71,23 @@ export default function Settings() {
                   }}
                   className="w-32"
                   data-testid="input-usd-nzd-rate"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">GST Rate (%)</Label>
+                <p className="text-xs text-muted-foreground mb-2">Applied to all sell-side totals on quotes and summaries</p>
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max="100"
+                  value={gstRate}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (!isNaN(v) && v >= 0) updateSetting("gstRate", v);
+                  }}
+                  className="w-32"
+                  data-testid="input-gst-rate"
                 />
               </div>
             </CardContent>

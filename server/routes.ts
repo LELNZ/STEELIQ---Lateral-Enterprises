@@ -913,17 +913,28 @@ async function seedLabourOperations() {
 }
 
 const DEFAULT_INSTALLATION_RATES = [
-  { name: "Small Window", category: "window", minSqm: 0, maxSqm: 1, pricePerUnit: 250, description: "" },
-  { name: "Medium Window", category: "window", minSqm: 1, maxSqm: 2, pricePerUnit: 300, description: "" },
-  { name: "Large Window", category: "window", minSqm: 2, maxSqm: 3, pricePerUnit: 350, description: "" },
-  { name: "Extra Large Window", category: "window", minSqm: 3, maxSqm: 999, pricePerUnit: 400, description: "" },
-  { name: "Standard Door", category: "door", minSqm: 0, maxSqm: 2.5, pricePerUnit: 350, description: "" },
-  { name: "Large Door", category: "door", minSqm: 2.5, maxSqm: 999, pricePerUnit: 450, description: "" },
+  { name: "Small Window", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 187.5, sellPerUnit: 250, description: "" },
+  { name: "Medium Window", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 225, sellPerUnit: 300, description: "" },
+  { name: "Large Window", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 262.5, sellPerUnit: 350, description: "" },
+  { name: "Extra Large Window", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 300, sellPerUnit: 400, description: "" },
+  { name: "Standard Door", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 262.5, sellPerUnit: 350, description: "" },
+  { name: "Large Door", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 337.5, sellPerUnit: 450, description: "" },
 ];
 
 async function seedInstallationRates() {
   const existing = await storage.getLibraryEntries("installation_rate");
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    for (const entry of existing) {
+      const d = entry.data as any;
+      if (d.pricePerUnit !== undefined && d.costPerUnit === undefined) {
+        const sell = d.pricePerUnit;
+        const cost = Math.round(sell * 0.75 * 100) / 100;
+        const { pricePerUnit, ...rest } = d;
+        await storage.updateLibraryEntry(entry.id, { data: { ...rest, costPerUnit: cost, sellPerUnit: sell } });
+      }
+    }
+    return;
+  }
   for (let i = 0; i < DEFAULT_INSTALLATION_RATES.length; i++) {
     await storage.createLibraryEntry({
       type: "installation_rate",
@@ -934,15 +945,26 @@ async function seedInstallationRates() {
 }
 
 const DEFAULT_DELIVERY_RATES = [
-  { name: "In-house Vehicle", vehicle: "van", rateNzd: 150, description: "" },
-  { name: "Small Crane Truck", vehicle: "small-crane", rateNzd: 350, description: "" },
-  { name: "Large Crane Truck", vehicle: "large-crane", rateNzd: 550, description: "" },
-  { name: "Trucking Company", vehicle: "trucking-company", rateNzd: 0, description: "Enter custom rate" },
+  { name: "In-house Vehicle", vehicle: "van", costNzd: 112.5, sellNzd: 150, description: "" },
+  { name: "Small Crane Truck", vehicle: "small-crane", costNzd: 262.5, sellNzd: 350, description: "" },
+  { name: "Large Crane Truck", vehicle: "large-crane", costNzd: 412.5, sellNzd: 550, description: "" },
+  { name: "Trucking Company", vehicle: "trucking-company", costNzd: 0, sellNzd: 0, description: "Enter custom rate" },
 ];
 
 async function seedDeliveryRates() {
   const existing = await storage.getLibraryEntries("delivery_rate");
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    for (const entry of existing) {
+      const d = entry.data as any;
+      if (d.rateNzd !== undefined && d.costNzd === undefined) {
+        const sell = d.rateNzd;
+        const cost = Math.round(sell * 0.75 * 100) / 100;
+        const { rateNzd, ...rest } = d;
+        await storage.updateLibraryEntry(entry.id, { data: { ...rest, costNzd: cost, sellNzd: sell } });
+      }
+    }
+    return;
+  }
   for (let i = 0; i < DEFAULT_DELIVERY_RATES.length; i++) {
     await storage.createLibraryEntry({
       type: "delivery_rate",

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -52,8 +52,10 @@ interface JobData {
   date?: string;
   installationEnabled?: boolean;
   installationOverride?: number | null;
+  installationMarkup?: number | null;
   deliveryMethod?: string | null;
   deliveryAmount?: number | null;
+  deliveryMarkup?: number | null;
   items: JobItem[];
 }
 
@@ -69,12 +71,14 @@ export default function ExecSummary() {
   const [, matchResult] = useRoute("/job/:id/exec-summary");
   const jobId = matchResult?.id;
   const [, navigate] = useLocation();
-  const { usdToNzdRate } = useSettings();
+  const { usdToNzdRate, gstRate } = useSettings();
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [installEnabled, setInstallEnabled] = useState(false);
   const [installOverride, setInstallOverride] = useState<string>("");
+  const [installMarkup, setInstallMarkup] = useState<string>("15");
   const [deliveryMethodId, setDeliveryMethodId] = useState<string>("");
   const [deliveryCustom, setDeliveryCustom] = useState<string>("");
+  const [deliveryMarkup, setDeliveryMarkup] = useState<string>("15");
   const [initialized, setInitialized] = useState(false);
 
   const { data: job, isLoading: jobLoading } = useQuery<JobData>({
@@ -165,12 +169,14 @@ export default function ExecSummary() {
   const { data: installationRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "installation_rate"], queryFn: fetchLib("installation_rate") });
   const { data: deliveryRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "delivery_rate"], queryFn: fetchLib("delivery_rate") });
 
-  useMemo(() => {
+  useEffect(() => {
     if (job && !initialized) {
       setInstallEnabled(!!job.installationEnabled);
       setInstallOverride(job.installationOverride != null ? String(job.installationOverride) : "");
+      setInstallMarkup(job.installationMarkup != null ? String(job.installationMarkup) : "15");
       setDeliveryMethodId(job.deliveryMethod || "");
       setDeliveryCustom(job.deliveryAmount != null ? String(job.deliveryAmount) : "");
+      setDeliveryMarkup(job.deliveryMarkup != null ? String(job.deliveryMarkup) : "15");
       setInitialized(true);
     }
   }, [job, initialized]);
@@ -270,17 +276,17 @@ export default function ExecSummary() {
     });
   }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
 
-  const getInstallationTier = useCallback((category: string, sqm: number): { name: string; price: number } | null => {
+  const getInstallationTier = useCallback((category: string, sqm: number): { name: string; cost: number; sell: number } | null => {
     const isDoor = DOOR_CATEGORIES.includes(category);
     const cat = isDoor ? "door" : "window";
     const tiers = installationRates.filter((r) => (r.data as any).category === cat);
     for (const t of tiers) {
       const d = t.data as any;
-      if (sqm >= d.minSqm && sqm < d.maxSqm) return { name: d.name, price: d.pricePerUnit };
+      if (sqm >= d.minSqm && sqm < d.maxSqm) return { name: d.name, cost: d.costPerUnit ?? d.pricePerUnit * 0.75, sell: d.sellPerUnit ?? d.pricePerUnit };
     }
     if (tiers.length > 0) {
       const last = tiers[tiers.length - 1].data as any;
-      return { name: last.name, price: last.pricePerUnit };
+      return { name: last.name, cost: last.costPerUnit ?? last.pricePerUnit * 0.75, sell: last.sellPerUnit ?? last.pricePerUnit };
     }
     return null;
   }, [installationRates]);
@@ -297,39 +303,60 @@ export default function ExecSummary() {
         unitSqm,
         qty,
         tierName: tier?.name || "—",
-        pricePerUnit: tier?.price || 0,
-        total: (tier?.price || 0) * qty,
+        costPerUnit: tier?.cost || 0,
+        sellPerUnit: tier?.sell || 0,
+        costTotal: (tier?.cost || 0) * qty,
+        sellTotal: (tier?.sell || 0) * qty,
       };
     });
   }, [installEnabled, itemPricings, getInstallationTier]);
 
-  const installationTotal = useMemo(() => {
+  const installationTotals = useMemo(() => {
     const overrideVal = parseFloat(installOverride);
-    if (installEnabled && overrideVal > 0) return overrideVal;
-    return installationItems.reduce((acc, i) => acc + i.total, 0);
-  }, [installEnabled, installOverride, installationItems]);
+    const rawMarkup = parseFloat(installMarkup);
+    const markupPct = Number.isFinite(rawMarkup) ? rawMarkup : 15;
+    if (installEnabled && overrideVal > 0) {
+      const cost = overrideVal;
+      const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
+      return { cost, sell, isOverride: true };
+    }
+    const cost = installationItems.reduce((acc, i) => acc + i.costTotal, 0);
+    const sell = installationItems.reduce((acc, i) => acc + i.sellTotal, 0);
+    return { cost, sell, isOverride: false };
+  }, [installEnabled, installOverride, installMarkup, installationItems]);
 
-  const deliveryTotal = useMemo(() => {
+  const deliveryTotals = useMemo(() => {
     const customVal = parseFloat(deliveryCustom);
-    if (customVal > 0) return customVal;
+    const rawMarkup = parseFloat(deliveryMarkup);
+    const markupPct = Number.isFinite(rawMarkup) ? rawMarkup : 15;
+    if (customVal > 0) {
+      const cost = customVal;
+      const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
+      return { cost, sell, isCustom: true };
+    }
     if (deliveryMethodId) {
       const rate = deliveryRates.find((r) => r.id === deliveryMethodId);
-      if (rate) return (rate.data as any).rateNzd || 0;
+      if (rate) {
+        const d = rate.data as any;
+        const cost = d.costNzd ?? (d.rateNzd ? d.rateNzd * 0.75 : 0);
+        const sell = d.sellNzd ?? d.rateNzd ?? 0;
+        return { cost, sell, isCustom: false };
+      }
     }
-    return 0;
-  }, [deliveryMethodId, deliveryCustom, deliveryRates]);
+    return { cost: 0, sell: 0, isCustom: false };
+  }, [deliveryMethodId, deliveryCustom, deliveryMarkup, deliveryRates]);
 
   const totals = useMemo(() => {
     let totalSqm = 0;
     let totalManufCost = 0;
-    let totalSalePrice = 0;
+    let itemSaleTotal = 0;
     let totalMaterials = 0;
     let totalLabor = 0;
     let totalWeight = 0;
 
     for (const ip of itemPricings) {
       totalSqm += ip.sqm;
-      totalSalePrice += ip.pricing?.salePriceNzd ?? ip.salePrice;
+      itemSaleTotal += ip.pricing?.salePriceNzd ?? ip.salePrice;
       if (ip.pricing) {
         totalManufCost += ip.pricing.netCostNzd;
         totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd + ip.pricing.wanzBarCostNzd;
@@ -338,20 +365,27 @@ export default function ExecSummary() {
       }
     }
 
-    const installCost = installEnabled ? installationTotal : 0;
-    const delivCost = deliveryTotal;
-    const grandTotal = totalManufCost + installCost + delivCost;
-    const totalProfit = totalSalePrice - grandTotal;
-    const grossMarginPct = totalSalePrice > 0 ? (totalProfit / totalSalePrice) * 100 : 0;
-    const avgCostPerSqm = totalSqm > 0 ? grandTotal / totalSqm : 0;
-    const avgSalePerSqm = totalSqm > 0 ? totalSalePrice / totalSqm : 0;
+    const installCost = installEnabled ? installationTotals.cost : 0;
+    const installSell = installEnabled ? installationTotals.sell : 0;
+    const delivCost = deliveryTotals.cost;
+    const delivSell = deliveryTotals.sell;
+    const grandTotalCost = totalManufCost + installCost + delivCost;
+    const totalSaleExGst = itemSaleTotal + installSell + delivSell;
+    const gstAmount = totalSaleExGst * (gstRate / 100);
+    const totalSaleIncGst = totalSaleExGst + gstAmount;
+    const totalProfit = totalSaleExGst - grandTotalCost;
+    const grossMarginPct = totalSaleExGst > 0 ? (totalProfit / totalSaleExGst) * 100 : 0;
+    const avgCostPerSqm = totalSqm > 0 ? grandTotalCost / totalSqm : 0;
+    const avgSalePerSqm = totalSqm > 0 ? totalSaleExGst / totalSqm : 0;
 
     return {
-      totalSqm, totalManufCost, totalSalePrice, totalMaterials,
+      totalSqm, totalManufCost, itemSaleTotal, totalMaterials,
       totalLabor, totalWeight, totalProfit, grossMarginPct,
-      avgCostPerSqm, avgSalePerSqm, installCost, delivCost, grandTotal,
+      avgCostPerSqm, avgSalePerSqm, installCost, installSell,
+      delivCost, delivSell, grandTotalCost, totalSaleExGst,
+      gstAmount, totalSaleIncGst,
     };
-  }, [itemPricings, installEnabled, installationTotal, deliveryTotal]);
+  }, [itemPricings, installEnabled, installationTotals, deliveryTotals, gstRate]);
 
   const toggleExpand = (idx: number) => {
     setExpandedItems((prev) => {
@@ -414,11 +448,16 @@ export default function ExecSummary() {
           <FinanceRow label="Manufacturing Materials" value={`$${fmt(totals.totalMaterials)}`} testId="text-total-materials" />
           <FinanceRow label="Manufacturing Labour" value={`$${fmt(totals.totalLabor)}`} testId="text-total-labor" />
           <FinanceRow label="Manufacturing Total" value={`$${fmt(totals.totalManufCost)}`} bold testId="text-total-manuf-cost" />
-          <FinanceRow label="Installation Labour" value={installEnabled ? `$${fmt(totals.installCost)}` : "—"} testId="text-total-installation" />
-          <FinanceRow label="Delivery" value={totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"} testId="text-total-delivery" />
-          <FinanceRow label="Grand Total Cost" value={`$${fmt(totals.grandTotal)}`} bold testId="text-grand-total" />
-          <FinanceRow label="Total Sale Price" value={`$${fmt(totals.totalSalePrice)}`} bold primary testId="text-total-sale-price" />
+          <FinanceRow label="Installation Cost" value={installEnabled ? `$${fmt(totals.installCost)}` : "—"} testId="text-total-install-cost" />
+          <FinanceRow label="Installation Sell" value={installEnabled ? `$${fmt(totals.installSell)}` : "—"} testId="text-total-install-sell" />
+          <FinanceRow label="Delivery Cost" value={totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"} testId="text-total-delivery-cost" />
+          <FinanceRow label="Delivery Sell" value={totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"} testId="text-total-delivery-sell" />
+          <FinanceRow label="Grand Total Cost" value={`$${fmt(totals.grandTotalCost)}`} bold testId="text-grand-total" />
+          <FinanceRow label="Sale Price (excl. GST)" value={`$${fmt(totals.totalSaleExGst)}`} bold primary testId="text-total-sale-ex-gst" />
+          <FinanceRow label={`GST (${gstRate}%)`} value={`$${fmt(totals.gstAmount)}`} testId="text-gst-amount" />
+          <FinanceRow label="Sale Price (incl. GST)" value={`$${fmt(totals.totalSaleIncGst)}`} bold primary testId="text-total-sale-inc-gst" />
           <FinanceRow label="Avg Cost/m²" value={`$${fmt(totals.avgCostPerSqm)}`} testId="text-avg-cost-sqm" />
+          <FinanceRow label="Avg Sale/m²" value={`$${fmt(totals.avgSalePerSqm)}`} testId="text-avg-sale-sqm" />
         </div>
         <Separator />
         <div className="flex items-center justify-between">
@@ -462,9 +501,11 @@ export default function ExecSummary() {
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Unit m²</TableHead>
                   <TableHead>Tier</TableHead>
-                  <TableHead className="text-right">$/Unit</TableHead>
+                  <TableHead className="text-right">Cost/Unit</TableHead>
+                  <TableHead className="text-right">Sell/Unit</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Cost Total</TableHead>
+                  <TableHead className="text-right">Sell Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -474,24 +515,28 @@ export default function ExecSummary() {
                     <TableCell><Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ii.category] || ii.category}</Badge></TableCell>
                     <TableCell className="text-right">{ii.unitSqm.toFixed(2)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-xs">{ii.tierName}</Badge></TableCell>
-                    <TableCell className="text-right">${fmt(ii.pricePerUnit)}</TableCell>
+                    <TableCell className="text-right">${fmt(ii.costPerUnit)}</TableCell>
+                    <TableCell className="text-right">${fmt(ii.sellPerUnit)}</TableCell>
                     <TableCell className="text-right">{ii.qty}</TableCell>
-                    <TableCell className="text-right font-medium">${fmt(ii.total)}</TableCell>
+                    <TableCell className="text-right font-medium">${fmt(ii.costTotal)}</TableCell>
+                    <TableCell className="text-right font-medium">${fmt(ii.sellTotal)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
             <Separator />
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="text-sm">
-                <span className="text-muted-foreground">Per-unit total: </span>
-                <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.total, 0))}</span>
+                <span className="text-muted-foreground">Per-unit cost: </span>
+                <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.costTotal, 0))}</span>
+                <span className="text-muted-foreground ml-3">Per-unit sell: </span>
+                <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.sellTotal, 0))}</span>
               </div>
               <div className="flex items-center gap-2 print:hidden">
-                <Label className="text-sm whitespace-nowrap">Subcontractor Lump Sum Override ($)</Label>
+                <Label className="text-sm whitespace-nowrap">Subcontractor Override ($)</Label>
                 <Input
                   type="number"
-                  className="w-32"
+                  className="w-28"
                   placeholder="—"
                   value={installOverride}
                   onChange={(e) => {
@@ -501,11 +546,24 @@ export default function ExecSummary() {
                   }}
                   data-testid="input-installation-override"
                 />
+                <Label className="text-sm whitespace-nowrap">Markup (%)</Label>
+                <Input
+                  type="number"
+                  className="w-20"
+                  value={installMarkup}
+                  onChange={(e) => {
+                    setInstallMarkup(e.target.value);
+                    const val = parseFloat(e.target.value);
+                    persistJobField("installationMarkup", val >= 0 ? val : null);
+                  }}
+                  data-testid="input-installation-markup"
+                />
               </div>
             </div>
-            <div className="text-right font-bold text-sm">
-              Installation Total: ${fmt(installationTotal)}
-              {parseFloat(installOverride) > 0 && <Badge variant="outline" className="ml-2">Override</Badge>}
+            <div className="flex items-center justify-end gap-4 font-bold text-sm">
+              <span>Cost: ${fmt(installationTotals.cost)}</span>
+              <span>Sell: ${fmt(installationTotals.sell)}</span>
+              {installationTotals.isOverride && <Badge variant="outline">Override</Badge>}
             </div>
           </>
         )}
@@ -516,8 +574,8 @@ export default function ExecSummary() {
 
       <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
-        <div className="flex items-center gap-4 print:hidden">
-          <div className="flex-1">
+        <div className="flex items-center gap-4 flex-wrap print:hidden">
+          <div className="flex-1 min-w-[200px]">
             <Label className="text-sm">Delivery Method</Label>
             <Select
               value={deliveryMethodId}
@@ -525,21 +583,21 @@ export default function ExecSummary() {
                 setDeliveryMethodId(v);
                 setDeliveryCustom("");
                 persistJobField("deliveryMethod", v);
-                const rate = deliveryRates.find((r) => r.id === v);
-                const rateVal = rate ? (rate.data as any).rateNzd : 0;
-                persistJobField("deliveryAmount", rateVal > 0 ? rateVal : null);
+                persistJobField("deliveryAmount", null);
               }}
             >
               <SelectTrigger data-testid="select-delivery-method"><SelectValue placeholder="Select delivery method" /></SelectTrigger>
               <SelectContent>
-                {deliveryRates.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{(r.data as any).name} {(r.data as any).rateNzd > 0 ? `($${(r.data as any).rateNzd})` : "(Custom)"}</SelectItem>
-                ))}
+                {deliveryRates.map((r) => {
+                  const d = r.data as any;
+                  const sell = d.sellNzd ?? d.rateNzd ?? 0;
+                  return <SelectItem key={r.id} value={r.id}>{d.name} {sell > 0 ? `($${sell})` : "(Custom)"}</SelectItem>;
+                })}
               </SelectContent>
             </Select>
           </div>
-          <div className="w-40">
-            <Label className="text-sm">Custom Amount ($)</Label>
+          <div className="w-28">
+            <Label className="text-sm">Custom Cost ($)</Label>
             <Input
               type="number"
               placeholder="—"
@@ -552,9 +610,24 @@ export default function ExecSummary() {
               data-testid="input-delivery-custom"
             />
           </div>
+          <div className="w-20">
+            <Label className="text-sm">Markup (%)</Label>
+            <Input
+              type="number"
+              value={deliveryMarkup}
+              onChange={(e) => {
+                setDeliveryMarkup(e.target.value);
+                const val = parseFloat(e.target.value);
+                persistJobField("deliveryMarkup", val >= 0 ? val : null);
+              }}
+              data-testid="input-delivery-markup"
+            />
+          </div>
         </div>
-        <div className="text-right font-bold text-sm" data-testid="text-delivery-total">
-          Delivery Total: ${fmt(deliveryTotal)}
+        <div className="flex items-center justify-end gap-4 font-bold text-sm" data-testid="text-delivery-total">
+          <span>Cost: ${fmt(deliveryTotals.cost)}</span>
+          <span>Sell: ${fmt(deliveryTotals.sell)}</span>
+          {deliveryTotals.isCustom && <Badge variant="outline">Custom</Badge>}
         </div>
       </div>
 
@@ -570,9 +643,9 @@ export default function ExecSummary() {
               <TableHead>Type</TableHead>
               <TableHead className="text-right">Dims (mm)</TableHead>
               <TableHead className="text-right">m²</TableHead>
-              <TableHead className="text-right">Net Cost</TableHead>
+              <TableHead className="text-right">Manuf. Cost</TableHead>
               <TableHead className="text-right">Sale Price</TableHead>
-              <TableHead className="text-right">Margin</TableHead>
+              <TableHead className="text-right">Manuf. Margin</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

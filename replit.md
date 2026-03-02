@@ -29,7 +29,9 @@ Do not make changes to the folder `shared`.
 - **Configuration & Pricing System**: Utilizes dedicated tables for frame configurations, profiles, accessories, and labor. A `pricing.ts` utility calculates comprehensive costs, including material, labor, glass, liner, and handle expenses, yielding net cost, sale price, and margin.
 - **Config Signature**: `deriveConfigSignature` analyzes drawing layouts to generate a unique signature, enabling auto-detection and matching of configurations.
 - **Auto-generation**: When no matching configuration is found, the system can auto-generate a new one based on the detected layout.
-- **Master Library Systems**: Centralized libraries for direct materials (profiles, accessories), manufacturing labor, installation labor (tiered rates), and delivery methods. These master libraries ensure consistency and propagate changes across configurations.
+- **Master Library Systems**: Centralized libraries for direct materials (profiles, accessories), manufacturing labor, installation labor (tiered rates with cost/sell split), and delivery methods (with cost/sell split). These master libraries ensure consistency and propagate changes across configurations.
+- **Financial Model**: Full cost/sell separation for installation and delivery. Installation tiers and delivery methods have independent cost and sell dollar amounts in the library. Subcontractor/custom overrides use a cost input + markup percentage (default 15%) to compute sell. GST rate is configurable in settings (default 15% NZ). Grand Total Cost = Manuf + Install Cost + Delivery Cost. Total Sale Price = Item Sales + Install Sell + Delivery Sell. GST applied to sell totals.
+- **Customer-Facing Quote Summary**: Shows Items Subtotal, Installation (sell), Delivery (sell), Subtotal excl. GST, GST line, Total incl. GST. No cost data shown.
 **Feature Specifications**:
 - **Job Management**: Full CRUD operations for jobs, including item photo capture, duplication, and deletion.
 - **Download/Export**: Options to download current drawings, all items as individual PNGs, or all items as a single PDF.
