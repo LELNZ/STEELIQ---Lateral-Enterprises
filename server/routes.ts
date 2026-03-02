@@ -8,43 +8,26 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { GLASS_LIBRARY } from "@shared/glass-library";
-import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, WINDOW_HANDLES, DOOR_HANDLES, HANDLE_CATEGORIES } from "@shared/item-options";
+import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES } from "@shared/item-options";
 
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
-  for (const entry of existing) {
-    await storage.deleteLibraryEntry(entry.id);
-  }
+  const existingTypes = new Set(existing.map((e) => e.type));
 
-  let sortOrder = 0;
-  for (const glass of GLASS_LIBRARY) {
-    await storage.createLibraryEntry({ type: "glass", data: { iguType: glass.iguType, combo: glass.combo, prices: glass.prices }, sortOrder: sortOrder++ });
-  }
-  sortOrder = 0;
-  for (const ft of FRAME_TYPES) {
-    await storage.createLibraryEntry({ type: "frame_type", data: { value: ft.value, label: ft.label, categories: ft.categories, pricePerKg: ft.pricePerKg }, sortOrder: sortOrder++ });
-  }
-  sortOrder = 0;
-  for (const fc of FRAME_COLORS) {
-    await storage.createLibraryEntry({ type: "frame_color", data: { value: fc.value, label: fc.label, priceProvision: fc.priceProvision }, sortOrder: sortOrder++ });
-  }
-  sortOrder = 0;
-  for (const wh of WINDOW_HANDLES) {
-    await storage.createLibraryEntry({ type: "window_handle", data: { value: wh.value, label: wh.label, priceProvision: wh.priceProvision }, sortOrder: sortOrder++ });
-  }
-  sortOrder = 0;
-  for (const dh of DOOR_HANDLES) {
-    await storage.createLibraryEntry({ type: "door_handle", data: { value: dh.value, label: dh.label, priceProvision: dh.priceProvision }, sortOrder: sortOrder++ });
-  }
-  for (const hc of HANDLE_CATEGORIES) {
-    sortOrder = 0;
-    for (const h of hc.defaults) {
-      await storage.createLibraryEntry({ type: hc.type, data: { value: h.value, label: h.label, priceProvision: h.priceProvision }, sortOrder: sortOrder++ });
+  const seedType = async (type: string, entries: { data: Record<string, unknown> }[]) => {
+    if (existingTypes.has(type)) return;
+    let sortOrder = 0;
+    for (const entry of entries) {
+      await storage.createLibraryEntry({ type, data: entry.data, sortOrder: sortOrder++ });
     }
-  }
-  sortOrder = 0;
-  for (const lt of LINER_TYPES) {
-    await storage.createLibraryEntry({ type: "liner_type", data: { value: lt.value, label: lt.label, priceProvision: lt.priceProvision }, sortOrder: sortOrder++ });
+  };
+
+  await seedType("glass", GLASS_LIBRARY.map((g) => ({ data: { iguType: g.iguType, combo: g.combo, prices: g.prices } })));
+  await seedType("frame_type", FRAME_TYPES.map((ft) => ({ data: { value: ft.value, label: ft.label, categories: ft.categories, pricePerKg: ft.pricePerKg } })));
+  await seedType("frame_color", FRAME_COLORS.map((fc) => ({ data: { value: fc.value, label: fc.label, priceProvision: fc.priceProvision } })));
+  await seedType("liner_type", LINER_TYPES.map((lt) => ({ data: { value: lt.value, label: lt.label, priceProvision: lt.priceProvision } })));
+  for (const hc of HANDLE_CATEGORIES) {
+    await seedType(hc.type, hc.defaults.map((h) => ({ data: { value: h.value, label: h.label, priceProvision: h.priceProvision } })));
   }
 }
 
