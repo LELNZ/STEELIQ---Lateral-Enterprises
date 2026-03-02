@@ -1183,7 +1183,6 @@ function LinerTypeSection() {
       title="Liner Types (price per linear metre)"
       fields={["value", "label", "priceProvision"]}
       priceUnit="/lin.m"
-      defaultAllocation="All Frame Types"
       allFrameTypeLabels={allFrameTypeLabels}
     />
   );
@@ -1460,7 +1459,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const hasAllocation = !!defaultAllocation;
+  const hasAllocation = !!defaultAllocation || (Array.isArray(allFrameTypeLabels) && allFrameTypeLabels.length > 0);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -1594,7 +1593,7 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocati
     : defaultAllocation ? [defaultAllocation] : [];
   const [selectedAllocations, setSelectedAllocations] = useState<string[]>(initialAllocations);
 
-  const hasAllocationSelector = !!defaultAllocation && Array.isArray(allFrameTypeLabels) && allFrameTypeLabels.length > 0;
+  const hasAllocationSelector = Array.isArray(allFrameTypeLabels) && allFrameTypeLabels.length > 0;
 
   function toggleAllocation(label: string) {
     setSelectedAllocations((prev) =>
@@ -1667,7 +1666,7 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocati
                   </div>
                 ))}
               </div>
-              {selectedAllocations.length === 0 && (
+              {selectedAllocations.length === 0 && defaultAllocation && (
                 <p className="text-xs text-amber-600 mt-1">No frame types selected. Will default to: {defaultAllocation}</p>
               )}
             </div>
