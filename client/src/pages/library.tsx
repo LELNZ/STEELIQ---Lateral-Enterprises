@@ -27,7 +27,7 @@ import type {
   ConfigurationAccessory, ConfigurationLabor,
 } from "@shared/schema";
 import { IGU_INFO } from "@shared/glass-library";
-import { HANDLE_CATEGORIES } from "@shared/item-options";
+import { HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Standard Window" },
@@ -114,6 +114,7 @@ export default function Library() {
             <TabsTrigger value="frame_color" data-testid="tab-frame-colors">Frame Colors</TabsTrigger>
             <TabsTrigger value="handles" data-testid="tab-handles">Handles</TabsTrigger>
             <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
+            <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
           </TabsList>
 
           <TabsContent value="glass">
@@ -130,6 +131,9 @@ export default function Library() {
           </TabsContent>
           <TabsContent value="liner_type">
             <SimpleSection type="liner_type" title="Liner Types (price per linear metre)" fields={["value", "label", "priceProvision"]} priceUnit="/lin.m" />
+          </TabsContent>
+          <TabsContent value="wanz_bar">
+            <WanzBarSection />
           </TabsContent>
         </Tabs>
       </div>
@@ -1170,6 +1174,190 @@ function FrameTypeDialog({ entry, onClose }: { entry: LibraryEntry | null; onClo
   );
 }
 
+function WanzBarSection() {
+  const { toast } = useToast();
+  const { data: entries = [], isLoading } = useLibraryEntries("wanz_bar");
+  const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "wanz_bar"] });
+      toast({ title: "Wanz Bar entry deleted" });
+      setDeleteId(null);
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      for (const e of entries) await apiRequest("DELETE", `/api/library/${e.id}`);
+      for (const wb of WANZ_BAR_DEFAULTS) {
+        await apiRequest("POST", "/api/library", { type: "wanz_bar", data: wb, sortOrder: 0 });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "wanz_bar"] });
+      toast({ title: "Wanz Bar entries reset to defaults" });
+    },
+  });
+
+  if (isLoading) return <p className="text-muted-foreground">Loading...</p>;
+
+  return (
+    <div className="space-y-4" data-testid="section-wanz-bar">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Wanz Sill Support Bars</h2>
+          <p className="text-sm text-muted-foreground">{entries.length} entries · Applies to all window categories (width ≥ 600mm)</p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending} data-testid="button-reset-wanz-bar">
+            <RotateCcw className="w-4 h-4 mr-1.5" /> Reset to Defaults
+          </Button>
+          <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-wanz-bar">
+            <Plus className="w-4 h-4 mr-1.5" /> Add
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Section #</TableHead>
+                <TableHead>Label</TableHead>
+                <TableHead className="text-right">kg/m</TableHead>
+                <TableHead className="text-right">Price USD/kg</TableHead>
+                <TableHead className="text-right">Price NZD/lin.m</TableHead>
+                <TableHead>Allocation</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry) => {
+                const d = entry.data as any;
+                return (
+                  <TableRow key={entry.id} data-testid={`row-wanz-bar-${entry.id}`}>
+                    <TableCell className="font-mono text-sm">{d.value || d.sectionNumber}</TableCell>
+                    <TableCell className="font-medium">{d.label}</TableCell>
+                    <TableCell className="text-right font-mono">{d.kgPerMetre}</TableCell>
+                    <TableCell className="text-right font-mono">{d.pricePerKgUsd ? `$${d.pricePerKgUsd}` : "—"}</TableCell>
+                    <TableCell className="text-right font-mono">{d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}` : "—"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">All Windows</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditEntry(entry)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(entry.id)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {entries.length === 0 && (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {(showAdd || editEntry) && (
+        <WanzBarDialog entry={editEntry} onClose={() => { setShowAdd(false); setEditEntry(null); }} />
+      )}
+      <DeleteConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
+        isPending={deleteMutation.isPending}
+      />
+    </div>
+  );
+}
+
+function WanzBarDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const d = entry ? (entry.data as any) : {};
+  const [values, setValues] = useState({
+    value: d.value?.toString() || "",
+    label: d.label?.toString() || "",
+    sectionNumber: d.sectionNumber?.toString() || d.value?.toString() || "",
+    kgPerMetre: d.kgPerMetre?.toString() || "",
+    pricePerKgUsd: d.pricePerKgUsd?.toString() || "0",
+    priceNzdPerLinM: d.priceNzdPerLinM?.toString() || "0",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const data = {
+        value: values.value || values.sectionNumber,
+        label: values.label,
+        sectionNumber: values.sectionNumber,
+        kgPerMetre: parseFloat(values.kgPerMetre) || 0,
+        pricePerKgUsd: parseFloat(values.pricePerKgUsd) || 0,
+        priceNzdPerLinM: parseFloat(values.priceNzdPerLinM) || 0,
+      };
+      if (entry) {
+        await apiRequest("PATCH", `/api/library/${entry.id}`, { data });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "wanz_bar", data, sortOrder: 0 });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "wanz_bar"] });
+      toast({ title: entry ? "Wanz Bar entry updated" : "Wanz Bar entry added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={() => onClose()}>
+      <DialogContent data-testid="dialog-wanz-bar">
+        <DialogHeader>
+          <DialogTitle>{entry ? "Edit" : "Add"} Wanz Bar Entry</DialogTitle>
+          <DialogDescription>Configure the sill support bar details</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label>Section Number</Label>
+            <Input value={values.sectionNumber} onChange={(e) => setValues({ ...values, sectionNumber: e.target.value, value: e.target.value })} placeholder="e.g. 36352" data-testid="input-wanz-bar-section" />
+          </div>
+          <div>
+            <Label>Label</Label>
+            <Input value={values.label} onChange={(e) => setValues({ ...values, label: e.target.value })} placeholder="e.g. 19mm Sill Support Bar" data-testid="input-wanz-bar-label" />
+          </div>
+          <div>
+            <Label>Weight (kg/m)</Label>
+            <Input type="number" step="0.001" value={values.kgPerMetre} onChange={(e) => setValues({ ...values, kgPerMetre: e.target.value })} placeholder="e.g. 0.525" data-testid="input-wanz-bar-kgm" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Price USD/kg (Direct)</Label>
+              <Input type="number" step="0.01" value={values.pricePerKgUsd} onChange={(e) => setValues({ ...values, pricePerKgUsd: e.target.value })} placeholder="0" data-testid="input-wanz-bar-price-usd" />
+            </div>
+            <div>
+              <Label>Price NZD/lin.m (NZ Local)</Label>
+              <Input type="number" step="0.01" value={values.priceNzdPerLinM} onChange={(e) => setValues({ ...values, priceNzdPerLinM: e.target.value })} placeholder="0" data-testid="input-wanz-bar-price-nzd" />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.label?.trim() || !values.sectionNumber?.trim() || saveMutation.isPending} data-testid="button-save-wanz-bar">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function HandlesSection() {
   return (
     <div className="space-y-4" data-testid="section-handles">
@@ -1188,8 +1376,11 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
   const [open, setOpen] = useState(false);
   const { data: entries = [] } = useLibraryEntries(handleCat.type);
   const { data: frameTypes = [] } = useLibraryEntries("frame_type");
-  const allocationLabel = frameTypes.find((ft) => (ft.data as any).value === handleCat.frameTypeValue)?.data as any;
-  const allocation = allocationLabel?.label || handleCat.frameTypeValue;
+  const matchingFt = frameTypes.find((ft) => {
+    const cats = (ft.data as any).categories;
+    return Array.isArray(cats) && cats.includes(handleCat.categoryMatch);
+  });
+  const allocation = matchingFt ? (matchingFt.data as any).label : handleCat.frameTypeValue;
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card>
@@ -1307,6 +1498,7 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
           fields={fields}
           fieldLabels={fieldLabels}
           entry={editEntry}
+          allocation={allocation}
           onClose={() => { setShowAdd(false); setEditEntry(null); }}
         />
       )}
@@ -1320,12 +1512,13 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
   );
 }
 
-function SimpleDialog({ type, title, fields, fieldLabels, entry, onClose }: {
+function SimpleDialog({ type, title, fields, fieldLabels, entry, allocation, onClose }: {
   type: string;
   title: string;
   fields: string[];
   fieldLabels: Record<string, string>;
   entry: LibraryEntry | null;
+  allocation?: string;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -1365,6 +1558,12 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, onClose }: {
           <DialogDescription>Configure the entry details</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          {allocation && (
+            <div className="bg-muted/50 rounded p-2 text-xs" data-testid="text-dialog-allocation">
+              <span className="text-muted-foreground">Allocated to: </span>
+              <span className="font-medium">{allocation}</span>
+            </div>
+          )}
           {fields.map((f) => (
             <div key={f}>
               <Label>{fieldLabels[f] || f}</Label>

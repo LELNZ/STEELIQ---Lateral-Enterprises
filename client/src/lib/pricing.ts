@@ -9,6 +9,7 @@ export interface PricingBreakdown {
   glassCostNzd: number;
   linerCostNzd: number;
   handleCostNzd: number;
+  wanzBarCostNzd: number;
   totalWeightKg: number;
   netCostNzd: number;
   actualCostPerSqm: number;
@@ -17,11 +18,20 @@ export interface PricingBreakdown {
   marginPercent: number;
 }
 
+export interface WanzBarPricingInput {
+  enabled: boolean;
+  source: "nz-local" | "direct" | "";
+  kgPerMetre: number;
+  pricePerKgUsd: number;
+  priceNzdPerLinM: number;
+}
+
 export interface PricingExtras {
   glassPricePerSqm?: number | null;
   linerPricePerM?: number | null;
   handlePriceEach?: number | null;
   openingPanelCount?: number;
+  wanzBar?: WanzBarPricingInput;
 }
 
 function calcProfileLength(
@@ -98,9 +108,20 @@ export function calculatePricing(
   const openingPanelCount = extras?.openingPanelCount ?? 1;
   const handleCostNzd = handlePriceEach != null ? handlePriceEach * openingPanelCount * quantity : 0;
 
+  let wanzBarCostNzd = 0;
+  const wb = extras?.wanzBar;
+  if (wb && wb.enabled && wb.source) {
+    const widthM = widthMm / 1000;
+    if (wb.source === "nz-local") {
+      wanzBarCostNzd = wb.priceNzdPerLinM * widthM * quantity;
+    } else if (wb.source === "direct") {
+      wanzBarCostNzd = wb.pricePerKgUsd * wb.kgPerMetre * widthM * usdToNzdRate * quantity;
+    }
+  }
+
   const profilesCostNzd = profilesCostUsd * usdToNzdRate;
   const accessoriesCostNzd = accessoriesCostUsd * usdToNzdRate;
-  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd;
+  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + wanzBarCostNzd;
   const actualCostPerSqm = sqm > 0 ? netCostNzd / sqm : 0;
   const salePriceNzd = salePricePerSqm * sqm;
   const marginNzd = salePriceNzd - netCostNzd;
@@ -115,6 +136,7 @@ export function calculatePricing(
     glassCostNzd,
     linerCostNzd,
     handleCostNzd,
+    wanzBarCostNzd,
     totalWeightKg,
     netCostNzd,
     actualCostPerSqm,

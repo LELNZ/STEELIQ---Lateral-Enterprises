@@ -8,7 +8,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { GLASS_LIBRARY } from "@shared/glass-library";
-import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES } from "@shared/item-options";
+import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS } from "@shared/item-options";
 
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
@@ -52,6 +52,9 @@ async function seedLibraryDefaults() {
   for (const hc of HANDLE_CATEGORIES) {
     await seedType(hc.type, hc.defaults.map((h) => ({ data: { value: h.value, label: h.label, priceProvision: h.priceProvision } })));
   }
+  await seedType("wanz_bar", WANZ_BAR_DEFAULTS.map((wb) => ({
+    data: { value: wb.value, label: wb.label, sectionNumber: wb.sectionNumber, kgPerMetre: wb.kgPerMetre, pricePerKgUsd: wb.pricePerKgUsd, priceNzdPerLinM: wb.priceNzdPerLinM }
+  })));
 }
 
 export async function registerRoutes(
@@ -63,6 +66,15 @@ export async function registerRoutes(
     console.log("Library is empty, seeding defaults...");
     await seedLibraryDefaults();
     console.log("Library seeded with defaults");
+  } else {
+    const hasWanzBar = existingEntries.some((e) => e.type === "wanz_bar");
+    if (!hasWanzBar) {
+      console.log("Seeding wanz_bar defaults...");
+      for (let i = 0; i < WANZ_BAR_DEFAULTS.length; i++) {
+        const wb = WANZ_BAR_DEFAULTS[i];
+        await storage.createLibraryEntry({ type: "wanz_bar", data: { value: wb.value, label: wb.label, sectionNumber: wb.sectionNumber, kgPerMetre: wb.kgPerMetre, pricePerKgUsd: wb.pricePerKgUsd, priceNzdPerLinM: wb.priceNzdPerLinM }, sortOrder: i });
+      }
+    }
   }
 
   app.post("/api/jobs", async (req, res) => {

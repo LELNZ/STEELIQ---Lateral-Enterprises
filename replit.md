@@ -34,7 +34,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 ## Database Tables
 - `jobs`: id (uuid PK), name (text, required), address (text), date (text), created_at (timestamp)
 - `job_items`: id (uuid PK), job_id (varchar FK), config (jsonb — full QuoteItem), photo (text, nullable — base64), sort_order (integer)
-- `library_entries`: id (uuid PK), type (text — "glass", "frame_type", "frame_color", "awning_handle", "sliding_window_handle", "entrance_door_handle", "hinge_door_handle", "sliding_door_handle", "bifold_door_handle", "stacker_door_handle", "liner_type"), data (jsonb), sort_order (integer). Auto-seeded per value on first run; new entries are inserted individually if missing (preserves existing IDs to avoid FK breakage).
+- `library_entries`: id (uuid PK), type (text — "glass", "frame_type", "frame_color", "awning_handle", "sliding_window_handle", "entrance_door_handle", "hinge_door_handle", "sliding_door_handle", "bifold_door_handle", "stacker_door_handle", "liner_type", "wanz_bar"), data (jsonb), sort_order (integer). Auto-seeded per value on first run; wanz_bar entries auto-seeded if missing.
 - `users`: id (uuid PK), username (text), password (text) — boilerplate, not currently used
 
 ## API Routes
@@ -80,7 +80,10 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Drawing Legend**: Positioned to the LEFT of the height dimension line, toggleable on/off. Shows frame size, window/door type info
 - **Item ID / Reference**: Combobox with room dropdown (14 rooms: KIT, LNG, DIN, BED, MBR, ENS, BTH, WC, LDY, GAR, HWY, STD, RMP, ENT). Floor selector (G, 1, 2, 3, B). Auto-generates CODE-FLOOR## format
 - **Glass Library**: Full pricing table for EnergySaver™ (R=0.37) and LightBridge™ (R=0.46) IGU types with 16 glass combinations each × 5-6 thickness options. Collapsible by IGU type in Library page
-- **Handle Categories**: 7 category-specific handle types (awning_handle, sliding_window_handle, entrance_door_handle, hinge_door_handle, sliding_door_handle, bifold_door_handle, stacker_door_handle) with collapsible UI in Library page. Each maps to a frame model (ES52, ES127, ES70). Quote builder and exec-summary use category-specific lookups with legacy fallback
+- **Handle Categories**: 7 category-specific handle types with collapsible UI in Library page. Allocation uses `categoryMatch` field for rename-proof frame type lookup (matches by category array, not value string). Edit/add dialogs show allocation info
+- **Wanz Bar (Sill Support)**: 6 WANZ products (19mm–55mm) in Library with kg/m, USD/kg, NZD/lin.m pricing. Auto-seeded. Source selection: NZ Local or Direct Supplier. Auto-enable hint at width ≥ 600mm. Pricing: NZ Local = priceNzdPerLinM × width; Direct = pricePerKgUsd × kgPerMetre × width × rate. Included in net cost and exec summary
+- **Auto-save**: Existing jobs (with savedJobId) auto-save 3s after item changes
+- **Auto-generate configurations**: On item add, if no matching config exists, auto-generates from base config. Manual button still available
 
 ## Settings (localStorage: proquote-settings)
 - `showLegendDefault` (boolean, default true) — whether legend is shown by default on new items
@@ -101,7 +104,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Frame types**: ES52 Window, ES52 Hinge Door (hinge-door only), Entrance Door (entrance-door only), French Door (french-door only), ES70 Bifold, ES127 Sliding Window, ES127 Sliding Door
 
 ## Data Model
-- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, showLegend, customColumns, pricePerSqm, frameType, frameColor, flashingSize, windZone, linerType, glassIguType, glassType, glassThickness, wanzBar, wallThickness, heightFromFloor, handleType
+- `quoteItemSchema` fields: name, quantity, category, width, height, layout, windowType, hingeSide, openDirection, halfSolid, panels, sidelightWidth, sidelightEnabled, sidelightSide, doorSplit, doorSplitHeight, bifoldLeftCount, centerWidth, entranceDoorRows, entranceSidelightRows, entranceSidelightLeftRows, hingeDoorRows, frenchDoorLeftRows, frenchDoorRightRows, panelRows, showLegend, customColumns, pricePerSqm, frameType, frameColor, flashingSize, windZone, linerType, glassIguType, glassType, glassThickness, wanzBar, wanzBarSource, wanzBarSize, wallThickness, heightFromFloor, handleType
 - `entranceDoorRows` / `entranceSidelightRows` / `entranceSidelightLeftRows`: Arrays of `{ height: number, type: "fixed"|"awning" }`
 - `hingeDoorRows`: Array of `{ height: number, type: "fixed"|"awning" }`
 - `frenchDoorLeftRows` / `frenchDoorRightRows`: Arrays of `{ height: number, type: "fixed"|"awning" }`

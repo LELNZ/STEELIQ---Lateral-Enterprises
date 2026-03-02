@@ -5,7 +5,7 @@ import { type QuoteItem, type JobItem, type ConfigurationProfile, type Configura
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
 import { getGlassPrice } from "@shared/glass-library";
-import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, HANDLE_CATEGORIES } from "@shared/item-options";
+import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,6 +142,7 @@ export default function ExecSummary() {
   const { data: libSlidingDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "sliding_door_handle"], queryFn: fetchLib("sliding_door_handle") });
   const { data: libBifoldDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "bifold_door_handle"], queryFn: fetchLib("bifold_door_handle") });
   const { data: libStackerDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "stacker_door_handle"], queryFn: fetchLib("stacker_door_handle") });
+  const { data: libWanzBars = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "wanz_bar"], queryFn: fetchLib("wanz_bar") });
 
   const handlesByType: Record<string, LibraryEntry[]> = {
     awning_handle: libAwningHandles,
@@ -197,6 +198,13 @@ export default function ExecSummary() {
         if (hasData) {
           const sig = deriveConfigSignature(item);
           const openingPanels = Math.max(1, sig.awningCount + sig.hingeCount + sig.slidingCount);
+          const wanzBarInput = (() => {
+            if (!item.wanzBar || !item.wanzBarSource || !item.wanzBarSize) return undefined;
+            const wbEntry = libWanzBars.find((e) => (e.data as any).value === item.wanzBarSize);
+            const d = wbEntry ? (wbEntry.data as any) : WANZ_BAR_DEFAULTS.find((wb) => wb.value === item.wanzBarSize);
+            if (!d) return undefined;
+            return { enabled: true, source: item.wanzBarSource as "nz-local" | "direct", kgPerMetre: d.kgPerMetre || 0, pricePerKgUsd: d.pricePerKgUsd || 0, priceNzdPerLinM: d.priceNzdPerLinM || 0 };
+          })();
           pricing = calculatePricing(
             item.width, item.height, item.quantity || 1,
             cd.profiles, cd.accessories, cd.labor,
@@ -206,6 +214,7 @@ export default function ExecSummary() {
               linerPricePerM: lookupLinerPrice(item.linerType || ""),
               handlePriceEach: lookupHandlePrice(item.handleType || "", item.category),
               openingPanelCount: openingPanels,
+              wanzBar: wanzBarInput,
             }
           );
         }
@@ -213,7 +222,7 @@ export default function ExecSummary() {
 
       return { item, sqm, salePrice, pricing, configName };
     });
-  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles]);
+  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libWanzBars]);
 
   const totals = useMemo(() => {
     let totalSqm = 0;
@@ -228,7 +237,7 @@ export default function ExecSummary() {
       totalSalePrice += ip.pricing?.salePriceNzd ?? ip.salePrice;
       if (ip.pricing) {
         totalNetCost += ip.pricing.netCostNzd;
-        totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd;
+        totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd + ip.pricing.wanzBarCostNzd;
         totalLabor += ip.pricing.laborCostNzd;
         totalWeight += ip.pricing.totalWeightKg;
       }
@@ -366,6 +375,7 @@ export default function ExecSummary() {
                         <TableCell className="font-medium" data-testid={`text-item-name-${idx}`}>{ip.item.name}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ip.item.category] || ip.item.category}</Badge>
+                          {ip.configName && <span className="text-xs text-muted-foreground ml-1.5" data-testid={`text-config-name-${idx}`}>{ip.configName}</span>}
                         </TableCell>
                         <TableCell className="text-right text-xs">{ip.item.width}×{ip.item.height}</TableCell>
                         <TableCell className="text-right">{ip.sqm.toFixed(2)}</TableCell>
@@ -409,9 +419,15 @@ export default function ExecSummary() {
                                 <span className="text-muted-foreground block">Handle (NZD)</span>
                                 <span className="font-medium">${fmt(ip.pricing.handleCostNzd)}</span>
                               </div>
+                              {ip.pricing.wanzBarCostNzd > 0 && (
+                                <div>
+                                  <span className="text-muted-foreground block">Wanz Bar (NZD)</span>
+                                  <span className="font-medium">${fmt(ip.pricing.wanzBarCostNzd)}</span>
+                                </div>
+                              )}
                               <div>
                                 <span className="text-muted-foreground block">Materials Total</span>
-                                <span className="font-medium">${fmt(ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd)}</span>
+                                <span className="font-medium">${fmt(ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd + ip.pricing.wanzBarCostNzd)}</span>
                               </div>
                               <div>
                                 <span className="text-muted-foreground block">Actual $/m²</span>

@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
-import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory } from "@shared/item-options";
+import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory } from "@shared/item-options";
 import type { LibraryEntry } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
@@ -150,6 +150,8 @@ const defaultValues: InsertQuoteItem = {
   glassType: "",
   glassThickness: "",
   wanzBar: false,
+  wanzBarSource: "",
+  wanzBarSize: "",
   wallThickness: 0,
   heightFromFloor: 0,
   handleType: "",
@@ -213,6 +215,7 @@ export default function QuoteBuilder() {
   const { data: libWindowHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "window_handle"], queryFn: fetchLib("window_handle") });
   const { data: libDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "door_handle"], queryFn: fetchLib("door_handle") });
   const { data: libLiners = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "liner_type"], queryFn: fetchLib("liner_type") });
+  const { data: libWanzBars = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "wanz_bar"], queryFn: fetchLib("wanz_bar") });
 
   const libFrameTypesForCategory = (cat: string) => {
     const fromDb = libFrameTypes.filter((e) => {
@@ -374,13 +377,25 @@ export default function QuoteBuilder() {
 
   const openingPanelCount = configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount;
 
+  const wanzBarPricingInput = (() => {
+    if (!w.wanzBar || !w.wanzBarSource || !w.wanzBarSize) return undefined;
+    const wbEntry = libWanzBars.find((e) => (e.data as any).value === w.wanzBarSize);
+    if (!wbEntry) {
+      const fallback = WANZ_BAR_DEFAULTS.find((wb) => wb.value === w.wanzBarSize);
+      if (!fallback) return undefined;
+      return { enabled: true, source: w.wanzBarSource as "nz-local" | "direct", kgPerMetre: fallback.kgPerMetre, pricePerKgUsd: fallback.pricePerKgUsd, priceNzdPerLinM: fallback.priceNzdPerLinM };
+    }
+    const d = wbEntry.data as any;
+    return { enabled: true, source: w.wanzBarSource as "nz-local" | "direct", kgPerMetre: d.kgPerMetre || 0, pricePerKgUsd: d.pricePerKgUsd || 0, priceNzdPerLinM: d.priceNzdPerLinM || 0 };
+  })();
+
   const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
   const currentPricing: PricingBreakdown | null = hasConfigData
     ? calculatePricing(
         w.width || 0, w.height || 0, w.quantity || 1,
         configProfiles, configAccessories, configLabor,
         usdToNzdRate, w.pricePerSqm || 500,
-        { glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount: Math.max(1, openingPanelCount) }
+        { glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput }
       )
     : null;
 
@@ -655,15 +670,79 @@ export default function QuoteBuilder() {
     setRoomFilter("");
   }
 
-  function onSubmit(data: InsertQuoteItem) {
+  async function autoGenerateConfiguration(sig: ConfigSignature): Promise<string | null> {
+    if (!currentFrameTypeLibId || configurations.length === 0) return null;
+    if (findMatchingConfiguration(sig, configurations)) return null;
+    const baseConfig = configurations[0];
+    try {
+      const baseProfiles = await fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []);
+      const baseAccessories = await fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []);
+      const baseLabor = await fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []);
+      const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
+        frameTypeId: currentFrameTypeLibId,
+        name: sig.label,
+        description: `Auto-generated: ${sig.label}`,
+        defaultSalePricePerSqm: baseConfig.defaultSalePricePerSqm || 550,
+        sortOrder: configurations.length,
+      });
+      const newConfig = await newConfigRes.json();
+      for (const p of baseProfiles) {
+        let qty = p.quantityPerSet || 1;
+        if (p.role === "sash-frame") qty = Math.max(1, sig.awningCount + sig.hingeCount + sig.slidingCount);
+        await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+          configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
+          kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
+          quantityPerSet: qty, lengthFormula: p.lengthFormula, surface: p.surface, sortOrder: p.sortOrder,
+        });
+      }
+      if (sig.mullionCount > 0) {
+        const hasMullion = baseProfiles.some((p: any) => p.role === "mullion");
+        if (!hasMullion) {
+          await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+            configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
+            kgPerMetre: "0.78", pricePerKgUsd: "5.60",
+            quantityPerSet: sig.mullionCount, lengthFormula: "height", surface: "", sortOrder: 99,
+          });
+        }
+      }
+      for (const a of baseAccessories) {
+        await apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
+          configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
+          priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
+        });
+      }
+      for (const l of baseLabor) {
+        await apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
+          configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });
+      toast({ title: "Configuration created", description: `"${sig.label}" auto-generated and added to library.` });
+      return newConfig.id;
+    } catch {
+      return null;
+    }
+  }
+
+  async function onSubmit(data: InsertQuoteItem) {
+    const sig = deriveConfigSignature(data as QuoteItem);
+    const matchingConfig = findMatchingConfiguration(sig, configurations);
+    let finalData = { ...data };
+    if (!matchingConfig && configurations.length > 0 && currentFrameTypeLibId) {
+      const newConfigId = await autoGenerateConfiguration(sig);
+      if (newConfigId) {
+        const baseConfig = configurations[0];
+        finalData = { ...finalData, configurationId: newConfigId, pricePerSqm: baseConfig?.defaultSalePricePerSqm || finalData.pricePerSqm || 500 };
+      }
+    }
     if (editingId) {
-      setItems(items.map((iwp) => (iwp.item.id === editingId ? { ...iwp, item: { ...data, id: editingId } } : iwp)));
+      setItems(items.map((iwp) => (iwp.item.id === editingId ? { ...iwp, item: { ...finalData, id: editingId } } : iwp)));
       setEditingId(null);
-      toast({ title: "Item updated", description: `${data.name} has been updated.` });
+      toast({ title: "Item updated", description: `${finalData.name} has been updated.` });
     } else {
-      const newItem: QuoteItem = { ...data, id: crypto.randomUUID() };
+      const newItem: QuoteItem = { ...finalData, id: crypto.randomUUID() };
       setItems([...items, { item: newItem }]);
-      toast({ title: "Item added", description: `${data.name} added to quote.` });
+      toast({ title: "Item added", description: `${finalData.name} added to quote.` });
     }
     setHasUnsavedChanges(true);
     form.reset({ ...defaultValues });
@@ -881,6 +960,16 @@ export default function QuoteBuilder() {
       setIsSaving(false);
     }
   }
+
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!savedJobId || !hasUnsavedChanges || items.length === 0 || !jobName.trim()) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveJob();
+    }, 3000);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate]);
 
   function calcSqm(width: number, height: number, quantity: number): string {
     return ((width * height * quantity) / 1_000_000).toFixed(2);
@@ -1833,55 +1922,14 @@ export default function QuoteBuilder() {
                           className="w-full mt-1.5 text-xs"
                           data-testid="button-auto-generate-config"
                           onClick={async () => {
-                            const baseConfig = configurations[0];
-                            if (!baseConfig || !currentFrameTypeLibId) return;
-                            try {
-                              const baseProfiles = await fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []);
-                              const baseAccessories = await fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []);
-                              const baseLabor = await fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []);
-                              const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
-                                frameTypeId: currentFrameTypeLibId,
-                                name: configSignature.label,
-                                description: `Auto-generated: ${configSignature.label}`,
-                                defaultSalePricePerSqm: baseConfig.defaultSalePricePerSqm || 550,
-                                sortOrder: configurations.length,
-                              });
-                              const newConfig = await newConfigRes.json();
-                              for (const p of baseProfiles) {
-                                let qty = p.quantityPerSet || 1;
-                                if (p.role === "sash-frame") qty = Math.max(1, configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount);
-                                await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-                                  configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
-                                  kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
-                                  quantityPerSet: qty, lengthFormula: p.lengthFormula, surface: p.surface, sortOrder: p.sortOrder,
-                                });
+                            const newId = await autoGenerateConfiguration(configSignature);
+                            if (newId) {
+                              form.setValue("configurationId", newId);
+                              const baseConfig = configurations[0];
+                              if (baseConfig?.defaultSalePricePerSqm) {
+                                form.setValue("pricePerSqm", baseConfig.defaultSalePricePerSqm);
                               }
-                              if (configSignature.mullionCount > 0) {
-                                const hasMullion = baseProfiles.some((p: any) => p.role === "mullion");
-                                if (!hasMullion) {
-                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-                                    configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
-                                    kgPerMetre: "0.78", pricePerKgUsd: "5.60",
-                                    quantityPerSet: configSignature.mullionCount, lengthFormula: "height", surface: "", sortOrder: 99,
-                                  });
-                                }
-                              }
-                              for (const a of baseAccessories) {
-                                await apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
-                                  configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
-                                  priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
-                                });
-                              }
-                              for (const l of baseLabor) {
-                                await apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
-                                  configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
-                                });
-                              }
-                              queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });
-                              form.setValue("configurationId", newConfig.id);
-                              form.setValue("pricePerSqm", newConfig.defaultSalePricePerSqm || 550);
-                              toast({ title: "Configuration created", description: `"${configSignature.label}" generated and selected.` });
-                            } catch {
+                            } else {
                               toast({ title: "Error", description: "Failed to generate configuration", variant: "destructive" });
                             }
                           }}
@@ -1967,6 +2015,12 @@ export default function QuoteBuilder() {
                             <>
                               <span className="text-muted-foreground">Handle (NZD)</span>
                               <span className="text-right font-medium" data-testid="text-handle-cost">${currentPricing.handleCostNzd.toFixed(2)}</span>
+                            </>
+                          )}
+                          {currentPricing.wanzBarCostNzd > 0 && (
+                            <>
+                              <span className="text-muted-foreground">Wanz Bar (NZD)</span>
+                              <span className="text-right font-medium" data-testid="text-wanz-bar-cost">${currentPricing.wanzBarCostNzd.toFixed(2)}</span>
                             </>
                           )}
                         </div>
@@ -2134,11 +2188,68 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Checkbox id="wanzBar" checked={w.wanzBar === true}
-                        onCheckedChange={(v) => form.setValue("wanzBar", !!v)}
-                        data-testid="checkbox-wanz-bar" />
-                      <Label htmlFor="wanzBar" className="text-xs cursor-pointer">Wanz Bar (Lower Support)</Label>
+
+                    <Separator className="my-3" />
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Wanz Bar (Sill Support)</Label>
+                        <div className="flex items-center gap-2">
+                          <Checkbox id="wanzBar" checked={w.wanzBar === true}
+                            onCheckedChange={(v) => {
+                              form.setValue("wanzBar", !!v);
+                              if (v && !w.wanzBarSource) form.setValue("wanzBarSource", "nz-local");
+                            }}
+                            data-testid="checkbox-wanz-bar" />
+                          <Label htmlFor="wanzBar" className="text-xs cursor-pointer">Enable</Label>
+                        </div>
+                      </div>
+                      {(w.width || 0) >= 600 && WINDOW_CATEGORIES.includes(w.category || "") && !w.wanzBar && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="text-wanz-bar-required">
+                          <AlertTriangle className="w-3 h-3 inline mr-1" />Required: width ≥ 600mm
+                        </p>
+                      )}
+                      {w.wanzBar && (
+                        <div className="space-y-2">
+                          <div>
+                            <Label className="text-xs">Size</Label>
+                            <Select value={w.wanzBarSize || ""} onValueChange={(v) => form.setValue("wanzBarSize", v)}>
+                              <SelectTrigger data-testid="select-wanz-bar-size"><SelectValue placeholder="Select size" /></SelectTrigger>
+                              <SelectContent>
+                                {(libWanzBars.length > 0
+                                  ? libWanzBars.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label, kgPerMetre: (e.data as any).kgPerMetre }))
+                                  : WANZ_BAR_DEFAULTS.map((wb) => ({ value: wb.value, label: wb.label, kgPerMetre: wb.kgPerMetre }))
+                                ).map((wb) => (
+                                  <SelectItem key={wb.value} value={wb.value}>{wb.label} ({wb.kgPerMetre} kg/m)</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-xs">Source</Label>
+                            <Select value={w.wanzBarSource || ""} onValueChange={(v) => form.setValue("wanzBarSource", v as any)}>
+                              <SelectTrigger data-testid="select-wanz-bar-source"><SelectValue placeholder="Select source" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="nz-local">NZ Local</SelectItem>
+                                <SelectItem value="direct">Direct Supplier</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {w.wanzBarSize && w.wanzBarSource && (() => {
+                            const wbEntry = libWanzBars.find((e) => (e.data as any).value === w.wanzBarSize);
+                            const d = wbEntry ? (wbEntry.data as any) : WANZ_BAR_DEFAULTS.find((wb) => wb.value === w.wanzBarSize);
+                            if (!d) return null;
+                            return (
+                              <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 space-y-0.5" data-testid="text-wanz-bar-info">
+                                <div>{d.kgPerMetre} kg/m · Section: {d.sectionNumber || d.value}</div>
+                                {w.wanzBarSource === "nz-local" && <div>NZ Price: {d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}/lin.m` : "Not set"}</div>}
+                                {w.wanzBarSource === "direct" && <div>Direct Price: {d.pricePerKgUsd ? `$${d.pricePerKgUsd} USD/kg` : "Not set"}</div>}
+                                <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-1">Fixings: 10g × 50mm SS, max 300mm centres</div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

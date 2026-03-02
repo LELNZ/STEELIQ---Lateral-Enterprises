@@ -9,6 +9,7 @@ export interface ConfigSignature {
   slidingCount: number;
   hingeCount: number;
   mullionCount: number;
+  transomCount: number;
 }
 
 function countPanelTypes(columns: CustomColumn[]): { awning: number; fixed: number; sliding: number; hinge: number } {
@@ -26,13 +27,39 @@ function countPanelTypes(columns: CustomColumn[]): { awning: number; fixed: numb
   return { awning, fixed, sliding, hinge };
 }
 
-function buildLabel(counts: { awning: number; fixed: number; sliding: number; hinge: number }): string {
+function countTransoms(columns: CustomColumn[]): number {
+  let transoms = 0;
+  for (const col of columns) {
+    if (col.rows.length > 1) {
+      transoms += col.rows.length - 1;
+    }
+  }
+  return transoms;
+}
+
+function buildLabel(
+  counts: { awning: number; fixed: number; sliding: number; hinge: number },
+  mullionCount?: number,
+  transomCount?: number
+): string {
   const parts: string[] = [];
   if (counts.awning > 0) parts.push(`${counts.awning} Awning`);
   if (counts.fixed > 0) parts.push(`${counts.fixed} Fixed`);
   if (counts.sliding > 0) parts.push(`${counts.sliding} Sliding`);
   if (counts.hinge > 0) parts.push(`${counts.hinge} Hinge`);
-  return parts.join(" + ") || "Fixed";
+  let label = parts.join(" + ") || "Fixed";
+
+  const extras: string[] = [];
+  if (mullionCount && mullionCount > 0) extras.push(`${mullionCount} Mullion`);
+  if (transomCount && transomCount > 0) extras.push(`${transomCount} Transom`);
+  if (extras.length > 0) label += ", " + extras.join(", ");
+
+  return label;
+}
+
+function extractPanelPart(label: string): string {
+  const commaIdx = label.indexOf(",");
+  return commaIdx >= 0 ? label.substring(0, commaIdx).trim() : label.trim();
 }
 
 export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
@@ -43,7 +70,8 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       const counts = countPanelTypes(item.customColumns);
       const totalCols = item.customColumns.length;
       const mullionCount = Math.max(0, totalCols - 1);
-      const label = buildLabel(counts);
+      const transomCount = countTransoms(item.customColumns);
+      const label = buildLabel(counts, mullionCount, transomCount);
       return {
         signature: `window:${label}`,
         label,
@@ -52,6 +80,7 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
         slidingCount: counts.sliding,
         hingeCount: counts.hinge,
         mullionCount,
+        transomCount,
       };
     }
     const wt = item.windowType || "fixed";
@@ -64,6 +93,7 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       slidingCount: 0,
       hingeCount: 0,
       mullionCount: 0,
+      transomCount: 0,
     };
   }
 
@@ -72,18 +102,24 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       const counts = countPanelTypes(item.customColumns);
       const totalCols = item.customColumns.length;
       const mullionCount = Math.max(0, totalCols - 1);
-      const label = buildLabel(counts);
+      const transomCount = countTransoms(item.customColumns);
+      const label = buildLabel(counts, mullionCount, transomCount);
       return {
         signature: `sliding:${label}`,
         label,
-        ...counts,
+        awningCount: counts.awning,
+        fixedCount: counts.fixed,
+        slidingCount: counts.sliding,
+        hingeCount: counts.hinge,
         mullionCount,
+        transomCount,
       };
     }
     const panels = item.panels || 2;
     const fixedCount = Math.ceil(panels / 2);
     const slidingCount = panels - fixedCount;
-    const label = buildLabel({ awning: 0, fixed: fixedCount, sliding: slidingCount, hinge: 0 });
+    const mullionCount = Math.max(0, panels - 1);
+    const label = buildLabel({ awning: 0, fixed: fixedCount, sliding: slidingCount, hinge: 0 }, mullionCount, 0);
     return {
       signature: `sliding:${label}`,
       label,
@@ -91,7 +127,8 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       fixedCount,
       slidingCount,
       hingeCount: 0,
-      mullionCount: Math.max(0, panels - 1),
+      mullionCount,
+      transomCount: 0,
     };
   }
 
@@ -106,6 +143,7 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       slidingCount: 0,
       hingeCount: 1,
       mullionCount: hasSidelight ? 1 : 0,
+      transomCount: 0,
     };
   }
 
@@ -118,6 +156,7 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       slidingCount: 0,
       hingeCount: 1,
       mullionCount: 0,
+      transomCount: 0,
     };
   }
 
@@ -130,6 +169,7 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       slidingCount: 0,
       hingeCount: 2,
       mullionCount: 1,
+      transomCount: 0,
     };
   }
 
@@ -144,6 +184,7 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       slidingCount: 0,
       hingeCount: panels,
       mullionCount: Math.max(0, panels - 1),
+      transomCount: 0,
     };
   }
 
@@ -155,6 +196,7 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
     slidingCount: 0,
     hingeCount: 0,
     mullionCount: 0,
+    transomCount: 0,
   };
 }
 
@@ -165,6 +207,7 @@ export function findMatchingConfiguration(
   if (configurations.length === 0) return null;
 
   const sigLower = sig.label.toLowerCase();
+  const sigPanelPart = extractPanelPart(sig.label).toLowerCase();
 
   for (const c of configurations) {
     const nameLower = c.name.toLowerCase();
@@ -173,29 +216,38 @@ export function findMatchingConfiguration(
 
   for (const c of configurations) {
     const nameLower = c.name.toLowerCase();
-    if (sigLower === "awning" && nameLower.includes("awning") && !nameLower.includes("+")) return c;
-    if (sigLower === "fixed" && nameLower.includes("fixed") && !nameLower.includes("+")) return c;
-    if (sigLower === "standard" && nameLower.includes("standard")) return c;
+    const namePanelPart = extractPanelPart(c.name).toLowerCase();
+    if (namePanelPart === sigPanelPart && sigPanelPart !== sigLower) return c;
+  }
+
+  for (const c of configurations) {
+    const nameLower = c.name.toLowerCase();
+    if (sigPanelPart === "awning" && nameLower.includes("awning") && !nameLower.includes("+")) return c;
+    if (sigPanelPart === "fixed" && nameLower.includes("fixed") && !nameLower.includes("+")) return c;
+    if (sigPanelPart === "standard" && nameLower.includes("standard")) return c;
   }
 
   const awningPatterns: Record<string, RegExp> = {
-    "1 Awning + 1 Fixed": /1\s*a\w*\s*\+?\s*1\s*f/i,
-    "2 Awning + 1 Fixed": /2\s*a\w*\s*\+?\s*1\s*f/i,
-    "1 Awning + 2 Fixed": /1\s*a\w*\s*\+?\s*2\s*f/i,
-    "2 Awning + 2 Fixed": /2\s*a\w*\s*\+?\s*2\s*f/i,
+    "1 awning + 1 fixed": /1\s*a\w*\s*\+?\s*1\s*f/i,
+    "2 awning + 1 fixed": /2\s*a\w*\s*\+?\s*1\s*f/i,
+    "1 awning + 2 fixed": /1\s*a\w*\s*\+?\s*2\s*f/i,
+    "2 awning + 2 fixed": /2\s*a\w*\s*\+?\s*2\s*f/i,
+    "2 awning + 3 fixed": /2\s*a\w*\s*\+?\s*3\s*f/i,
+    "3 awning + 2 fixed": /3\s*a\w*\s*\+?\s*2\s*f/i,
   };
 
   for (const c of configurations) {
+    const namePanelPart = extractPanelPart(c.name).toLowerCase();
     for (const [patLabel, regex] of Object.entries(awningPatterns)) {
-      if (sigLower === patLabel.toLowerCase() && regex.test(c.name)) return c;
+      if (sigPanelPart === patLabel && regex.test(namePanelPart)) return c;
     }
   }
 
   for (const c of configurations) {
     const nameLower = c.name.toLowerCase();
-    if (sigLower.includes("awning") && nameLower.includes("awning")) return c;
-    if (sigLower.includes("sliding") && nameLower.includes("sliding")) return c;
-    if (sigLower.includes("hinge") && nameLower.includes("hinge")) return c;
+    if (sigPanelPart.includes("awning") && nameLower.includes("awning")) return c;
+    if (sigPanelPart.includes("sliding") && nameLower.includes("sliding")) return c;
+    if (sigPanelPart.includes("hinge") && nameLower.includes("hinge")) return c;
   }
 
   return null;

@@ -86,6 +86,8 @@ export const quoteItemSchema = z.object({
   glassType: z.string().default(""),
   glassThickness: z.string().default(""),
   wanzBar: z.boolean().default(false),
+  wanzBarSource: z.enum(["nz-local", "direct", ""]).default(""),
+  wanzBarSize: z.string().default(""),
   wallThickness: z.number().default(0),
   heightFromFloor: z.number().default(0),
   handleType: z.string().default(""),
