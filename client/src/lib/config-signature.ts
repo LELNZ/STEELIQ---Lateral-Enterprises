@@ -234,6 +234,9 @@ export function findMatchingConfiguration(
     "2 awning + 2 fixed": /2\s*a\w*\s*\+?\s*2\s*f/i,
     "2 awning + 3 fixed": /2\s*a\w*\s*\+?\s*3\s*f/i,
     "3 awning + 2 fixed": /3\s*a\w*\s*\+?\s*2\s*f/i,
+    "3 awning + 3 fixed": /3\s*a\w*\s*\+?\s*3\s*f/i,
+    "1 awning + 3 fixed": /1\s*a\w*\s*\+?\s*3\s*f/i,
+    "3 awning + 1 fixed": /3\s*a\w*\s*\+?\s*1\s*f/i,
   };
 
   for (const c of configurations) {
@@ -241,13 +244,6 @@ export function findMatchingConfiguration(
     for (const [patLabel, regex] of Object.entries(awningPatterns)) {
       if (sigPanelPart === patLabel && regex.test(namePanelPart)) return c;
     }
-  }
-
-  for (const c of configurations) {
-    const nameLower = c.name.toLowerCase();
-    if (sigPanelPart.includes("awning") && nameLower.includes("awning")) return c;
-    if (sigPanelPart.includes("sliding") && nameLower.includes("sliding")) return c;
-    if (sigPanelPart.includes("hinge") && nameLower.includes("hinge")) return c;
   }
 
   return null;

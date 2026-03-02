@@ -453,7 +453,7 @@ async function seedES52WindowConfigs(frameTypeId: string) {
   const awning = await storage.createFrameConfiguration({
     frameTypeId,
     name: "Awning",
-    description: "Single awning pane, no mullion/transom",
+    description: "Single awning pane, 0 Mullion, 0 Transom",
     defaultSalePricePerSqm: 550,
     sortOrder: 0,
   });
@@ -475,7 +475,7 @@ async function seedES52WindowConfigs(frameTypeId: string) {
   const a1f = await storage.createFrameConfiguration({
     frameTypeId,
     name: "1 Awning + 1 Fixed",
-    description: "One awning pane + one fixed pane with 1 mullion, no transom",
+    description: "1 Awning + 1 Fixed, 1 Mullion, 0 Transom",
     defaultSalePricePerSqm: 550,
     sortOrder: 1,
   });
@@ -497,7 +497,7 @@ async function seedES52WindowConfigs(frameTypeId: string) {
   const a2f = await storage.createFrameConfiguration({
     frameTypeId,
     name: "2 Awning + 1 Fixed",
-    description: "Two awning panes + one fixed pane (center) with 2 mullions, no transom",
+    description: "2 Awning + 1 Fixed, 2 Mullion, 0 Transom",
     defaultSalePricePerSqm: 550,
     sortOrder: 2,
   });
@@ -543,7 +543,7 @@ async function seedES52HingeDoorConfigs(frameTypeId: string) {
   const standard = await storage.createFrameConfiguration({
     frameTypeId,
     name: "Standard (Open In)",
-    description: "1 pane: fixed + transom + fixed, outer frame + inner door frame",
+    description: "Standard entrance door, 0 Mullion, 1 Transom",
     defaultSalePricePerSqm: 550,
     sortOrder: 0,
   });
@@ -611,7 +611,7 @@ async function seedES127SlidingDoorConfigs(frameTypeId: string) {
   const standard = await storage.createFrameConfiguration({
     frameTypeId,
     name: "Standard",
-    description: "1 sliding pane (fixed+transom+fixed) + 1 non-sliding pane (fixed+transom+awning), outer frame + door/fixed pane frame",
+    description: "1 Fixed + 1 Sliding, 1 Mullion, 1 Transom",
     defaultSalePricePerSqm: 650,
     sortOrder: 0,
   });
@@ -695,7 +695,7 @@ async function seedES52BayWindowConfigs(frameTypeId: string) {
   const standard = await storage.createFrameConfiguration({
     frameTypeId,
     name: "Standard",
-    description: "Bay window configuration with multiple panes at angles",
+    description: "Bay window, 2 Mullion, 0 Transom",
     defaultSalePricePerSqm: 600,
     sortOrder: 0,
   });
@@ -720,7 +720,7 @@ async function seedES127StackerDoorConfigs(frameTypeId: string) {
   const standard = await storage.createFrameConfiguration({
     frameTypeId,
     name: "Standard",
-    description: "Stacker door configuration with stacking sliding panels",
+    description: "Stacker door, 1 Mullion, 1 Transom",
     defaultSalePricePerSqm: 700,
     sortOrder: 0,
   });

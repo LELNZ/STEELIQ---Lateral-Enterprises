@@ -1380,7 +1380,8 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
     const cats = (ft.data as any).categories;
     return Array.isArray(cats) && cats.includes(handleCat.categoryMatch);
   });
-  const allocation = matchingFt ? (matchingFt.data as any).label : handleCat.frameTypeValue;
+  const defaultAllocation = matchingFt ? (matchingFt.data as any).label : handleCat.frameTypeValue;
+  const allFrameTypeLabels = frameTypes.map((ft) => (ft.data as any).label as string).filter(Boolean);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card>
@@ -1395,7 +1396,7 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="pt-0">
-            <SimpleSection type={handleCat.type} title={handleCat.label} fields={["value", "label", "priceProvision"]} allocation={allocation} />
+            <SimpleSection type={handleCat.type} title={handleCat.label} fields={["value", "label", "priceProvision"]} defaultAllocation={defaultAllocation} allFrameTypeLabels={allFrameTypeLabels} />
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -1403,12 +1404,13 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
   );
 }
 
-function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: string; title: string; fields: string[]; priceUnit?: string; allocation?: string }) {
+function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allFrameTypeLabels }: { type: string; title: string; fields: string[]; priceUnit?: string; defaultAllocation?: string; allFrameTypeLabels?: string[] }) {
   const { toast } = useToast();
   const { data: entries = [], isLoading } = useLibraryEntries(type);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const hasAllocation = !!defaultAllocation;
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -1428,6 +1430,14 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
     label: "Display Label",
     priceProvision: priceUnit ? `Price (${priceUnit})` : "Price Provision ($)",
   };
+
+  function getEntryAllocations(entry: LibraryEntry): string {
+    const d = entry.data as any;
+    if (Array.isArray(d.allocations) && d.allocations.length > 0) {
+      return d.allocations.join(", ");
+    }
+    return defaultAllocation || "—";
+  }
 
   return (
     <div className="space-y-4" data-testid={`section-${type}`}>
@@ -1451,7 +1461,7 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
                     {fieldLabels[f] || f}
                   </TableHead>
                 ))}
-                {allocation && <TableHead>Allocation</TableHead>}
+                {hasAllocation && <TableHead>Allocation</TableHead>}
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -1467,8 +1477,8 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
                           : (d[f] ?? "—")}
                       </TableCell>
                     ))}
-                    {allocation && (
-                      <TableCell className="text-sm text-muted-foreground" data-testid={`text-allocation-${entry.id}`}>{allocation}</TableCell>
+                    {hasAllocation && (
+                      <TableCell className="text-sm text-muted-foreground" data-testid={`text-allocation-${entry.id}`}>{getEntryAllocations(entry)}</TableCell>
                     )}
                     <TableCell>
                       <div className="flex gap-1">
@@ -1484,7 +1494,7 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={fields.length + (allocation ? 2 : 1)} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={fields.length + (hasAllocation ? 2 : 1)} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1498,7 +1508,8 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
           fields={fields}
           fieldLabels={fieldLabels}
           entry={editEntry}
-          allocation={allocation}
+          defaultAllocation={defaultAllocation}
+          allFrameTypeLabels={allFrameTypeLabels}
           onClose={() => { setShowAdd(false); setEditEntry(null); }}
         />
       )}
@@ -1512,13 +1523,14 @@ function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: s
   );
 }
 
-function SimpleDialog({ type, title, fields, fieldLabels, entry, allocation, onClose }: {
+function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocation, allFrameTypeLabels, onClose }: {
   type: string;
   title: string;
   fields: string[];
   fieldLabels: Record<string, string>;
   entry: LibraryEntry | null;
-  allocation?: string;
+  defaultAllocation?: string;
+  allFrameTypeLabels?: string[];
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -1526,6 +1538,19 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, allocation, onC
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f, d[f]?.toString() || ""]))
   );
+
+  const initialAllocations: string[] = Array.isArray(d.allocations) && d.allocations.length > 0
+    ? d.allocations
+    : defaultAllocation ? [defaultAllocation] : [];
+  const [selectedAllocations, setSelectedAllocations] = useState<string[]>(initialAllocations);
+
+  const hasAllocationSelector = !!defaultAllocation && Array.isArray(allFrameTypeLabels) && allFrameTypeLabels.length > 0;
+
+  function toggleAllocation(label: string) {
+    setSelectedAllocations((prev) =>
+      prev.includes(label) ? prev.filter((a) => a !== label) : [...prev, label]
+    );
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1536,6 +1561,9 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, allocation, onC
         } else {
           data[f] = values[f];
         }
+      }
+      if (hasAllocationSelector) {
+        data.allocations = selectedAllocations;
       }
       if (entry) {
         await apiRequest("PATCH", `/api/library/${entry.id}`, { data });
@@ -1558,12 +1586,6 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, allocation, onC
           <DialogDescription>Configure the entry details</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          {allocation && (
-            <div className="bg-muted/50 rounded p-2 text-xs" data-testid="text-dialog-allocation">
-              <span className="text-muted-foreground">Allocated to: </span>
-              <span className="font-medium">{allocation}</span>
-            </div>
-          )}
           {fields.map((f) => (
             <div key={f}>
               <Label>{fieldLabels[f] || f}</Label>
@@ -1577,6 +1599,29 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, allocation, onC
               />
             </div>
           ))}
+          {hasAllocationSelector && (
+            <div>
+              <Label className="mb-2 block">Allocated Frame Types</Label>
+              <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto" data-testid="allocation-checkboxes">
+                {allFrameTypeLabels!.map((ftLabel) => (
+                  <div key={ftLabel} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`alloc-${ftLabel}`}
+                      checked={selectedAllocations.includes(ftLabel)}
+                      onCheckedChange={() => toggleAllocation(ftLabel)}
+                      data-testid={`checkbox-alloc-${ftLabel}`}
+                    />
+                    <label htmlFor={`alloc-${ftLabel}`} className="text-sm cursor-pointer select-none">
+                      {ftLabel}
+                    </label>
+                  </div>
+                ))}
+              </div>
+              {selectedAllocations.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">No frame types selected. Will default to: {defaultAllocation}</p>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
