@@ -129,7 +129,7 @@ export default function Library() {
             <HandlesSection />
           </TabsContent>
           <TabsContent value="liner_type">
-            <SimpleSection type="liner_type" title="Liner Types" fields={["value", "label", "priceProvision"]} />
+            <SimpleSection type="liner_type" title="Liner Types (price per linear metre)" fields={["value", "label", "priceProvision"]} priceUnit="/lin.m" />
           </TabsContent>
         </Tabs>
       </div>
@@ -139,7 +139,7 @@ export default function Library() {
 
 function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
   iguType: string;
-  info: { label: string; rValue: number; surcharge: number } | undefined;
+  info: { label: string; rValue: number } | undefined;
   items: LibraryEntry[];
   onEdit: (e: LibraryEntry) => void;
   onDelete: (id: string) => void;
@@ -155,10 +155,7 @@ function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
               {info?.label || iguType}
               <Badge variant="outline" className="text-[10px]">{items.length} combos</Badge>
               {info && (
-                <>
-                  <Badge variant="outline">R={info.rValue}</Badge>
-                  <Badge variant="secondary">+${info.surcharge}/m²</Badge>
-                </>
+                <Badge variant="outline">R={info.rValue}</Badge>
               )}
             </CardTitle>
           </CardHeader>
@@ -1213,7 +1210,7 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
   );
 }
 
-function SimpleSection({ type, title, fields }: { type: string; title: string; fields: string[] }) {
+function SimpleSection({ type, title, fields, priceUnit }: { type: string; title: string; fields: string[]; priceUnit?: string }) {
   const { toast } = useToast();
   const { data: entries = [], isLoading } = useLibraryEntries(type);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
@@ -1236,7 +1233,7 @@ function SimpleSection({ type, title, fields }: { type: string; title: string; f
   const fieldLabels: Record<string, string> = {
     value: "Value (ID)",
     label: "Display Label",
-    priceProvision: "Price Provision ($)",
+    priceProvision: priceUnit ? `Price (${priceUnit})` : "Price Provision ($)",
   };
 
   return (
@@ -1272,7 +1269,7 @@ function SimpleSection({ type, title, fields }: { type: string; title: string; f
                     {fields.map((f) => (
                       <TableCell key={f} className={f === "priceProvision" ? "text-right font-mono" : f === "value" ? "font-mono text-sm" : "font-medium"}>
                         {f === "priceProvision"
-                          ? (d[f] != null ? `$${d[f]}` : "—")
+                          ? (d[f] != null ? `$${d[f]}${priceUnit || ''}` : "—")
                           : (d[f] ?? "—")}
                       </TableCell>
                     ))}

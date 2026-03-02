@@ -39,8 +39,8 @@ export const GLASS_LIBRARY: GlassEntry[] = [
 ];
 
 export const IGU_INFO = {
-  EnergySaver: { label: "EnergySaver™ IGU (Entry-level Low-E)", rValue: 0.37, surcharge: 10 },
-  LightBridge: { label: "LightBridge™ IGU (High Performance Low-E)", rValue: 0.46, surcharge: 40 },
+  EnergySaver: { label: "EnergySaver™ IGU (Entry-level Low-E)", rValue: 0.37 },
+  LightBridge: { label: "LightBridge™ IGU (High Performance Low-E)", rValue: 0.46 },
 } as const;
 
 export function getGlassCombos(iguType: string): string[] {

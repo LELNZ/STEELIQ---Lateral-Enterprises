@@ -13,9 +13,32 @@ import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES } from "@shar
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
   const existingTypes = new Set(existing.map((e) => e.type));
+  const existingValues = new Set(
+    existing
+      .filter((e) => (e.data as any)?.value)
+      .map((e) => `${e.type}::${(e.data as any).value}`)
+  );
+  const existingCombos = new Set(
+    existing
+      .filter((e) => (e.data as any)?.combo)
+      .map((e) => `${e.type}::${(e.data as any).combo}`)
+  );
 
   const seedType = async (type: string, entries: { data: Record<string, unknown> }[]) => {
-    if (existingTypes.has(type)) return;
+    if (existingTypes.has(type)) {
+      const maxSort = existing.filter((e) => e.type === type).reduce((m, e) => Math.max(m, e.sortOrder ?? 0), -1);
+      let nextSort = maxSort + 1;
+      for (const entry of entries) {
+        const key = (entry.data as any).value
+          ? `${type}::${(entry.data as any).value}`
+          : (entry.data as any).combo
+            ? `${type}::${(entry.data as any).combo}`
+            : null;
+        if (key && (existingValues.has(key) || existingCombos.has(key))) continue;
+        await storage.createLibraryEntry({ type, data: entry.data, sortOrder: nextSort++ });
+      }
+      return;
+    }
     let sortOrder = 0;
     for (const entry of entries) {
       await storage.createLibraryEntry({ type, data: entry.data, sortOrder: sortOrder++ });
@@ -380,28 +403,26 @@ const DEFAULT_LABOR_TASKS = ["cutting", "milling", "drilling", "assembly-crimped
 async function seedConfigurationDefaults() {
   const frameTypes = await storage.getLibraryEntries("frame_type");
 
-  for (const ft of frameTypes) {
-    const existing = await storage.getFrameConfigurations(ft.id);
-    for (const cfg of existing) {
-      await storage.deleteFrameConfiguration(cfg.id);
-    }
-  }
-
   const findFt = (value: string) => frameTypes.find((f) => (f.data as any).value === value);
 
-  const es52Window = findFt("ES52-Window");
-  if (es52Window) {
-    await seedES52WindowConfigs(es52Window.id);
+  async function needsSeed(ftId: string): Promise<boolean> {
+    const existing = await storage.getFrameConfigurations(ftId);
+    return existing.length === 0;
   }
 
-  const es52Hinge = findFt("ES52-HingeDoor");
-  if (es52Hinge) {
-    await seedES52HingeDoorConfigs(es52Hinge.id);
-  }
+  const seedMap: [string, (id: string) => Promise<void>][] = [
+    ["ES52-Window", seedES52WindowConfigs],
+    ["ES52-HingeDoor", seedES52HingeDoorConfigs],
+    ["ES127-SlidingDoor", seedES127SlidingDoorConfigs],
+    ["ES52-BayWindow", seedES52BayWindowConfigs],
+    ["ES127-StackerDoor", seedES127StackerDoorConfigs],
+  ];
 
-  const es127Sliding = findFt("ES127-SlidingDoor");
-  if (es127Sliding) {
-    await seedES127SlidingDoorConfigs(es127Sliding.id);
+  for (const [value, seedFn] of seedMap) {
+    const ft = findFt(value);
+    if (ft && await needsSeed(ft.id)) {
+      await seedFn(ft.id);
+    }
   }
 }
 
@@ -649,6 +670,108 @@ async function seedES127SlidingDoorConfigs(frameTypeId: string) {
     { name: "Gasket B", code: "0808595 04", colour: "Black plastic", priceUsd: "0.88", quantityPerSet: "2.14", scalingType: "per-linear-metre" },
     { name: "Sealing gasket E", code: "0808762 04", colour: "Black plastic", priceUsd: "0.18", quantityPerSet: "8.58", scalingType: "per-linear-metre" },
     { name: "Sliding window gasket", code: "0809000 04", colour: "Black plastic", priceUsd: "0.29", quantityPerSet: "18.97", scalingType: "per-linear-metre" },
+  ];
+
+  for (let i = 0; i < accessories.length; i++) {
+    await storage.createConfigurationAccessory({ ...accessories[i], configurationId: standard.id, sortOrder: i });
+  }
+
+  await addLaborTasks(standard.id);
+}
+
+async function seedES52BayWindowConfigs(frameTypeId: string) {
+  const standard = await storage.createFrameConfiguration({
+    frameTypeId,
+    name: "Standard",
+    description: "Bay window configuration with multiple panes at angles",
+    defaultSalePricePerSqm: 600,
+    sortOrder: 0,
+  });
+
+  const profiles = [
+    { mouldNumber: "0015032", role: "spacer", kgPerMetre: "1.309", pricePerKgUsd: "3.970", quantityPerSet: 1, lengthFormula: "perimeter", surface: "Mill Finish" },
+    { mouldNumber: "0017133", role: "bead", kgPerMetre: "1.250", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "E0026001", role: "outer-frame", kgPerMetre: "1.530", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "E0026002", role: "sash-frame", kgPerMetre: "0.679", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "2020250", role: "mullion", kgPerMetre: "0.646", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "height", surface: "HYX87838" },
+  ];
+
+  for (let i = 0; i < profiles.length; i++) {
+    await storage.createConfigurationProfile({ ...profiles[i], configurationId: standard.id, sortOrder: i });
+  }
+
+  await seedES52WindowAccessories(standard.id);
+  await addLaborTasks(standard.id);
+}
+
+async function seedES127StackerDoorConfigs(frameTypeId: string) {
+  const standard = await storage.createFrameConfiguration({
+    frameTypeId,
+    name: "Standard",
+    description: "Stacker door configuration with stacking sliding panels",
+    defaultSalePricePerSqm: 700,
+    sortOrder: 0,
+  });
+
+  const profiles = [
+    { mouldNumber: "0011133", role: "bead", kgPerMetre: "0.259", pricePerKgUsd: "4.180", quantityPerSet: 3, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0100122", role: "spacer", kgPerMetre: "0.421", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0101008", role: "outer-frame", kgPerMetre: "0.565", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0200122", role: "sash-frame", kgPerMetre: "0.415", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0204102", role: "door-frame", kgPerMetre: "1.915", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0209016", role: "spacer", kgPerMetre: "0.241", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "width", surface: "HYX87838" },
+    { mouldNumber: "0209112", role: "sash-frame", kgPerMetre: "1.962", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0209120", role: "transom", kgPerMetre: "1.293", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "width", surface: "HYX87838" },
+    { mouldNumber: "0209210", role: "outer-frame", kgPerMetre: "2.678", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0209252", role: "door-frame", kgPerMetre: "2.007", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0355313", role: "bead", kgPerMetre: "0.226", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+  ];
+
+  for (let i = 0; i < profiles.length; i++) {
+    await storage.createConfigurationProfile({ ...profiles[i], configurationId: standard.id, sortOrder: i });
+  }
+
+  const accessories = [
+    { name: "Hinged insulation profile", code: "0100104 04", colour: "Black plastic", priceUsd: "1.48", quantityPerSet: "8.58", scalingType: "per-linear-metre" },
+    { name: "Stainless steel rail", code: "0110019 SS", colour: "Stainless steel", priceUsd: "0.86", quantityPerSet: "4.23", scalingType: "per-linear-metre" },
+    { name: "Process hole cap Φ10", code: "0550065 04", colour: "Black plastic", priceUsd: "0.02", quantityPerSet: "36", scalingType: "fixed" },
+    { name: "Glass cushion block", code: "0550080 04", colour: "Black plastic", priceUsd: "0.03", quantityPerSet: "28", scalingType: "fixed" },
+    { name: "Water drain hole cap", code: "0550104 04", colour: "Black plastic", priceUsd: "0.07", quantityPerSet: "17", scalingType: "fixed" },
+    { name: "Hook edge sealing block (top/bottom)", code: "0550120 04", colour: "Black plastic", priceUsd: "0.29", quantityPerSet: "2", scalingType: "fixed" },
+    { name: "Hook edge sealing block (upper inner)", code: "0550121 04", colour: "Black plastic", priceUsd: "0.19", quantityPerSet: "2", scalingType: "fixed" },
+    { name: "Hook edge sealing block (lower internal)", code: "0550122 04", colour: "Black plastic", priceUsd: "0.10", quantityPerSet: "2", scalingType: "fixed" },
+    { name: "Sealing block for ES120", code: "0550128 04", colour: "Black plastic", priceUsd: "0.19", quantityPerSet: "2", scalingType: "fixed" },
+    { name: "Windproof drain valve", code: "0550139 04", colour: "Black plastic", priceUsd: "0.17", quantityPerSet: "10", scalingType: "fixed" },
+    { name: "Gap block for stacker door", code: "0550246 04", colour: "Black plastic", priceUsd: "0.05", quantityPerSet: "16", scalingType: "fixed" },
+    { name: "25mm cache block", code: "0550266 04", colour: "Black plastic", priceUsd: "0.27", quantityPerSet: "4", scalingType: "fixed" },
+    { name: "28mm glass support", code: "0550722 04", colour: "Black plastic", priceUsd: "0.10", quantityPerSet: "8", scalingType: "fixed" },
+    { name: "37mm glass support", code: "0550731 04", colour: "Black plastic", priceUsd: "0.12", quantityPerSet: "8", scalingType: "fixed" },
+    { name: "Glass support", code: "0550732 04", colour: "Black plastic", priceUsd: "0.10", quantityPerSet: "12", scalingType: "fixed" },
+    { name: "Clip anti-theft", code: "0551461 04", colour: "Black plastic", priceUsd: "0.04", quantityPerSet: "12", scalingType: "fixed" },
+    { name: "Stream deflector 0003726", code: "0553727 04", colour: "Black plastic", priceUsd: "0.06", quantityPerSet: "32", scalingType: "fixed" },
+    { name: "11/41mm corner connector", code: "0502871 00", colour: "Plain color", priceUsd: "0.61", quantityPerSet: "8", scalingType: "fixed" },
+    { name: "13/17.5mm T-connector A", code: "0503401 00", colour: "Plain color", priceUsd: "0.60", quantityPerSet: "4", scalingType: "fixed" },
+    { name: "13/17.5mm T-connector B", code: "0503402 00", colour: "Plain color", priceUsd: "0.50", quantityPerSet: "4", scalingType: "fixed" },
+    { name: "10.5/23.3mm corner connector", code: "0504570 00", colour: "Plain color", priceUsd: "0.26", quantityPerSet: "8", scalingType: "fixed" },
+    { name: "7.5/26mm corner connector", code: "0504723 00", colour: "Plain color", priceUsd: "0.22", quantityPerSet: "16", scalingType: "fixed" },
+    { name: "13/13mm corner connector", code: "0504834 00", colour: "Plain color", priceUsd: "0.32", quantityPerSet: "8", scalingType: "fixed" },
+    { name: "53/13mm corner connector", code: "0504852 00", colour: "Plain color", priceUsd: "0.41", quantityPerSet: "4", scalingType: "fixed" },
+    { name: "20mm corner fixing piece", code: "0507000 00", colour: "Plain color", priceUsd: "0.06", quantityPerSet: "24", scalingType: "fixed" },
+    { name: "13mm corner fixing piece", code: "0507013 00", colour: "Plain color", priceUsd: "0.03", quantityPerSet: "16", scalingType: "fixed" },
+    { name: "SS pan head screw ST3.5x9.5", code: "0602110 SS", colour: "Stainless steel", priceUsd: "0.01", quantityPerSet: "36", scalingType: "fixed" },
+    { name: "SS pan head screw ST4.2x19", code: "0603119 SS", colour: "Stainless steel", priceUsd: "0.02", quantityPerSet: "9", scalingType: "fixed" },
+    { name: "SS countersunk screw ST4.2x13", code: "0603213 SS", colour: "Stainless steel", priceUsd: "0.01", quantityPerSet: "26", scalingType: "fixed" },
+    { name: "Anti-collision block", code: "0731747", colour: "Black", priceUsd: "0.44", quantityPerSet: "4", scalingType: "fixed" },
+    { name: "Sealing gasket", code: "0808111 04", colour: "Black plastic", priceUsd: "0.24", quantityPerSet: "16.44", scalingType: "per-linear-metre" },
+    { name: "Outer glass gasket", code: "0808204 04", colour: "Black plastic", priceUsd: "0.20", quantityPerSet: "26.71", scalingType: "per-linear-metre" },
+    { name: "Inner glazing gasket A", code: "0808305 04", colour: "Black plastic", priceUsd: "0.30", quantityPerSet: "12.43", scalingType: "per-linear-metre" },
+    { name: "Inner glazing gasket B", code: "0808306 04", colour: "Black plastic", priceUsd: "0.32", quantityPerSet: "14.28", scalingType: "per-linear-metre" },
+    { name: "4mm round gasket", code: "0808504 04", colour: "Black plastic", priceUsd: "0.09", quantityPerSet: "1", scalingType: "per-linear-metre" },
+    { name: "Sealing gasket D", code: "0808535 04", colour: "Black plastic", priceUsd: "0.31", quantityPerSet: "4.67", scalingType: "per-linear-metre" },
+    { name: "Gasket A", code: "0808586 04", colour: "Black plastic", priceUsd: "0.13", quantityPerSet: "8.67", scalingType: "per-linear-metre" },
+    { name: "Gasket B", code: "0808595 04", colour: "Black plastic", priceUsd: "0.88", quantityPerSet: "2.14", scalingType: "per-linear-metre" },
+    { name: "Sealing gasket E", code: "0808762 04", colour: "Black plastic", priceUsd: "0.18", quantityPerSet: "8.58", scalingType: "per-linear-metre" },
+    { name: "Stacker door gasket", code: "0809000 04", colour: "Black plastic", priceUsd: "0.29", quantityPerSet: "18.97", scalingType: "per-linear-metre" },
   ];
 
   for (let i = 0; i < accessories.length; i++) {

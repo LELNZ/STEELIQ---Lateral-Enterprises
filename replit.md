@@ -34,7 +34,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 ## Database Tables
 - `jobs`: id (uuid PK), name (text, required), address (text), date (text), created_at (timestamp)
 - `job_items`: id (uuid PK), job_id (varchar FK), config (jsonb — full QuoteItem), photo (text, nullable — base64), sort_order (integer)
-- `library_entries`: id (uuid PK), type (text — "glass", "frame_type", "frame_color", "awning_handle", "sliding_window_handle", "entrance_door_handle", "hinge_door_handle", "sliding_door_handle", "bifold_door_handle", "stacker_door_handle", "liner_type"), data (jsonb), sort_order (integer). Auto-seeded per type on first run if type is missing (preserves existing IDs to avoid FK breakage).
+- `library_entries`: id (uuid PK), type (text — "glass", "frame_type", "frame_color", "awning_handle", "sliding_window_handle", "entrance_door_handle", "hinge_door_handle", "sliding_door_handle", "bifold_door_handle", "stacker_door_handle", "liner_type"), data (jsonb), sort_order (integer). Auto-seeded per value on first run; new entries are inserted individually if missing (preserves existing IDs to avoid FK breakage).
 - `users`: id (uuid PK), username (text), password (text) — boilerplate, not currently used
 
 ## API Routes
