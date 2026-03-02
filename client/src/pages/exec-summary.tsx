@@ -5,7 +5,7 @@ import { type QuoteItem, type JobItem, type ConfigurationProfile, type Configura
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
 import { getGlassPrice } from "@shared/glass-library";
-import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory } from "@shared/item-options";
+import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, HANDLE_CATEGORIES } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -135,6 +135,23 @@ export default function ExecSummary() {
   const { data: libLiners = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "liner_type"], queryFn: fetchLib("liner_type") });
   const { data: libWindowHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "window_handle"], queryFn: fetchLib("window_handle") });
   const { data: libDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "door_handle"], queryFn: fetchLib("door_handle") });
+  const { data: libAwningHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "awning_handle"], queryFn: fetchLib("awning_handle") });
+  const { data: libSlidingWindowHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "sliding_window_handle"], queryFn: fetchLib("sliding_window_handle") });
+  const { data: libEntranceDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "entrance_door_handle"], queryFn: fetchLib("entrance_door_handle") });
+  const { data: libHingeDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "hinge_door_handle"], queryFn: fetchLib("hinge_door_handle") });
+  const { data: libSlidingDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "sliding_door_handle"], queryFn: fetchLib("sliding_door_handle") });
+  const { data: libBifoldDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "bifold_door_handle"], queryFn: fetchLib("bifold_door_handle") });
+  const { data: libStackerDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "stacker_door_handle"], queryFn: fetchLib("stacker_door_handle") });
+
+  const handlesByType: Record<string, LibraryEntry[]> = {
+    awning_handle: libAwningHandles,
+    sliding_window_handle: libSlidingWindowHandles,
+    entrance_door_handle: libEntranceDoorHandles,
+    hinge_door_handle: libHingeDoorHandles,
+    sliding_door_handle: libSlidingDoorHandles,
+    bifold_door_handle: libBifoldDoorHandles,
+    stacker_door_handle: libStackerDoorHandles,
+  };
 
   const lookupGlassPrice = (iguType: string, combo: string, thickness: string): number | null => {
     const entry = libGlass.find((e) => (e.data as any).iguType === iguType && (e.data as any).combo === combo);
@@ -150,6 +167,13 @@ export default function ExecSummary() {
   };
   const lookupHandlePrice = (handleType: string, cat: string): number | null => {
     if (!handleType) return null;
+    const catType = getHandleTypeForCategory(cat);
+    const catHandles = handlesByType[catType] || [];
+    if (catHandles.length > 0) {
+      const entry = catHandles.find((e) => (e.data as any).value === handleType);
+      const dbPrice = entry ? (entry.data as any).priceProvision : null;
+      if (dbPrice != null) return dbPrice;
+    }
     const handles = DOOR_CATEGORIES.includes(cat) ? libDoorHandles : libWindowHandles;
     const entry = handles.find((e) => (e.data as any).value === handleType);
     const dbPrice = entry ? (entry.data as any).priceProvision : null;
@@ -189,7 +213,7 @@ export default function ExecSummary() {
 
       return { item, sqm, salePrice, pricing, configName };
     });
-  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles]);
+  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles]);
 
   const totals = useMemo(() => {
     let totalSqm = 0;

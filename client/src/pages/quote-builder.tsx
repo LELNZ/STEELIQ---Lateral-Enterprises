@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue, IGU_INFO } from "@shared/glass-library";
-import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, getFrameTypesForCategory, getHandlesForCategory } from "@shared/item-options";
+import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory } from "@shared/item-options";
 import type { LibraryEntry } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
@@ -228,7 +228,7 @@ export default function QuoteBuilder() {
   const libLinerOptions = libLiners.length > 0
     ? libLiners.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
     : LINER_TYPES.map((lt) => ({ value: lt.value, label: lt.label }));
-  const libHandlesForCategory = (cat: string) => {
+  const libHandlesForCategoryLegacy = (cat: string) => {
     const handles = DOOR_CATEGORIES.includes(cat) ? libDoorHandles : libWindowHandles;
     if (handles.length > 0) return handles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }));
     return getHandlesForCategory(cat).map((h) => ({ value: h.value, label: h.label }));
@@ -296,6 +296,8 @@ export default function QuoteBuilder() {
   const layout = w.layout;
   const frameSize = getFrameSize(category);
   const formIsDirty = form.formState.isDirty;
+  const currentHandleType = getHandleTypeForCategory(category || "windows-standard");
+  const { data: libCategoryHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", currentHandleType], queryFn: fetchLib(currentHandleType) });
 
   const currentFrameTypeLibId = findFrameTypeLibId(w.frameType || "");
   const { data: configurations = [] } = useQuery<FrameConfiguration[]>({
@@ -356,6 +358,11 @@ export default function QuoteBuilder() {
 
   const handlePriceEach = (() => {
     if (!w.handleType) return null;
+    if (libCategoryHandles.length > 0) {
+      const catEntry = libCategoryHandles.find((e) => (e.data as any).value === w.handleType);
+      const catPrice = catEntry ? (catEntry.data as any).priceProvision : null;
+      if (catPrice != null) return catPrice;
+    }
     const handles = DOOR_CATEGORIES.includes(w.category || "") ? libDoorHandles : libWindowHandles;
     const handleEntry = handles.find((e) => (e.data as any).value === w.handleType);
     const dbPrice = handleEntry ? (handleEntry.data as any).priceProvision : null;
@@ -1802,14 +1809,14 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
-                    {configurations.length > 0 && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <Label className="text-xs">Configuration</Label>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0" data-testid="badge-detected-config">
-                            Detected: {configSignature.label}
-                          </Badge>
-                        </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Label className="text-xs">Configuration</Label>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0" data-testid="badge-detected-config">
+                          Detected: {configSignature.label}
+                        </Badge>
+                      </div>
+                      {configurations.length > 0 ? (
                         <Select
                           value={w.configurationId || ""}
                           onValueChange={(v) => {
@@ -1825,71 +1832,73 @@ export default function QuoteBuilder() {
                             ))}
                           </SelectContent>
                         </Select>
-                        {!findMatchingConfiguration(configSignature, configurations) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full mt-1.5 text-xs"
-                            data-testid="button-auto-generate-config"
-                            onClick={async () => {
-                              const baseConfig = configurations[0];
-                              if (!baseConfig || !currentFrameTypeLibId) return;
-                              try {
-                                const baseProfiles = await fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []);
-                                const baseAccessories = await fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []);
-                                const baseLabor = await fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []);
-                                const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
-                                  frameTypeId: currentFrameTypeLibId,
-                                  name: configSignature.label,
-                                  description: `Auto-generated: ${configSignature.label}`,
-                                  defaultSalePricePerSqm: baseConfig.defaultSalePricePerSqm || 550,
-                                  sortOrder: configurations.length,
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">No configurations for this frame type yet</p>
+                      )}
+                      {configurations.length > 0 && !findMatchingConfiguration(configSignature, configurations) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-1.5 text-xs"
+                          data-testid="button-auto-generate-config"
+                          onClick={async () => {
+                            const baseConfig = configurations[0];
+                            if (!baseConfig || !currentFrameTypeLibId) return;
+                            try {
+                              const baseProfiles = await fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []);
+                              const baseAccessories = await fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []);
+                              const baseLabor = await fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []);
+                              const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
+                                frameTypeId: currentFrameTypeLibId,
+                                name: configSignature.label,
+                                description: `Auto-generated: ${configSignature.label}`,
+                                defaultSalePricePerSqm: baseConfig.defaultSalePricePerSqm || 550,
+                                sortOrder: configurations.length,
+                              });
+                              const newConfig = await newConfigRes.json();
+                              for (const p of baseProfiles) {
+                                let qty = p.quantityPerSet || 1;
+                                if (p.role === "sash-frame") qty = Math.max(1, configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount);
+                                await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+                                  configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
+                                  kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
+                                  quantityPerSet: qty, lengthFormula: p.lengthFormula, surface: p.surface, sortOrder: p.sortOrder,
                                 });
-                                const newConfig = await newConfigRes.json();
-                                for (const p of baseProfiles) {
-                                  let qty = p.quantityPerSet || 1;
-                                  if (p.role === "sash-frame") qty = Math.max(1, configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount);
-                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-                                    configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
-                                    kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
-                                    quantityPerSet: qty, lengthFormula: p.lengthFormula, surface: p.surface, sortOrder: p.sortOrder,
-                                  });
-                                }
-                                if (configSignature.mullionCount > 0) {
-                                  const hasMullion = baseProfiles.some((p: any) => p.role === "mullion");
-                                  if (!hasMullion) {
-                                    await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-                                      configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
-                                      kgPerMetre: "0.78", pricePerKgUsd: "5.60",
-                                      quantityPerSet: configSignature.mullionCount, lengthFormula: "height", surface: "", sortOrder: 99,
-                                    });
-                                  }
-                                }
-                                for (const a of baseAccessories) {
-                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
-                                    configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
-                                    priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
-                                  });
-                                }
-                                for (const l of baseLabor) {
-                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
-                                    configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
-                                  });
-                                }
-                                queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });
-                                form.setValue("configurationId", newConfig.id);
-                                form.setValue("pricePerSqm", newConfig.defaultSalePricePerSqm || 550);
-                                toast({ title: "Configuration created", description: `"${configSignature.label}" generated and selected.` });
-                              } catch {
-                                toast({ title: "Error", description: "Failed to generate configuration", variant: "destructive" });
                               }
-                            }}
-                          >
-                            <Plus className="w-3 h-3 mr-1" /> Auto-generate "{configSignature.label}"
-                          </Button>
-                        )}
-                      </div>
-                    )}
+                              if (configSignature.mullionCount > 0) {
+                                const hasMullion = baseProfiles.some((p: any) => p.role === "mullion");
+                                if (!hasMullion) {
+                                  await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+                                    configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
+                                    kgPerMetre: "0.78", pricePerKgUsd: "5.60",
+                                    quantityPerSet: configSignature.mullionCount, lengthFormula: "height", surface: "", sortOrder: 99,
+                                  });
+                                }
+                              }
+                              for (const a of baseAccessories) {
+                                await apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
+                                  configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
+                                  priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
+                                });
+                              }
+                              for (const l of baseLabor) {
+                                await apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
+                                  configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
+                                });
+                              }
+                              queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });
+                              form.setValue("configurationId", newConfig.id);
+                              form.setValue("pricePerSqm", newConfig.defaultSalePricePerSqm || 550);
+                              toast({ title: "Configuration created", description: `"${configSignature.label}" generated and selected.` });
+                            } catch {
+                              toast({ title: "Error", description: "Failed to generate configuration", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Auto-generate "{configSignature.label}"
+                        </Button>
+                      )}
+                    </div>
                     <div>
                       <Label className="text-xs">Frame Color</Label>
                       <Select value={w.frameColor || ""} onValueChange={(v) => form.setValue("frameColor", v)}>
@@ -2125,7 +2134,10 @@ export default function QuoteBuilder() {
                       <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
                         <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
                         <SelectContent>
-                          {libHandlesForCategory(w.category || "windows-standard").map((h) => (
+                          {(libCategoryHandles.length > 0
+                            ? libCategoryHandles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
+                            : libHandlesForCategoryLegacy(w.category || "windows-standard")
+                          ).map((h) => (
                             <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
                           ))}
                         </SelectContent>

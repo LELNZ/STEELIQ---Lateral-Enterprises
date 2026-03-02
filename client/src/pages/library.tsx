@@ -20,13 +20,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, Settings2, Wrench, Package } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
   ConfigurationAccessory, ConfigurationLabor,
 } from "@shared/schema";
 import { IGU_INFO } from "@shared/glass-library";
+import { HANDLE_CATEGORIES } from "@shared/item-options";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Standard Window" },
@@ -136,6 +137,82 @@ export default function Library() {
   );
 }
 
+function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
+  iguType: string;
+  info: { label: string; rValue: number; surcharge: number } | undefined;
+  items: LibraryEntry[];
+  onEdit: (e: LibraryEntry) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              {info?.label || iguType}
+              <Badge variant="outline" className="text-[10px]">{items.length} combos</Badge>
+              {info && (
+                <>
+                  <Badge variant="outline">R={info.rValue}</Badge>
+                  <Badge variant="secondary">+${info.surcharge}/m²</Badge>
+                </>
+              )}
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Glass Combination</TableHead>
+                    <TableHead className="text-right">4/4</TableHead>
+                    <TableHead className="text-right">5/4</TableHead>
+                    <TableHead className="text-right">5/5</TableHead>
+                    <TableHead className="text-right">6/5</TableHead>
+                    <TableHead className="text-right">6/6</TableHead>
+                    <TableHead className="text-right">8/8</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((entry) => {
+                    const d = entry.data as any;
+                    return (
+                      <TableRow key={entry.id} data-testid={`row-glass-${entry.id}`}>
+                        <TableCell className="font-medium text-sm">{d.combo}</TableCell>
+                        {["4/4", "5/4", "5/5", "6/5", "6/6", "8/8"].map((t) => (
+                          <TableCell key={t} className="text-right font-mono text-sm">
+                            {d.prices[t] != null ? `$${d.prices[t].toFixed(2)}` : "—"}
+                          </TableCell>
+                        ))}
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(entry)} data-testid={`button-edit-glass-${entry.id}`}>
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(entry.id)} data-testid={`button-delete-glass-${entry.id}`}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
 function GlassSection() {
   const { toast } = useToast();
   const { data: entries = [], isLoading } = useLibraryEntries("glass");
@@ -178,62 +255,7 @@ function GlassSection() {
       {Object.entries(grouped).map(([iguType, items]) => {
         const info = IGU_INFO[iguType as keyof typeof IGU_INFO];
         return (
-          <Card key={iguType}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                {info?.label || iguType}
-                {info && (
-                  <>
-                    <Badge variant="outline">R={info.rValue}</Badge>
-                    <Badge variant="secondary">+${info.surcharge}/m²</Badge>
-                  </>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Glass Combination</TableHead>
-                      <TableHead className="text-right">4/4</TableHead>
-                      <TableHead className="text-right">5/4</TableHead>
-                      <TableHead className="text-right">5/5</TableHead>
-                      <TableHead className="text-right">6/5</TableHead>
-                      <TableHead className="text-right">6/6</TableHead>
-                      <TableHead className="text-right">8/8</TableHead>
-                      <TableHead className="w-20"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((entry) => {
-                      const d = entry.data as any;
-                      return (
-                        <TableRow key={entry.id} data-testid={`row-glass-${entry.id}`}>
-                          <TableCell className="font-medium text-sm">{d.combo}</TableCell>
-                          {["4/4", "5/4", "5/5", "6/5", "6/6", "8/8"].map((t) => (
-                            <TableCell key={t} className="text-right font-mono text-sm">
-                              {d.prices[t] != null ? `$${d.prices[t].toFixed(2)}` : "—"}
-                            </TableCell>
-                          ))}
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditEntry(entry)} data-testid={`button-edit-glass-${entry.id}`}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(entry.id)} data-testid={`button-delete-glass-${entry.id}`}>
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+          <GlassTypeCollapsible key={iguType} iguType={iguType} info={info} items={items} onEdit={setEditEntry} onDelete={setDeleteId} />
         );
       })}
 
@@ -1153,10 +1175,41 @@ function FrameTypeDialog({ entry, onClose }: { entry: LibraryEntry | null; onClo
 
 function HandlesSection() {
   return (
-    <div className="space-y-6" data-testid="section-handles">
-      <SimpleSection type="window_handle" title="Window Handles" fields={["value", "label", "priceProvision"]} />
-      <SimpleSection type="door_handle" title="Door Handles" fields={["value", "label", "priceProvision"]} />
+    <div className="space-y-4" data-testid="section-handles">
+      <div>
+        <h2 className="text-base font-semibold">Handles by Category</h2>
+        <p className="text-sm text-muted-foreground">{HANDLE_CATEGORIES.length} handle categories</p>
+      </div>
+      {HANDLE_CATEGORIES.map((hc) => (
+        <HandleCategoryCollapsible key={hc.type} handleCat={hc} />
+      ))}
     </div>
+  );
+}
+
+function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CATEGORIES[number] }) {
+  const [open, setOpen] = useState(false);
+  const { data: entries = [] } = useLibraryEntries(handleCat.type);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="py-3 cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              {handleCat.label}
+              <Badge variant="outline" className="text-[10px]">{handleCat.frameModel}</Badge>
+              <Badge variant="secondary" className="text-[10px]">{entries.length} handles</Badge>
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0">
+            <SimpleSection type={handleCat.type} title={handleCat.label} fields={["value", "label", "priceProvision"]} />
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 

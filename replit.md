@@ -34,7 +34,7 @@ A professional window and door quotation tool with live SVG technical drawings. 
 ## Database Tables
 - `jobs`: id (uuid PK), name (text, required), address (text), date (text), created_at (timestamp)
 - `job_items`: id (uuid PK), job_id (varchar FK), config (jsonb — full QuoteItem), photo (text, nullable — base64), sort_order (integer)
-- `library_entries`: id (uuid PK), type (text — "glass", "frame_type", "frame_color", "window_handle", "door_handle", "liner_type"), data (jsonb), sort_order (integer). Auto-seeded from hardcoded defaults on first run if empty.
+- `library_entries`: id (uuid PK), type (text — "glass", "frame_type", "frame_color", "window_handle", "door_handle", "awning_handle", "sliding_window_handle", "entrance_door_handle", "hinge_door_handle", "sliding_door_handle", "bifold_door_handle", "stacker_door_handle", "liner_type"), data (jsonb), sort_order (integer). Auto-seeded from hardcoded defaults on first run if empty.
 - `users`: id (uuid PK), username (text), password (text) — boilerplate, not currently used
 
 ## API Routes
@@ -72,14 +72,15 @@ A professional window and door quotation tool with live SVG technical drawings. 
 - **Unsaved Changes Warning**: beforeunload browser prompt + in-app dialog (Cancel/Discard/Save & Leave) when navigating away with unsaved changes
 - **Square Meters**: Live m² badge in item form panel (during creation/editing) + per-item m² in items table + total m² in section header + m² badge on job cards
 - **Pricing**: Per-item $/m² rate ($500–$750 slider), item price shown in items table + total price in header, Quote Summary page with full breakdown + average $/m²
-- **Item Specifics Tab**: Tab toggle in form panel (Drawing Config / Item Specifics) with: price per m², frame type (filtered by category), frame color (4 Dulux colors), flashing (35–95mm), wind zone, liner/reveal, glass (IGU type → glass combo → thickness with price + R-value display), handle (window vs door handles), wanz bar, wall thickness, height from floor
+- **Item Specifics Tab**: Tab toggle in form panel (Drawing Config / Item Specifics) with: price per m², frame type (filtered by category), frame color (4 Dulux colors), flashing (35–95mm), wind zone, liner/reveal, glass (IGU type → glass combo → thickness with price + R-value display), handle (category-specific: awning, sliding window, entrance/hinge/sliding/bifold/stacker door), wanz bar, wall thickness, height from floor
 - **Quote Summary Page**: Separate page at `/job/:id/summary` with items table, pricing breakdown, total items/m²/price, average $/m²
 - **Expand/Collapse Items**: Toggle between 1/3 height (33vh) and 1/2 height (50vh) for the quote items section
 - **Settings Page**: Global preferences stored in localStorage — legend default on/off, quote list position (bottom or right side)
 - **Custom Grid Layout**: Column-based system available for all categories except Entrance Door and Hinge Door
 - **Drawing Legend**: Positioned to the LEFT of the height dimension line, toggleable on/off. Shows frame size, window/door type info
 - **Item ID / Reference**: Combobox with room dropdown (14 rooms: KIT, LNG, DIN, BED, MBR, ENS, BTH, WC, LDY, GAR, HWY, STD, RMP, ENT). Floor selector (G, 1, 2, 3, B). Auto-generates CODE-FLOOR## format
-- **Glass Library**: Full pricing table for EnergySaver™ (R=0.37) and LightBridge™ (R=0.46) IGU types with 16 glass combinations each × 5-6 thickness options
+- **Glass Library**: Full pricing table for EnergySaver™ (R=0.37) and LightBridge™ (R=0.46) IGU types with 16 glass combinations each × 5-6 thickness options. Collapsible by IGU type in Library page
+- **Handle Categories**: 7 category-specific handle types (awning_handle, sliding_window_handle, entrance_door_handle, hinge_door_handle, sliding_door_handle, bifold_door_handle, stacker_door_handle) with collapsible UI in Library page. Each maps to a frame model (ES52, ES127, ES70). Quote builder and exec-summary use category-specific lookups with legacy fallback
 
 ## Settings (localStorage: proquote-settings)
 - `showLegendDefault` (boolean, default true) — whether legend is shown by default on new items

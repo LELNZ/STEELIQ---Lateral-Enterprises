@@ -8,7 +8,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { GLASS_LIBRARY } from "@shared/glass-library";
-import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, WINDOW_HANDLES, DOOR_HANDLES } from "@shared/item-options";
+import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, WINDOW_HANDLES, DOOR_HANDLES, HANDLE_CATEGORIES } from "@shared/item-options";
 
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
@@ -35,6 +35,12 @@ async function seedLibraryDefaults() {
   sortOrder = 0;
   for (const dh of DOOR_HANDLES) {
     await storage.createLibraryEntry({ type: "door_handle", data: { value: dh.value, label: dh.label, priceProvision: dh.priceProvision }, sortOrder: sortOrder++ });
+  }
+  for (const hc of HANDLE_CATEGORIES) {
+    sortOrder = 0;
+    for (const h of hc.defaults) {
+      await storage.createLibraryEntry({ type: hc.type, data: { value: h.value, label: h.label, priceProvision: h.priceProvision }, sortOrder: sortOrder++ });
+    }
   }
   sortOrder = 0;
   for (const lt of LINER_TYPES) {
