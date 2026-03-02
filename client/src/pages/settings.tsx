@@ -2,12 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Settings as SettingsIcon } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 
 export default function Settings() {
-  const { showLegendDefault, quoteListPosition, usdToNzdRate, updateSetting } = useSettings();
+  const { quoteListPosition, usdToNzdRate, updateSetting } = useSettings();
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="settings-page">
@@ -23,25 +22,6 @@ export default function Settings() {
 
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-xl mx-auto space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Drawing Options</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Show Legend by Default</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Display the drawing legend on new items</p>
-                </div>
-                <Switch
-                  checked={showLegendDefault}
-                  onCheckedChange={(v) => updateSetting("showLegendDefault", v)}
-                  data-testid="switch-legend-default"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Layout Options</CardTitle>

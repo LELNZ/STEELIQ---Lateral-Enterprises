@@ -65,33 +65,33 @@ export const DOOR_HANDLES: HandleOption[] = [
 export interface HandleCategoryDef {
   type: string;
   label: string;
-  frameModel: string;
+  frameTypeValue: string;
   defaults: HandleOption[];
 }
 
 export const HANDLE_CATEGORIES: HandleCategoryDef[] = [
-  { type: "awning_handle", label: "Awning Window Handles", frameModel: "ES52 Window", defaults: [
+  { type: "awning_handle", label: "Awning Window Handles", frameTypeValue: "ES52-Window", defaults: [
     { value: "Helix-Venting-Double-Tongue", label: "Helix Seal - Venting Double Tongue Window Handle", priceProvision: 28.50 },
     { value: "Helix-Low-Profile", label: "Helix Seal - Low Profile Window Handle", priceProvision: 24.00 },
     { value: "Miro-Standard-Wedgeless", label: "Miro - Standard Wedgeless Window Handle", priceProvision: 22.00 },
   ]},
-  { type: "sliding_window_handle", label: "Sliding Window Handles", frameModel: "ES127 Sliding Window", defaults: [
+  { type: "sliding_window_handle", label: "Sliding Window Handles", frameTypeValue: "ES127-SlidingWindow", defaults: [
     { value: "Helix-Venting-Double-Tongue", label: "Helix Seal - Venting Double Tongue Window Handle", priceProvision: 28.50 },
     { value: "Helix-Low-Profile", label: "Helix Seal - Low Profile Window Handle", priceProvision: 24.00 },
   ]},
-  { type: "entrance_door_handle", label: "Entrance Door Handles", frameModel: "ES52 Entrance Door", defaults: [
+  { type: "entrance_door_handle", label: "Entrance Door Handles", frameTypeValue: "EntranceDoor", defaults: [
     { value: "Standard-D-Type", label: "Standard D-Type Handle", priceProvision: 45.00 },
   ]},
-  { type: "hinge_door_handle", label: "Hinge Door Handles", frameModel: "ES52 Hinge Door", defaults: [
+  { type: "hinge_door_handle", label: "Hinge Door Handles", frameTypeValue: "ES52-HingeDoor", defaults: [
     { value: "Standard-D-Type", label: "Standard D-Type Handle", priceProvision: 45.00 },
   ]},
-  { type: "sliding_door_handle", label: "Sliding Door Handles", frameModel: "ES127 Sliding Door", defaults: [
+  { type: "sliding_door_handle", label: "Sliding Door Handles", frameTypeValue: "ES127-SlidingDoor", defaults: [
     { value: "Standard-D-Type", label: "Standard D-Type Handle", priceProvision: 45.00 },
   ]},
-  { type: "bifold_door_handle", label: "Bifold Door Handles", frameModel: "ES70 Bifold", defaults: [
+  { type: "bifold_door_handle", label: "Bifold Door Handles", frameTypeValue: "ES70-BifoldDoor", defaults: [
     { value: "Standard-D-Type", label: "Standard D-Type Handle", priceProvision: 45.00 },
   ]},
-  { type: "stacker_door_handle", label: "Stacker Door Handles", frameModel: "ES127 Stacker Door", defaults: [
+  { type: "stacker_door_handle", label: "Stacker Door Handles", frameTypeValue: "ES127-StackerDoor", defaults: [
     { value: "Standard-D-Type", label: "Standard D-Type Handle", priceProvision: 45.00 },
   ]},
 ];

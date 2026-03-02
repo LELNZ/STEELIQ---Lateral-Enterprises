@@ -635,7 +635,6 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
 
 const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ config }, ref) => {
   const { width: W, height: H, name, quantity, category, layout, customColumns } = config;
-  const showLegend = config.showLegend !== false;
   const frameSize = getFrameSize(category);
   const maxDim = Math.max(W, H);
 
@@ -643,7 +642,7 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
 
   const dimGap = maxDim * 0.06;
   const textGap = maxDim * 0.1;
-  const padLeft = showLegend ? maxDim * 0.32 : maxDim * 0.16;
+  const padLeft = maxDim * 0.16;
   const padBottom = maxDim * 0.16;
   const padRight = maxDim * 0.05;
   const padTop = maxDim * 0.1;
@@ -1022,51 +1021,6 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
         </g>
       )}
 
-      {showLegend && (
-        <g data-testid="text-legend">
-          {(() => {
-            const legendFs = fontSize * 0.7;
-            const lineH = legendFs * 1.4;
-            const legendX = -(textGap + maxDim * 0.06);
-            const legendStartY = fontSize * 0.5;
-            const lines: string[] = [`${frameSize}mm frame`];
-
-            if (category === "windows-standard") {
-              const wt = config.windowType === "awning" ? "Awning" : "Fixed";
-              lines.push(`Type: ${wt}`);
-            }
-
-            const hasHinge = ["entrance-door", "hinge-door"].includes(category);
-            if (hasHinge) {
-              lines.push(`Hinge: ${(config.hingeSide || "left") === "left" ? "Left" : "Right"}`);
-            }
-
-            const hasOpenDir = ["entrance-door", "hinge-door", "french-door"].includes(category);
-            if (hasOpenDir) {
-              const od = config.openDirection || "out";
-              lines.push(`Door: ${od === "in" ? "Open In" : "Open Out"}`);
-            }
-
-            if (category === "bifold-door") {
-              lines.push(`Leaves: ${config.panels || 3}`);
-            }
-            if (category === "stacker-door") {
-              lines.push(`Panels: ${config.panels || 3}`);
-            }
-
-            if (layout === "custom" && !["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"].includes(category)) {
-              lines.push("Custom Layout");
-            }
-
-            return lines.map((line, i) => (
-              <text key={i} x={legendX} y={legendStartY + i * lineH} textAnchor="end"
-                fontSize={legendFs} fill="#888" fontFamily="sans-serif">
-                {line}
-              </text>
-            ));
-          })()}
-        </g>
-      )}
     </svg>
   );
 });

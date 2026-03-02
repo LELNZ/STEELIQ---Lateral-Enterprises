@@ -185,7 +185,7 @@ export default function QuoteBuilder() {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [formTab, setFormTab] = useState<string>("drawing");
-  const { showLegendDefault, quoteListPosition, usdToNzdRate } = useSettings();
+  const { quoteListPosition, usdToNzdRate } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
@@ -288,7 +288,7 @@ export default function QuoteBuilder() {
 
   const form = useForm<InsertQuoteItem>({
     resolver: zodResolver(insertQuoteItemSchema),
-    defaultValues: { ...defaultValues, showLegend: showLegendDefault },
+    defaultValues: { ...defaultValues },
   });
 
   const w = form.watch();
@@ -666,7 +666,7 @@ export default function QuoteBuilder() {
       toast({ title: "Item added", description: `${data.name} added to quote.` });
     }
     setHasUnsavedChanges(true);
-    form.reset({ ...defaultValues, showLegend: showLegendDefault });
+    form.reset({ ...defaultValues });
   }
 
   function editItem(iwp: ItemWithPhoto) {
@@ -685,14 +685,14 @@ export default function QuoteBuilder() {
 
   function deleteItem(id: string) {
     setItems(items.filter((iwp) => iwp.item.id !== id));
-    if (editingId === id) { setEditingId(null); form.reset({ ...defaultValues, showLegend: showLegendDefault }); }
+    if (editingId === id) { setEditingId(null); form.reset({ ...defaultValues }); }
     setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
   }
 
   function cancelEdit() {
     setEditingId(null);
-    form.reset({ ...defaultValues, showLegend: showLegendDefault });
+    form.reset({ ...defaultValues });
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1169,15 +1169,6 @@ export default function QuoteBuilder() {
                     </Select>
                   </div>
                 )}
-
-                <div className="flex items-center gap-2">
-                  <Checkbox id="showLegend" checked={w.showLegend !== false}
-                    onCheckedChange={(v) => form.setValue("showLegend", !!v)}
-                    data-testid="checkbox-show-legend" />
-                  <Label htmlFor="showLegend" className="text-xs cursor-pointer">
-                    Show Drawing Legend
-                  </Label>
-                </div>
 
                 {showWindowType && (
                   <div>

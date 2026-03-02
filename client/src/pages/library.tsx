@@ -1187,6 +1187,9 @@ function HandlesSection() {
 function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CATEGORIES[number] }) {
   const [open, setOpen] = useState(false);
   const { data: entries = [] } = useLibraryEntries(handleCat.type);
+  const { data: frameTypes = [] } = useLibraryEntries("frame_type");
+  const allocationLabel = frameTypes.find((ft) => (ft.data as any).value === handleCat.frameTypeValue)?.data as any;
+  const allocation = allocationLabel?.label || handleCat.frameTypeValue;
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card>
@@ -1195,14 +1198,13 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
             <CardTitle className="text-sm flex items-center gap-2">
               {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
               {handleCat.label}
-              <Badge variant="outline" className="text-[10px]">{handleCat.frameModel}</Badge>
               <Badge variant="secondary" className="text-[10px]">{entries.length} handles</Badge>
             </CardTitle>
           </CardHeader>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="pt-0">
-            <SimpleSection type={handleCat.type} title={handleCat.label} fields={["value", "label", "priceProvision"]} />
+            <SimpleSection type={handleCat.type} title={handleCat.label} fields={["value", "label", "priceProvision"]} allocation={allocation} />
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -1210,7 +1212,7 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
   );
 }
 
-function SimpleSection({ type, title, fields, priceUnit }: { type: string; title: string; fields: string[]; priceUnit?: string }) {
+function SimpleSection({ type, title, fields, priceUnit, allocation }: { type: string; title: string; fields: string[]; priceUnit?: string; allocation?: string }) {
   const { toast } = useToast();
   const { data: entries = [], isLoading } = useLibraryEntries(type);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
@@ -1258,6 +1260,7 @@ function SimpleSection({ type, title, fields, priceUnit }: { type: string; title
                     {fieldLabels[f] || f}
                   </TableHead>
                 ))}
+                {allocation && <TableHead>Allocation</TableHead>}
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -1273,6 +1276,9 @@ function SimpleSection({ type, title, fields, priceUnit }: { type: string; title
                           : (d[f] ?? "—")}
                       </TableCell>
                     ))}
+                    {allocation && (
+                      <TableCell className="text-sm text-muted-foreground" data-testid={`text-allocation-${entry.id}`}>{allocation}</TableCell>
+                    )}
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditEntry(entry)}>
@@ -1287,7 +1293,7 @@ function SimpleSection({ type, title, fields, priceUnit }: { type: string; title
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={fields.length + 1} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={fields.length + (allocation ? 2 : 1)} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
