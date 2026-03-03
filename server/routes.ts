@@ -185,7 +185,8 @@ export async function registerRoutes(
 
   app.patch("/api/jobs/:id/items/:itemId", async (req, res) => {
     try {
-      const item = await storage.updateJobItem(req.params.itemId, req.body);
+      const parsed = jobItemBodySchema.partial().parse(req.body);
+      const item = await storage.updateJobItem(req.params.itemId, parsed);
       if (!item) return res.status(404).json({ error: "Item not found" });
       res.json(item);
     } catch (e: any) {

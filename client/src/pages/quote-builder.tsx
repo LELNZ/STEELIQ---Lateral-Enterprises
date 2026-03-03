@@ -453,6 +453,13 @@ export default function QuoteBuilder() {
   }, [category]);
 
   useEffect(() => {
+    const currentFrameType = form.getValues("frameType");
+    if (currentFrameType) return;
+    const frameTypes = libFrameTypesForCategory(category);
+    if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
+  }, [libFrameTypes]);
+
+  useEffect(() => {
     if (configurations.length === 0) return;
     const match = findMatchingConfiguration(configSignature, configurations);
     if (match && match.id !== w.configurationId) {
@@ -969,11 +976,13 @@ export default function QuoteBuilder() {
   }
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveJobRef = useRef(saveJob);
+  saveJobRef.current = saveJob;
   useEffect(() => {
     if (!savedJobId || !hasUnsavedChanges || items.length === 0 || !jobName.trim()) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
-      saveJob();
+      saveJobRef.current();
     }, 3000);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate]);
@@ -988,7 +997,7 @@ export default function QuoteBuilder() {
   }
 
   function formatPrice(amount: number): string {
-    return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   const totalSqm = items.reduce((sum, iwp) => {
