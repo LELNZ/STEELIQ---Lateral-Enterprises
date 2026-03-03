@@ -53,6 +53,7 @@ interface JobData {
   installationEnabled?: boolean;
   installationOverride?: number | null;
   installationMarkup?: number | null;
+  deliveryEnabled?: boolean;
   deliveryMethod?: string | null;
   deliveryAmount?: number | null;
   deliveryMarkup?: number | null;
@@ -76,6 +77,7 @@ export default function ExecSummary() {
   const [installEnabled, setInstallEnabled] = useState(false);
   const [installOverride, setInstallOverride] = useState<string>("");
   const [installMarkup, setInstallMarkup] = useState<string>("15");
+  const [deliveryEnabled, setDeliveryEnabled] = useState(false);
   const [deliveryMethodId, setDeliveryMethodId] = useState<string>("");
   const [deliveryCustom, setDeliveryCustom] = useState<string>("");
   const [deliveryMarkup, setDeliveryMarkup] = useState<string>("15");
@@ -174,6 +176,11 @@ export default function ExecSummary() {
       setInstallEnabled(!!job.installationEnabled);
       setInstallOverride(job.installationOverride != null ? String(job.installationOverride) : "");
       setInstallMarkup(job.installationMarkup != null ? String(job.installationMarkup) : "15");
+      let initDelivery = false;
+      if (job.deliveryEnabled === true) initDelivery = true;
+      else if (job.deliveryEnabled === false) initDelivery = false;
+      else initDelivery = !!job.deliveryMethod || (job.deliveryAmount != null && job.deliveryAmount > 0);
+      setDeliveryEnabled(initDelivery);
       setDeliveryMethodId(job.deliveryMethod || "");
       setDeliveryCustom(job.deliveryAmount != null ? String(job.deliveryAmount) : "");
       setDeliveryMarkup(job.deliveryMarkup != null ? String(job.deliveryMarkup) : "15");
@@ -326,6 +333,7 @@ export default function ExecSummary() {
   }, [installEnabled, installOverride, installMarkup, installationItems]);
 
   const deliveryTotals = useMemo(() => {
+    if (!deliveryEnabled) return { cost: 0, sell: 0, isCustom: false };
     const customVal = parseFloat(deliveryCustom);
     const rawMarkup = parseFloat(deliveryMarkup);
     const markupPct = Number.isFinite(rawMarkup) ? rawMarkup : 15;
@@ -344,7 +352,7 @@ export default function ExecSummary() {
       }
     }
     return { cost: 0, sell: 0, isCustom: false };
-  }, [deliveryMethodId, deliveryCustom, deliveryMarkup, deliveryRates]);
+  }, [deliveryEnabled, deliveryMethodId, deliveryCustom, deliveryMarkup, deliveryRates]);
 
   const totals = useMemo(() => {
     let totalSqm = 0;
@@ -353,6 +361,7 @@ export default function ExecSummary() {
     let totalMaterials = 0;
     let totalLabor = 0;
     let totalWeight = 0;
+    let totalLaborHours = 0;
 
     for (const ip of itemPricings) {
       totalSqm += ip.sqm;
@@ -362,6 +371,7 @@ export default function ExecSummary() {
         totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd + ip.pricing.wanzBarCostNzd;
         totalLabor += ip.pricing.laborCostNzd;
         totalWeight += ip.pricing.totalWeightKg;
+        totalLaborHours += ip.pricing.laborHours;
       }
     }
 
@@ -373,14 +383,16 @@ export default function ExecSummary() {
     const totalSaleExGst = itemSaleTotal + installSell + delivSell;
     const gstAmount = totalSaleExGst * (gstRate / 100);
     const totalSaleIncGst = totalSaleExGst + gstAmount;
-    const totalProfit = totalSaleExGst - grandTotalCost;
-    const grossMarginPct = totalSaleExGst > 0 ? (totalProfit / totalSaleExGst) * 100 : 0;
+    const grossProfit = totalSaleExGst - grandTotalCost;
+    const grossMarginPct = totalSaleExGst > 0 ? (grossProfit / totalSaleExGst) * 100 : 0;
+    const grossProfitPerHour = totalLaborHours > 0 ? grossProfit / totalLaborHours : 0;
     const avgCostPerSqm = totalSqm > 0 ? grandTotalCost / totalSqm : 0;
     const avgSalePerSqm = totalSqm > 0 ? totalSaleExGst / totalSqm : 0;
 
     return {
       totalSqm, totalManufCost, itemSaleTotal, totalMaterials,
-      totalLabor, totalWeight, totalProfit, grossMarginPct,
+      totalLabor, totalWeight, grossProfit, grossMarginPct,
+      grossProfitPerHour, totalLaborHours,
       avgCostPerSqm, avgSalePerSqm, installCost, installSell,
       delivCost, delivSell, grandTotalCost, totalSaleExGst,
       gstAmount, totalSaleIncGst,
@@ -442,35 +454,85 @@ export default function ExecSummary() {
         <SummaryCard label="USD → NZD Rate" value={`${usdToNzdRate}`} testId="text-usd-rate" />
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="financial-summary">
+      <div className="rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Financial Summary</h2>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[200px]">Category</TableHead>
+              <TableHead className="text-right">Detail</TableHead>
+              <TableHead className="text-right">Cost</TableHead>
+              <TableHead className="text-right">Sell</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow data-testid="row-manuf-materials">
+              <TableCell className="text-sm font-medium" rowSpan={3}>Manufacturing</TableCell>
+              <TableCell className="text-right text-sm text-muted-foreground">Materials</TableCell>
+              <TableCell className="text-right text-sm" data-testid="text-total-materials">${fmt(totals.totalMaterials)}</TableCell>
+              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+            </TableRow>
+            <TableRow data-testid="row-manuf-labour">
+              <TableCell className="text-right text-sm text-muted-foreground">Labour</TableCell>
+              <TableCell className="text-right text-sm" data-testid="text-total-labor">${fmt(totals.totalLabor)}</TableCell>
+              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+            </TableRow>
+            <TableRow className="border-b-2" data-testid="row-manuf-total">
+              <TableCell className="text-right text-sm font-semibold">Total</TableCell>
+              <TableCell className="text-right text-sm font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
+              <TableCell className="text-right text-sm font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
+            </TableRow>
+            <TableRow data-testid="row-installation">
+              <TableCell className="text-sm font-medium">Installation</TableCell>
+              <TableCell className="text-right text-sm text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
+              <TableCell className="text-right text-sm" data-testid="text-total-install-cost">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</TableCell>
+              <TableCell className="text-right text-sm" data-testid="text-total-install-sell">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</TableCell>
+            </TableRow>
+            <TableRow className="border-b-2" data-testid="row-delivery">
+              <TableCell className="text-sm font-medium">Delivery</TableCell>
+              <TableCell className="text-right text-sm text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</TableCell>
+              <TableCell className="text-right text-sm" data-testid="text-total-delivery-cost">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</TableCell>
+              <TableCell className="text-right text-sm" data-testid="text-total-delivery-sell">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</TableCell>
+            </TableRow>
+            <TableRow data-testid="row-grand-total-cost">
+              <TableCell colSpan={2} className="text-sm font-bold">Grand Total Cost (COGS)</TableCell>
+              <TableCell className="text-right text-sm font-bold" data-testid="text-grand-total">${fmt(totals.grandTotalCost)}</TableCell>
+              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+
+        <Separator />
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <FinanceRow label="Manufacturing Materials" value={`$${fmt(totals.totalMaterials)}`} testId="text-total-materials" />
-          <FinanceRow label="Manufacturing Labour" value={`$${fmt(totals.totalLabor)}`} testId="text-total-labor" />
-          <FinanceRow label="Manufacturing Total" value={`$${fmt(totals.totalManufCost)}`} bold testId="text-total-manuf-cost" />
-          <FinanceRow label="Installation Cost" value={installEnabled ? `$${fmt(totals.installCost)}` : "—"} testId="text-total-install-cost" />
-          <FinanceRow label="Installation Sell" value={installEnabled ? `$${fmt(totals.installSell)}` : "—"} testId="text-total-install-sell" />
-          <FinanceRow label="Delivery Cost" value={totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"} testId="text-total-delivery-cost" />
-          <FinanceRow label="Delivery Sell" value={totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"} testId="text-total-delivery-sell" />
-          <FinanceRow label="Grand Total Cost" value={`$${fmt(totals.grandTotalCost)}`} bold testId="text-grand-total" />
           <FinanceRow label="Sale Price (excl. GST)" value={`$${fmt(totals.totalSaleExGst)}`} bold primary testId="text-total-sale-ex-gst" />
           <FinanceRow label={`GST (${gstRate}%)`} value={`$${fmt(totals.gstAmount)}`} testId="text-gst-amount" />
           <FinanceRow label="Sale Price (incl. GST)" value={`$${fmt(totals.totalSaleIncGst)}`} bold primary testId="text-total-sale-inc-gst" />
+          <div />
           <FinanceRow label="Avg Cost/m²" value={`$${fmt(totals.avgCostPerSqm)}`} testId="text-avg-cost-sqm" />
           <FinanceRow label="Avg Sale/m²" value={`$${fmt(totals.avgSalePerSqm)}`} testId="text-avg-sale-sqm" />
         </div>
+
         <Separator />
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-sm text-muted-foreground">Gross Profit</span>
-            <p className={`text-2xl font-bold ${totals.totalProfit >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-total-profit">
-              ${fmt(totals.totalProfit)}
+
+        <div className="grid grid-cols-3 gap-4">
+          <div data-testid="text-gross-profit">
+            <p className="text-xs text-muted-foreground">Gross Profit</p>
+            <p className={`text-2xl font-bold ${totals.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+              ${fmt(totals.grossProfit)}
             </p>
           </div>
-          <div className="text-right">
-            <span className="text-sm text-muted-foreground">Gross Margin</span>
-            <p className={`text-2xl font-bold ${totals.grossMarginPct >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-gross-margin">
+          <div data-testid="text-gross-margin">
+            <p className="text-xs text-muted-foreground">Gross Margin</p>
+            <p className={`text-2xl font-bold ${totals.grossMarginPct >= 0 ? "text-green-600" : "text-red-600"}`}>
               {totals.grossMarginPct.toFixed(1)}%
+            </p>
+          </div>
+          <div data-testid="text-gross-profit-per-hour">
+            <p className="text-xs text-muted-foreground">Gross Profit/hr</p>
+            <p className={`text-2xl font-bold ${totals.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+              {totals.totalLaborHours > 0 ? `$${fmt(totals.grossProfitPerHour)}/hr` : "—"}
             </p>
           </div>
         </div>
@@ -573,62 +635,83 @@ export default function ExecSummary() {
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
-        <div className="flex items-center gap-4 flex-wrap print:hidden">
-          <div className="flex-1 min-w-[200px]">
-            <Label className="text-sm">Delivery Method</Label>
-            <Select
-              value={deliveryMethodId}
-              onValueChange={(v) => {
-                setDeliveryMethodId(v);
-                setDeliveryCustom("");
-                persistJobField("deliveryMethod", v);
-                persistJobField("deliveryAmount", null);
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
+          <div className="flex items-center gap-2 print:hidden">
+            <Label htmlFor="delivery-toggle" className="text-sm">Enable</Label>
+            <Switch
+              id="delivery-toggle"
+              checked={deliveryEnabled}
+              onCheckedChange={(v) => {
+                setDeliveryEnabled(v);
+                persistJobField("deliveryEnabled", v);
               }}
-            >
-              <SelectTrigger data-testid="select-delivery-method"><SelectValue placeholder="Select delivery method" /></SelectTrigger>
-              <SelectContent>
-                {deliveryRates.map((r) => {
-                  const d = r.data as any;
-                  const sell = d.sellNzd ?? d.rateNzd ?? 0;
-                  return <SelectItem key={r.id} value={r.id}>{d.name} {sell > 0 ? `($${sell})` : "(Custom)"}</SelectItem>;
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-28">
-            <Label className="text-sm">Custom Cost ($)</Label>
-            <Input
-              type="number"
-              placeholder="—"
-              value={deliveryCustom}
-              onChange={(e) => {
-                setDeliveryCustom(e.target.value);
-                const val = parseFloat(e.target.value);
-                persistJobField("deliveryAmount", val > 0 ? val : null);
-              }}
-              data-testid="input-delivery-custom"
-            />
-          </div>
-          <div className="w-20">
-            <Label className="text-sm">Markup (%)</Label>
-            <Input
-              type="number"
-              value={deliveryMarkup}
-              onChange={(e) => {
-                setDeliveryMarkup(e.target.value);
-                const val = parseFloat(e.target.value);
-                persistJobField("deliveryMarkup", val >= 0 ? val : null);
-              }}
-              data-testid="input-delivery-markup"
+              data-testid="switch-delivery"
             />
           </div>
         </div>
-        <div className="flex items-center justify-end gap-4 font-bold text-sm" data-testid="text-delivery-total">
-          <span>Cost: ${fmt(deliveryTotals.cost)}</span>
-          <span>Sell: ${fmt(deliveryTotals.sell)}</span>
-          {deliveryTotals.isCustom && <Badge variant="outline">Custom</Badge>}
-        </div>
+        {deliveryEnabled && (
+          <>
+            <div className="flex items-center gap-4 flex-wrap print:hidden">
+              <div className="flex-1 min-w-[200px]">
+                <Label className="text-sm">Delivery Method</Label>
+                <Select
+                  value={deliveryMethodId}
+                  onValueChange={(v) => {
+                    setDeliveryMethodId(v);
+                    setDeliveryCustom("");
+                    persistJobField("deliveryMethod", v);
+                    persistJobField("deliveryAmount", null);
+                  }}
+                >
+                  <SelectTrigger data-testid="select-delivery-method"><SelectValue placeholder="Select delivery method" /></SelectTrigger>
+                  <SelectContent>
+                    {deliveryRates.map((r) => {
+                      const d = r.data as any;
+                      const sell = d.sellNzd ?? d.rateNzd ?? 0;
+                      return <SelectItem key={r.id} value={r.id}>{d.name} {sell > 0 ? `($${sell})` : "(Custom)"}</SelectItem>;
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-28">
+                <Label className="text-sm">Custom Cost ($)</Label>
+                <Input
+                  type="number"
+                  placeholder="—"
+                  value={deliveryCustom}
+                  onChange={(e) => {
+                    setDeliveryCustom(e.target.value);
+                    const val = parseFloat(e.target.value);
+                    persistJobField("deliveryAmount", val > 0 ? val : null);
+                  }}
+                  data-testid="input-delivery-custom"
+                />
+              </div>
+              <div className="w-20">
+                <Label className="text-sm">Markup (%)</Label>
+                <Input
+                  type="number"
+                  value={deliveryMarkup}
+                  onChange={(e) => {
+                    setDeliveryMarkup(e.target.value);
+                    const val = parseFloat(e.target.value);
+                    persistJobField("deliveryMarkup", val >= 0 ? val : null);
+                  }}
+                  data-testid="input-delivery-markup"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-4 font-bold text-sm" data-testid="text-delivery-total">
+              <span>Cost: ${fmt(deliveryTotals.cost)}</span>
+              <span>Sell: ${fmt(deliveryTotals.sell)}</span>
+              {deliveryTotals.isCustom && <Badge variant="outline">Custom</Badge>}
+            </div>
+          </>
+        )}
+        {!deliveryEnabled && (
+          <p className="text-sm text-muted-foreground py-2" data-testid="text-delivery-supply-only">Supply Only — Customer to Collect</p>
+        )}
       </div>
 
       <div className="rounded-lg border bg-card" data-testid="items-breakdown">

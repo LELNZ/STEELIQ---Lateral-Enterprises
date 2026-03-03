@@ -43,6 +43,7 @@ interface JobData {
   installationEnabled?: boolean;
   installationOverride?: number | null;
   installationMarkup?: number | null;
+  deliveryEnabled?: boolean;
   deliveryMethod?: string | null;
   deliveryAmount?: number | null;
   deliveryMarkup?: number | null;
@@ -96,8 +97,15 @@ export default function QuoteSummary() {
     return total;
   }, [job, installationRates]);
 
+  const isDeliveryEnabled = useMemo(() => {
+    if (!job) return false;
+    if (job.deliveryEnabled === true) return true;
+    if (job.deliveryEnabled === false) return false;
+    return !!job.deliveryMethod || (job.deliveryAmount != null && job.deliveryAmount > 0);
+  }, [job]);
+
   const deliverySellTotal = useMemo(() => {
-    if (!job) return 0;
+    if (!job || !isDeliveryEnabled) return 0;
     const customVal = job.deliveryAmount;
     if (customVal && customVal > 0) {
       const markup = job.deliveryMarkup ?? 15;
@@ -133,7 +141,7 @@ export default function QuoteSummary() {
   const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1), 0);
   const itemsSubtotal = items.reduce((sum, item) => sum + calcItemPrice(item), 0);
   const hasInstallation = !!job.installationEnabled && installSellTotal > 0;
-  const hasDelivery = deliverySellTotal > 0;
+  const hasDelivery = isDeliveryEnabled && deliverySellTotal > 0;
   const subtotalExGst = itemsSubtotal + (hasInstallation ? installSellTotal : 0) + (hasDelivery ? deliverySellTotal : 0);
   const gstAmount = subtotalExGst * (gstRate / 100);
   const totalIncGst = subtotalExGst + gstAmount;
@@ -224,6 +232,12 @@ export default function QuoteSummary() {
             <div className="flex justify-between items-center text-sm">
               <span className="text-muted-foreground">Delivery</span>
               <span className="font-medium" data-testid="text-delivery-sell">${formatPrice(deliverySellTotal)}</span>
+            </div>
+          )}
+          {!isDeliveryEnabled && (
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Delivery</span>
+              <span className="text-muted-foreground text-xs" data-testid="text-delivery-supply-only">Supply Only — Customer to Collect</span>
             </div>
           )}
           <Separator />

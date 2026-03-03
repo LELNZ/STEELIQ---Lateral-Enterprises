@@ -11,6 +11,7 @@ export interface PricingBreakdown {
   handleCostNzd: number;
   wanzBarCostNzd: number;
   totalWeightKg: number;
+  laborHours: number;
   netCostNzd: number;
   actualCostPerSqm: number;
   salePriceNzd: number;
@@ -129,14 +130,20 @@ export function calculatePricing(
   }
 
   let laborCostNzd = 0;
+  let laborHours = 0;
   for (const l of laborTasks) {
     const master = masterLabourMap.get(l.taskName);
     const configCost = parseFloat(l.costNzd || "0") || 0;
     if (master && configCost === 0) {
       const timeMins = parseFloat(master.timeMinutes) || 0;
       const rate = parseFloat(master.ratePerHour) || 0;
+      laborHours += (timeMins / 60) * quantity;
       laborCostNzd += (timeMins / 60) * rate * quantity;
     } else {
+      const rate = master ? (parseFloat(master.ratePerHour) || 0) : 0;
+      if (rate > 0) {
+        laborHours += (configCost / rate) * quantity;
+      }
       laborCostNzd += configCost * quantity;
     }
   }
@@ -181,6 +188,7 @@ export function calculatePricing(
     handleCostNzd,
     wanzBarCostNzd,
     totalWeightKg,
+    laborHours,
     netCostNzd,
     actualCostPerSqm,
     salePriceNzd,
