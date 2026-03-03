@@ -1894,12 +1894,10 @@ export default function QuoteBuilder() {
                       </Select>
                     </div>
                     <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <Label className="text-xs">Configuration</Label>
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0" data-testid="badge-detected-config">
-                          Detected: {configSignature.label}
-                        </Badge>
-                      </div>
+                      <Label className="text-xs mb-0.5">Configuration</Label>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 whitespace-normal break-words max-w-full mb-1 block w-fit" data-testid="badge-detected-config">
+                        {configSignature.label}
+                      </Badge>
                       {configurations.length > 0 ? (
                         <Select
                           value={w.configurationId || ""}
@@ -1938,7 +1936,7 @@ export default function QuoteBuilder() {
                             }
                           }}
                         >
-                          <Plus className="w-3 h-3 mr-1" /> Auto-generate "{configSignature.label}"
+                          <Plus className="w-3 h-3 mr-1" /> Auto-generate
                         </Button>
                       )}
                     </div>

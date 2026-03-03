@@ -460,10 +460,10 @@ export default function ExecSummary() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[200px]">Category</TableHead>
-              <TableHead className="text-right">Detail</TableHead>
-              <TableHead className="text-right">Cost</TableHead>
-              <TableHead className="text-right">Sell</TableHead>
+              <TableHead className="w-[180px] text-sm">Category</TableHead>
+              <TableHead className="text-right text-sm">Detail</TableHead>
+              <TableHead className="text-right text-sm">Cost</TableHead>
+              <TableHead className="text-right text-sm">Sell</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -480,8 +480,8 @@ export default function ExecSummary() {
             </TableRow>
             <TableRow className="border-b-2" data-testid="row-manuf-total">
               <TableCell className="text-right text-sm font-semibold">Total</TableCell>
-              <TableCell className="text-right text-sm font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
-              <TableCell className="text-right text-sm font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
+              <TableCell className="text-right text-base font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
+              <TableCell className="text-right text-base font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
             </TableRow>
             <TableRow data-testid="row-installation">
               <TableCell className="text-sm font-medium">Installation</TableCell>
@@ -495,9 +495,9 @@ export default function ExecSummary() {
               <TableCell className="text-right text-sm" data-testid="text-total-delivery-cost">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</TableCell>
               <TableCell className="text-right text-sm" data-testid="text-total-delivery-sell">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</TableCell>
             </TableRow>
-            <TableRow data-testid="row-grand-total-cost">
-              <TableCell colSpan={2} className="text-sm font-bold">Grand Total Cost (COGS)</TableCell>
-              <TableCell className="text-right text-sm font-bold" data-testid="text-grand-total">${fmt(totals.grandTotalCost)}</TableCell>
+            <TableRow className="bg-muted/30" data-testid="row-grand-total-cost">
+              <TableCell colSpan={2} className="text-base font-bold">Grand Total Cost (COGS)</TableCell>
+              <TableCell className="text-right text-base font-bold" data-testid="text-grand-total">${fmt(totals.grandTotalCost)}</TableCell>
               <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
             </TableRow>
           </TableBody>
@@ -505,32 +505,49 @@ export default function ExecSummary() {
 
         <Separator />
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <FinanceRow label="Sale Price (excl. GST)" value={`$${fmt(totals.totalSaleExGst)}`} bold primary testId="text-total-sale-ex-gst" />
-          <FinanceRow label={`GST (${gstRate}%)`} value={`$${fmt(totals.gstAmount)}`} testId="text-gst-amount" />
-          <FinanceRow label="Sale Price (incl. GST)" value={`$${fmt(totals.totalSaleIncGst)}`} bold primary testId="text-total-sale-inc-gst" />
-          <div />
-          <FinanceRow label="Avg Cost/m²" value={`$${fmt(totals.avgCostPerSqm)}`} testId="text-avg-cost-sqm" />
-          <FinanceRow label="Avg Sale/m²" value={`$${fmt(totals.avgSalePerSqm)}`} testId="text-avg-sale-sqm" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div data-testid="text-total-sale-ex-gst">
+            <p className="text-sm text-muted-foreground">Sale Price (excl. GST)</p>
+            <p className="text-lg font-bold text-primary mt-0.5">${fmt(totals.totalSaleExGst)}</p>
+          </div>
+          <div data-testid="text-gst-amount">
+            <p className="text-sm text-muted-foreground">GST ({gstRate}%)</p>
+            <p className="text-base font-medium mt-0.5">${fmt(totals.gstAmount)}</p>
+          </div>
+          <div data-testid="text-total-sale-inc-gst">
+            <p className="text-sm text-muted-foreground">Sale Price (incl. GST)</p>
+            <p className="text-lg font-bold text-primary mt-0.5">${fmt(totals.totalSaleIncGst)}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div data-testid="text-avg-cost-sqm">
+            <p className="text-sm text-muted-foreground">Avg Cost/m²</p>
+            <p className="text-base font-semibold mt-0.5">${fmt(totals.avgCostPerSqm)}</p>
+          </div>
+          <div data-testid="text-avg-sale-sqm">
+            <p className="text-sm text-muted-foreground">Avg Sale/m²</p>
+            <p className="text-base font-semibold mt-0.5">${fmt(totals.avgSalePerSqm)}</p>
+          </div>
         </div>
 
         <Separator />
 
         <div className="grid grid-cols-3 gap-4">
           <div data-testid="text-gross-profit">
-            <p className="text-xs text-muted-foreground">Gross Profit</p>
+            <p className="text-sm text-muted-foreground">Gross Profit</p>
             <p className={`text-2xl font-bold ${totals.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
               ${fmt(totals.grossProfit)}
             </p>
           </div>
           <div data-testid="text-gross-margin">
-            <p className="text-xs text-muted-foreground">Gross Margin</p>
+            <p className="text-sm text-muted-foreground">Gross Margin</p>
             <p className={`text-2xl font-bold ${totals.grossMarginPct >= 0 ? "text-green-600" : "text-red-600"}`}>
               {totals.grossMarginPct.toFixed(1)}%
             </p>
           </div>
           <div data-testid="text-gross-profit-per-hour">
-            <p className="text-xs text-muted-foreground">Gross Profit/hr</p>
+            <p className="text-sm text-muted-foreground">Gross Profit/hr</p>
             <p className={`text-2xl font-bold ${totals.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
               {totals.totalLaborHours > 0 ? `$${fmt(totals.grossProfitPerHour)}/hr` : "—"}
             </p>

@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowLeftCircle, FileText } from "lucide-react";
+import { ArrowLeftCircle, FileText, Settings2 } from "lucide-react";
 
 function calcSqm(width: number, height: number, quantity: number): number {
   return (width * height * quantity) / 1_000_000;
@@ -54,7 +54,7 @@ export default function QuoteSummary() {
   const [, params] = useRoute("/job/:id/summary");
   const [, navigate] = useLocation();
   const jobId = params?.id;
-  const { gstRate } = useSettings();
+  const { gstRate, showAvgPriceOnQuote, updateSetting } = useSettings();
 
   const { data: job, isLoading } = useQuery<JobData>({
     queryKey: ["/api/jobs", jobId],
@@ -256,19 +256,31 @@ export default function QuoteSummary() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-card border rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Items</p>
-            <p className="text-2xl font-bold" data-testid="text-total-items">{items.length}</p>
+        <div className="relative">
+          <div className={`grid grid-cols-1 ${showAvgPriceOnQuote ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4`}>
+            <div className="bg-card border rounded-lg p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Items</p>
+              <p className="text-2xl font-bold" data-testid="text-total-items">{items.length}</p>
+            </div>
+            <div className="bg-card border rounded-lg p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total m²</p>
+              <p className="text-2xl font-bold" data-testid="text-total-sqm">{totalSqm.toFixed(2)}</p>
+            </div>
+            {showAvgPriceOnQuote && (
+              <div className="bg-card border rounded-lg p-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Avg $/m²</p>
+                <p className="text-2xl font-bold" data-testid="text-avg-price-sqm">${formatPrice(totalSqm > 0 ? itemsSubtotal / totalSqm : 0)}</p>
+              </div>
+            )}
           </div>
-          <div className="bg-card border rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Total m²</p>
-            <p className="text-2xl font-bold" data-testid="text-total-sqm">{totalSqm.toFixed(2)}</p>
-          </div>
-          <div className="bg-card border rounded-lg p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Avg $/m²</p>
-            <p className="text-2xl font-bold" data-testid="text-avg-price-sqm">${formatPrice(totalSqm > 0 ? itemsSubtotal / totalSqm : 0)}</p>
-          </div>
+          <button
+            onClick={() => updateSetting("showAvgPriceOnQuote", !showAvgPriceOnQuote)}
+            className="absolute -top-1 -right-1 p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground transition-colors print:hidden"
+            title={showAvgPriceOnQuote ? "Hide Avg $/m²" : "Show Avg $/m²"}
+            data-testid="toggle-avg-price"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
     </div>
