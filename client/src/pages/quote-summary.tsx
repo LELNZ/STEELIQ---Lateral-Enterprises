@@ -54,7 +54,7 @@ export default function QuoteSummary() {
   const [, params] = useRoute("/job/:id/summary");
   const [, navigate] = useLocation();
   const jobId = params?.id;
-  const { gstRate, showAvgPriceOnQuote, updateSetting } = useSettings();
+  const { gstRate, showPricingOnQuote, updateSetting } = useSettings();
 
   const { data: job, isLoading } = useQuery<JobData>({
     queryKey: ["/api/jobs", jobId],
@@ -139,6 +139,7 @@ export default function QuoteSummary() {
 
   const items = job.items.map((ji) => ji.config as QuoteItem);
   const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1), 0);
+  const totalWeight = items.reduce((sum, item) => sum + (item.cachedWeightKg || 0), 0);
   const itemsSubtotal = items.reduce((sum, item) => sum + calcItemPrice(item), 0);
   const hasInstallation = !!job.installationEnabled && installSellTotal > 0;
   const hasDelivery = isDeliveryEnabled && deliverySellTotal > 0;
@@ -191,15 +192,17 @@ export default function QuoteSummary() {
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Dimensions</TableHead>
                 <TableHead className="text-right">m²</TableHead>
-                <TableHead className="text-right">$/m²</TableHead>
+                <TableHead className="text-right">Weight</TableHead>
+                {showPricingOnQuote && <TableHead className="text-right">$/m²</TableHead>}
                 <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Price</TableHead>
+                {showPricingOnQuote && <TableHead className="text-right">Price</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item, index) => {
                 const sqm = calcSqm(item.width, item.height, item.quantity || 1);
                 const price = calcItemPrice(item);
+                const weightKg = item.cachedWeightKg || 0;
                 return (
                   <TableRow key={item.id || `item-${index}`} data-testid={`summary-row-${index}`}>
                     <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
@@ -207,9 +210,10 @@ export default function QuoteSummary() {
                     <TableCell className="text-sm">{CATEGORY_LABELS[item.category] || item.category}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{item.width} x {item.height}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{sqm.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">${item.pricePerSqm || 500}</TableCell>
+                    <TableCell className="text-right font-mono text-sm" data-testid={`text-weight-${index}`}>{weightKg > 0 ? `${weightKg.toFixed(1)} kg` : "—"}</TableCell>
+                    {showPricingOnQuote && <TableCell className="text-right font-mono text-sm">${item.pricePerSqm || 500}</TableCell>}
                     <TableCell className="text-right">{item.quantity || 1}</TableCell>
-                    <TableCell className="text-right font-mono text-sm font-semibold">${formatPrice(price)}</TableCell>
+                    {showPricingOnQuote && <TableCell className="text-right font-mono text-sm font-semibold">${formatPrice(price)}</TableCell>}
                   </TableRow>
                 );
               })}
@@ -257,7 +261,7 @@ export default function QuoteSummary() {
         </div>
 
         <div className="relative">
-          <div className={`grid grid-cols-1 ${showAvgPriceOnQuote ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4`}>
+          <div className={`grid grid-cols-1 ${showPricingOnQuote ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4`}>
             <div className="bg-card border rounded-lg p-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Items</p>
               <p className="text-2xl font-bold" data-testid="text-total-items">{items.length}</p>
@@ -266,7 +270,11 @@ export default function QuoteSummary() {
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Total m²</p>
               <p className="text-2xl font-bold" data-testid="text-total-sqm">{totalSqm.toFixed(2)}</p>
             </div>
-            {showAvgPriceOnQuote && (
+            <div className="bg-card border rounded-lg p-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Weight</p>
+              <p className="text-2xl font-bold" data-testid="text-total-weight">{totalWeight.toFixed(1)} kg</p>
+            </div>
+            {showPricingOnQuote && (
               <div className="bg-card border rounded-lg p-4">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Avg $/m²</p>
                 <p className="text-2xl font-bold" data-testid="text-avg-price-sqm">${formatPrice(totalSqm > 0 ? itemsSubtotal / totalSqm : 0)}</p>
@@ -274,10 +282,10 @@ export default function QuoteSummary() {
             )}
           </div>
           <button
-            onClick={() => updateSetting("showAvgPriceOnQuote", !showAvgPriceOnQuote)}
+            onClick={() => updateSetting("showPricingOnQuote", !showPricingOnQuote)}
             className="absolute -top-1 -right-1 p-1 rounded-md text-muted-foreground/40 hover:text-muted-foreground transition-colors print:hidden"
-            title={showAvgPriceOnQuote ? "Hide Avg $/m²" : "Show Avg $/m²"}
-            data-testid="toggle-avg-price"
+            title={showPricingOnQuote ? "Hide line pricing" : "Show line pricing"}
+            data-testid="toggle-pricing"
           >
             <Settings2 className="w-3.5 h-3.5" />
           </button>

@@ -92,6 +92,7 @@ export const quoteItemSchema = z.object({
   heightFromFloor: z.number().default(0),
   handleType: z.string().default(""),
   configurationId: z.string().default(""),
+  cachedWeightKg: z.number().default(0),
 });
 
 export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });

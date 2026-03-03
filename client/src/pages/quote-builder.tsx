@@ -156,6 +156,7 @@ const defaultValues: InsertQuoteItem = {
   heightFromFloor: 0,
   handleType: "",
   configurationId: "",
+  cachedWeightKg: 0,
 };
 
 interface ItemWithPhoto {
@@ -739,12 +740,14 @@ export default function QuoteBuilder() {
         finalData = { ...finalData, configurationId: newConfigId, pricePerSqm: baseConfig?.defaultSalePricePerSqm || finalData.pricePerSqm || 500 };
       }
     }
+    const cachedWeightKg = currentPricing?.totalWeightKg ?? 0;
+    const itemWithWeight = { ...finalData, cachedWeightKg };
     if (editingId) {
-      setItems(items.map((iwp) => (iwp.item.id === editingId ? { ...iwp, item: { ...finalData, id: editingId } } : iwp)));
+      setItems(items.map((iwp) => (iwp.item.id === editingId ? { ...iwp, item: { ...itemWithWeight, id: editingId } } : iwp)));
       setEditingId(null);
       toast({ title: "Item updated", description: `${finalData.name} has been updated.` });
     } else {
-      const newItem: QuoteItem = { ...finalData, id: crypto.randomUUID() };
+      const newItem: QuoteItem = { ...itemWithWeight, id: crypto.randomUUID() };
       setItems([...items, { item: newItem }]);
       toast({ title: "Item added", description: `${finalData.name} added to quote.` });
     }

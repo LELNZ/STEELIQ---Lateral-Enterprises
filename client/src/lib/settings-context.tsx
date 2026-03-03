@@ -6,7 +6,7 @@ interface AppSettings {
   quoteListPosition: QuoteListPosition;
   usdToNzdRate: number;
   gstRate: number;
-  showAvgPriceOnQuote: boolean;
+  showPricingOnQuote: boolean;
 }
 
 interface SettingsContextValue extends AppSettings {
@@ -19,7 +19,7 @@ const defaults: AppSettings = {
   quoteListPosition: "bottom",
   usdToNzdRate: 1.7,
   gstRate: 15,
-  showAvgPriceOnQuote: false,
+  showPricingOnQuote: false,
 };
 
 function loadSettings(): AppSettings {
