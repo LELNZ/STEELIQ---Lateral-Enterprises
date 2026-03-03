@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { type QuoteItem, type JobItem, type LibraryEntry } from "@shared/schema";
+import { type QuoteItem, type JobItem, type LibraryEntry, type ConfigurationProfile } from "@shared/schema";
 import { DOOR_CATEGORIES } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,35 @@ function calcItemPrice(item: QuoteItem): number {
 
 function formatPrice(amount: number): string {
   return amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function calcProfileLength(widthMm: number, heightMm: number, formula: string): number {
+  const wM = widthMm / 1000;
+  const hM = heightMm / 1000;
+  switch (formula) {
+    case "perimeter": return 2 * (wM + hM);
+    case "width": return wM;
+    case "height": return hM;
+    default: return 2 * (wM + hM);
+  }
+}
+
+function calcItemWeight(
+  item: QuoteItem,
+  profiles: ConfigurationProfile[],
+  masterProfileMap: Map<string, any>
+): number {
+  if (!profiles.length) return 0;
+  let totalKg = 0;
+  for (const p of profiles) {
+    const master = masterProfileMap.get(p.mouldNumber);
+    const kgPerM = parseFloat(master?.kgPerMetre ?? p.kgPerMetre) || 0;
+    const formula = master?.lengthFormula ?? p.lengthFormula ?? "perimeter";
+    const length = calcProfileLength(item.width, item.height, formula);
+    const qty = (p.quantityPerSet || 1) * (item.quantity || 1);
+    totalKg += length * qty * kgPerM;
+  }
+  return totalKg;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -61,13 +90,46 @@ export default function QuoteSummary() {
     enabled: !!jobId,
   });
 
+  const configIds = useMemo(() => {
+    if (!job) return [];
+    const ids = new Set<string>();
+    job.items.forEach((ji) => {
+      const cid = (ji.config as QuoteItem).configurationId;
+      if (cid) ids.add(cid);
+    });
+    return Array.from(ids).sort();
+  }, [job]);
+
+  const { data: configProfilesMap = {} } = useQuery<Record<string, ConfigurationProfile[]>>({
+    queryKey: ["quote-summary-config-profiles", ...configIds],
+    queryFn: async () => {
+      const result: Record<string, ConfigurationProfile[]> = {};
+      await Promise.all(configIds.map(async (cid) => {
+        const res = await fetch(`/api/configurations/${cid}/profiles`);
+        result[cid] = res.ok ? await res.json() : [];
+      }));
+      return result;
+    },
+    enabled: configIds.length > 0,
+  });
+
   const fetchLib = (type: string) => async () => {
     const res = await fetch(`/api/library?type=${type}`);
     if (!res.ok) return [];
     return res.json() as Promise<LibraryEntry[]>;
   };
+  const { data: masterProfiles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_profile"], queryFn: fetchLib("direct_profile") });
   const { data: installationRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "installation_rate"], queryFn: fetchLib("installation_rate") });
   const { data: deliveryRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "delivery_rate"], queryFn: fetchLib("delivery_rate") });
+
+  const masterProfileMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const mp of masterProfiles) {
+      const d = mp.data as any;
+      if (d.mouldNumber) m.set(d.mouldNumber, d);
+    }
+    return m;
+  }, [masterProfiles]);
 
   const installSellTotal = useMemo(() => {
     if (!job?.installationEnabled) return 0;
@@ -121,6 +183,15 @@ export default function QuoteSummary() {
     return 0;
   }, [job, deliveryRates]);
 
+  const itemWeights = useMemo(() => {
+    if (!job) return [];
+    return job.items.map((ji) => {
+      const item = ji.config as QuoteItem;
+      const profiles = item.configurationId ? (configProfilesMap[item.configurationId] || []) : [];
+      return calcItemWeight(item, profiles, masterProfileMap);
+    });
+  }, [job, configProfilesMap, masterProfileMap]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -139,7 +210,7 @@ export default function QuoteSummary() {
 
   const items = job.items.map((ji) => ji.config as QuoteItem);
   const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1), 0);
-  const totalWeight = items.reduce((sum, item) => sum + (item.cachedWeightKg || 0), 0);
+  const totalWeight = itemWeights.reduce((sum, w) => sum + w, 0);
   const itemsSubtotal = items.reduce((sum, item) => sum + calcItemPrice(item), 0);
   const hasInstallation = !!job.installationEnabled && installSellTotal > 0;
   const hasDelivery = isDeliveryEnabled && deliverySellTotal > 0;
@@ -202,7 +273,7 @@ export default function QuoteSummary() {
               {items.map((item, index) => {
                 const sqm = calcSqm(item.width, item.height, item.quantity || 1);
                 const price = calcItemPrice(item);
-                const weightKg = item.cachedWeightKg || 0;
+                const weightKg = itemWeights[index] || 0;
                 return (
                   <TableRow key={item.id || `item-${index}`} data-testid={`summary-row-${index}`}>
                     <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
