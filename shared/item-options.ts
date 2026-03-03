@@ -21,13 +21,14 @@ export interface FrameColorOption {
   value: string;
   label: string;
   priceProvision: number | null;
+  supplierCode: string;
 }
 
 export const FRAME_COLORS: FrameColorOption[] = [
-  { value: "Dulux Iron Sand", label: "Dulux Iron Sand", priceProvision: null },
-  { value: "Dulux Flax Pod", label: "Dulux Flax Pod", priceProvision: null },
-  { value: "Dulux Arctic White", label: "Dulux Arctic White", priceProvision: null },
-  { value: "Dulux Black", label: "Dulux Black", priceProvision: null },
+  { value: "Dulux Iron Sand", label: "Dulux Iron Sand", priceProvision: null, supplierCode: "HYX87838" },
+  { value: "Dulux Flax Pod", label: "Dulux Flax Pod", priceProvision: null, supplierCode: "JL3600" },
+  { value: "Dulux Arctic White", label: "Dulux Arctic White", priceProvision: null, supplierCode: "" },
+  { value: "Dulux Black", label: "Dulux Black", priceProvision: null, supplierCode: "" },
 ];
 
 export const FLASHING_SIZES: number[] = [];

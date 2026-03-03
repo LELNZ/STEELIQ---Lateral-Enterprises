@@ -697,7 +697,7 @@ export default function QuoteBuilder() {
         await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
           configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
           kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
-          quantityPerSet: qty, lengthFormula: p.lengthFormula, surface: p.surface, sortOrder: p.sortOrder,
+          quantityPerSet: qty, lengthFormula: p.lengthFormula, sortOrder: p.sortOrder,
         });
       }
       if (sig.mullionCount > 0) {
@@ -706,7 +706,7 @@ export default function QuoteBuilder() {
           await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
             configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
             kgPerMetre: "0.78", pricePerKgUsd: "5.60",
-            quantityPerSet: sig.mullionCount, lengthFormula: "height", surface: "", sortOrder: 99,
+            quantityPerSet: sig.mullionCount, lengthFormula: "height", sortOrder: 99,
           });
         }
       }

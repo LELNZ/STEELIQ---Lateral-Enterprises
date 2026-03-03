@@ -128,7 +128,7 @@ export default function Library() {
             <FrameTypeSection />
           </TabsContent>
           <TabsContent value="frame_color">
-            <SimpleSection type="frame_color" title="Frame Colors" fields={["value", "label", "priceProvision"]} />
+            <SimpleSection type="frame_color" title="Frame Colors" fields={["value", "label", "supplierCode", "priceProvision"]} />
           </TabsContent>
           <TabsContent value="handles">
             <HandlesSection />
@@ -684,7 +684,6 @@ function ProfilesPanel({ configurationId }: { configurationId: string }) {
                 <TableHead className="text-xs text-right">$/kg USD</TableHead>
                 <TableHead className="text-xs text-right">Qty/Set</TableHead>
                 <TableHead className="text-xs">Length</TableHead>
-                <TableHead className="text-xs">Surface</TableHead>
                 <TableHead className="w-16"></TableHead>
               </TableRow>
             </TableHeader>
@@ -697,7 +696,6 @@ function ProfilesPanel({ configurationId }: { configurationId: string }) {
                   <TableCell className="text-xs text-right font-mono">{p.pricePerKgUsd}</TableCell>
                   <TableCell className="text-xs text-right">{p.quantityPerSet}</TableCell>
                   <TableCell className="text-xs">{p.lengthFormula}</TableCell>
-                  <TableCell className="text-xs">{p.surface}</TableCell>
                   <TableCell>
                     <div className="flex gap-0.5">
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditProfile(p)}>
@@ -730,11 +728,9 @@ function ProfileDialog({ configurationId, profile, onClose }: { configurationId:
   const [pricePerKgUsd, setPricePerKgUsd] = useState(profile?.pricePerKgUsd || "");
   const [quantityPerSet, setQuantityPerSet] = useState((profile?.quantityPerSet || 1).toString());
   const [lengthFormula, setLengthFormula] = useState(profile?.lengthFormula || "perimeter");
-  const [surface, setSurface] = useState(profile?.surface || "");
-
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const body = { mouldNumber, role, kgPerMetre, pricePerKgUsd, quantityPerSet: parseInt(quantityPerSet) || 1, lengthFormula, surface };
+      const body = { mouldNumber, role, kgPerMetre, pricePerKgUsd, quantityPerSet: parseInt(quantityPerSet) || 1, lengthFormula };
       if (profile) {
         await apiRequest("PATCH", `/api/profiles/${profile.id}`, body);
       } else {
@@ -789,10 +785,6 @@ function ProfileDialog({ configurationId, profile, onClose }: { configurationId:
                 {LENGTH_FORMULAS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
-          <div className="col-span-2">
-            <Label className="text-xs">Surface / Colour Code</Label>
-            <Input value={surface} onChange={(e) => setSurface(e.target.value)} placeholder="e.g. HYX87838, Mill Finish" data-testid="input-profile-surface" />
           </div>
         </div>
         <DialogFooter>
@@ -1493,6 +1485,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
   const fieldLabels: Record<string, string> = {
     value: "Value (ID)",
     label: "Display Label",
+    supplierCode: "Supplier Code",
     priceProvision: priceUnit ? `Price (${priceUnit})` : "Price Provision ($)",
   };
 
@@ -1868,7 +1861,6 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       <TableHead>kg/m</TableHead>
                       <TableHead>$/kg USD</TableHead>
                       <TableHead>Length</TableHead>
-                      <TableHead>Surface</TableHead>
                       <TableHead className="w-20"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1882,7 +1874,6 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                           <TableCell>{d.kgPerMetre}</TableCell>
                           <TableCell>${d.pricePerKgUsd}</TableCell>
                           <TableCell>{d.lengthFormula}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{d.surface}</TableCell>
                           <TableCell>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditProfile(p)} data-testid={`button-edit-profile-${p.id}`}>
@@ -1897,7 +1888,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       );
                     })}
                     {profiles.length === 0 && (
-                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No profiles</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No profiles</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -1968,7 +1959,6 @@ function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; o
     kgPerMetre: d.kgPerMetre || "",
     pricePerKgUsd: d.pricePerKgUsd || "",
     lengthFormula: d.lengthFormula || "perimeter",
-    surface: d.surface || "",
     familyGroup: d.familyGroup || ["ES52 Window"],
     description: d.description || "",
   });
@@ -2025,10 +2015,6 @@ function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; o
                 {LENGTH_FORMULAS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <Label>Surface</Label>
-            <Input value={values.surface} onChange={(e) => setValues({ ...values, surface: e.target.value })} data-testid="input-surface" />
           </div>
           <div className="col-span-2">
             <Label>Family Groups</Label>

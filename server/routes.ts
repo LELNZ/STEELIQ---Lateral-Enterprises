@@ -47,7 +47,7 @@ async function seedLibraryDefaults() {
 
   await seedType("glass", GLASS_LIBRARY.map((g) => ({ data: { iguType: g.iguType, combo: g.combo, prices: g.prices } })));
   await seedType("frame_type", FRAME_TYPES.map((ft) => ({ data: { value: ft.value, label: ft.label, categories: ft.categories, pricePerKg: ft.pricePerKg } })));
-  await seedType("frame_color", FRAME_COLORS.map((fc) => ({ data: { value: fc.value, label: fc.label, priceProvision: fc.priceProvision } })));
+  await seedType("frame_color", FRAME_COLORS.map((fc) => ({ data: { value: fc.value, label: fc.label, priceProvision: fc.priceProvision, supplierCode: fc.supplierCode || "" } })));
   await seedType("liner_type", LINER_TYPES.map((lt) => ({ data: { value: lt.value, label: lt.label, priceProvision: lt.priceProvision } })));
   for (const hc of HANDLE_CATEGORIES) {
     await seedType(hc.type, hc.defaults.map((h) => ({ data: { value: h.value, label: h.label, priceProvision: h.priceProvision } })));
@@ -82,6 +82,17 @@ export async function registerRoutes(
     console.log("Seeding direct materials from configurations...");
     await seedDirectMaterials();
     console.log("Direct materials seeded");
+  }
+
+  const existingColors = await storage.getLibraryEntries("frame_color");
+  for (const entry of existingColors) {
+    const d = entry.data as any;
+    if (d.value && !d.supplierCode) {
+      const match = FRAME_COLORS.find((fc) => fc.value === d.value);
+      if (match && match.supplierCode) {
+        await storage.updateLibraryEntry(entry.id, { data: { ...d, supplierCode: match.supplierCode } });
+      }
+    }
   }
 
   await seedLabourOperations();
@@ -440,7 +451,6 @@ export async function registerRoutes(
         if (data.pricePerKgUsd !== undefined) syncData.pricePerKgUsd = String(data.pricePerKgUsd);
         if (data.role !== undefined) syncData.role = data.role;
         if (data.lengthFormula !== undefined) syncData.lengthFormula = data.lengthFormula;
-        if (data.surface !== undefined) syncData.surface = data.surface;
         const synced = await storage.updateProfilesByMouldNumber(data.mouldNumber, syncData);
         return res.json({ ...entry, syncedConfigProfiles: synced });
       }
@@ -520,10 +530,10 @@ async function seedES52WindowConfigs(frameTypeId: string) {
   });
 
   const awningProfiles = [
-    { mouldNumber: "0015032", role: "spacer", kgPerMetre: "1.309", pricePerKgUsd: "3.970", quantityPerSet: 1, lengthFormula: "perimeter", surface: "Mill Finish" },
-    { mouldNumber: "0017133", role: "bead", kgPerMetre: "1.250", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "E0026001", role: "outer-frame", kgPerMetre: "1.530", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "E0026002", role: "sash-frame", kgPerMetre: "0.679", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0015032", role: "spacer", kgPerMetre: "1.309", pricePerKgUsd: "3.970", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0017133", role: "bead", kgPerMetre: "1.250", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "E0026001", role: "outer-frame", kgPerMetre: "1.530", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "E0026002", role: "sash-frame", kgPerMetre: "0.679", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
   ];
 
   for (let i = 0; i < awningProfiles.length; i++) {
@@ -542,10 +552,10 @@ async function seedES52WindowConfigs(frameTypeId: string) {
   });
 
   const a1fProfiles = [
-    { mouldNumber: "0017133", role: "bead", kgPerMetre: "1.250", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "E0026001", role: "outer-frame", kgPerMetre: "1.530", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "E0026002", role: "sash-frame", kgPerMetre: "0.679", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "2020250", role: "mullion", kgPerMetre: "0.646", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "height", surface: "HYX87838" },
+    { mouldNumber: "0017133", role: "bead", kgPerMetre: "1.250", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "E0026001", role: "outer-frame", kgPerMetre: "1.530", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "E0026002", role: "sash-frame", kgPerMetre: "0.679", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "2020250", role: "mullion", kgPerMetre: "0.646", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "height" },
   ];
 
   for (let i = 0; i < a1fProfiles.length; i++) {
@@ -564,10 +574,10 @@ async function seedES52WindowConfigs(frameTypeId: string) {
   });
 
   const a2fProfiles = [
-    { mouldNumber: "0017133", role: "bead", kgPerMetre: "1.250", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "E0026001", role: "outer-frame", kgPerMetre: "1.530", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "E0026002", role: "sash-frame", kgPerMetre: "0.679", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "2020250", role: "mullion", kgPerMetre: "0.646", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "height", surface: "HYX87838" },
+    { mouldNumber: "0017133", role: "bead", kgPerMetre: "1.250", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "E0026001", role: "outer-frame", kgPerMetre: "1.530", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "E0026002", role: "sash-frame", kgPerMetre: "0.679", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "perimeter" },
+    { mouldNumber: "2020250", role: "mullion", kgPerMetre: "0.646", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "height" },
   ];
 
   for (let i = 0; i < a2fProfiles.length; i++) {
@@ -610,13 +620,13 @@ async function seedES52HingeDoorConfigs(frameTypeId: string) {
   });
 
   const profiles = [
-    { mouldNumber: "0010175", role: "spacer", kgPerMetre: "0.105", pricePerKgUsd: "3.970", quantityPerSet: 1, lengthFormula: "perimeter", surface: "Mill Finish" },
-    { mouldNumber: "0035223", role: "bead", kgPerMetre: "0.278", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "E0026004", role: "outer-frame", kgPerMetre: "1.946", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0020322", role: "door-frame", kgPerMetre: "1.849", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0021801", role: "transom", kgPerMetre: "0.765", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "width", surface: "HYX87838" },
-    { mouldNumber: "0022200", role: "sash-frame", kgPerMetre: "1.331", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0011808", role: "bead", kgPerMetre: "0.286", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0010175", role: "spacer", kgPerMetre: "0.105", pricePerKgUsd: "3.970", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0035223", role: "bead", kgPerMetre: "0.278", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "E0026004", role: "outer-frame", kgPerMetre: "1.946", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0020322", role: "door-frame", kgPerMetre: "1.849", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0021801", role: "transom", kgPerMetre: "0.765", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "width" },
+    { mouldNumber: "0022200", role: "sash-frame", kgPerMetre: "1.331", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0011808", role: "bead", kgPerMetre: "0.286", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
   ];
 
   for (let i = 0; i < profiles.length; i++) {
@@ -678,17 +688,17 @@ async function seedES127SlidingDoorConfigs(frameTypeId: string) {
   });
 
   const profiles = [
-    { mouldNumber: "0011133", role: "bead", kgPerMetre: "0.259", pricePerKgUsd: "4.180", quantityPerSet: 3, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0100122", role: "spacer", kgPerMetre: "0.421", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0101008", role: "outer-frame", kgPerMetre: "0.565", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0200122", role: "sash-frame", kgPerMetre: "0.415", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0204102", role: "door-frame", kgPerMetre: "1.915", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0209016", role: "spacer", kgPerMetre: "0.241", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "width", surface: "HYX87838" },
-    { mouldNumber: "0209112", role: "sash-frame", kgPerMetre: "1.962", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0209120", role: "transom", kgPerMetre: "1.293", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "width", surface: "HYX87838" },
-    { mouldNumber: "0209210", role: "outer-frame", kgPerMetre: "2.678", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0209252", role: "door-frame", kgPerMetre: "2.007", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
-    { mouldNumber: "0355313", role: "bead", kgPerMetre: "0.226", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter", surface: "HYX87838" },
+    { mouldNumber: "0011133", role: "bead", kgPerMetre: "0.259", pricePerKgUsd: "4.180", quantityPerSet: 3, lengthFormula: "perimeter" },
+    { mouldNumber: "0100122", role: "spacer", kgPerMetre: "0.421", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0101008", role: "outer-frame", kgPerMetre: "0.565", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0200122", role: "sash-frame", kgPerMetre: "0.415", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0204102", role: "door-frame", kgPerMetre: "1.915", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0209016", role: "spacer", kgPerMetre: "0.241", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "width" },
+    { mouldNumber: "0209112", role: "sash-frame", kgPerMetre: "1.962", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0209120", role: "transom", kgPerMetre: "1.293", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "width" },
+    { mouldNumber: "0209210", role: "outer-frame", kgPerMetre: "2.678", pricePerKgUsd: "4.400", quantityPerSet: 2, lengthFormula: "perimeter" },
+    { mouldNumber: "0209252", role: "door-frame", kgPerMetre: "2.007", pricePerKgUsd: "4.400", quantityPerSet: 1, lengthFormula: "perimeter" },
+    { mouldNumber: "0355313", role: "bead", kgPerMetre: "0.226", pricePerKgUsd: "4.180", quantityPerSet: 1, lengthFormula: "perimeter" },
   ];
 
   for (let i = 0; i < profiles.length; i++) {
@@ -851,7 +861,6 @@ async function seedDirectMaterials() {
         kgPerMetre: p.kgPerMetre,
         pricePerKgUsd: p.pricePerKgUsd,
         lengthFormula: p.lengthFormula || "perimeter",
-        surface: p.surface || "",
         familyGroup,
         description: "",
       },
