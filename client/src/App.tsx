@@ -15,6 +15,7 @@ import ExecSummary from "@/pages/exec-summary";
 import Library from "@/pages/library";
 import QuotesList from "@/pages/quotes-list";
 import QuoteDetail from "@/pages/quote-detail";
+import QuotePreview from "@/pages/quote-preview";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/job/:id/exec-summary" component={ExecSummary} />
       <Route path="/job/:id" component={QuoteBuilder} />
       <Route path="/quotes" component={QuotesList} />
+      <Route path="/quote/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id" component={QuoteDetail} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />

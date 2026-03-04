@@ -136,6 +136,7 @@ export const libraryEntries = pgTable("library_entries", {
   type: text("type").notNull(),
   data: jsonb("data").notNull(),
   sortOrder: integer("sort_order").default(0),
+  divisionScope: text("division_scope"),
 });
 
 export const insertLibraryEntrySchema = createInsertSchema(libraryEntries).omit({ id: true });
@@ -240,6 +241,8 @@ export const quoteRevisions = pgTable("quote_revisions", {
   quoteId: varchar("quote_id").notNull(),
   versionNumber: integer("version_number").notNull(),
   snapshotJson: jsonb("snapshot_json").notNull(),
+  specDisplayOverrideJson: jsonb("spec_display_override_json"),
+  templateKey: text("template_key").notNull().default("base_v1"),
   xeroSyncStatus: text("xero_sync_status"),
   procurementGenerated: boolean("procurement_generated").default(false),
   pdfStorageKey: text("pdf_storage_key"),
@@ -266,3 +269,63 @@ export const auditLogs = pgTable("audit_logs", {
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+
+export const orgSettings = pgTable("org_settings", {
+  id: varchar("id").primaryKey().default("default"),
+  legalName: text("legal_name").notNull().default("Lateral Engineering Limited"),
+  gstNumber: text("gst_number"),
+  nzbn: text("nzbn"),
+  address: text("address"),
+  phone: text("phone"),
+  email: text("email"),
+  bankDetails: text("bank_details"),
+  defaultHeaderNotesBlock: text("default_header_notes_block"),
+  defaultTermsBlock: text("default_terms_block"),
+  defaultExclusionsBlock: text("default_exclusions_block"),
+  paymentTermsBlock: text("payment_terms_block"),
+  quoteValidityDays: integer("quote_validity_days").default(30),
+});
+
+export const insertOrgSettingsSchema = createInsertSchema(orgSettings).omit({});
+export type InsertOrgSettings = z.infer<typeof insertOrgSettingsSchema>;
+export type OrgSettings = typeof orgSettings.$inferSelect;
+
+export const divisionSettings = pgTable("division_settings", {
+  divisionCode: varchar("division_code").primaryKey(),
+  tradingName: text("trading_name"),
+  logoUrl: text("logo_url"),
+  templateKey: text("template_key").notNull().default("base_v1"),
+  requiredLegalLine: text("required_legal_line").notNull().default("A trading division of Lateral Engineering Limited"),
+  termsOverrideBlock: text("terms_override_block"),
+  headerNotesOverrideBlock: text("header_notes_override_block"),
+  exclusionsOverrideBlock: text("exclusions_override_block"),
+  fontFamily: text("font_family"),
+  accentColor: text("accent_color"),
+  logoPosition: text("logo_position"),
+  headerVariant: text("header_variant"),
+  scheduleLayoutVariant: text("schedule_layout_variant").notNull().default("image_left_specs_right_v1"),
+  totalsLayoutVariant: text("totals_layout_variant").notNull().default("totals_block_v1"),
+  specDisplayDefaultsJson: jsonb("spec_display_defaults_json"),
+});
+
+export const insertDivisionSettingsSchema = createInsertSchema(divisionSettings);
+export type InsertDivisionSettings = z.infer<typeof insertDivisionSettingsSchema>;
+export type DivisionSettings = typeof divisionSettings.$inferSelect;
+
+export const specDictionary = pgTable("spec_dictionary", {
+  key: text("key").primaryKey(),
+  divisionScope: text("division_scope"),
+  group: text("group").notNull(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").default(0),
+  inputKind: text("input_kind").notNull(),
+  librarySourceKey: text("library_source_key"),
+  optionsJson: jsonb("options_json"),
+  customerVisibleAllowed: boolean("customer_visible_allowed").default(true),
+  unit: text("unit"),
+  helpText: text("help_text"),
+});
+
+export const insertSpecDictionarySchema = createInsertSchema(specDictionary);
+export type InsertSpecDictionary = z.infer<typeof insertSpecDictionarySchema>;
+export type SpecDictionaryEntry = typeof specDictionary.$inferSelect;

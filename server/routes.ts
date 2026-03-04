@@ -11,6 +11,10 @@ import { z } from "zod";
 import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
 import { GLASS_LIBRARY } from "@shared/glass-library";
 import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS } from "@shared/item-options";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
 
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
@@ -100,6 +104,8 @@ export async function registerRoutes(
   await seedLabourOperations();
   await seedInstallationRates();
   await seedDeliveryRates();
+  await seedOrgAndDivisions();
+  await seedSpecDictionary();
 
   app.post("/api/jobs", async (req, res) => {
     try {
@@ -208,6 +214,11 @@ export async function registerRoutes(
   app.get("/api/library", async (req, res) => {
     try {
       const type = req.query.type as string | undefined;
+      const divisionCode = req.query.divisionCode as string | undefined;
+      if (divisionCode) {
+        const entries = await storage.getLibraryEntriesWithScope(type, divisionCode);
+        return res.json(entries);
+      }
       const entries = await storage.getLibraryEntries(type);
       res.json(entries);
     } catch (e: any) {
@@ -487,18 +498,23 @@ export async function registerRoutes(
     snapshot: estimateSnapshotSchema,
     sourceJobId: z.string().optional(),
     customer: z.string().min(1),
+    divisionCode: z.string().optional().default("LJ"),
+    mode: z.enum(["revision", "new_quote"]).optional().default("revision"),
   });
 
   app.post("/api/quotes", async (req, res) => {
     try {
       const parsed = createQuoteBodySchema.parse(req.body);
-      const { snapshot, sourceJobId, customer } = parsed;
+      const { snapshot, sourceJobId, customer, divisionCode, mode } = parsed;
+
+      const divSettings = await storage.getDivisionSettings(divisionCode);
+      const templateKey = divSettings?.templateKey || "base_v1";
 
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
 
-        if (sourceJobId) {
+        if (mode === "revision" && sourceJobId) {
           const existingResult = await client.query(
             `SELECT * FROM quotes WHERE source_job_id = $1 LIMIT 1 FOR UPDATE`,
             [sourceJobId]
@@ -511,14 +527,14 @@ export async function registerRoutes(
             );
             const nextVersion = (revResult.rows[0].max_ver || 0) + 1;
             const revInsert = await client.query(
-              `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, created_at)
-               VALUES (gen_random_uuid(), $1, $2, $3, NOW()) RETURNING *`,
-              [existing.id, nextVersion, JSON.stringify(snapshot)]
+              `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, template_key, created_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW()) RETURNING *`,
+              [existing.id, nextVersion, JSON.stringify(snapshot), templateKey]
             );
             const revision = revInsert.rows[0];
             await client.query(
-              `UPDATE quotes SET current_revision_id = $1, updated_at = NOW() WHERE id = $2`,
-              [revision.id, existing.id]
+              `UPDATE quotes SET current_revision_id = $1, division_id = $2, updated_at = NOW() WHERE id = $3`,
+              [revision.id, divisionCode, existing.id]
             );
             await client.query(
               `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
@@ -532,6 +548,8 @@ export async function registerRoutes(
               quoteId: revision.quote_id,
               versionNumber: revision.version_number,
               snapshotJson: snapshot,
+              templateKey: revision.template_key,
+              specDisplayOverrideJson: revision.spec_display_override_json || null,
               xeroSyncStatus: revision.xero_sync_status || null,
               procurementGenerated: revision.procurement_generated || false,
               pdfStorageKey: revision.pdf_storage_key || null,
@@ -555,16 +573,16 @@ export async function registerRoutes(
         const number = formatQuoteNumber(seqResult.rows[0].current_value);
 
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, customer, status, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, 'draft', NOW(), NOW()) RETURNING *`,
-          [number, sourceJobId || null, customer]
+          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', NOW(), NOW()) RETURNING *`,
+          [number, mode === "new_quote" ? null : (sourceJobId || null), divisionCode, customer]
         );
         const quote = quoteInsert.rows[0];
 
         const revInsert = await client.query(
-          `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, created_at)
-           VALUES (gen_random_uuid(), $1, 1, $2, NOW()) RETURNING *`,
-          [quote.id, JSON.stringify(snapshot)]
+          `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, template_key, created_at)
+           VALUES (gen_random_uuid(), $1, 1, $2, $3, NOW()) RETURNING *`,
+          [quote.id, JSON.stringify(snapshot), templateKey]
         );
         const revision = revInsert.rows[0];
 
@@ -586,6 +604,8 @@ export async function registerRoutes(
           quoteId: revision.quote_id,
           versionNumber: revision.version_number,
           snapshotJson: snapshot,
+          templateKey: revision.template_key,
+          specDisplayOverrideJson: revision.spec_display_override_json || null,
           xeroSyncStatus: revision.xero_sync_status || null,
           procurementGenerated: revision.procurement_generated || false,
           pdfStorageKey: revision.pdf_storage_key || null,
@@ -661,6 +681,156 @@ export async function registerRoutes(
       res.json(logs);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/settings/org", async (_req, res) => {
+    try {
+      const org = await storage.getOrgSettings();
+      res.json(org || {});
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/settings/org", async (req, res) => {
+    try {
+      const org = await storage.upsertOrgSettings(req.body);
+      res.json(org);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/settings/divisions", async (_req, res) => {
+    try {
+      const all = await storage.getAllDivisionSettings();
+      res.json(all);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/settings/divisions/:code", async (req, res) => {
+    try {
+      const div = await storage.getDivisionSettings(req.params.code);
+      if (!div) return res.status(404).json({ error: "Division not found" });
+      res.json(div);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/settings/divisions/:code", async (req, res) => {
+    try {
+      const div = await storage.upsertDivisionSettings(req.params.code, req.body);
+      res.json(div);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/spec-dictionary", async (req, res) => {
+    try {
+      const scope = req.query.scope as string | undefined;
+      const entries = await storage.getSpecDictionary(scope);
+      res.json(entries);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  const DRAWING_DIR = path.resolve("uploads/drawing-images");
+  fs.mkdirSync(DRAWING_DIR, { recursive: true });
+
+  const drawingUpload = multer({
+    storage: multer.diskStorage({
+      destination: DRAWING_DIR,
+      filename: (_req, _file, cb) => {
+        cb(null, `${crypto.randomUUID()}.png`);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype === "image/png") cb(null, true);
+      else cb(new Error("Only PNG files allowed"));
+    },
+  });
+
+  app.post("/api/drawing-images", drawingUpload.single("file"), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    res.json({ key: req.file.filename });
+  });
+
+  app.get("/api/drawing-images/:key", (req, res) => {
+    const key = req.params.key;
+    if (!/^[a-f0-9-]+\.png$/.test(key)) {
+      return res.status(400).json({ error: "Invalid key" });
+    }
+    const filePath = path.resolve(DRAWING_DIR, key);
+    const resolvedDir = path.resolve(DRAWING_DIR);
+    if (!filePath.startsWith(resolvedDir)) {
+      return res.status(400).json({ error: "Invalid key" });
+    }
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+    res.type("image/png").sendFile(filePath);
+  });
+
+  app.get("/api/quotes/:id/preview-data", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const revisions = await storage.getQuoteRevisions(quote.id);
+      const currentRevision = revisions.find(r => r.id === quote.currentRevisionId) || revisions[revisions.length - 1];
+      if (!currentRevision) return res.status(404).json({ error: "No revision found" });
+
+      const orgSettings = await storage.getOrgSettings();
+      const divCode = quote.divisionId || "LJ";
+      const divisionSettings = await storage.getDivisionSettings(divCode);
+      const specEntries = await storage.getSpecDictionary(divCode);
+
+      const grouped: Record<string, typeof specEntries> = {};
+      for (const entry of specEntries) {
+        if (!grouped[entry.group]) grouped[entry.group] = [];
+        grouped[entry.group].push(entry);
+      }
+
+      const revOverride = currentRevision.specDisplayOverrideJson as string[] | null;
+      const divDefaults = divisionSettings?.specDisplayDefaultsJson as string[] | null;
+      const effectiveSpecDisplayKeys = revOverride || divDefaults || [];
+
+      res.json({
+        orgSettings: orgSettings || {},
+        divisionSettings: divisionSettings || {},
+        quote,
+        currentRevision,
+        snapshot: currentRevision.snapshotJson,
+        templateKey: currentRevision.templateKey || "base_v1",
+        specDictionaryGrouped: grouped,
+        effectiveSpecDisplayKeys,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/quotes/:id/revisions/:revId/spec-display", async (req, res) => {
+    try {
+      const { specDisplayKeys } = z.object({ specDisplayKeys: z.array(z.string()) }).parse(req.body);
+      const client = await pool.connect();
+      try {
+        await client.query(
+          `UPDATE quote_revisions SET spec_display_override_json = $1 WHERE id = $2 AND quote_id = $3`,
+          [JSON.stringify(specDisplayKeys), req.params.revId, req.params.id]
+        );
+        res.json({ ok: true });
+      } finally {
+        client.release();
+      }
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
     }
   });
 
@@ -1164,5 +1334,105 @@ async function seedDeliveryRates() {
       data: DEFAULT_DELIVERY_RATES[i],
       sortOrder: i,
     });
+  }
+}
+
+const LJ_DEFAULT_SPEC_DISPLAY_KEYS = [
+  "configuration", "overallSize", "frameSeries", "frameColor", "windZone",
+  "rValue", "iguType", "glassType", "glassThickness", "handleSet",
+  "linerType", "flashingSize", "wallThickness", "heightFromFloor",
+];
+
+async function seedOrgAndDivisions() {
+  const org = await storage.getOrgSettings();
+  if (!org) {
+    await storage.upsertOrgSettings({
+      id: "default",
+      legalName: "Lateral Engineering Limited",
+      quoteValidityDays: 30,
+    });
+  }
+
+  const divisions = [
+    { divisionCode: "LJ", tradingName: "Lateral Joinery", templateKey: "joinery_v1", specDisplayDefaultsJson: LJ_DEFAULT_SPEC_DISPLAY_KEYS },
+    { divisionCode: "LE", tradingName: "Lateral Engineering", templateKey: "engineering_v1", specDisplayDefaultsJson: null },
+    { divisionCode: "LL", tradingName: "Lateral Laser", templateKey: "laser_v1", specDisplayDefaultsJson: null },
+  ];
+
+  for (const d of divisions) {
+    const existing = await storage.getDivisionSettings(d.divisionCode);
+    if (!existing) {
+      await storage.upsertDivisionSettings(d.divisionCode, {
+        tradingName: d.tradingName,
+        templateKey: d.templateKey,
+        specDisplayDefaultsJson: d.specDisplayDefaultsJson,
+      });
+    }
+  }
+}
+
+const LJ_SPEC_ENTRIES = [
+  { key: "itemRef", divisionScope: "LJ", group: "Identification", label: "Item Reference", sortOrder: 1, inputKind: "text", customerVisibleAllowed: true },
+  { key: "configuration", divisionScope: "LJ", group: "Identification", label: "Configuration", sortOrder: 2, inputKind: "text", customerVisibleAllowed: true },
+  { key: "itemCategory", divisionScope: "LJ", group: "Identification", label: "Item Category", sortOrder: 3, inputKind: "select_enum", optionsJson: ["windows-standard","sliding-window","sliding-door","entrance-door","hinge-door","french-door","bifold-door","stacker-door","bay-window"], customerVisibleAllowed: true },
+  { key: "overallSize", divisionScope: "LJ", group: "Dimensions", label: "Overall Size", sortOrder: 10, inputKind: "computed", customerVisibleAllowed: true, unit: "mm" },
+  { key: "quantity", divisionScope: "LJ", group: "Dimensions", label: "Quantity", sortOrder: 11, inputKind: "number", customerVisibleAllowed: false },
+  { key: "width", divisionScope: "LJ", group: "Dimensions", label: "Width", sortOrder: 12, inputKind: "number", customerVisibleAllowed: true, unit: "mm" },
+  { key: "height", divisionScope: "LJ", group: "Dimensions", label: "Height", sortOrder: 13, inputKind: "number", customerVisibleAllowed: true, unit: "mm" },
+  { key: "windZone", divisionScope: "LJ", group: "Performance", label: "Wind Zone", sortOrder: 20, inputKind: "select_enum", optionsJson: ["Low","Medium","High","Very High","Extra High"], customerVisibleAllowed: true },
+  { key: "rValue", divisionScope: "LJ", group: "Performance", label: "R-Value", sortOrder: 21, inputKind: "computed", customerVisibleAllowed: true },
+  { key: "frameSeries", divisionScope: "LJ", group: "FrameFinish", label: "Frame Series", sortOrder: 30, inputKind: "select_library", librarySourceKey: "frame_type", customerVisibleAllowed: true },
+  { key: "frameColor", divisionScope: "LJ", group: "FrameFinish", label: "Frame Colour", sortOrder: 31, inputKind: "select_library", librarySourceKey: "frame_color", customerVisibleAllowed: true },
+  { key: "flashingSize", divisionScope: "LJ", group: "FrameFinish", label: "Flashing Size", sortOrder: 32, inputKind: "select_enum", optionsJson: ["0","40","50","60","75","100","125","150"], unit: "mm", customerVisibleAllowed: true },
+  { key: "iguType", divisionScope: "LJ", group: "Glazing", label: "IGU Type", sortOrder: 40, inputKind: "cascading_glass", customerVisibleAllowed: true },
+  { key: "glassType", divisionScope: "LJ", group: "Glazing", label: "Glass Type", sortOrder: 41, inputKind: "cascading_glass", customerVisibleAllowed: true },
+  { key: "glassThickness", divisionScope: "LJ", group: "Glazing", label: "Glass Thickness", sortOrder: 42, inputKind: "cascading_glass", customerVisibleAllowed: true },
+  { key: "handleSet", divisionScope: "LJ", group: "Hardware", label: "Handle Set", sortOrder: 50, inputKind: "select_library_dynamic", customerVisibleAllowed: true },
+  { key: "wanzBarEnabled", divisionScope: "LJ", group: "Hardware", label: "Wanz Bar", sortOrder: 51, inputKind: "boolean", customerVisibleAllowed: false },
+  { key: "wanzBarSource", divisionScope: "LJ", group: "Hardware", label: "Wanz Bar Source", sortOrder: 52, inputKind: "select_enum", optionsJson: ["nz-local","direct",""], customerVisibleAllowed: false },
+  { key: "wanzBarSize", divisionScope: "LJ", group: "Hardware", label: "Wanz Bar Size", sortOrder: 53, inputKind: "select_library", librarySourceKey: "wanz_bar", customerVisibleAllowed: false },
+  { key: "linerType", divisionScope: "LJ", group: "LinersFlashings", label: "Liner Type", sortOrder: 60, inputKind: "select_library", librarySourceKey: "liner_type", customerVisibleAllowed: true },
+  { key: "wallThickness", divisionScope: "LJ", group: "Install", label: "Wall Thickness", sortOrder: 70, inputKind: "number", unit: "mm", customerVisibleAllowed: true },
+  { key: "heightFromFloor", divisionScope: "LJ", group: "Install", label: "Height from Floor", sortOrder: 71, inputKind: "number", unit: "mm", customerVisibleAllowed: true },
+  { key: "pricePerSqm", divisionScope: "LJ", group: "Pricing", label: "Sale Price / m²", sortOrder: 80, inputKind: "number", unit: "$/m²", customerVisibleAllowed: false },
+  { key: "configurationId", divisionScope: "LJ", group: "Pricing", label: "Frame Configuration", sortOrder: 81, inputKind: "text", customerVisibleAllowed: false },
+  { key: "layout", divisionScope: "LJ", group: "Layout", label: "Layout Mode", sortOrder: 90, inputKind: "select_enum", optionsJson: ["standard","custom"], customerVisibleAllowed: false },
+  { key: "windowType", divisionScope: "LJ", group: "Layout", label: "Window Type", sortOrder: 91, inputKind: "select_enum", optionsJson: ["fixed","awning"], customerVisibleAllowed: true },
+  { key: "hingeSide", divisionScope: "LJ", group: "Layout", label: "Hinge Side", sortOrder: 92, inputKind: "select_enum", optionsJson: ["left","right"], customerVisibleAllowed: true },
+  { key: "openDirection", divisionScope: "LJ", group: "Layout", label: "Open Direction", sortOrder: 93, inputKind: "select_enum", optionsJson: ["in","out"], customerVisibleAllowed: true },
+  { key: "halfSolid", divisionScope: "LJ", group: "Layout", label: "Half Solid Panel", sortOrder: 94, inputKind: "boolean", customerVisibleAllowed: false },
+  { key: "panels", divisionScope: "LJ", group: "Layout", label: "Panel Count", sortOrder: 95, inputKind: "number", customerVisibleAllowed: true },
+  { key: "sidelightEnabled", divisionScope: "LJ", group: "Layout", label: "Sidelight", sortOrder: 96, inputKind: "boolean", customerVisibleAllowed: true },
+  { key: "sidelightSide", divisionScope: "LJ", group: "Layout", label: "Sidelight Side", sortOrder: 97, inputKind: "select_enum", optionsJson: ["left","right","both"], customerVisibleAllowed: true },
+  { key: "sidelightWidth", divisionScope: "LJ", group: "Layout", label: "Sidelight Width", sortOrder: 98, inputKind: "number", unit: "mm", customerVisibleAllowed: true },
+  { key: "doorSplit", divisionScope: "LJ", group: "Layout", label: "Door Split", sortOrder: 99, inputKind: "boolean", customerVisibleAllowed: false },
+  { key: "doorSplitHeight", divisionScope: "LJ", group: "Layout", label: "Split Height", sortOrder: 100, inputKind: "number", unit: "mm", customerVisibleAllowed: false },
+  { key: "bifoldLeftCount", divisionScope: "LJ", group: "Layout", label: "Bifold Left Panels", sortOrder: 101, inputKind: "number", customerVisibleAllowed: false },
+  { key: "showLegend", divisionScope: "LJ", group: "Layout", label: "Show Legend", sortOrder: 102, inputKind: "boolean", customerVisibleAllowed: false },
+  { key: "cachedWeightKg", divisionScope: "LJ", group: "Pricing", label: "Estimated Weight", sortOrder: 82, inputKind: "computed", unit: "kg", customerVisibleAllowed: false },
+  { key: "notes", divisionScope: "LJ", group: "Notes", label: "Notes", sortOrder: 110, inputKind: "textarea", customerVisibleAllowed: false },
+];
+
+async function seedSpecDictionary() {
+  const existing = await storage.getAllSpecEntries();
+  const existingKeys = new Set(existing.map(e => e.key));
+  for (const entry of LJ_SPEC_ENTRIES) {
+    if (existingKeys.has(entry.key)) continue;
+    await pool.query(
+      `INSERT INTO spec_dictionary (key, division_scope, "group", label, sort_order, input_kind, library_source_key, options_json, customer_visible_allowed, unit, help_text) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
+      [
+        entry.key,
+        entry.divisionScope || null,
+        entry.group,
+        entry.label,
+        entry.sortOrder,
+        entry.inputKind,
+        (entry as any).librarySourceKey || null,
+        (entry as any).optionsJson ? JSON.stringify((entry as any).optionsJson) : null,
+        entry.customerVisibleAllowed ?? true,
+        (entry as any).unit || null,
+        (entry as any).helpText || null,
+      ]
+    );
   }
 }

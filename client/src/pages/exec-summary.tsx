@@ -403,38 +403,153 @@ export default function ExecSummary() {
 
   const { toast } = useToast();
 
-  const generateQuoteMutation = useMutation({
-    mutationFn: async () => {
-      const snapshot: EstimateSnapshot = {
-        division: "",
-        customer: job?.name || "Unknown",
-        assemblies: itemPricings.map((ip) => ({
-          description: ip.configName,
-          width: ip.item.width,
-          height: ip.item.height,
-          quantity: ip.item.quantity || 1,
-          sqm: ip.sqm,
-          salePrice: ip.salePrice,
-          cost: ip.pricing?.totalCost || 0,
-        })),
-        lineItems: [],
-        operations: [],
-        totals: {
-          cost: totals.grandTotalCost,
-          sell: totals.totalSaleExGst,
-          grossProfit: totals.grossProfit,
-          grossMargin: totals.grossMarginPct,
-          totalLabourHours: totals.totalLaborHours,
-          gpPerHour: totals.grossProfitPerHour,
-        },
+  const buildSnapshotAndPost = async (mode: "revision" | "new_quote") => {
+    const snapshotItems = await Promise.all(itemPricings.map(async (ip, idx) => {
+      const item = ip.item;
+      let drawingImageKey: string | undefined;
+      try {
+        const svgEl = document.querySelector(`[data-testid="drawing-svg-${idx}"]`) as SVGSVGElement | null;
+        if (svgEl) {
+          const { svgToPngBlob } = await import("@/lib/export-png");
+          const blob = await svgToPngBlob(svgEl, 2);
+          const formData = new FormData();
+          formData.append("file", blob, "drawing.png");
+          const uploadRes = await fetch("/api/drawing-images", { method: "POST", body: formData });
+          if (uploadRes.ok) {
+            const { key } = await uploadRes.json();
+            drawingImageKey = key;
+          }
+        }
+      } catch (_e) {}
+
+      const frameTypeEntry = libFrameTypes.find(ft => (ft.data as any).value === item.frameType);
+      const frameTypeLabel = frameTypeEntry ? (frameTypeEntry.data as any).label : item.frameType || "";
+
+      const specValues: Record<string, any> = {
+        itemRef: item.name,
+        configuration: ip.configName,
+        itemCategory: item.category,
+        width: item.width,
+        height: item.height,
+        quantity: item.quantity || 1,
+        frameSeries: item.frameType || "",
+        frameColor: item.frameColor || "",
+        windZone: item.windZone || "",
+        iguType: item.glassIguType || "",
+        glassType: item.glassType || "",
+        glassThickness: item.glassThickness || "",
+        handleSet: item.handleType || "",
+        linerType: item.linerType || "",
+        flashingSize: item.flashingSize || 0,
+        wallThickness: item.wallThickness || 0,
+        heightFromFloor: item.heightFromFloor || 0,
+        pricePerSqm: item.pricePerSqm || 500,
+        configurationId: item.configurationId || "",
+        layout: item.layout || "standard",
+        windowType: item.windowType || "",
+        hingeSide: item.hingeSide || "",
+        openDirection: item.openDirection || "",
+        panels: item.panels || 0,
+        wanzBarEnabled: item.wanzBar || false,
+        wanzBarSize: item.wanzBarSize || "",
+        wanzBarSource: item.wanzBarSource || "",
       };
-      const res = await apiRequest("POST", "/api/quotes", {
-        snapshot,
-        sourceJobId: jobId,
-        customer: job?.name || "Unknown",
-      });
-      return res.json();
-    },
+
+      const resolvedSpecs: Record<string, string> = {
+        itemRef: item.name,
+        configuration: ip.configName,
+        itemCategory: CATEGORY_LABELS[item.category] || item.category,
+        overallSize: `${item.width} x ${item.height}mm`,
+        quantity: String(item.quantity || 1),
+        width: `${item.width}mm`,
+        height: `${item.height}mm`,
+        frameSeries: frameTypeLabel,
+        frameColor: item.frameColor || "",
+        windZone: item.windZone || "",
+        rValue: (() => {
+          if (item.glassIguType) {
+            const rv = getGlassRValue(item.glassIguType);
+            return rv ? `R${rv}` : "";
+          }
+          return "";
+        })(),
+        iguType: item.glassIguType || "",
+        glassType: item.glassType || "",
+        glassThickness: item.glassThickness || "",
+        handleSet: item.handleType || "",
+        linerType: item.linerType || "",
+        flashingSize: item.flashingSize ? `${item.flashingSize}mm` : "",
+        wallThickness: item.wallThickness ? `${item.wallThickness}mm` : "",
+        heightFromFloor: item.heightFromFloor ? `${item.heightFromFloor}mm` : "",
+      };
+
+      return {
+        itemNumber: idx + 1,
+        itemRef: item.name,
+        title: ip.configName || item.name,
+        quantity: item.quantity || 1,
+        width: item.width,
+        height: item.height,
+        drawingImageKey,
+        specValues,
+        resolvedSpecs,
+      };
+    }));
+
+    const installSell = installEnabled ? installationTotals.sell : 0;
+    const delivSell = deliveryTotals.sell;
+    const itemsSubtotal = totals.itemSaleTotal;
+    const subtotalExclGst = totals.totalSaleExGst;
+    const gstAmount = totals.gstAmount;
+    const totalInclGst = totals.totalSaleIncGst;
+
+    const snapshot: EstimateSnapshot = {
+      divisionCode: "LJ",
+      customer: job?.name || "Unknown",
+      specDictionaryVersion: 1,
+      items: snapshotItems,
+      totalsBreakdown: {
+        itemsSubtotal,
+        installationTotal: installSell,
+        deliveryTotal: delivSell,
+        subtotalExclGst,
+        gstAmount,
+        totalInclGst,
+      },
+      division: "",
+      assemblies: itemPricings.map((ip) => ({
+        description: ip.configName,
+        width: ip.item.width,
+        height: ip.item.height,
+        quantity: ip.item.quantity || 1,
+        sqm: ip.sqm,
+        salePrice: ip.salePrice,
+        cost: ip.pricing?.totalCost || 0,
+      })),
+      lineItems: [],
+      operations: [],
+      totals: {
+        cost: totals.grandTotalCost,
+        sell: totals.totalSaleExGst,
+        grossProfit: totals.grossProfit,
+        grossMargin: totals.grossMarginPct,
+        totalLabourHours: totals.totalLaborHours,
+        gpPerHour: totals.grossProfitPerHour,
+      },
+    };
+
+    const res = await apiRequest("POST", "/api/quotes", {
+      snapshot,
+      sourceJobId: jobId,
+      customer: job?.name || "Unknown",
+      divisionCode: "LJ",
+      mode,
+    });
+    return res.json();
+  };
+
+  const generateQuoteMutation = useMutation({
+    mutationFn: () => buildSnapshotAndPost("revision"),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
       if (data.isNewRevision) {
@@ -445,6 +560,17 @@ export default function ExecSummary() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to generate quote", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const generateNewQuoteMutation = useMutation({
+    mutationFn: () => buildSnapshotAndPost("new_quote"),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: `New quote ${data.quote.number} created` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create new quote", description: err.message, variant: "destructive" });
     },
   });
 
@@ -490,11 +616,20 @@ export default function ExecSummary() {
             variant="default"
             size="sm"
             onClick={() => generateQuoteMutation.mutate()}
-            disabled={generateQuoteMutation.isPending}
+            disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
             data-testid="button-generate-quote"
           >
             <FileText className="h-4 w-4 mr-1" />
-            {generateQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
+            {generateQuoteMutation.isPending ? "Generating..." : "Create Quote (Revision)"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => generateNewQuoteMutation.mutate()}
+            disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
+            data-testid="button-generate-new-quote"
+          >
+            {generateNewQuoteMutation.isPending ? "Creating..." : "Create New Quote Number"}
           </Button>
           <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
             <Printer className="h-4 w-4 mr-1" /> Print

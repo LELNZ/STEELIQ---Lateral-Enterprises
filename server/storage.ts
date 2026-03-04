@@ -10,9 +10,13 @@ import {
   type Quote, type InsertQuote,
   type QuoteRevision, type InsertQuoteRevision,
   type AuditLog, type InsertAuditLog,
+  type OrgSettings, type InsertOrgSettings,
+  type DivisionSettings, type InsertDivisionSettings,
+  type SpecDictionaryEntry, type InsertSpecDictionary,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
+  orgSettings, divisionSettings, specDictionary,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, sql } from "drizzle-orm";
@@ -84,6 +88,18 @@ export interface IStorage {
 
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(entityType: string, entityId: string): Promise<AuditLog[]>;
+
+  getOrgSettings(): Promise<OrgSettings | undefined>;
+  upsertOrgSettings(data: Partial<InsertOrgSettings>): Promise<OrgSettings>;
+
+  getDivisionSettings(code: string): Promise<DivisionSettings | undefined>;
+  getAllDivisionSettings(): Promise<DivisionSettings[]>;
+  upsertDivisionSettings(code: string, data: Partial<InsertDivisionSettings>): Promise<DivisionSettings>;
+
+  getSpecDictionary(divisionScope?: string): Promise<SpecDictionaryEntry[]>;
+  getAllSpecEntries(): Promise<SpecDictionaryEntry[]>;
+
+  getLibraryEntriesWithScope(type?: string, divisionCode?: string): Promise<LibraryEntry[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -330,6 +346,73 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(auditLogs)
       .where(and(eq(auditLogs.entityType, entityType), eq(auditLogs.entityId, entityId)))
       .orderBy(desc(auditLogs.createdAt));
+  }
+
+  async getOrgSettings(): Promise<OrgSettings | undefined> {
+    const [row] = await db.select().from(orgSettings).where(eq(orgSettings.id, "default"));
+    return row;
+  }
+
+  async upsertOrgSettings(data: Partial<InsertOrgSettings>): Promise<OrgSettings> {
+    const existing = await this.getOrgSettings();
+    if (existing) {
+      const [updated] = await db.update(orgSettings).set(data).where(eq(orgSettings.id, "default")).returning();
+      return updated;
+    }
+    const [created] = await db.insert(orgSettings).values({ ...data, id: "default" } as any).returning();
+    return created;
+  }
+
+  async getDivisionSettings(code: string): Promise<DivisionSettings | undefined> {
+    const [row] = await db.select().from(divisionSettings).where(eq(divisionSettings.divisionCode, code));
+    return row;
+  }
+
+  async getAllDivisionSettings(): Promise<DivisionSettings[]> {
+    return db.select().from(divisionSettings);
+  }
+
+  async upsertDivisionSettings(code: string, data: Partial<InsertDivisionSettings>): Promise<DivisionSettings> {
+    const existing = await this.getDivisionSettings(code);
+    if (existing) {
+      const [updated] = await db.update(divisionSettings).set(data).where(eq(divisionSettings.divisionCode, code)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(divisionSettings).values({ ...data, divisionCode: code } as any).returning();
+    return created;
+  }
+
+  async getSpecDictionary(divisionScope?: string): Promise<SpecDictionaryEntry[]> {
+    if (divisionScope) {
+      return db.select().from(specDictionary)
+        .where(sql`${specDictionary.divisionScope} IS NULL OR ${specDictionary.divisionScope} = ${divisionScope}`)
+        .orderBy(asc(specDictionary.sortOrder));
+    }
+    return db.select().from(specDictionary).orderBy(asc(specDictionary.sortOrder));
+  }
+
+  async getAllSpecEntries(): Promise<SpecDictionaryEntry[]> {
+    return db.select().from(specDictionary).orderBy(asc(specDictionary.sortOrder));
+  }
+
+  async getLibraryEntriesWithScope(type?: string, divisionCode?: string): Promise<LibraryEntry[]> {
+    if (type && divisionCode) {
+      return db.select().from(libraryEntries)
+        .where(and(
+          eq(libraryEntries.type, type),
+          sql`(${libraryEntries.divisionScope} IS NULL OR ${libraryEntries.divisionScope} = ${divisionCode})`
+        ))
+        .orderBy(asc(libraryEntries.sortOrder));
+    }
+    if (type) {
+      return db.select().from(libraryEntries).where(eq(libraryEntries.type, type)).orderBy(asc(libraryEntries.sortOrder));
+    }
+    if (divisionCode) {
+      return db.select().from(libraryEntries)
+        .where(sql`(${libraryEntries.divisionScope} IS NULL OR ${libraryEntries.divisionScope} = ${divisionCode})`)
+        .orderBy(asc(libraryEntries.sortOrder));
+    }
+    return db.select().from(libraryEntries).orderBy(asc(libraryEntries.sortOrder));
   }
 }
 

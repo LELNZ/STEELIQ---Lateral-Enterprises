@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowLeftCircle, Clock, FileText, History } from "lucide-react";
+import { ArrowLeftCircle, Clock, Eye, FileText, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface QuoteWithRevisions extends Quote {
@@ -108,9 +108,14 @@ export default function QuoteDetail() {
             <p className="text-sm text-muted-foreground" data-testid="text-quote-customer">{quote.customer}</p>
           </div>
         </div>
-        <Badge variant={STATUS_VARIANT[quote.status] || "secondary"} className="text-sm px-3 py-1" data-testid="badge-quote-status">
-          {STATUS_LABELS[quote.status] || quote.status}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate(`/quote/${quoteId}/preview`)} data-testid="button-preview-quote">
+            <Eye className="h-4 w-4 mr-1" /> Preview Customer Quote
+          </Button>
+          <Badge variant={STATUS_VARIANT[quote.status] || "secondary"} className="text-sm px-3 py-1" data-testid="badge-quote-status">
+            {STATUS_LABELS[quote.status] || quote.status}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

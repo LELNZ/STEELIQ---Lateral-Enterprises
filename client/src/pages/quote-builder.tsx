@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
 import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory } from "@shared/item-options";
-import type { LibraryEntry } from "@shared/schema";
+import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
 import {
@@ -160,6 +160,7 @@ const defaultValues: InsertQuoteItem = {
 };
 
 interface ItemWithPhoto {
+  uiId: string;
   item: QuoteItem;
   photo?: string | null;
   dbId?: string;
@@ -221,6 +222,44 @@ export default function QuoteBuilder() {
   const { data: masterAccessories = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_accessory"], queryFn: fetchLib("direct_accessory") });
   const { data: masterLabour = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "labour_operation"], queryFn: fetchLib("labour_operation") });
 
+  const { data: specDictionary = [] } = useQuery<SpecDictionaryEntry[]>({
+    queryKey: ["/api/spec-dictionary", "LJ"],
+    queryFn: async () => {
+      const res = await fetch("/api/spec-dictionary?scope=LJ");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+  const { data: divisionSettings } = useQuery<DivisionSettings>({
+    queryKey: ["/api/settings/divisions", "LJ"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/divisions/LJ");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+  const [showAllSpecs, setShowAllSpecs] = useState(false);
+  const defaultSpecKeys = (divisionSettings?.specDisplayDefaultsJson as string[] | null) || [
+    "configuration","overallSize","frameSeries","frameColor","windZone","rValue",
+    "iguType","glassType","glassThickness","handleSet","linerType","flashingSize",
+    "wallThickness","heightFromFloor"
+  ];
+
+  const specGroups = (() => {
+    const groups: Record<string, SpecDictionaryEntry[]> = {};
+    const layoutKeys = new Set(["layout","windowType","hingeSide","openDirection","halfSolid","panels",
+      "sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"]);
+    for (const spec of specDictionary) {
+      if (layoutKeys.has(spec.key)) continue;
+      if (!groups[spec.group]) groups[spec.group] = [];
+      groups[spec.group].push(spec);
+    }
+    return groups;
+  })();
+
+  const isSpecVisible = (key: string) => showAllSpecs || defaultSpecKeys.includes(key);
+  const hiddenSpecCount = specDictionary.filter(s => !defaultSpecKeys.includes(s.key) && !["layout","windowType","hingeSide","openDirection","halfSolid","panels","sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"].includes(s.key)).length;
+
   const libFrameTypesForCategory = (cat: string) => {
     const fromDb = libFrameTypes.filter((e) => {
       const d = e.data as any;
@@ -266,6 +305,7 @@ export default function QuoteBuilder() {
       setJobDate(existingJob.date || "");
       setSavedJobId(existingJob.id);
       setItems(existingJob.items.map((ji) => ({
+        uiId: ji.id || crypto.randomUUID(),
         item: ji.config as QuoteItem,
         photo: ji.photo,
         dbId: ji.id,
@@ -750,12 +790,12 @@ export default function QuoteBuilder() {
     const cachedWeightKg = currentPricing?.totalWeightKg ?? 0;
     const itemWithWeight = { ...finalData, cachedWeightKg };
     if (editingId) {
-      setItems(items.map((iwp) => (iwp.item.id === editingId ? { ...iwp, item: { ...itemWithWeight, id: editingId } } : iwp)));
+      setItems(items.map((iwp) => (iwp.uiId === editingId ? { ...iwp, item: itemWithWeight } : iwp)));
       setEditingId(null);
       toast({ title: "Item updated", description: `${finalData.name} has been updated.` });
     } else {
       const newItem: QuoteItem = { ...itemWithWeight, id: crypto.randomUUID() };
-      setItems([...items, { item: newItem }]);
+      setItems([...items, { uiId: crypto.randomUUID(), item: newItem }]);
       toast({ title: "Item added", description: `${finalData.name} added to quote.` });
     }
     setHasUnsavedChanges(true);
@@ -766,18 +806,18 @@ export default function QuoteBuilder() {
     const { id, ...rest } = iwp.item;
     skipCategoryResetRef.current = true;
     form.reset(rest);
-    setEditingId(id);
+    setEditingId(iwp.uiId);
   }
 
   function duplicateItem(iwp: ItemWithPhoto) {
     const newItem: QuoteItem = { ...iwp.item, id: crypto.randomUUID(), name: `${iwp.item.name} (copy)` };
-    setItems([...items, { item: newItem }]);
+    setItems([...items, { uiId: crypto.randomUUID(), item: newItem }]);
     setHasUnsavedChanges(true);
     toast({ title: "Item duplicated" });
   }
 
   function deleteItem(id: string) {
-    setItems(items.filter((iwp) => iwp.item.id !== id));
+    setItems(items.filter((iwp) => iwp.uiId !== id));
     if (editingId === id) { setEditingId(null); form.reset({ ...defaultValues }); }
     setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
@@ -794,7 +834,7 @@ export default function QuoteBuilder() {
     try {
       const compressed = await compressImage(file);
       setItems(prev => prev.map(iwp =>
-        iwp.item.id === photoTargetItemId ? { ...iwp, photo: compressed } : iwp
+        iwp.uiId === photoTargetItemId ? { ...iwp, photo: compressed } : iwp
       ));
       setHasUnsavedChanges(true);
       toast({ title: "Photo added" });
@@ -1888,12 +1928,14 @@ export default function QuoteBuilder() {
             </div>
             </TabsContent>
 
-              <TabsContent value="specifics" className="space-y-4 mt-0">
+              <TabsContent value="specifics" className="space-y-3 mt-0">
+                {(isSpecVisible("frameSeries") || isSpecVisible("frameColor") || isSpecVisible("flashingSize") || isSpecVisible("configurationId")) && (
                 <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-FrameFinish">
                     Frame & Finish
                   </h2>
                   <div className="space-y-2">
+                    {isSpecVisible("frameSeries") && (
                     <div>
                       <Label className="text-xs">Frame Type</Label>
                       <Select value={w.frameType || ""} onValueChange={(v) => { form.setValue("frameType", v); form.setValue("configurationId", ""); }}>
@@ -1905,6 +1947,8 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                    )}
+                    {isSpecVisible("configurationId") && (
                     <div>
                       <Label className="text-xs mb-0.5">Configuration</Label>
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 whitespace-normal break-words max-w-full mb-1 block w-fit" data-testid="badge-detected-config">
@@ -1952,8 +1996,10 @@ export default function QuoteBuilder() {
                         </Button>
                       )}
                     </div>
+                    )}
+                    {isSpecVisible("frameColor") && (
                     <div>
-                      <Label className="text-xs">Frame Color</Label>
+                      <Label className="text-xs">Frame Colour</Label>
                       <Select value={w.frameColor || ""} onValueChange={(v) => form.setValue("frameColor", v)}>
                         <SelectTrigger data-testid="select-frame-color"><SelectValue placeholder="Select color" /></SelectTrigger>
                         <SelectContent>
@@ -1963,6 +2009,8 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                    )}
+                    {isSpecVisible("flashingSize") && (
                     <div>
                       <Label className="text-xs">Flashing (Head)</Label>
                       <Select value={String(w.flashingSize || 0)} onValueChange={(v) => form.setValue("flashingSize", Number(v))}>
@@ -1975,13 +2023,250 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                    )}
                   </div>
                 </div>
+                )}
+
+                {(isSpecVisible("frameSeries") || isSpecVisible("flashingSize")) && <Separator />}
+
+                {(isSpecVisible("iguType") || isSpecVisible("glassType") || isSpecVisible("glassThickness") || isSpecVisible("rValue")) && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Glazing">
+                    Glazing
+                  </h2>
+                  <div className="space-y-2">
+                    {isSpecVisible("iguType") && (
+                    <div>
+                      <Label className="text-xs">IGU Type</Label>
+                      <Select value={w.glassIguType || ""} onValueChange={(v) => {
+                        form.setValue("glassIguType", v);
+                        form.setValue("glassType", "");
+                        form.setValue("glassThickness", "");
+                      }}>
+                        <SelectTrigger data-testid="select-glass-igu"><SelectValue placeholder="Select IGU" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="EnergySaver">EnergySaver™ IGU (Entry-level Low-E)</SelectItem>
+                          <SelectItem value="LightBridge">LightBridge™ IGU (High Performance Low-E)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    )}
+                    {isSpecVisible("glassType") && w.glassIguType && (
+                      <div>
+                        <Label className="text-xs">Glass Type</Label>
+                        <Select value={w.glassType || ""} onValueChange={(v) => {
+                          form.setValue("glassType", v);
+                          form.setValue("glassThickness", "");
+                        }}>
+                          <SelectTrigger data-testid="select-glass-type"><SelectValue placeholder="Select glass" /></SelectTrigger>
+                          <SelectContent>
+                            {libGlassCombos(w.glassIguType).map((combo) => (
+                              <SelectItem key={combo} value={combo}>{combo}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {isSpecVisible("glassThickness") && w.glassIguType && w.glassType && (
+                      <div>
+                        <Label className="text-xs">Glass Thickness</Label>
+                        <Select value={w.glassThickness || ""} onValueChange={(v) => form.setValue("glassThickness", v)}>
+                          <SelectTrigger data-testid="select-glass-thickness"><SelectValue placeholder="Select thickness" /></SelectTrigger>
+                          <SelectContent>
+                            {libGlassThicknesses(w.glassIguType, w.glassType).map((t) => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {w.glassIguType && w.glassType && w.glassThickness && (
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-price">
+                          ${libGlassPrice(w.glassIguType, w.glassType, w.glassThickness)?.toFixed(2) ?? "—"}/m²
+                        </Badge>
+                        {isSpecVisible("rValue") && (
+                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-rvalue">
+                          R-Value: {getGlassRValue(w.glassIguType) ?? "—"}
+                        </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                <Separator />
+
+                {(isSpecVisible("windZone") || isSpecVisible("wallThickness") || isSpecVisible("heightFromFloor")) && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Performance">
+                    Performance & Install
+                  </h2>
+                  <div className="space-y-2">
+                    {isSpecVisible("windZone") && (
+                    <div>
+                      <Label className="text-xs">Wind Zone</Label>
+                      <Select value={w.windZone || ""} onValueChange={(v) => form.setValue("windZone", v)}>
+                        <SelectTrigger data-testid="select-wind-zone"><SelectValue placeholder="Select wind zone" /></SelectTrigger>
+                        <SelectContent>
+                          {WIND_ZONES.map((wz) => (
+                            <SelectItem key={wz} value={wz}>{wz}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    )}
+                    {isSpecVisible("wallThickness") && (
+                    <div>
+                      <Label className="text-xs">Wall Thickness (mm)</Label>
+                      <Input type="number" min={0}
+                        value={w.wallThickness || ""}
+                        onChange={(e) => form.setValue("wallThickness", Number(e.target.value) || 0)}
+                        data-testid="input-wall-thickness" />
+                    </div>
+                    )}
+                    {isSpecVisible("heightFromFloor") && (
+                    <div>
+                      <Label className="text-xs">Height from Floor (mm)</Label>
+                      <Input type="number" min={0}
+                        value={w.heightFromFloor || ""}
+                        onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
+                        placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
+                        data-testid="input-height-from-floor" />
+                    </div>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                {(isSpecVisible("windZone") || isSpecVisible("wallThickness")) && <Separator />}
+
+                {isSpecVisible("linerType") && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-LinersFlashings">
+                    Liner / Reveal
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Liner Type</Label>
+                      <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
+                        <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
+                        <SelectContent>
+                          {libLinerOptions.map((lt) => (
+                            <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                )}
+
+                {isSpecVisible("linerType") && <Separator />}
+
+                {(isSpecVisible("handleSet") || isSpecVisible("wanzBarEnabled") || isSpecVisible("wanzBarSize")) && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Hardware">
+                    Hardware & Components
+                  </h2>
+                  <div className="space-y-2">
+                    {isSpecVisible("handleSet") && (
+                    <div>
+                      <Label className="text-xs">Handle</Label>
+                      <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
+                        <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
+                        <SelectContent>
+                          {(libCategoryHandles.length > 0
+                            ? libCategoryHandles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
+                            : libHandlesForCategoryLegacy(w.category || "windows-standard")
+                          ).map((h) => (
+                            <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    )}
+
+                    {isSpecVisible("wanzBarEnabled") && (
+                    <>
+                    <Separator className="my-3" />
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Wanz Bar (Sill Support)</Label>
+                        <div className="flex items-center gap-2">
+                          <Checkbox id="wanzBar" checked={w.wanzBar === true}
+                            onCheckedChange={(v) => {
+                              form.setValue("wanzBar", !!v);
+                              if (v && !w.wanzBarSource) form.setValue("wanzBarSource", "nz-local");
+                            }}
+                            data-testid="checkbox-wanz-bar" />
+                          <Label htmlFor="wanzBar" className="text-xs cursor-pointer">Enable</Label>
+                        </div>
+                      </div>
+                      {(w.width || 0) >= 600 && WINDOW_CATEGORIES.includes(w.category || "") && !w.wanzBar && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="text-wanz-bar-required">
+                          <AlertTriangle className="w-3 h-3 inline mr-1" />Required: width ≥ 600mm
+                        </p>
+                      )}
+                      {w.wanzBar && (
+                        <div className="space-y-2">
+                          {isSpecVisible("wanzBarSize") && (
+                          <div>
+                            <Label className="text-xs">Size</Label>
+                            <Select value={w.wanzBarSize || ""} onValueChange={(v) => form.setValue("wanzBarSize", v)}>
+                              <SelectTrigger data-testid="select-wanz-bar-size"><SelectValue placeholder="Select size" /></SelectTrigger>
+                              <SelectContent>
+                                {(libWanzBars.length > 0
+                                  ? libWanzBars.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label, kgPerMetre: (e.data as any).kgPerMetre }))
+                                  : WANZ_BAR_DEFAULTS.map((wb) => ({ value: wb.value, label: wb.label, kgPerMetre: wb.kgPerMetre }))
+                                ).map((wb) => (
+                                  <SelectItem key={wb.value} value={wb.value}>{wb.label} ({wb.kgPerMetre} kg/m)</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          )}
+                          {isSpecVisible("wanzBarSource") && (
+                          <div>
+                            <Label className="text-xs">Source</Label>
+                            <Select value={w.wanzBarSource || ""} onValueChange={(v) => form.setValue("wanzBarSource", v as any)}>
+                              <SelectTrigger data-testid="select-wanz-bar-source"><SelectValue placeholder="Select source" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="nz-local">NZ Local</SelectItem>
+                                <SelectItem value="direct">Direct Supplier</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          )}
+                          {w.wanzBarSize && w.wanzBarSource && (() => {
+                            const wbEntry = libWanzBars.find((e) => (e.data as any).value === w.wanzBarSize);
+                            const d = wbEntry ? (wbEntry.data as any) : WANZ_BAR_DEFAULTS.find((wb) => wb.value === w.wanzBarSize);
+                            if (!d) return null;
+                            return (
+                              <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 space-y-0.5" data-testid="text-wanz-bar-info">
+                                <div>{d.kgPerMetre} kg/m · Section: {d.sectionNumber || d.value}</div>
+                                {w.wanzBarSource === "nz-local" && <div>NZ Price: {d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}/lin.m` : "Not set"}</div>}
+                                {w.wanzBarSource === "direct" && <div>Direct Price: {d.pricePerKgUsd ? `$${d.pricePerKgUsd} USD/kg` : "Not set"}</div>}
+                                <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-1">Fixings: 10g × 50mm SS, max 300mm centres</div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                    </>
+                    )}
+                  </div>
+                </div>
+                )}
 
                 <Separator />
 
                 <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Pricing">
                     Pricing
                   </h2>
                   <div className="space-y-2">
@@ -2063,209 +2348,32 @@ export default function QuoteBuilder() {
 
                 <Separator />
 
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Environment
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Wind Zone</Label>
-                      <Select value={w.windZone || ""} onValueChange={(v) => form.setValue("windZone", v)}>
-                        <SelectTrigger data-testid="select-wind-zone"><SelectValue placeholder="Select wind zone" /></SelectTrigger>
-                        <SelectContent>
-                          {WIND_ZONES.map((wz) => (
-                            <SelectItem key={wz} value={wz}>{wz}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Wall Thickness (mm)</Label>
-                      <Input type="number" min={0}
-                        value={w.wallThickness || ""}
-                        onChange={(e) => form.setValue("wallThickness", Number(e.target.value) || 0)}
-                        data-testid="input-wall-thickness" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Height from Floor (mm)</Label>
-                      <Input type="number" min={0}
-                        value={w.heightFromFloor || ""}
-                        onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
-                        placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
-                        data-testid="input-height-from-floor" />
-                    </div>
-                  </div>
+                {isSpecVisible("overallSize") && (
+                <div className="flex gap-2 flex-wrap">
+                  <Badge variant="outline" className="text-xs" data-testid="badge-overall-size">
+                    Size: {w.width || 0} × {w.height || 0}mm
+                  </Badge>
+                  <Badge variant="outline" className="text-xs" data-testid="badge-live-sqm-specifics">
+                    {calcSqm(w.width || 0, w.height || 0, w.quantity || 1)} m²
+                  </Badge>
                 </div>
+                )}
 
-                <Separator />
-
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Liner / Reveal
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Liner Type</Label>
-                      <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
-                        <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
-                        <SelectContent>
-                          {libLinerOptions.map((lt) => (
-                            <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Glass
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">IGU Type</Label>
-                      <Select value={w.glassIguType || ""} onValueChange={(v) => {
-                        form.setValue("glassIguType", v);
-                        form.setValue("glassType", "");
-                        form.setValue("glassThickness", "");
-                      }}>
-                        <SelectTrigger data-testid="select-glass-igu"><SelectValue placeholder="Select IGU" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="EnergySaver">EnergySaver™ IGU (Entry-level Low-E)</SelectItem>
-                          <SelectItem value="LightBridge">LightBridge™ IGU (High Performance Low-E)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {w.glassIguType && (
-                      <div>
-                        <Label className="text-xs">Glass Type</Label>
-                        <Select value={w.glassType || ""} onValueChange={(v) => {
-                          form.setValue("glassType", v);
-                          form.setValue("glassThickness", "");
-                        }}>
-                          <SelectTrigger data-testid="select-glass-type"><SelectValue placeholder="Select glass" /></SelectTrigger>
-                          <SelectContent>
-                            {libGlassCombos(w.glassIguType).map((combo) => (
-                              <SelectItem key={combo} value={combo}>{combo}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs text-muted-foreground"
+                    onClick={() => setShowAllSpecs(!showAllSpecs)}
+                    data-testid="button-toggle-all-specs"
+                  >
+                    {showAllSpecs ? (
+                      <><ChevronUp className="w-3 h-3 mr-1" /> Show fewer specs</>
+                    ) : (
+                      <><ChevronDown className="w-3 h-3 mr-1" /> Show all specs ({hiddenSpecCount} more)</>
                     )}
-                    {w.glassIguType && w.glassType && (
-                      <div>
-                        <Label className="text-xs">Glass Thickness</Label>
-                        <Select value={w.glassThickness || ""} onValueChange={(v) => form.setValue("glassThickness", v)}>
-                          <SelectTrigger data-testid="select-glass-thickness"><SelectValue placeholder="Select thickness" /></SelectTrigger>
-                          <SelectContent>
-                            {libGlassThicknesses(w.glassIguType, w.glassType).map((t) => (
-                              <SelectItem key={t} value={t}>{t}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    {w.glassIguType && w.glassType && w.glassThickness && (
-                      <div className="flex gap-2">
-                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-price">
-                          ${libGlassPrice(w.glassIguType, w.glassType, w.glassThickness)?.toFixed(2) ?? "—"}/m²
-                        </Badge>
-                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-rvalue">
-                          R-Value: {getGlassRValue(w.glassIguType) ?? "—"}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Hardware & Components
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Handle</Label>
-                      <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
-                        <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
-                        <SelectContent>
-                          {(libCategoryHandles.length > 0
-                            ? libCategoryHandles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
-                            : libHandlesForCategoryLegacy(w.category || "windows-standard")
-                          ).map((h) => (
-                            <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <Separator className="my-3" />
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">Wanz Bar (Sill Support)</Label>
-                        <div className="flex items-center gap-2">
-                          <Checkbox id="wanzBar" checked={w.wanzBar === true}
-                            onCheckedChange={(v) => {
-                              form.setValue("wanzBar", !!v);
-                              if (v && !w.wanzBarSource) form.setValue("wanzBarSource", "nz-local");
-                            }}
-                            data-testid="checkbox-wanz-bar" />
-                          <Label htmlFor="wanzBar" className="text-xs cursor-pointer">Enable</Label>
-                        </div>
-                      </div>
-                      {(w.width || 0) >= 600 && WINDOW_CATEGORIES.includes(w.category || "") && !w.wanzBar && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="text-wanz-bar-required">
-                          <AlertTriangle className="w-3 h-3 inline mr-1" />Required: width ≥ 600mm
-                        </p>
-                      )}
-                      {w.wanzBar && (
-                        <div className="space-y-2">
-                          <div>
-                            <Label className="text-xs">Size</Label>
-                            <Select value={w.wanzBarSize || ""} onValueChange={(v) => form.setValue("wanzBarSize", v)}>
-                              <SelectTrigger data-testid="select-wanz-bar-size"><SelectValue placeholder="Select size" /></SelectTrigger>
-                              <SelectContent>
-                                {(libWanzBars.length > 0
-                                  ? libWanzBars.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label, kgPerMetre: (e.data as any).kgPerMetre }))
-                                  : WANZ_BAR_DEFAULTS.map((wb) => ({ value: wb.value, label: wb.label, kgPerMetre: wb.kgPerMetre }))
-                                ).map((wb) => (
-                                  <SelectItem key={wb.value} value={wb.value}>{wb.label} ({wb.kgPerMetre} kg/m)</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label className="text-xs">Source</Label>
-                            <Select value={w.wanzBarSource || ""} onValueChange={(v) => form.setValue("wanzBarSource", v as any)}>
-                              <SelectTrigger data-testid="select-wanz-bar-source"><SelectValue placeholder="Select source" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="nz-local">NZ Local</SelectItem>
-                                <SelectItem value="direct">Direct Supplier</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {w.wanzBarSize && w.wanzBarSource && (() => {
-                            const wbEntry = libWanzBars.find((e) => (e.data as any).value === w.wanzBarSize);
-                            const d = wbEntry ? (wbEntry.data as any) : WANZ_BAR_DEFAULTS.find((wb) => wb.value === w.wanzBarSize);
-                            if (!d) return null;
-                            return (
-                              <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 space-y-0.5" data-testid="text-wanz-bar-info">
-                                <div>{d.kgPerMetre} kg/m · Section: {d.sectionNumber || d.value}</div>
-                                {w.wanzBarSource === "nz-local" && <div>NZ Price: {d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}/lin.m` : "Not set"}</div>}
-                                {w.wanzBarSource === "direct" && <div>Direct Price: {d.pricePerKgUsd ? `$${d.pricePerKgUsd} USD/kg` : "Not set"}</div>}
-                                <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-1">Fixings: 10g × 50mm SS, max 300mm centres</div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  </Button>
                 </div>
               </TabsContent>
             </Tabs>
@@ -2337,7 +2445,7 @@ export default function QuoteBuilder() {
                   </TableHeader>
                   <TableBody>
                     {items.map((iwp, index) => (
-                      <TableRow key={iwp.item.id} data-testid={`row-item-${iwp.item.id}`}>
+                      <TableRow key={iwp.uiId} data-testid={`row-item-${iwp.uiId}`}>
                         <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
                         <TableCell className="font-medium">{iwp.item.name}</TableCell>
                         <TableCell className="text-sm">{getCategoryLabel(iwp.item.category)}</TableCell>
@@ -2345,10 +2453,10 @@ export default function QuoteBuilder() {
                           {getLayoutSummary(iwp.item)}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{iwp.item.width} x {iwp.item.height}</TableCell>
-                        <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.item.id}`}>
+                        <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.uiId}`}>
                           {calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm" data-testid={`text-price-${iwp.item.id}`}>
+                        <TableCell className="text-right font-mono text-sm" data-testid={`text-price-${iwp.uiId}`}>
                           ${formatPrice(calcItemPrice(iwp.item))}
                         </TableCell>
                         <TableCell className="text-center">{iwp.item.quantity}</TableCell>
@@ -2358,7 +2466,7 @@ export default function QuoteBuilder() {
                               type="button"
                               onClick={() => setPhotoPreview(iwp.photo!)}
                               className="inline-block"
-                              data-testid={`button-view-photo-${iwp.item.id}`}
+                              data-testid={`button-view-photo-${iwp.uiId}`}
                             >
                               <img src={iwp.photo} alt="Site photo" className="w-8 h-8 rounded object-cover border" />
                             </button>
@@ -2370,28 +2478,28 @@ export default function QuoteBuilder() {
                           <div className="flex items-center justify-end gap-0.5">
                             <Button size="icon" variant="ghost" onClick={() => {
                               const { id, ...rest } = iwp.item;
-                              handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "" }, iwp.item.id);
+                              handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "" }, iwp.uiId);
                             }}
-                              title="Download PNG" data-testid={`button-download-${iwp.item.id}`}>
+                              title="Download PNG" data-testid={`button-download-${iwp.uiId}`}>
                               <Download className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => {
-                              setPhotoTargetItemId(iwp.item.id);
+                              setPhotoTargetItemId(iwp.uiId);
                               photoInputRef.current?.click();
                             }}
-                              title="Take Photo" data-testid={`button-photo-${iwp.item.id}`}>
+                              title="Take Photo" data-testid={`button-photo-${iwp.uiId}`}>
                               <Camera className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => editItem(iwp)}
-                              title="Edit" data-testid={`button-edit-${iwp.item.id}`}>
+                              title="Edit" data-testid={`button-edit-${iwp.uiId}`}>
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => duplicateItem(iwp)}
-                              title="Duplicate" data-testid={`button-duplicate-${iwp.item.id}`}>
+                              title="Duplicate" data-testid={`button-duplicate-${iwp.uiId}`}>
                               <Copy className="w-3.5 h-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" onClick={() => deleteItem(iwp.item.id)}
-                              title="Delete" data-testid={`button-delete-${iwp.item.id}`}>
+                            <Button size="icon" variant="ghost" onClick={() => deleteItem(iwp.uiId)}
+                              title="Delete" data-testid={`button-delete-${iwp.uiId}`}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
