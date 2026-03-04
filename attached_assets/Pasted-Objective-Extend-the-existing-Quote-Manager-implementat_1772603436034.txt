@@ -1,0 +1,494 @@
+Objective
+
+Extend the existing Quote Manager implementation so that the system supports the following architecture:
+
+Layer 1 — Estimates
+
+Estimator workspaces where items are created.
+
+Example:
+
+LJ – Estimates (Lateral Joinery estimator)
+
+This layer captures:
+
+configuration
+
+dimensions
+
+item image (drawing)
+
+library references
+
+cost/pricing logic
+
+Layer 2 — Unified Quote System
+
+The Quotes module acts as a commercial container that manages:
+
+quote numbers
+
+revisions
+
+audit trail
+
+lifecycle (Draft → Review → Sent → Accepted / Declined → Archived)
+
+customer quote rendering
+
+PDF generation
+
+future Xero integration
+
+future procurement triggers
+
+Quotes are generated from estimates via an immutable snapshot.
+
+Critical Business Rule
+
+Legal entity:
+
+Lateral Engineering Limited
+
+Divisions:
+
+Lateral Joinery (LJ)
+
+Lateral Engineering (LE)
+
+Lateral Laser Cutting (LL)
+
+Quotes from divisions must display:
+
+“A trading division of Lateral Engineering Limited”
+
+Branding is determined by the division.
+
+Implementation Plan
+Step 0 — Safety
+
+Create branch
+
+feature/lj-quote-output-v1
+
+Commit baseline:
+
+Baseline before LJ quote output
+
+Do not restructure folders.
+
+Step 1 — UI Layer Structure
+
+Rename UI only.
+
+Sidebar changes:
+
+Estimates
+   LJ – Estimates
+Quotes
+Settings
+
+Existing Jobs page becomes:
+
+LJ – Estimates
+
+Do NOT rename database tables or routes.
+
+Step 2 — Business + Division Settings
+
+Add settings tables.
+
+org_settings
+
+Single row:
+
+id = "default"
+legal_name = "Lateral Engineering Limited"
+gst_number
+nzbn
+address
+phone
+email
+bank_details
+default_terms_block
+default_header_notes_block
+default_exclusions_block
+payment_terms_block
+quote_validity_days
+division_settings
+
+Rows:
+
+LJ
+LE
+LL
+
+Fields:
+
+division_code
+trading_name
+logo_url
+template_key
+required_legal_line
+terms_override_block
+header_notes_override_block
+exclusions_override_block
+
+Theme controls:
+
+font_family
+accent_color
+logo_position
+header_variant
+schedule_layout_variant
+totals_layout_variant
+
+Defaults for LJ:
+
+template_key = joinery_v1
+schedule_layout_variant = image_left_specs_right_v1
+totals_layout_variant = totals_block_v1
+Step 3 — Spec Dictionary System
+
+We must support many spec fields but not require them all.
+
+Create new table:
+
+spec_dictionary
+
+Fields:
+
+id
+key
+label
+group
+display_order
+division_scope
+enabled_by_default
+customer_visible_allowed
+
+Groups:
+
+Identification
+Dimensions
+Performance
+FrameFinish
+Glazing
+Hardware
+Install
+Notes
+Step 4 — Default LJ Spec Set
+
+Default enabled specs:
+
+itemRef
+configuration
+overallSize
+quantity
+frameSeries
+frameColor
+windZone
+rValue
+iguType
+glassType
+glassThickness
+linerType
+handleSet
+wallThickness
+heightFromFloor
+
+Only R-value is used for thermal performance.
+
+Do not display Uw.
+
+Step 5 — Spec Display Controls
+
+Add configuration storage.
+
+division_settings
+
+Add:
+
+spec_display_defaults_json
+
+Array of spec keys.
+
+Example:
+
+[
+"configuration",
+"overallSize",
+"frameSeries",
+"frameColor",
+"windZone",
+"rValue",
+"iguType",
+"glassType",
+"linerType",
+"handleSet"
+]
+quote_revisions
+
+Add optional override:
+
+spec_display_override_json
+
+Used if the user customizes spec visibility for that quote revision.
+
+Step 6 — Estimate Snapshot Enhancement
+
+Update estimate-snapshot.ts.
+
+Snapshot must include:
+
+divisionCode
+customer
+items[]
+totalsBreakdown
+Snapshot Item Structure
+
+Each item includes:
+
+itemNumber
+itemRef
+title
+quantity
+width
+height
+drawingImageUrl
+resolvedSpecs
+libraryRefs
+
+resolvedSpecs is a key/value object.
+
+Example:
+
+resolvedSpecs: {
+ frameSeries: "ES52",
+ configuration: "2 Awning + 1 Fixed",
+ frameColor: "Black",
+ windZone: "High",
+ rValue: "0.37",
+ linerType: "90mm",
+ iguType: "Double Glazed",
+ glassType: "Low-E Argon",
+ glassThickness: "4/14/4"
+}
+
+Renderer must only show specs that:
+
+specKey enabled in filter
+AND value exists
+Step 7 — Totals Breakdown
+
+Customer quote must display:
+
+Items subtotal
+Installation total
+Delivery total
+Subtotal (excl GST)
+GST
+Total (incl GST)
+
+These must exist in snapshot:
+
+totalsBreakdown: {
+itemsSubtotal
+installationTotal
+deliveryTotal
+subtotalExclGst
+gstAmount
+totalInclGst
+}
+
+Per-item prices must NOT be shown in customer quote.
+
+Step 8 — Quote Preview Renderer
+
+Create route:
+
+/quote/:id/preview
+
+Query parameter:
+
+view=customer
+
+Fetch via API:
+
+GET /api/quotes/:id/preview-data
+
+Return:
+
+quote
+revision
+snapshot
+effectiveBranding
+specDisplayKeys
+Step 9 — Quote Layout (Joinery Template)
+
+Template key:
+
+joinery_v1
+
+Pages:
+
+Page 1 — Cover
+
+Header:
+
+Division logo
+Trading name
+"A trading division of Lateral Engineering Limited"
+Legal entity details
+
+Quote information:
+
+Customer
+Quote number
+Date
+Expiry
+
+Header notes from settings.
+
+Totals block:
+
+Items subtotal
+Installation total
+Delivery total
+Subtotal excl GST
+GST
+Total incl GST
+Page 2 — Terms
+
+Display:
+
+Exclusions
+Terms
+Payment details
+Bank details
+
+Acceptance section:
+
+Signature
+Name
+Date
+Schedule Pages
+
+For each item:
+
+Title:
+
+Item {number} — {itemRef}
+
+Layout:
+
+Left side: drawing image
+Right side: spec table
+
+Spec table order controlled by:
+
+spec_display_defaults_json OR override
+
+Hide rows where value missing.
+
+Step 10 — Spec Display UI
+
+Add control in Quote Preview:
+
+Button:
+
+Edit Spec Display
+
+Opens panel:
+
+Checkbox list of spec_dictionary keys
+Grouped logically
+
+Options:
+
+Apply to this quote revision
+Save as LJ default (future admin)
+
+Store override in:
+
+quote_revisions.spec_display_override_json
+Step 11 — PDF Generation
+
+Add endpoint:
+
+POST /api/quotes/:id/generate-pdf
+
+Render Preview HTML → PDF.
+
+Store location in:
+
+quote_revisions.pdf_storage_key
+
+Add UI buttons:
+
+Preview Customer Quote
+Generate Customer PDF
+Download Customer PDF
+Step 12 — Create Quote Behaviour
+
+From LJ Estimate:
+
+Primary button:
+
+Create Quote (Revision)
+
+Secondary dropdown:
+
+Create New Quote Number
+
+API change:
+
+POST /api/quotes
+mode = revision | new_quote
+
+revision (default):
+
+existing quote → create revision
+
+new_quote:
+
+always create new quote number
+Step 13 — Verification
+
+Test full flow:
+
+Create LJ estimate
+
+Create quote revision
+
+Preview quote
+
+Verify image + spec layout
+
+Verify totals breakdown
+
+Generate PDF
+
+Confirm revision immutability
+
+Confirm status transitions still enforced
+
+Future Expansion (Do Not Implement Now)
+
+System must remain compatible with future suites:
+
+LE – Structural Steel Estimator
+LL – Laser Cutting Estimator
+Procurement Suite
+Financial Suite
+Production Suite
+Integration Hub
+Material Library Suite
+
+All suites feed into Unified Quote Manager.
+
+End Implementation
+
+If PDF generation is blocked by environment tooling:
+
+Implement Preview + Settings + Spec Filters first and report available PDF tooling.
