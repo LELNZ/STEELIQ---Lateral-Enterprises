@@ -1,0 +1,275 @@
+You are performing a structural refactor of this project.
+
+This is a controlled refactor.
+You must follow Git safety procedures and preserve working functionality.
+
+The system must still allow the user to create and send a quote today.
+
+We are restructuring into internal suites while preparing for future:
+
+RBAC
+
+Multi-tenant separation
+
+Audit logs
+
+Procurement suite
+
+Xero integration
+
+We are NOT implementing those fully now.
+We are architecting for them.
+
+🔒 STEP 0 — GIT SAFETY PROCEDURE (MANDATORY)
+
+Check git status.
+
+Stage all current changes.
+
+Commit with message:
+
+"Baseline before suite refactor"
+
+Create new branch:
+
+refactor/internal-suite-structure
+
+Switch to that branch.
+
+Do not proceed until branch is created.
+
+🗂 STEP 1 — Introduce Internal Suite Structure
+
+Create folder structure:
+
+apps/
+estimation-joinery/
+quote-manager/
+
+packages/
+contracts/
+db/
+core/
+shared/
+
+Move existing joinery estimation logic into:
+
+apps/estimation-joinery/
+
+Do NOT break imports.
+Fix import paths where necessary.
+System must still run after move.
+
+🧱 STEP 2 — Database Preparation (Future-Proofing Only)
+
+Using Drizzle migrations:
+
+Create a new migration file.
+
+Add new tables:
+
+quotes
+quote_revisions
+audit_logs
+
+Schema:
+
+quotes:
+id
+tenant_id (nullable for now)
+division_id (nullable for now)
+number
+customer
+status
+current_revision_id
+created_by_user_id (nullable)
+created_at
+updated_at
+
+quote_revisions:
+id
+quote_id
+version_number
+snapshot_json (jsonb)
+xero_sync_status (nullable)
+procurement_generated (boolean default false)
+created_by_user_id (nullable)
+created_at
+
+audit_logs:
+id
+entity_type
+entity_id
+action
+performed_by_user_id (nullable)
+metadata_json (jsonb)
+created_at
+
+Do NOT remove existing job tables.
+Do NOT modify existing working logic yet.
+
+Run migration safely.
+Confirm database compiles.
+If migration fails, stop and fix.
+
+📦 STEP 3 — Create EstimateSnapshot Contract
+
+Create:
+
+packages/contracts/estimateSnapshot.ts
+
+Define:
+
+EstimateSnapshot {
+division: string
+customer: string
+assemblies: any[]
+lineItems: any[]
+operations: any[]
+totals: {
+cost: number
+sell: number
+grossProfit: number
+grossMargin: number
+totalLabourHours: number
+gpPerHour: number
+}
+overheadAllocation?: number
+netProfitEstimate?: number
+exclusions?: string[]
+images?: string[]
+}
+
+Exporter must use this contract.
+
+🏗 STEP 4 — Create Quote Manager Module
+
+Create:
+
+apps/quote-manager/
+
+Implement:
+
+createQuoteFromSnapshot(snapshot)
+
+createQuoteRevision()
+
+changeQuoteStatus()
+
+logAuditEvent()
+
+Quote status enum:
+
+Draft
+Review
+Sent
+Accepted
+Declined
+Archived
+
+Quote Manager must own lifecycle.
+Estimator must NOT directly change quote status anymore.
+
+🔄 STEP 5 — Refactor Flow
+
+New flow:
+
+Joinery Estimator
+↓
+Generate EstimateSnapshot
+↓
+Quote Manager creates Draft Quote
+↓
+User reviews
+↓
+User clicks Send
+↓
+Status = Sent
+
+Accepted:
+change status to Accepted
+
+Declined:
+change status to Declined
+
+Ensure PDF generation still works.
+Ensure user can still make a quote today.
+
+🧪 STEP 6 — VERIFY SYSTEM STILL WORKS
+
+After refactor:
+
+Run app
+
+Confirm estimation works
+
+Confirm quote can be created
+
+Confirm status can change
+
+Confirm PDF downloads
+
+Confirm no runtime errors
+
+Do not proceed to final commit unless app runs successfully.
+
+💾 STEP 7 — FINALIZE
+
+If system works:
+
+Stage changes
+
+Commit with message:
+
+"Refactor: Introduced internal suite structure with Quote Manager and future-proof DB"
+
+Do NOT merge to main.
+Stay on refactor branch.
+
+🚫 DO NOT:
+
+Implement full RBAC
+
+Implement procurement
+
+Implement Xero sync logic
+
+Remove working estimation logic
+
+Break current quote functionality
+
+END OF INSTRUCTIONS
+
+🧠 Why This Version Is Safe
+
+This:
+
+Preserves rollback via Git
+
+Preserves DB safety via migration
+
+Separates estimation from commercial lifecycle
+
+Adds tenant/division placeholders
+
+Prepares audit logging
+
+Prepares procurement/Xero columns
+
+Keeps you shipping today
+
+Once this is done and stable, we will:
+
+Phase 2:
+
+Introduce Engineering estimator
+
+Introduce Laser estimator
+
+Phase 3:
+
+Introduce proper RBAC layer
+
+Introduce approval matrix
+
+But first, let’s stabilize this safely.

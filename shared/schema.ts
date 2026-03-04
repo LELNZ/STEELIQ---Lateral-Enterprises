@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -199,3 +199,70 @@ export const configurationLabor = pgTable("configuration_labor", {
 export const insertConfigurationLaborSchema = createInsertSchema(configurationLabor).omit({ id: true });
 export type InsertConfigurationLabor = z.infer<typeof insertConfigurationLaborSchema>;
 export type ConfigurationLabor = typeof configurationLabor.$inferSelect;
+
+export const QUOTE_STATUSES = ["draft", "review", "sent", "accepted", "declined", "archived"] as const;
+export type QuoteStatus = typeof QUOTE_STATUSES[number];
+
+export const VALID_STATUS_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
+  draft: ["review"],
+  review: ["sent"],
+  sent: ["accepted", "declined"],
+  accepted: ["archived"],
+  declined: ["archived"],
+  archived: [],
+};
+
+export const numberSequences = pgTable("number_sequences", {
+  id: varchar("id").primaryKey(),
+  currentValue: integer("current_value").notNull().default(0),
+});
+
+export const quotes = pgTable("quotes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  number: text("number").notNull().unique(),
+  sourceJobId: varchar("source_job_id"),
+  tenantId: varchar("tenant_id"),
+  divisionId: varchar("division_id"),
+  customer: text("customer").notNull(),
+  status: text("status").notNull().default("draft"),
+  currentRevisionId: varchar("current_revision_id"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertQuoteSchema = createInsertSchema(quotes).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertQuote = z.infer<typeof insertQuoteSchema>;
+export type Quote = typeof quotes.$inferSelect;
+
+export const quoteRevisions = pgTable("quote_revisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quoteId: varchar("quote_id").notNull(),
+  versionNumber: integer("version_number").notNull(),
+  snapshotJson: jsonb("snapshot_json").notNull(),
+  xeroSyncStatus: text("xero_sync_status"),
+  procurementGenerated: boolean("procurement_generated").default(false),
+  pdfStorageKey: text("pdf_storage_key"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("quote_revision_unique").on(table.quoteId, table.versionNumber),
+]);
+
+export const insertQuoteRevisionSchema = createInsertSchema(quoteRevisions).omit({ id: true, createdAt: true });
+export type InsertQuoteRevision = z.infer<typeof insertQuoteRevisionSchema>;
+export type QuoteRevision = typeof quoteRevisions.$inferSelect;
+
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  action: text("action").notNull(),
+  performedByUserId: varchar("performed_by_user_id"),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;

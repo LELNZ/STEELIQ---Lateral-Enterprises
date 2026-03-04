@@ -23,7 +23,9 @@ import {
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, Printer } from "lucide-react";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, Printer, FileText } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 
 function calcSqm(width: number, height: number, quantity: number): number {
   return (width * height * quantity) / 1_000_000;
@@ -399,6 +401,53 @@ export default function ExecSummary() {
     };
   }, [itemPricings, installEnabled, installationTotals, deliveryTotals, gstRate]);
 
+  const { toast } = useToast();
+
+  const generateQuoteMutation = useMutation({
+    mutationFn: async () => {
+      const snapshot: EstimateSnapshot = {
+        division: "",
+        customer: job?.name || "Unknown",
+        assemblies: itemPricings.map((ip) => ({
+          description: ip.configName,
+          width: ip.item.width,
+          height: ip.item.height,
+          quantity: ip.item.quantity || 1,
+          sqm: ip.sqm,
+          salePrice: ip.salePrice,
+          cost: ip.pricing?.totalCost || 0,
+        })),
+        lineItems: [],
+        operations: [],
+        totals: {
+          cost: totals.grandTotalCost,
+          sell: totals.totalSaleExGst,
+          grossProfit: totals.grossProfit,
+          grossMargin: totals.grossMarginPct,
+          totalLabourHours: totals.totalLaborHours,
+          gpPerHour: totals.grossProfitPerHour,
+        },
+      };
+      const res = await apiRequest("POST", "/api/quotes", {
+        snapshot,
+        sourceJobId: jobId,
+        customer: job?.name || "Unknown",
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      if (data.isNewRevision) {
+        toast({ title: `New revision added to ${data.quote.number}` });
+      } else {
+        toast({ title: `Quote ${data.quote.number} created` });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to generate quote", description: err.message, variant: "destructive" });
+    },
+  });
+
   const toggleExpand = (idx: number) => {
     setExpandedItems((prev) => {
       const next = new Set(prev);
@@ -436,9 +485,21 @@ export default function ExecSummary() {
             <p className="text-sm text-muted-foreground">Executive Summary</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
-          <Printer className="h-4 w-4 mr-1" /> Print
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => generateQuoteMutation.mutate()}
+            disabled={generateQuoteMutation.isPending}
+            data-testid="button-generate-quote"
+          >
+            <FileText className="h-4 w-4 mr-1" />
+            {generateQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
+            <Printer className="h-4 w-4 mr-1" /> Print
+          </Button>
+        </div>
       </div>
 
       <div className="print:block hidden mb-4">

@@ -7,15 +7,20 @@ import {
   type ConfigurationProfile, type InsertConfigurationProfile,
   type ConfigurationAccessory, type InsertConfigurationAccessory,
   type ConfigurationLabor, type InsertConfigurationLabor,
+  type Quote, type InsertQuote,
+  type QuoteRevision, type InsertQuoteRevision,
+  type AuditLog, type InsertAuditLog,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
+  numberSequences, quotes, quoteRevisions, auditLogs,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc, and, sql } from "drizzle-orm";
 import pg from "pg";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL! });
 const db = drizzle(pool);
+export { pool };
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -65,6 +70,20 @@ export interface IStorage {
   getAllConfigurationAccessories(): Promise<ConfigurationAccessory[]>;
   updateProfilesByMouldNumber(mouldNumber: string, data: Partial<InsertConfigurationProfile>): Promise<number>;
   updateAccessoriesByCode(code: string, data: Partial<InsertConfigurationAccessory>): Promise<number>;
+
+  getNextQuoteNumber(): Promise<string>;
+  createQuote(data: InsertQuote): Promise<Quote>;
+  getQuote(id: string): Promise<Quote | undefined>;
+  getQuoteByJobId(jobId: string): Promise<Quote | undefined>;
+  getAllQuotes(): Promise<Quote[]>;
+  updateQuoteStatus(id: string, status: string): Promise<Quote | undefined>;
+  updateQuoteCurrentRevision(id: string, revisionId: string): Promise<Quote | undefined>;
+
+  createQuoteRevision(data: InsertQuoteRevision): Promise<QuoteRevision>;
+  getQuoteRevisions(quoteId: string): Promise<QuoteRevision[]>;
+
+  createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(entityType: string, entityId: string): Promise<AuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -246,6 +265,76 @@ export class DatabaseStorage implements IStorage {
     const result = await db.update(configurationAccessories).set(data).where(eq(configurationAccessories.code, code)).returning();
     return result.length;
   }
+
+  async getNextQuoteNumber(): Promise<string> {
+    await db.insert(numberSequences).values({ id: "quote", currentValue: 0 }).onConflictDoNothing();
+    const [row] = await db.update(numberSequences)
+      .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
+      .where(eq(numberSequences.id, "quote"))
+      .returning();
+    return formatQuoteNumber(row.currentValue);
+  }
+
+  async createQuote(data: InsertQuote): Promise<Quote> {
+    const [created] = await db.insert(quotes).values(data).returning();
+    return created;
+  }
+
+  async getQuote(id: string): Promise<Quote | undefined> {
+    const [quote] = await db.select().from(quotes).where(eq(quotes.id, id));
+    return quote;
+  }
+
+  async getQuoteByJobId(jobId: string): Promise<Quote | undefined> {
+    const [quote] = await db.select().from(quotes).where(eq(quotes.sourceJobId, jobId));
+    return quote;
+  }
+
+  async getAllQuotes(): Promise<Quote[]> {
+    return db.select().from(quotes).orderBy(desc(quotes.createdAt));
+  }
+
+  async updateQuoteStatus(id: string, status: string): Promise<Quote | undefined> {
+    const [updated] = await db.update(quotes)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(quotes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateQuoteCurrentRevision(id: string, revisionId: string): Promise<Quote | undefined> {
+    const [updated] = await db.update(quotes)
+      .set({ currentRevisionId: revisionId, updatedAt: new Date() })
+      .where(eq(quotes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createQuoteRevision(data: InsertQuoteRevision): Promise<QuoteRevision> {
+    const [created] = await db.insert(quoteRevisions).values(data).returning();
+    return created;
+  }
+
+  async getQuoteRevisions(quoteId: string): Promise<QuoteRevision[]> {
+    return db.select().from(quoteRevisions)
+      .where(eq(quoteRevisions.quoteId, quoteId))
+      .orderBy(asc(quoteRevisions.versionNumber));
+  }
+
+  async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db.insert(auditLogs).values(data).returning();
+    return created;
+  }
+
+  async getAuditLogs(entityType: string, entityId: string): Promise<AuditLog[]> {
+    return db.select().from(auditLogs)
+      .where(and(eq(auditLogs.entityType, entityType), eq(auditLogs.entityId, entityId)))
+      .orderBy(desc(auditLogs.createdAt));
+  }
+}
+
+export function formatQuoteNumber(seq: number): string {
+  return `Q-${String(seq).padStart(4, "0")}`;
 }
 
 export const storage = new DatabaseStorage();

@@ -1,4 +1,4 @@
-import { Briefcase, BookOpen, Settings } from "lucide-react";
+import { Briefcase, BookOpen, Settings, FileText } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -13,6 +13,7 @@ import {
 
 const items = [
   { title: "Jobs", url: "/", icon: Briefcase },
+  { title: "Quotes", url: "/quotes", icon: FileText },
   { title: "Library", url: "/library", icon: BookOpen },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
@@ -35,7 +36,9 @@ export function AppSidebar() {
                 const isActive =
                   item.url === "/"
                     ? location === "/" || location.startsWith("/job")
-                    : location.startsWith(item.url);
+                    : item.url === "/quotes"
+                      ? location === "/quotes" || location.startsWith("/quote/")
+                      : location.startsWith(item.url);
 
                 return (
                   <SidebarMenuItem key={item.title}>

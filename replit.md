@@ -42,6 +42,17 @@ Do not make changes to the folder `shared`.
 - **Pricing**: Live calculation of square meters and pricing with customizable $/m² rates and a detailed quote summary page.
 - **Settings**: User-configurable global settings for legend visibility and quote list position.
 - **Auto-save**: Automatic saving of existing jobs after item changes.
+- **Quote Manager**: Full quote lifecycle (Draft→Review→Sent→Accepted/Declined→Archived) with:
+    - Atomic sequential numbering via `number_sequences` table (format Q-XXXX)
+    - Revision history — immutable `snapshot_json` stored per revision; new revision created instead of updating
+    - Duplicate job prevention — if quote already exists for a `source_job_id`, creates a new revision on that quote
+    - Status transitions enforced server-side via `VALID_STATUS_TRANSITIONS` map
+    - Audit logging for all quote actions (creation, revision, status changes)
+    - EstimateSnapshot contract in `shared/estimate-snapshot.ts` (Zod schema + TypeScript type)
+    - Tables: `number_sequences`, `quotes`, `quote_revisions`, `audit_logs`
+    - Frontend pages: `/quotes` (list), `/quote/:id` (detail with revisions, status actions, audit trail)
+    - "Generate Quote" button on Executive Summary page builds snapshot from current pricing data
+    - Future-proofed for RBAC, multi-tenancy, Xero integration, and procurement (nullable fields)
 - **Business Rules**:
     - Frame sizes are standardized: 52mm for standard windows/doors, 70mm for bi-folding, and 127mm for sliding/stacker/sliding doors.
     - Opening indicators reflect hinge locations; awning indicators are always solid.
