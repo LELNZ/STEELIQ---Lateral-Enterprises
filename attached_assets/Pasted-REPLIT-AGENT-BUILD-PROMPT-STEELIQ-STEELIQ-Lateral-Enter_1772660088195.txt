@@ -1,0 +1,213 @@
+REPLIT AGENT BUILD PROMPT — STEELIQ (STEELIQ---Lateral-Enterprises)
+
+BRANCH + SAFETY
+- Create new branch: feature/lj-customer-quote-preview-v1
+- Do NOT push to main. Use commits with clear messages. Prepare PR.
+- Do not restructure folders. Do not rename existing DB tables or existing API routes.
+- Keep the existing Quote Manager + estimator working (no regressions).
+- If an “existing PDF engine” exists, do NOT refactor it. We are NOT building PDF generation in this phase.
+
+GOAL (T001–T007 ONLY)
+Implement customer-facing LJ quote preview + division/org settings + spec dictionary + spec visibility filter + drawing image upload/storage + enhanced snapshot generation.
+
+CORE ARCHITECTURE (MUST KEEP)
+Division Estimation Layer (LJ now; LE/LL later)
+  ↓
+Estimate Snapshot Contract (immutable)
+  ↓
+Unified Quote Manager (already exists)
+  ↓
+Customer-facing Quote Output (template-based per division)
+
+DIVISIONS
+- Legal entity: Lateral Engineering Limited (LEL)
+- Divisions: LJ, LE, LL
+- Joinery and Laser quotes must show: “A trading division of Lateral Engineering Limited”
+- Quotes store division code in existing quotes.division_id (string).
+
+LIBRARY ARCHITECTURE (CRITICAL)
+- There is ONE shared library system today using /api/library?type=... backed by library_entries table (type + jsonb).
+- Hybrid pattern: API-first with hardcoded fallback; seedLibraryDefaults() seeds DB from constants.
+- Make library future-proof for multi-division:
+  - Add column library_entries.division_scope TEXT NULL
+    - NULL = shared
+    - 'LJ'/'LE'/'LL' = division-specific
+  - Update /api/library responses to accept optional divisionCode and return entries where
+      (division_scope IS NULL OR division_scope = divisionCode)
+    - Default existing seeded joinery entries to division_scope='LJ'.
+- Do NOT redesign the whole library UI now; just ensure schema + API can support divisions.
+
+GLASS / IGU (DO NOT BREAK)
+- Glass selection is a 3-step cascade tied to pricing:
+  1) IGU Type (group)
+  2) Glass Type (combo within IGU)
+  3) Glass Thickness (pricing columns)
+- This is currently driven by the Glass tab/library and must remain exactly functional.
+- Do NOT create a separate “igu_type” library list. IGU is part of glass pricing library.
+
+SPEC SYSTEM REQUIREMENTS (CRITICAL)
+- Specs must come from the QUOTE BUILDER selections (Item specifics).
+- We need provision for 36+ specs, grouped for good UX.
+- Builder UI:
+  - show default 12–18 key specs
+  - “Show more specs” expands to show the rest
+- Quote Preview:
+  - image LEFT, spec table RIGHT per item
+  - customer sees NO per-item prices
+  - totals only:
+      Items Subtotal, Installation Total, Delivery Total,
+      Subtotal excl GST, GST, Total incl GST
+  - spec visibility filter:
+      per-division defaults + per-quote-revision override
+  - hide empty spec rows; default show ~12–18 rows, with “Show more details” toggle.
+
+T001 — ORG + DIVISION SETTINGS
+Add tables in shared/schema.ts (Drizzle) and storage methods:
+1) org_settings (single row id='default'):
+   legal_name (default “Lateral Engineering Limited”), gst_number, nzbn, address, phone, email,
+   bank_details,
+   default_header_notes_block, default_terms_block, default_exclusions_block, payment_terms_block,
+   quote_validity_days (default 30)
+2) division_settings:
+   division_code TEXT PRIMARY KEY (NO UUID id)
+   trading_name, logo_url,
+   template_key DEFAULT 'base_v1' (seed: LJ='joinery_v1', LE='engineering_v1', LL='laser_v1')
+   required_legal_line DEFAULT “A trading division of Lateral Engineering Limited”
+   theme placeholders: font_family, accent_color, layout variants etc
+   spec_display_defaults_json JSONB NULL (array of spec keys)
+Seed idempotently on startup: org + LJ/LE/LL rows.
+
+Add API routes:
+- GET/PATCH /api/settings/org
+- GET /api/settings/divisions
+- GET/PATCH /api/settings/divisions/:code
+
+T002 — SPEC DICTIONARY + REVISION OVERRIDES
+Create spec_dictionary table that drives BOTH:
+- builder input grouping
+- preview filter UI and rendering
+Fields:
+- key TEXT PRIMARY KEY (normalized keys)
+- division_scope TEXT NULL (NULL = shared)
+- group TEXT NOT NULL (Identification/Dimensions/Performance/FrameFinish/Glazing/Hardware/LinersFlashings/Install/Notes)
+- label TEXT NOT NULL
+- sort_order INT DEFAULT 0
+- input_kind TEXT NOT NULL
+    allowed: 'text'|'number'|'boolean'|'textarea'|'select_library'|'select_enum'|'computed'|'cascading_glass'|'select_library_dynamic'
+- library_source_key TEXT NULL (for select_library)
+- options_json JSONB NULL (for select_enum)
+- customer_visible_allowed BOOL DEFAULT true
+- unit TEXT NULL
+- help_text TEXT NULL
+
+Add to quote_revisions:
+- spec_display_override_json JSONB NULL (array of keys)
+- template_key TEXT NOT NULL (lock template used by this revision; set at creation from division_settings.template_key)
+
+Seed LJ specs:
+- Seed a full LJ set (36+ keys) grouped logically.
+- Wind Zone must be under Performance group and options are:
+  ["Low","Medium","High","Very High","Extra High"] (select_enum)
+- R-value is required (computed/display), NO U-value required.
+- Glazing must be represented as:
+  iguType / glassType / glassThickness (all derived from the existing cascading glass control),
+  and rValue as computed.
+- HandleSet uses select_library_dynamic driven by CATEGORY_TO_HANDLE_TYPE mapping.
+  Handle library types (exact):
+    awning_handle, sliding_window_handle, entrance_door_handle, hinge_door_handle,
+    sliding_door_handle, bifold_door_handle, stacker_door_handle
+
+Seed LJ division_settings.spec_display_defaults_json with 12–18 keys in customer-friendly order
+(ensure order supports table reading):
+Identification → Dimensions → Performance → FrameFinish → Glazing → Hardware → Liners/Flashings → Install → Notes
+
+T003 — ENHANCED SNAPSHOT + DRAWING IMAGE STORAGE
+Update shared/estimate-snapshot.ts to support:
+- divisionCode
+- customer
+- items[]:
+    itemNumber, itemRef, title, qty, width, height,
+    drawingImageKey (string, NOT base64),
+    specValues (raw values used in estimator),
+    resolvedSpecs (pretty strings used in customer quote),
+- totalsBreakdown ALWAYS includes:
+    itemsSubtotal, installationTotal, deliveryTotal, subtotalExclGst, gstAmount, totalInclGst
+  installationTotal and deliveryTotal must always exist (default 0).
+
+IMAGE STORAGE REQUIREMENT
+- Do NOT store base64 images in snapshot_json.
+- Upload drawings to server storage: uploads/drawing-images/{uuid}.png
+- Serve via a controlled Express route (NOT public folder):
+    POST /api/drawing-images (multipart png) -> returns { key }
+    GET  /api/drawing-images/:key -> streams file
+- Snapshot stores only drawingImageKey.
+
+T004 — PREVIEW DATA + SPEC DISPLAY APIs + QUOTE CREATE MODE
+Add API:
+- GET /api/spec-dictionary?scope=LJ (returns grouped ordered specs)
+- GET /api/quotes/:id/preview-data returns:
+    orgSettings, divisionSettings (for quote.division_id),
+    quote, currentRevision, snapshot,
+    template_key (from revision.template_key),
+    specDictionaryGrouped,
+    effectiveSpecDisplayKeys (revision override else division defaults)
+- PATCH /api/quotes/:id/revisions/:revId/spec-display (save override array)
+
+Update POST /api/quotes to accept:
+- divisionCode (store in quotes.division_id)
+- mode:
+    'revision' (default existing behavior: dedupe by source job -> new revision)
+    'new_quote' (force new quote number even if same job)
+Keep quote manager logic and PDF engine untouched.
+
+T005 — UI NAV LABELS ONLY
+- Sidebar rename only:
+  Replace “Jobs” with “Estimates” group containing “LJ – Estimates” (route stays '/')
+  Keep “Quotes” as unified module.
+
+T006 — EXEC SUMMARY: BUILD ENHANCED SNAPSHOT + UPLOAD DRAWINGS + 2 CREATE MODES
+- Update Exec Summary “Generate Quote” flow:
+  - Build new snapshot shape including divisionCode='LJ'
+  - For each item:
+      render item SVG to PNG blob
+      POST /api/drawing-images -> store key as drawingImageKey
+      Build resolvedSpecs using the spec_dictionary keys (normalized keys)
+      IMPORTANT: preserve existing glass cascade behavior; just export:
+          resolvedSpecs.iguType / glassType / glassThickness / rValue
+  - totalsBreakdown:
+      itemsSubtotal from existing totals
+      installationTotal and deliveryTotal always present (0 if disabled)
+      subtotalExclGst, gstAmount (15%), totalInclGst
+- Provide two buttons:
+    “Create Quote (Revision)” -> POST /api/quotes {mode:'revision', divisionCode:'LJ'}
+    “Create New Quote Number” -> POST /api/quotes {mode:'new_quote', divisionCode:'LJ'}
+- When creating revision, set quote_revisions.template_key from division_settings.template_key.
+
+T007 — CUSTOMER QUOTE PREVIEW PAGE (/quote/:id/preview)
+- Add route: /quote/:id/preview
+- Fetch GET /api/quotes/:id/preview-data
+- Render template joinery_v1 styled for customer and print readiness:
+  Sections:
+    1) Cover: branding (trading_name + logo), required legal line,
+       org legal details, quote meta (quote #, date, expiry), header notes,
+       totals block (items/install/delivery/subtotal excl gst/gst/total incl gst)
+    2) Terms: exclusions, terms, payment/bank, acceptance lines
+    3) Schedule: for each item:
+        left: drawing image (GET /api/drawing-images/:key)
+        right: spec table
+           - ordered by effectiveSpecDisplayKeys
+           - hide rows with empty value
+           - default show ~12–18 rows with “Show more details” toggle
+- Add “Edit Spec Display” drawer/panel:
+  - grouped checkboxes from spec_dictionary
+  - save override to current revision via PATCH spec-display
+  - affects preview only (and later PDF), not estimator costing
+
+STOP POINT
+- Do NOT implement PDF generation (T008–T011 are next PR).
+- Ensure no regressions:
+  - estimator still calculates costs
+  - quote manager status transitions still work
+  - revisions + audit trail remain correct
+  - drawing uploads work
+  - preview works end-to-end

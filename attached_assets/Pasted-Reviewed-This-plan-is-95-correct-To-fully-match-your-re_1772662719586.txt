@@ -1,0 +1,83 @@
+Reviewed. This plan is 95% correct. To fully match your requirements (especially “all 36+ specs in the builder” and “glass cascade is the source of truth”), make these edits:
+
+Must-change items
+1) Add a Builder task for the 36+ specs (missing right now)
+
+Your plan seeds 36+ specs (T002) and exports some in Exec Summary (T006), but it does not add the 36+ spec inputs into the builder UI.
+
+✅ Add a new task (between T005 and T006, or as T006b):
+
+T006b: LJ Builder – Item Specifics driven by spec_dictionary
+
+Fetch /api/spec-dictionary?scope=LJ
+
+Render grouped accordions (Identification, Dimensions, Performance, FrameFinish, Glazing, Hardware, LinersFlashings, Install, Notes)
+
+Default show only the division default 12–18 keys + “Show more specs”
+
+Inputs:
+
+select_library: pull from /api/library?type=<library_source_key>&divisionCode=LJ
+
+select_enum: options_json
+
+select_library_dynamic (handleSet): use CATEGORY_TO_HANDLE_TYPE to pick the handle library type per item category
+
+cascading_glass: reuse existing 3-step glass selector exactly (IGU → Glass → Thickness)
+
+computed: read-only display
+
+Save selected values back into the item config without breaking costing.
+
+Without this, you won’t meet: “all 36+ fields to builder”.
+
+2) Fix “rValue from IGU_INFO lookup” (currently wrong for your system)
+
+In T006 you wrote: rValue = R-value string (from IGU_INFO lookup)
+
+But your actual UI shows r-value comes from the glass cascade/library selection (IGU+combo+thickness), not a separate lookup.
+
+✅ Change T006 to:
+
+rValue = from the same value currently displayed in the Glass UI (source-of-truth), derived from selected IGU/glass/thickness.
+
+Do not introduce a new IGU_INFO structure unless it already exists.
+
+3) Remove quantity from default customer specDisplayDefaults
+
+You included quantity in the default spec list. It’s usually better shown in the header (or near item title) instead of duplicating in the table.
+
+✅ Update:
+Seed LJ spec_display_defaults_json to exclude quantity unless you explicitly want it.
+
+Suggested default keys (12–18):
+[configuration, overallSize, frameSeries, frameColor, windZone, rValue, iguType, glassType, glassThickness, handleSet, linerType, flashingSize, wallThickness, heightFromFloor]
+
+4) “T008 Verification” naming
+
+You wrote “Scope T001–T007 ONLY” but then you have “T008 Verification and testing”.
+
+✅ Either:
+
+rename it to T007b Verification, or
+
+keep it as-is but clarify it’s “verification task within this PR”.
+
+Also your last line says “STOP POINT: T008–T011 deferred” — but you are doing T008 (verification). So tweak that wording to:
+
+“STOP POINT: PDF + Settings UI deferred to next PR.”
+
+Nice-to-have refinements (recommended)
+A) Make /api/library divisionCode default explicit
+
+If divisionCode not provided, either:
+
+return existing behavior (all), or
+
+default to LJ
+
+Just document it so future divisions don’t surprise you.
+
+B) Harden drawing image GET endpoint
+
+Add simple key validation: allow only filenames like ^[a-f0-9-]+\.png$ and prevent path traversal.
