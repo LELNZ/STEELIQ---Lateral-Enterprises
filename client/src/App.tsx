@@ -13,6 +13,8 @@ import Settings from "@/pages/settings";
 import QuoteSummary from "@/pages/quote-summary";
 import ExecSummary from "@/pages/exec-summary";
 import Library from "@/pages/library";
+import QuotesList from "@/pages/quotes-list";
+import QuoteDetail from "@/pages/quote-detail";
 
 function Router() {
   return (
@@ -22,6 +24,8 @@ function Router() {
       <Route path="/job/:id/summary" component={QuoteSummary} />
       <Route path="/job/:id/exec-summary" component={ExecSummary} />
       <Route path="/job/:id" component={QuoteBuilder} />
+      <Route path="/quotes" component={QuotesList} />
+      <Route path="/quote/:id" component={QuoteDetail} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />

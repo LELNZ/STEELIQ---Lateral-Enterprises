@@ -1,12 +1,14 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, pool, formatQuoteNumber } from "./storage";
 import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
+  VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
 } from "@shared/schema";
 import { z } from "zod";
+import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
 import { GLASS_LIBRARY } from "@shared/glass-library";
 import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS } from "@shared/item-options";
 
@@ -478,6 +480,187 @@ export async function registerRoutes(
       res.json(entry);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  const createQuoteBodySchema = z.object({
+    snapshot: estimateSnapshotSchema,
+    sourceJobId: z.string().optional(),
+    customer: z.string().min(1),
+  });
+
+  app.post("/api/quotes", async (req, res) => {
+    try {
+      const parsed = createQuoteBodySchema.parse(req.body);
+      const { snapshot, sourceJobId, customer } = parsed;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        if (sourceJobId) {
+          const existingResult = await client.query(
+            `SELECT * FROM quotes WHERE source_job_id = $1 LIMIT 1 FOR UPDATE`,
+            [sourceJobId]
+          );
+          if (existingResult.rows.length > 0) {
+            const existing = existingResult.rows[0];
+            const revResult = await client.query(
+              `SELECT COALESCE(MAX(version_number), 0) AS max_ver FROM quote_revisions WHERE quote_id = $1`,
+              [existing.id]
+            );
+            const nextVersion = (revResult.rows[0].max_ver || 0) + 1;
+            const revInsert = await client.query(
+              `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, created_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, NOW()) RETURNING *`,
+              [existing.id, nextVersion, JSON.stringify(snapshot)]
+            );
+            const revision = revInsert.rows[0];
+            await client.query(
+              `UPDATE quotes SET current_revision_id = $1, updated_at = NOW() WHERE id = $2`,
+              [revision.id, existing.id]
+            );
+            await client.query(
+              `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
+               VALUES (gen_random_uuid(), 'quote', $1, 'revision_created', $2, NOW())`,
+              [existing.id, JSON.stringify({ versionNumber: nextVersion })]
+            );
+            await client.query("COMMIT");
+            const updatedQuote = await storage.getQuote(existing.id);
+            const fullRev = {
+              id: revision.id,
+              quoteId: revision.quote_id,
+              versionNumber: revision.version_number,
+              snapshotJson: snapshot,
+              xeroSyncStatus: revision.xero_sync_status || null,
+              procurementGenerated: revision.procurement_generated || false,
+              pdfStorageKey: revision.pdf_storage_key || null,
+              createdByUserId: revision.created_by_user_id || null,
+              createdAt: revision.created_at,
+            };
+            return res.json({
+              quote: updatedQuote,
+              revision: fullRev,
+              isNewRevision: true,
+            });
+          }
+        }
+
+        await client.query(
+          `INSERT INTO number_sequences (id, current_value) VALUES ('quote', 0) ON CONFLICT DO NOTHING`
+        );
+        const seqResult = await client.query(
+          `UPDATE number_sequences SET current_value = current_value + 1 WHERE id = 'quote' RETURNING current_value`
+        );
+        const number = formatQuoteNumber(seqResult.rows[0].current_value);
+
+        const quoteInsert = await client.query(
+          `INSERT INTO quotes (id, number, source_job_id, customer, status, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, 'draft', NOW(), NOW()) RETURNING *`,
+          [number, sourceJobId || null, customer]
+        );
+        const quote = quoteInsert.rows[0];
+
+        const revInsert = await client.query(
+          `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, created_at)
+           VALUES (gen_random_uuid(), $1, 1, $2, NOW()) RETURNING *`,
+          [quote.id, JSON.stringify(snapshot)]
+        );
+        const revision = revInsert.rows[0];
+
+        await client.query(
+          `UPDATE quotes SET current_revision_id = $1 WHERE id = $2`,
+          [revision.id, quote.id]
+        );
+
+        await client.query(
+          `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
+           VALUES (gen_random_uuid(), 'quote', $1, 'quote_created', $2, NOW())`,
+          [quote.id, JSON.stringify({ number })]
+        );
+
+        await client.query("COMMIT");
+        const fullQuote = await storage.getQuote(quote.id);
+        const fullRevision = {
+          id: revision.id,
+          quoteId: revision.quote_id,
+          versionNumber: revision.version_number,
+          snapshotJson: snapshot,
+          xeroSyncStatus: revision.xero_sync_status || null,
+          procurementGenerated: revision.procurement_generated || false,
+          pdfStorageKey: revision.pdf_storage_key || null,
+          createdByUserId: revision.created_by_user_id || null,
+          createdAt: revision.created_at,
+        };
+        res.json({
+          quote: fullQuote,
+          revision: fullRevision,
+          isNewRevision: false,
+        });
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/quotes", async (_req, res) => {
+    try {
+      const allQuotes = await storage.getAllQuotes();
+      res.json(allQuotes);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/quotes/:id", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const revisions = await storage.getQuoteRevisions(quote.id);
+      res.json({ ...quote, revisions });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/quotes/:id/status", async (req, res) => {
+    try {
+      const { status } = z.object({ status: z.enum(QUOTE_STATUSES) }).parse(req.body);
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      const currentStatus = quote.status as QuoteStatus;
+      const allowed = VALID_STATUS_TRANSITIONS[currentStatus] || [];
+      if (!allowed.includes(status as QuoteStatus)) {
+        return res.status(400).json({
+          error: `Cannot transition from "${currentStatus}" to "${status}". Allowed: ${allowed.join(", ") || "none"}`,
+        });
+      }
+
+      const updated = await storage.updateQuoteStatus(req.params.id, status);
+      await storage.createAuditLog({
+        entityType: "quote",
+        entityId: req.params.id,
+        action: "status_changed",
+        metadataJson: { from: currentStatus, to: status },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/quotes/:id/audit-log", async (req, res) => {
+    try {
+      const logs = await storage.getAuditLogs("quote", req.params.id);
+      res.json(logs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
