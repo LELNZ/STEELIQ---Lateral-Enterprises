@@ -1,0 +1,87 @@
+Symptom
+
+Clicking “Create Quote (Revision)” or “Create New Quote Number” fails with:
+
+getGlassRValue is not defined
+
+Yet the Item Specifics panel shows an R-Value (e.g. 0.37), so the UI layer has access to the logic, but the exec-summary quote generation path does not.
+
+Likely root cause (high confidence)
+
+In client/src/pages/exec-summary.tsx (or a helper it calls), code references getGlassRValue(...) but:
+
+it’s not imported, or
+
+it’s imported with the wrong name/casing (e.g. getglassrvalue, getGlassRvalue), or
+
+it was moved/renamed and the exec-summary code still calls the old symbol.
+
+Because the error is “not defined” (not “is not a function”), it’s almost certainly a missing identifier at runtime, not bad input.
+
+Important context from your current code
+
+quote-builder.tsx imports it correctly:
+import { ... getGlassRValue } from "@shared/glass-library";
+
+The R-value badge in the builder uses that function successfully (so the function exists in @shared/glass-library).
+
+The crash only happens when generating the quote from exec summary.
+
+Required fix (keep previous uiId solution untouched)
+Task: Fix missing getGlassRValue reference in exec summary quote creation
+
+Files to check first
+
+client/src/pages/exec-summary.tsx
+
+Any helper used by quote generation (search for getGlassRValue usage)
+
+Steps
+
+Search the repo for the broken reference:
+
+getGlassRValue
+
+getglassrvalue
+
+getGlassRvalue
+
+Ensure exec-summary.tsx has the correct import:
+
+import { getGlassRValue } from "@shared/glass-library";
+
+Ensure the function is called using the exact exported name:
+
+const rValue = getGlassRValue(item.glassIguType || "");
+
+Defensive fallback so quote generation never hard-crashes:
+
+const rValue = (() => {
+  try {
+    return getGlassRValue(item.glassIguType || "") ?? "";
+  } catch {
+    return "";
+  }
+})();
+
+Use that result in resolvedSpecs.rValue (string):
+
+resolvedSpecs.rValue = rValue ? String(rValue) : "";
+
+Acceptance criteria
+
+Clicking Create Quote (Revision) works
+
+Clicking Create New Quote Number works
+
+No console/runtime crash
+
+R-value still shows correctly in the builder UI
+
+No changes to the existing uiId-based React key solution
+
+No schema/API changes required
+
+Extra note (so the agent doesn’t “fix” the wrong thing)
+
+Do NOT change shared/schema.ts or make config.id optional — that save bug is already fixed properly. This new issue is strictly a missing function reference/import in the exec-summary quote generation path.
