@@ -8,7 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowLeftCircle, Clock, Eye, FileText, History } from "lucide-react";
+import { ArrowLeftCircle, Clock, Eye, FileDown, FileText, History, Printer } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 
 interface QuoteWithRevisions extends Quote {
@@ -109,6 +110,28 @@ export default function QuoteDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => quoteId && window.open(`/quote/${quoteId}/preview`, "_blank", "noopener,noreferrer")}
+              data-testid="button-print-quote"
+            >
+              <Printer className="h-4 w-4 mr-1" /> Print / Save as PDF
+            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button variant="outline" size="sm" disabled data-testid="button-generate-pdf">
+                    <FileDown className="h-4 w-4 mr-1" /> Generate PDF
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>PDF engine not configured yet — use Print / Save as PDF</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button variant="outline" size="sm" onClick={() => navigate(`/quote/${quoteId}/preview`)} data-testid="button-preview-quote">
             <Eye className="h-4 w-4 mr-1" /> Preview Customer Quote
           </Button>
