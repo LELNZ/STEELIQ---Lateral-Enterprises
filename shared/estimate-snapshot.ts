@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+const snapshotPhotoSchema = z.object({
+  key: z.string(),
+  isPrimary: z.boolean().optional(),
+  includeInCustomerPdf: z.boolean().optional(),
+  caption: z.string().optional(),
+  takenAt: z.string().optional(),
+});
+
 const snapshotItemSchema = z.object({
   itemNumber: z.number(),
   itemRef: z.string(),
@@ -8,6 +16,7 @@ const snapshotItemSchema = z.object({
   width: z.number(),
   height: z.number(),
   drawingImageKey: z.string().optional(),
+  photos: z.array(snapshotPhotoSchema).optional().default([]),
   specValues: z.record(z.string(), z.any()).default({}),
   resolvedSpecs: z.record(z.string(), z.string()).default({}),
   libraryRefs: z.any().optional(),

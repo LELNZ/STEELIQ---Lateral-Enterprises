@@ -124,6 +124,13 @@ export const jobItems = pgTable("job_items", {
   jobId: varchar("job_id").notNull(),
   config: jsonb("config").notNull().$type<QuoteItem>(),
   photo: text("photo"),
+  photos: jsonb("photos").$type<Array<{
+    key: string;
+    isPrimary?: boolean;
+    includeInCustomerPdf?: boolean;
+    caption?: string;
+    takenAt?: string;
+  }>>(),
   sortOrder: integer("sort_order").default(0),
 });
 

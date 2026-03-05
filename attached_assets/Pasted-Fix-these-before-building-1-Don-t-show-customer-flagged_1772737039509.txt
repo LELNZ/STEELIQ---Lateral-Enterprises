@@ -1,0 +1,114 @@
+Fix these before building
+1) Don’t show “customer-flagged photos” in the schedule right now
+
+Your requirement: photos are on a separate appendix page, not beside the drawing/spec schedule.
+
+So this line in T013E is misaligned:
+
+“quote-preview ScheduleItem: show those photos alongside the drawing image.”
+
+Correct: do not render photos in schedule; instead:
+
+add a placeholder “Photos appendix enabled (N photos)” indicator if you want,
+
+or do nothing until the appendix task.
+
+This avoids rework and matches your PDF goal.
+
+2) Backward-compat: don’t “synthesize photos[] if photo exists as a non-base64 key” (too risky)
+
+Right now discovery says jobItems.photo stores base64 strings in DB. Your plan suggests:
+
+“if photos is null but photo exists as a non-base64 key…”
+
+That’s dangerous because you need a reliable test of “key vs base64”.
+
+Best-practice compatibility rule:
+
+If photo starts with data:image/ (or is very long), treat as legacy base64 and do not try to convert automatically.
+
+If photo matches your new key regex (uuid.jpg), treat it as a key.
+
+Even better: write a migration helper in the client:
+
+If legacy base64 exists, show it in UI, but require the user to re-add/upload if they want it preserved as a file key. (Optional “Convert legacy photo” can come later.)
+
+Auto-converting base64 to filesystem on read is possible, but it’s more work and easy to get wrong—don’t do it unless you explicitly choose to.
+
+3) Don’t accept PNG if you’re enforcing .jpg keys
+
+You wrote:
+
+accept image/jpeg and image/png … regex expects .jpg
+
+If you accept PNG, either:
+
+convert server-side to JPEG (extra complexity), or
+
+allow .png keys and support both in regex and serving.
+
+Given your locked decision: JPEG only, keep it strict:
+
+accept only image/jpeg
+
+save .jpg
+
+regex .jpg only
+
+4) Snapshot creation file reference likely wrong
+
+You reference exec-summary.tsx buildSnapshotAndPost(). In your uploaded codebase, snapshot/revision creation appears more likely in quote flows (quote detail / quote builder / server route) rather than an “exec-summary” page. I haven’t seen that file in the uploads you listed earlier.
+
+Action: before implementing, verify where snapshot is constructed. The plan is correct conceptually, but the file path might be wrong.
+
+Rule stays:
+
+wherever snapshot is built, include item.photos ?? [] into snapshot items.
+
+5) Deletion safety: be careful—this can get expensive
+
+Parsing every quote_revision.snapshot_json to find keys can become heavy.
+
+Best-practice (now): restrict scope:
+
+When deleting a job, only consider quote revisions for the quote tied to that job (you have getQuoteByJobId(jobId) in storage).
+
+Parse only those revisions’ snapshot_json.
+That’s fast and correct for your system.
+
+Best-practice (later): store an asset_index table mapping revision_id -> photo_keys[] for O(1) cleanup checks. Not needed now.
+
+Minor improvements
+
+Add takenAt on client at capture time (good).
+
+In gallery modal: ensure “primary” invariant (exactly one if photos exist).
+
+Keep invalidate strategy broad for library; for photos, job save refetch is sufficient.
+
+Updated task breakdown (tight, aligned)
+T013A Schema + Types
+
+✅ Add jobItems.photos jsonb + snapshotItem.photos schema. Keep legacy photo for now.
+
+T013B Server endpoints
+
+✅ Add /api/item-photos POST + GET (JPEG only). Reuse drawing-images safety patterns.
+
+T013C Client compressImageToBlob
+
+✅ Add blob compressor.
+
+T013D Quote builder UI
+
+✅ Primary + “+N”, modal gallery, upload flow, save photos[].
+⚠️ Legacy base64: display-only; don’t auto-migrate unless explicitly chosen.
+
+T013E Snapshot immutability
+
+✅ Include photos[] in snapshot_json at revision creation.
+❌ Do NOT render photos in schedule; appendix later.
+
+T013F Deletion safety
+
+✅ On delete job/item, delete photo files only if not referenced by quote revisions for that job’s quote.

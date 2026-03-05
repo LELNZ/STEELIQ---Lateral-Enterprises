@@ -32,7 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { downloadPng, compressImage, svgToPngBlob, downloadBlob, sanitizeFilename } from "@/lib/export-png";
+import { downloadPng, compressImage, compressImageToBlob, svgToPngBlob, downloadBlob, sanitizeFilename } from "@/lib/export-png";
 import { jsPDF } from "jspdf";
 
 const CATEGORY_OPTIONS = [
@@ -159,11 +159,31 @@ const defaultValues: InsertQuoteItem = {
   cachedWeightKg: 0,
 };
 
+interface ItemPhotoRef {
+  key: string;
+  isPrimary?: boolean;
+  includeInCustomerPdf?: boolean;
+  caption?: string;
+  takenAt?: string;
+}
+
 interface ItemWithPhoto {
   uiId: string;
   item: QuoteItem;
   photo?: string | null;
+  photos?: ItemPhotoRef[];
   dbId?: string;
+}
+
+function getPrimaryPhotoSrc(iwp: ItemWithPhoto): string | null {
+  if (iwp.photos && iwp.photos.length > 0) {
+    const primary = iwp.photos.find(p => p.isPrimary) || iwp.photos[0];
+    return `/api/item-photos/${primary.key}`;
+  }
+  if (iwp.photo && iwp.photo.startsWith("data:image/")) {
+    return iwp.photo;
+  }
+  return null;
 }
 
 function ensureConfigId(config: any): QuoteItem {
@@ -188,6 +208,7 @@ export default function QuoteBuilder() {
   const [jobDate, setJobDate] = useState(new Date().toISOString().split("T")[0]);
   const [savedJobId, setSavedJobId] = useState<string | null>(jobId || null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [galleryItemId, setGalleryItemId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
@@ -308,10 +329,11 @@ export default function QuoteBuilder() {
       setJobAddress(existingJob.address || "");
       setJobDate(existingJob.date || "");
       setSavedJobId(existingJob.id);
-      setItems(existingJob.items.map((ji) => ({
+      setItems(existingJob.items.map((ji: any) => ({
         uiId: ji.id || crypto.randomUUID(),
         item: ensureConfigId(ji.config as QuoteItem),
         photo: ji.photo,
+        photos: ji.photos || [],
         dbId: ji.id,
       })));
     }
@@ -840,10 +862,23 @@ export default function QuoteBuilder() {
     const file = e.target.files?.[0];
     if (!file || !photoTargetItemId) return;
     try {
-      const compressed = await compressImage(file);
-      setItems(prev => prev.map(iwp =>
-        iwp.uiId === photoTargetItemId ? { ...iwp, photo: compressed } : iwp
-      ));
+      const blob = await compressImageToBlob(file);
+      const formData = new FormData();
+      formData.append("file", blob, "photo.jpg");
+      const uploadRes = await fetch("/api/item-photos", { method: "POST", body: formData });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const { key } = await uploadRes.json();
+      setItems(prev => prev.map(iwp => {
+        if (iwp.uiId !== photoTargetItemId) return iwp;
+        const existing = iwp.photos || [];
+        const newPhoto: ItemPhotoRef = {
+          key,
+          isPrimary: existing.length === 0,
+          includeInCustomerPdf: false,
+          takenAt: new Date().toISOString(),
+        };
+        return { ...iwp, photos: [...existing, newPhoto] };
+      }));
       setHasUnsavedChanges(true);
       toast({ title: "Photo added" });
     } catch {
@@ -1004,11 +1039,15 @@ export default function QuoteBuilder() {
 
       const normalized = items.map(iwp => ({ ...iwp, item: ensureConfigId(iwp.item) }));
       for (let i = 0; i < normalized.length; i++) {
-        await apiRequest("POST", `/api/jobs/${currentJobId}/items`, {
+        const payload: any = {
           config: normalized[i].item,
-          photo: normalized[i].photo || null,
+          photos: normalized[i].photos || [],
           sortOrder: i,
-        });
+        };
+        if (normalized[i].photo && normalized[i].photo!.startsWith("data:image/") && !(normalized[i].photos?.length)) {
+          payload.photo = normalized[i].photo;
+        }
+        await apiRequest("POST", `/api/jobs/${currentJobId}/items`, payload);
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
@@ -2470,18 +2509,28 @@ export default function QuoteBuilder() {
                         </TableCell>
                         <TableCell className="text-center">{iwp.item.quantity}</TableCell>
                         <TableCell className="text-center">
-                          {iwp.photo ? (
-                            <button
-                              type="button"
-                              onClick={() => setPhotoPreview(iwp.photo!)}
-                              className="inline-block"
-                              data-testid={`button-view-photo-${iwp.uiId}`}
-                            >
-                              <img src={iwp.photo} alt="Site photo" className="w-8 h-8 rounded object-cover border" />
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
+                          {(() => {
+                            const src = getPrimaryPhotoSrc(iwp);
+                            const photoCount = (iwp.photos || []).length;
+                            if (src) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setGalleryItemId(iwp.uiId)}
+                                  className="inline-block relative"
+                                  data-testid={`button-view-photo-${iwp.uiId}`}
+                                >
+                                  <img src={src} alt="Site photo" className="w-8 h-8 rounded object-cover border" />
+                                  {photoCount > 1 && (
+                                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center" data-testid={`badge-photo-count-${iwp.uiId}`}>
+                                      +{photoCount - 1}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            }
+                            return <span className="text-xs text-muted-foreground">-</span>;
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
@@ -2562,6 +2611,96 @@ export default function QuoteBuilder() {
           {photoPreview && (
             <img src={photoPreview} alt="Site photo" className="w-full rounded" data-testid="img-photo-preview" />
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!galleryItemId} onOpenChange={() => setGalleryItemId(null)}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-photo-gallery">
+          <DialogHeader>
+            <DialogTitle>Item Photos</DialogTitle>
+          </DialogHeader>
+          {galleryItemId && (() => {
+            const iwp = items.find(i => i.uiId === galleryItemId);
+            if (!iwp) return null;
+            const photos = iwp.photos || [];
+            const legacySrc = (!photos.length && iwp.photo?.startsWith("data:image/")) ? iwp.photo : null;
+            return (
+              <div className="space-y-4">
+                {legacySrc && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">Legacy photo (read-only)</p>
+                    <img src={legacySrc} alt="Legacy photo" className="w-full max-h-64 object-contain rounded border" />
+                  </div>
+                )}
+                {photos.length === 0 && !legacySrc && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No photos yet. Use the camera button to add photos.</p>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {photos.map((p, idx) => (
+                    <div key={p.key} className={`relative rounded-lg border-2 overflow-hidden ${p.isPrimary ? "border-primary" : "border-border"}`} data-testid={`gallery-photo-${idx}`}>
+                      <img src={`/api/item-photos/${p.key}`} alt={p.caption || `Photo ${idx + 1}`} className="w-full h-32 object-cover" />
+                      {p.isPrimary && (
+                        <Badge className="absolute top-1 left-1 text-[10px] px-1 py-0" data-testid={`badge-primary-${idx}`}>Primary</Badge>
+                      )}
+                      {p.includeInCustomerPdf && (
+                        <Badge variant="secondary" className="absolute top-1 right-1 text-[10px] px-1 py-0" data-testid={`badge-pdf-${idx}`}>PDF</Badge>
+                      )}
+                      <div className="flex items-center justify-between p-1.5 bg-card">
+                        <div className="flex gap-1">
+                          {!p.isPrimary && (
+                            <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5" data-testid={`button-set-primary-${idx}`}
+                              onClick={() => {
+                                setItems(prev => prev.map(i => {
+                                  if (i.uiId !== galleryItemId) return i;
+                                  return { ...i, photos: (i.photos || []).map(ph => ({ ...ph, isPrimary: ph.key === p.key })) };
+                                }));
+                                setHasUnsavedChanges(true);
+                              }}>
+                              Set Primary
+                            </Button>
+                          )}
+                          <Button size="sm" variant={p.includeInCustomerPdf ? "secondary" : "ghost"} className="h-6 text-xs px-1.5" data-testid={`button-toggle-pdf-${idx}`}
+                            onClick={() => {
+                              setItems(prev => prev.map(i => {
+                                if (i.uiId !== galleryItemId) return i;
+                                return { ...i, photos: (i.photos || []).map(ph => ph.key === p.key ? { ...ph, includeInCustomerPdf: !ph.includeInCustomerPdf } : ph) };
+                              }));
+                              setHasUnsavedChanges(true);
+                            }}>
+                            {p.includeInCustomerPdf ? "In PDF" : "Add to PDF"}
+                          </Button>
+                        </div>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" data-testid={`button-delete-photo-${idx}`}
+                          onClick={() => {
+                            setItems(prev => prev.map(i => {
+                              if (i.uiId !== galleryItemId) return i;
+                              let updated = (i.photos || []).filter(ph => ph.key !== p.key);
+                              if (updated.length > 0 && p.isPrimary) {
+                                updated = updated.map((ph, j) => j === 0 ? { ...ph, isPrimary: true } : ph);
+                              }
+                              return { ...i, photos: updated };
+                            }));
+                            setHasUnsavedChanges(true);
+                          }}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <Button variant="outline" size="sm" data-testid="button-gallery-add-photo"
+                    onClick={() => {
+                      setPhotoTargetItemId(galleryItemId);
+                      photoInputRef.current?.click();
+                    }}>
+                    <Camera className="w-4 h-4 mr-1.5" /> Add Photo
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setGalleryItemId(null)}>Close</Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

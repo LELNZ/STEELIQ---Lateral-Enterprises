@@ -161,20 +161,96 @@ export async function registerRoutes(
     }
   });
 
+  async function getReferencedPhotoKeys(jobId: string): Promise<Set<string>> {
+    const referenced = new Set<string>();
+    try {
+      const quote = await storage.getQuoteByJobId(jobId);
+      if (!quote) return referenced;
+      const revisions = await storage.getQuoteRevisions(quote.id);
+      for (const rev of revisions) {
+        try {
+          const snapshot = rev.snapshotJson as any;
+          const items = snapshot?.items || [];
+          for (const item of items) {
+            const photos = item.photos || [];
+            for (const p of photos) {
+              if (p.key) referenced.add(p.key);
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+    return referenced;
+  }
+
+  function safeDeletePhotoFile(key: string) {
+    try {
+      const filePath = path.resolve(ITEM_PHOTO_DIR, key);
+      if (filePath.startsWith(path.resolve(ITEM_PHOTO_DIR)) && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch {}
+  }
+
   app.delete("/api/jobs/:id", async (req, res) => {
     try {
+      const items = await storage.getJobItems(req.params.id);
+      const allPhotoKeys: string[] = [];
+      for (const item of items) {
+        const photos = (item.photos as any[]) || [];
+        for (const p of photos) {
+          if (p.key) allPhotoKeys.push(p.key);
+        }
+      }
+
+      const referenced = await getReferencedPhotoKeys(req.params.id);
+
       await storage.deleteJob(req.params.id);
+
+      for (const key of allPhotoKeys) {
+        if (!referenced.has(key)) {
+          safeDeletePhotoFile(key);
+        }
+      }
+
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
   });
 
+  const PHOTO_KEY_REGEX = /^[A-Za-z0-9._-]+\.jpg$/;
+  const itemPhotoRefSchema = z.object({
+    key: z.string()
+      .max(200)
+      .refine(k => !k.startsWith("data:"), { message: "Data URIs not allowed in photo keys" })
+      .refine(k => PHOTO_KEY_REGEX.test(k), { message: "Photo key must match [A-Za-z0-9._-]+.jpg" }),
+    isPrimary: z.boolean().optional(),
+    includeInCustomerPdf: z.boolean().optional(),
+    caption: z.string().max(500).optional(),
+    takenAt: z.string().optional(),
+  });
+
   const jobItemBodySchema = z.object({
     config: quoteItemSchema,
     photo: z.string().nullable().optional(),
+    photos: z.array(itemPhotoRefSchema).nullable().optional(),
     sortOrder: z.number().int().optional().default(0),
   });
+
+  function normalizePhotoPrimary(photos: any[] | null | undefined): any[] | null {
+    if (!photos || photos.length === 0) return photos as any;
+    const hasPrimary = photos.some(p => p.isPrimary);
+    if (!hasPrimary) {
+      return photos.map((p, i) => i === 0 ? { ...p, isPrimary: true } : { ...p, isPrimary: false });
+    }
+    let foundFirst = false;
+    return photos.map(p => {
+      if (p.isPrimary && !foundFirst) { foundFirst = true; return p; }
+      if (p.isPrimary && foundFirst) return { ...p, isPrimary: false };
+      return p;
+    });
+  }
 
   app.post("/api/jobs/:id/items", async (req, res) => {
     try {
@@ -183,6 +259,7 @@ export async function registerRoutes(
         jobId: req.params.id,
         config: parsed.config,
         photo: parsed.photo || null,
+        photos: normalizePhotoPrimary(parsed.photos) || null,
         sortOrder: parsed.sortOrder,
       });
       res.json(item);
@@ -194,7 +271,12 @@ export async function registerRoutes(
   app.patch("/api/jobs/:id/items/:itemId", async (req, res) => {
     try {
       const parsed = jobItemBodySchema.partial().parse(req.body);
-      const item = await storage.updateJobItem(req.params.itemId, parsed);
+      const updateData: any = {};
+      if (parsed.config !== undefined) updateData.config = parsed.config;
+      if (parsed.photo !== undefined) updateData.photo = parsed.photo;
+      if (parsed.photos !== undefined) updateData.photos = normalizePhotoPrimary(parsed.photos);
+      if (parsed.sortOrder !== undefined) updateData.sortOrder = parsed.sortOrder;
+      const item = await storage.updateJobItem(req.params.itemId, updateData);
       if (!item) return res.status(404).json({ error: "Item not found" });
       res.json(item);
     } catch (e: any) {
@@ -204,7 +286,26 @@ export async function registerRoutes(
 
   app.delete("/api/jobs/:id/items/:itemId", async (req, res) => {
     try {
+      const items = await storage.getJobItems(req.params.id);
+      const item = items.find(i => i.id === req.params.itemId);
+      const photoKeys: string[] = [];
+      if (item) {
+        const photos = (item.photos as any[]) || [];
+        for (const p of photos) {
+          if (p.key) photoKeys.push(p.key);
+        }
+      }
+
+      const referenced = photoKeys.length > 0 ? await getReferencedPhotoKeys(req.params.id) : new Set<string>();
+
       await storage.deleteJobItem(req.params.itemId);
+
+      for (const key of photoKeys) {
+        if (!referenced.has(key)) {
+          safeDeletePhotoFile(key);
+        }
+      }
+
       res.json({ ok: true });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -738,6 +839,44 @@ export async function registerRoutes(
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  const ITEM_PHOTO_DIR = path.resolve("uploads/item-photos");
+  fs.mkdirSync(ITEM_PHOTO_DIR, { recursive: true });
+
+  const itemPhotoUpload = multer({
+    storage: multer.diskStorage({
+      destination: ITEM_PHOTO_DIR,
+      filename: (_req, _file, cb) => {
+        cb(null, `${crypto.randomUUID()}.jpg`);
+      },
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype === "image/jpeg") cb(null, true);
+      else cb(new Error("Only JPEG files allowed"));
+    },
+  });
+
+  app.post("/api/item-photos", itemPhotoUpload.single("file"), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    res.json({ key: req.file.filename });
+  });
+
+  app.get("/api/item-photos/:key", (req, res) => {
+    const key = req.params.key;
+    if (!/^[A-Za-z0-9._-]+\.jpg$/.test(key)) {
+      return res.status(400).json({ error: "Invalid key" });
+    }
+    const filePath = path.resolve(ITEM_PHOTO_DIR, key);
+    const resolvedDir = path.resolve(ITEM_PHOTO_DIR);
+    if (!filePath.startsWith(resolvedDir)) {
+      return res.status(400).json({ error: "Invalid key" });
+    }
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+    res.type("image/jpeg").sendFile(filePath);
   });
 
   const DRAWING_DIR = path.resolve("uploads/drawing-images");

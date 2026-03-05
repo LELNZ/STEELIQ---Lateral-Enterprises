@@ -1,0 +1,207 @@
+You are assisting with Pro-Quote CAD Generator (React/TypeScript + Express.js + PostgreSQL + Drizzle). This is a production-grade quoting system with strict constraints:
+
+Quotes/revisions must be historically immutable and reproducible
+
+Quote PDFs must be generated from quote_revision.snapshot_json (never live library data)
+
+There is a unified library with division scoping (already implemented)
+
+Do not introduce duplicated structures or unnecessary routes
+
+TASK: Implement multi-photo per Job Item (internal by default), filesystem storage (upgradeable later), and ensure quote immutability is preserved
+NON-NEGOTIABLE RULES
+
+Do NOT store base64 images in Postgres (no data URLs in DB).
+
+Store only file keys + metadata in DB (JSON array).
+
+Reuse the existing drawing images pattern (/api/drawing-images) for uploads, key validation, and secure GET serving.
+
+Preserve revision immutability: quote_revision.snapshot_json must include the item photos array at the moment the revision is created.
+
+Deletion safety: do not delete photo files that are referenced by any quote revision snapshot.
+
+Keep architecture clean: minimal changes, no new files unless truly necessary.
+
+IMPLEMENTATION SCOPE
+A) Server: add photo upload + serve endpoints (filesystem)
+
+In server/routes.ts:
+
+1) Create upload directory
+
+uploads/item-photos created if missing (mirror how drawing-images dir is handled).
+
+2) Add endpoints
+
+POST /api/item-photos
+
+Multer .single("file")
+
+Allow: image/jpeg only (for now)
+
+Limit: 10MB
+
+Filename: ${crypto.randomUUID()}.jpg
+
+Response JSON: { key: "<filename>" }
+
+GET /api/item-photos/:key
+
+Validate key via regex like: ^[a-f0-9-]+\.jpg$
+
+Prevent path traversal: ensure resolved filepath starts with resolved ITEM_PHOTO_DIR
+
+404 if missing
+
+res.sendFile(...) with correct mime
+
+Re-use the same safety approach used for /api/drawing-images/:key.
+
+B) Shared schema + types: migrate JobItem from photo to photos[]
+
+Goal: each job item supports multiple photos with metadata.
+
+1) Define the photo ref type (in shared types / schema)
+
+Use:
+
+photos?: Array<{
+  key: string;
+  isPrimary?: boolean;
+  includeInCustomerPdf?: boolean; // default false
+  caption?: string;
+  takenAt?: string; // ISO string
+}>;
+2) Database column
+
+In shared/schema.ts, update jobItems to include:
+
+photos as JSONB (Drizzle json)
+
+3) Backward compatibility (temporary)
+
+Keep legacy photo?: string | null support for old data and older client payloads.
+
+When receiving job item payload:
+
+If photos missing but photo exists: set photos = [{ key: photo, isPrimary: true, includeInCustomerPdf: false }]
+
+Prefer storing to photos going forward.
+
+Update jobItemBodySchema in server/routes.ts accordingly:
+
+Accept photos (preferred) and photo (legacy)
+
+Persist only photos to DB going forward
+
+Never accept base64 strings as photo/key
+
+Update server/storage.ts types as needed for InsertJobItem/JobItem.
+
+C) Client: Quote Builder UI updates (industry best practice)
+
+In client/src/pages/quote-builder.tsx:
+
+Display pattern (best practice)
+
+In the item row/card, show:
+
+Primary thumbnail (if any)
+
+A small badge: +N for additional photos
+
+Button: Add Photo
+
+Button: View Photos (opens modal)
+
+Add photo flow
+
+Use file input with: accept="image/*" and capture="environment" (reuse existing approach in code).
+
+BEFORE uploading, compress client-side:
+
+JPEG
+
+Long edge: 1600px
+
+Quality: ~0.82
+
+Use canvas to resize.
+
+Upload as FormData field file to POST /api/item-photos
+
+On success { key }, append to item.photos[]:
+
+If first photo: set isPrimary=true
+
+Others: isPrimary=false
+
+includeInCustomerPdf=false
+
+takenAt=new Date().toISOString()
+
+Gallery modal
+
+Grid of thumbnails
+
+Actions per photo:
+
+Set Primary (ensure only one isPrimary)
+
+Toggle “Include in customer PDF” (default false)
+
+Delete photo
+
+If deleting primary, promote next photo to primary automatically
+
+IMPORTANT: Do NOT implement the PDF appendix UI yet — only store includeInCustomerPdf flags.
+
+D) Quote immutability: ensure revision snapshots contain photos
+
+Wherever quote revisions are created (in server/routes.ts and/or snapshot builder logic):
+
+Ensure the snapshot_json includes each item’s photos[] array (keys + flags + timestamps/captions) at the time of revision creation.
+
+The PDF/preview renderer must read photos from snapshot_json, not from live job tables.
+
+E) Deletion safety: do not remove files referenced by quote revisions
+
+When deleting a job (or deleting job items), you must NOT delete photo files that are still referenced by any quote revision snapshot_json.
+
+Implementation requirement:
+
+Gather all photo keys referenced by the job being deleted.
+
+Query all quote revisions that could reference those keys (at minimum, quote revisions for the job’s quote if exists).
+
+Parse snapshot_json and build a set of referenced photo keys.
+
+Only delete files that are NOT referenced by any quote revision snapshot.
+
+If a quote exists for a job, consider converting “delete job” into “archive job” (optional), but the minimum requirement is: don’t break historical quotes.
+
+ACCEPTANCE CRITERIA
+
+✅ User can add multiple photos per job item.
+✅ Item shows only primary + “+N” count.
+✅ Photos are stored as filesystem keys; DB stores JSON array, not base64.
+✅ Can set primary, delete, toggle includeInCustomerPdf (flag stored).
+✅ Old jobs using legacy photo don’t break (migrated into photos[]).
+✅ Quote revisions store photos in snapshot_json for determinism.
+✅ Deleting a job does NOT delete photo files referenced by any quote revision snapshot.
+
+OUTPUT REQUIRED
+
+Provide exact code changes for these existing files (no new files unless absolutely required):
+
+server/routes.ts
+
+shared/schema.ts
+
+server/storage.ts
+
+client/src/pages/quote-builder.tsx
+(If snapshot logic is in another existing file, modify it too and include it in the diff.)
+
+Proceed now with implementation-quality code and minimal architectural disruption.

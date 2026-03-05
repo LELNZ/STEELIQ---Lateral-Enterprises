@@ -62,12 +62,21 @@ interface JobData {
   items: JobItem[];
 }
 
+interface ItemPhotoRef {
+  key: string;
+  isPrimary?: boolean;
+  includeInCustomerPdf?: boolean;
+  caption?: string;
+  takenAt?: string;
+}
+
 interface ItemPricingData {
   item: QuoteItem;
   sqm: number;
   salePrice: number;
   pricing: PricingBreakdown | null;
   configName: string;
+  photos: ItemPhotoRef[];
 }
 
 export default function ExecSummary() {
@@ -244,13 +253,14 @@ export default function ExecSummary() {
 
   const itemPricings: ItemPricingData[] = useMemo(() => {
     if (!job) return [];
-    return job.items.map((ji) => {
+    return job.items.map((ji: any) => {
       const item = ji.config as QuoteItem;
       const sqm = calcSqm(item.width, item.height, item.quantity || 1);
       const salePrice = (item.pricePerSqm || 500) * sqm;
       const cid = item.configurationId;
       let pricing: PricingBreakdown | null = null;
       let configName = cid ? (configNameMap[cid] || "") : "";
+      const photos: ItemPhotoRef[] = (ji.photos as ItemPhotoRef[]) || [];
 
       if (cid && configData[cid]) {
         const cd = configData[cid];
@@ -281,7 +291,7 @@ export default function ExecSummary() {
         }
       }
 
-      return { item, sqm, salePrice, pricing, configName };
+      return { item, sqm, salePrice, pricing, configName, photos };
     });
   }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
 
@@ -495,6 +505,7 @@ export default function ExecSummary() {
         width: item.width,
         height: item.height,
         drawingImageKey,
+        photos: ip.photos ?? [],
         specValues,
         resolvedSpecs,
       };

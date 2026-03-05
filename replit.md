@@ -18,7 +18,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Navigation**: A collapsible sidebar facilitates navigation between Jobs, Library, and Settings. Sidebar has nested "Estimates" group with "LJ – Estimates" sub-item.
 **Routing**: Wouter is used for client-side routing, defining paths for job management, library access, settings, and quote preview.
 **Export Capabilities**: Supports client-side SVG to PNG conversion (at 3x resolution) and multi-page PDF generation via jsPDF.
-**Photo Storage**: Photos are captured as Base64 JPEG data URLs, compressed client-side, and stored in the database.
+**Item Photo Storage**: Multi-photo per job item. Photos uploaded as JPEG to `uploads/item-photos/{uuid}.jpg` via POST /api/item-photos, served via GET /api/item-photos/:key with path traversal protection. DB stores `photos` JSONB array on job_items: `[{ key, isPrimary?, includeInCustomerPdf?, caption?, takenAt? }]`. Legacy `photo` field (base64) is read-only/display-only. Client compresses to 1600px long edge JPEG before upload. Gallery modal supports Set Primary, Toggle PDF flag, Delete. Snapshot captures photos[] at revision time for immutability. Deletion safety: photo files referenced by quote revision snapshots are preserved when jobs are deleted.
 **Drawing Image Storage**: Drawing PNGs uploaded via POST /api/drawing-images, stored in `uploads/drawing-images/{uuid}.png`, served via GET /api/drawing-images/:key with path traversal protection.
 
 ## Multi-Division Architecture
@@ -114,6 +114,8 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - GET /api/settings/divisions — All division settings
 - GET/PATCH /api/settings/divisions/:code — Single division CRUD
 - GET /api/spec-dictionary?scope=LJ — Spec dictionary filtered by division
+- POST /api/item-photos — Upload item photo (JPEG only, 10MB limit)
+- GET /api/item-photos/:key — Serve item photo
 - POST /api/drawing-images — Upload drawing PNG
 - GET /api/drawing-images/:key — Serve drawing PNG
 - GET /api/quotes/:id/preview-data — Full preview data bundle
