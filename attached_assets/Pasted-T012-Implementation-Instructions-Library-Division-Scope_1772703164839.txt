@@ -1,0 +1,210 @@
+T012 Implementation Instructions (Library Division Scope Navigation)
+
+Goal
+Add division scope filter to unified /library page:
+- URL persisted selection via ?division=
+- All library queries include optional &divisionCode=
+- Show scope badge per library entry row (Shared vs LJ/LE/LL)
+- New entries default to selected scope (with dropdown override in dialogs)
+
+Constraints
+- No DB changes
+- No new API routes
+- Do not modify shared/
+- Keep existing library tabs/sections intact
+
+Edits: client/src/pages/library.tsx only
+
+1) Imports (top of file)
+- Change import: `import { useState } from "react";` -> `import { useEffect, useState } from "react";`
+- Add wouter hooks import: `import { useLocation, useSearch } from "wouter";`
+  (Keep existing imports unchanged)
+
+2) Update useLibraryEntries to accept division scope
+Replace current hook:
+
+function useLibraryEntries(type: string) {
+  return useQuery<LibraryEntry[]>({
+    queryKey: ["/api/library", type],
+    queryFn: async () => {
+      const res = await fetch(`/api/library?type=${type}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+}
+
+With:
+
+function useLibraryEntries(type: string, divisionCode?: string | null) {
+  const divKey = divisionCode ?? "all";
+  return useQuery<LibraryEntry[]>({
+    queryKey: ["/api/library", type, divKey],
+    queryFn: async () => {
+      const url = `/api/library?type=${encodeURIComponent(type)}${divisionCode ? `&divisionCode=${encodeURIComponent(divisionCode)}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+}
+
+3) Add selectedDivision state + URL persistence in Library() component
+Inside `export default function Library()`:
+
+- Add:
+  const [, navigate] = useLocation();
+  const search = useSearch();
+
+- Parse URL param and create state:
+  const urlDivision = new URLSearchParams(search).get("division");
+  const initialDivision = urlDivision && ["LJ","LE","LL"].includes(urlDivision) ? urlDivision : null;
+  const [selectedDivision, setSelectedDivision] = useState<string | null>(initialDivision);
+
+- Sync state when URL changes (back/forward, pasted link):
+  useEffect(() => {
+    const next = new URLSearchParams(search).get("division");
+    const nextDiv = next && ["LJ","LE","LL"].includes(next) ? next : null;
+    setSelectedDivision(nextDiv);
+  }, [search]);
+
+- Add handler to update URL on click:
+  const setDivisionAndUrl = (div: string | null) => {
+    setSelectedDivision(div);
+    navigate(`/library${div ? `?division=${div}` : ""}`);
+  };
+
+4) Render the division scope selector UI above the Tabs
+In the main return of Library(), inside the content area:
+Locate:
+<div className="flex-1 overflow-auto p-6">
+  <Tabs ...
+
+Insert ABOVE <Tabs ...>:
+
+<div className="mb-4 flex items-center justify-between gap-3">
+  <div className="flex items-center gap-2">
+    <span className="text-xs text-muted-foreground">Division Scope</span>
+    <div className="flex gap-2">
+      <Button
+        variant={selectedDivision === null ? "default" : "outline"}
+        size="sm"
+        onClick={() => setDivisionAndUrl(null)}
+        data-testid="button-scope-all"
+      >
+        All
+      </Button>
+      {["LJ","LE","LL"].map((code) => (
+        <Button
+          key={code}
+          variant={selectedDivision === code ? "default" : "outline"}
+          size="sm"
+          onClick={() => setDivisionAndUrl(code)}
+          data-testid={`button-scope-${code}`}
+        >
+          {code}
+        </Button>
+      ))}
+    </div>
+  </div>
+
+  <Badge variant="secondary" className="text-xs">
+    {selectedDivision ? `Showing: Shared + ${selectedDivision}` : "Showing: All divisions + Shared"}
+  </Badge>
+</div>
+
+5) Pass selectedDivision through all useLibraryEntries call sites
+You must update every useLibraryEntries(...) call so it includes selectedDivision where appropriate.
+
+Approach:
+- Because Library() is the top component and all sections are below it, easiest is:
+  - Add a prop `divisionCode?: string | null` to each section component that calls useLibraryEntries (GlassSection, FrameTypeSection, WanzBarSection, DirectMaterialsSection, ManufacturingLabourSection, InstallationSection, DeliverySection, HandlesSection, HandleCategoryCollapsible, SimpleSection, LinerTypeSection).
+  - Then pass selectedDivision from TabsContent:
+    <GlassSection divisionCode={selectedDivision} />
+    <FrameTypeSection divisionCode={selectedDivision} />
+    etc.
+
+- In each section, change:
+  useLibraryEntries("glass")
+  to
+  useLibraryEntries("glass", divisionCode)
+
+Notes:
+- Some internal queries are NOT library entries (e.g., /api/frame-types/... configs) and should stay unchanged.
+- Only library_entries queries should be scoped.
+
+6) Add scope badge to common row renderers
+Minimum implementation:
+A) In SimpleSection table:
+- Add a "Scope" column before Allocation (or before actions).
+- Use entry.divisionScope to render:
+  const scope = (entry as any).divisionScope ?? null;
+  <Badge variant={scope ? "outline" : "secondary"} className="text-xs" data-testid={`badge-scope-${entry.id}`}>
+    {scope || "Shared"}
+  </Badge>
+
+B) In GlassTypeCollapsible table rows:
+- Add a new TableHead "Scope" and TableCell with badge using same logic.
+
+C) In FrameTypeSection card header:
+- Under categories badges, also show the scope badge for the frame type entry.
+
+D) In DirectMaterialsFamilyGroup profile/accessory rows:
+- Add a scope badge column (optional), or at least append badge next to mould/code field.
+
+7) Default divisionScope on new entries (+ dropdown override)
+Add a scope dropdown in dialogs where library entries are created via POST /api/library.
+Implement in these dialogs at minimum:
+- SimpleDialog (covers many types)
+- GlassDialog
+- FrameTypeDialog
+- WanzBarDialog
+- DirectProfileDialog
+- DirectAccessoryDialog
+- LabourOperationDialog
+- InstallationRateDialog
+- DeliveryRateDialog
+
+Pattern:
+- Pass divisionCode (selectedDivision) into the dialog as prop: `divisionCode?: string | null`.
+- Add state:
+  const [divisionScope, setDivisionScope] = useState<string>(entry ? ((entry as any).divisionScope || "") : (divisionCode || ""));
+  where "" means Shared.
+- Add a Select in the dialog UI near the top:
+  <Label>Division Scope</Label>
+  <Select value={divisionScope} onValueChange={setDivisionScope}>
+    <SelectTrigger data-testid="select-entry-scope"><SelectValue /></SelectTrigger>
+    <SelectContent>
+      <SelectItem value="">Shared</SelectItem>
+      <SelectItem value="LJ">LJ</SelectItem>
+      <SelectItem value="LE">LE</SelectItem>
+      <SelectItem value="LL">LL</SelectItem>
+    </SelectContent>
+  </Select>
+
+- On POST and PATCH payloads, include:
+  divisionScope: divisionScope === "" ? null : divisionScope
+
+Example for POST /api/library:
+await apiRequest("POST", "/api/library", { type, data, sortOrder: 0, divisionScope: divisionScope === "" ? null : divisionScope });
+
+Example for PATCH /api/library/:id:
+await apiRequest("PATCH", `/api/library/${entry.id}`, { data, divisionScope: divisionScope === "" ? null : divisionScope });
+
+- IMPORTANT: For PATCH routes like `/api/library/direct-profiles/:id` and `/api/library/direct-accessories/:id`, include divisionScope in the body if those endpoints accept it; if not, do NOT change those PATCH calls. For creation via POST /api/library, include divisionScope.
+
+8) React Query invalidation updates
+Where you invalidate queries, include the division key when needed, OR simply invalidate the base prefix:
+- Keep existing invalidations if they use queryKey: ["/api/library", type] etc.
+- Add broader invalidation after saves if needed:
+  queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+
+9) Acceptance Checks
+- /library renders division scope buttons and persists selection in URL.
+- Switching scope changes all library lists (server already returns Shared + division scoped entries).
+- Rows show scope badge (Shared vs LJ/LE/LL).
+- New entry dialogs default scope to currently selected division (or Shared if All).
+- No server changes, no schema changes, no shared/ changes.
+
+Commit message:
+"T012: Add division scope filter to library with URL persistence"
