@@ -166,6 +166,10 @@ interface ItemWithPhoto {
   dbId?: string;
 }
 
+function ensureConfigId(config: any): QuoteItem {
+  return { ...config, id: config?.id ?? crypto.randomUUID() };
+}
+
 export default function QuoteBuilder() {
   const [, matchResult] = useRoute("/job/:id");
   const rawId = matchResult?.id;
@@ -306,7 +310,7 @@ export default function QuoteBuilder() {
       setSavedJobId(existingJob.id);
       setItems(existingJob.items.map((ji) => ({
         uiId: ji.id || crypto.randomUUID(),
-        item: ji.config as QuoteItem,
+        item: ensureConfigId(ji.config as QuoteItem),
         photo: ji.photo,
         dbId: ji.id,
       })));
@@ -790,7 +794,11 @@ export default function QuoteBuilder() {
     const cachedWeightKg = currentPricing?.totalWeightKg ?? 0;
     const itemWithWeight = { ...finalData, cachedWeightKg };
     if (editingId) {
-      setItems(items.map((iwp) => (iwp.uiId === editingId ? { ...iwp, item: itemWithWeight } : iwp)));
+      setItems(items.map((iwp) => {
+        if (iwp.uiId !== editingId) return iwp;
+        const preservedId = iwp.item.id;
+        return { ...iwp, item: ensureConfigId({ ...itemWithWeight, id: preservedId }) };
+      }));
       setEditingId(null);
       toast({ title: "Item updated", description: `${finalData.name} has been updated.` });
     } else {
@@ -994,10 +1002,11 @@ export default function QuoteBuilder() {
         }
       }
 
-      for (let i = 0; i < items.length; i++) {
+      const normalized = items.map(iwp => ({ ...iwp, item: ensureConfigId(iwp.item) }));
+      for (let i = 0; i < normalized.length; i++) {
         await apiRequest("POST", `/api/jobs/${currentJobId}/items`, {
-          config: items[i].item,
-          photo: items[i].photo || null,
+          config: normalized[i].item,
+          photo: normalized[i].photo || null,
           sortOrder: i,
         });
       }
