@@ -48,6 +48,12 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Spec display editing**: PATCH /api/quotes/:id/revisions/:revId/spec-display saves override array.
 **Two create modes**: "Create Quote (Revision)" and "Create New Quote Number" buttons on exec summary.
 
+## Settings UI
+**Route**: /settings with 3 tabs:
+- **Application**: Layout options (quote items list position), Pricing (USD-NZD rate, GST rate). Uses localStorage via settings-context.
+- **Organisation**: Company details form (legalName, gstNumber, nzbn, address, phone, email), banking, quote defaults (quoteValidityDays, header/terms/exclusions/payment text blocks). Fetches GET /api/settings/org, saves via PATCH /api/settings/org.
+- **Divisions**: Division selector (LJ/LE/LL) with per-division settings — branding (tradingName, logoUrl, requiredLegalLine), template (templateKey readonly, scheduleLayoutVariant, totalsLayoutVariant selects), theme (fontFamily, accentColor, logoPosition, headerVariant), content overrides (terms/header/exclusions textareas), spec display defaults (checkbox list from /api/spec-dictionary?scope={code}, placeholder for LE/LL).
+
 ## UI/UX Decisions
 - **Color Schemes**: Based on Shadcn UI defaults.
 - **Templates**: Various pre-defined categories for windows (Standard, Sliding, Bay), and doors (Sliding, Entrance, Hinge, French, Bi-folding, Stacker).
