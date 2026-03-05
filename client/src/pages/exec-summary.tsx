@@ -5,7 +5,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type QuoteItem, type JobItem, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor, type FrameConfiguration, type LibraryEntry } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
-import { getGlassPrice } from "@shared/glass-library";
+import { getGlassPrice, getGlassRValue } from "@shared/glass-library";
 import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
@@ -467,11 +467,15 @@ export default function ExecSummary() {
         frameColor: item.frameColor || "",
         windZone: item.windZone || "",
         rValue: (() => {
-          if (item.glassIguType) {
-            const rv = getGlassRValue(item.glassIguType);
-            return rv ? `R${rv}` : "";
+          try {
+            if (item.glassIguType) {
+              const rv = getGlassRValue(item.glassIguType);
+              return rv ? `R${rv}` : "";
+            }
+            return "";
+          } catch {
+            return "";
           }
-          return "";
         })(),
         iguType: item.glassIguType || "",
         glassType: item.glassType || "",
