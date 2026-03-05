@@ -1,0 +1,75 @@
+Corrections / Improvements to make before proceeding
+1) The window.open signature
+
+Your plan uses:
+window.open(/quote/${quoteId}/preview, "_blank", "noreferrer")
+
+In browsers, the 3rd arg is a features string, and "noreferrer" isn’t universally respected as a feature there. If you want to prevent referrer reliably, you typically do:
+
+window.open(url, "_blank", "noopener,noreferrer")
+
+So change to:
+
+window.open(/quote/${quoteId}/preview, "_blank", "noopener,noreferrer");
+
+This also avoids the “new tab can access opener” security issue.
+
+2) Tooltip providers: don’t nest repeatedly if avoidable
+
+The plan wraps just the disabled button with its own <TooltipProvider>. That’s fine, but if the app already uses a global provider (common in shadcn setups), adding another is unnecessary (still works though).
+
+Best practice inside a page component:
+
+Use a single <TooltipProvider> around the two buttons (or at least around that button group), then use <Tooltip> inside.
+
+Not required, but cleaner.
+
+3) Button ordering: match your acceptance criteria
+
+Plan says: “add two buttons before Preview button” and acceptance says order should be:
+
+Print / Save as PDF
+
+Generate PDF
+
+Preview Customer Quote
+
+✅ That’s consistent. Keep it.
+
+4) T011B (replit.md) — align with what you want
+
+You already said you don’t want to paste replit.md updates. So either:
+
+Drop T011B, or
+
+Keep it as a “note” task but don’t block coding on it.
+
+If you want the agent to keep momentum, I’d change:
+
+T011B Blocked By: [T011A]
+to
+
+T011B Optional (non-blocking) or remove it entirely.
+
+5) Library future note: keep it precise (your “unified library” idea)
+
+Your phrasing is good: unified dataset + scope switcher + query param deep links.
+I’d ensure it explicitly says:
+
+NOT separate duplicated libraries, just filtered views.
+
+(Your current plan already says that—good.)
+
+Revised “best” plan (minimal edits)
+
+Change window.open(..., "noreferrer") → "noopener,noreferrer"
+
+Make T011B optional/non-blocking (since you don’t want doc paste work right now)
+
+Everything else: ✅ proceed.
+
+If you want, paste this 2-line correction back to Replit agent:
+
+Use window.open(url, "_blank", "noopener,noreferrer")
+
+Skip T011B for now / do not edit replit.md unless explicitly requested
