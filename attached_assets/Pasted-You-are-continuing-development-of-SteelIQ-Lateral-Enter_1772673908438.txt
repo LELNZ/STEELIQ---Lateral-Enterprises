@@ -1,0 +1,298 @@
+You are continuing development of SteelIQ (Lateral Enterprises) after the getGlassRValue runtime error has been fixed. Continue with tasks T009–T011 below.
+
+Objective (009–011)
+
+Complete remaining deliverables after quote preview + snapshot/spec work by adding:
+
+T009: End-to-end verification + regression testing + fixes
+
+T010: Settings UI for org + division settings (API already exists)
+
+T011: PDF generation integration using the existing PDF engine (do not modify PDF engine internals)
+
+Guardrails (must keep)
+
+DO NOT rename existing DB tables or API routes
+
+DO NOT restructure folders
+
+Keep Estimator + Quote Manager fully working (no regressions)
+
+Keep existing PDF engine untouched (treat as a black box)
+
+DO NOT modify /shared except already-approved files (no new shared edits in these tasks unless explicitly necessary)
+
+T009 — Verification + Regression Pass (Fixes allowed)
+
+Blocked by: none (assumes previous work is merged and running)
+
+What to test (manual checklist)
+Jobs / Quote Builder
+
+Create new job → add item → save job ✅
+
+Edit existing item → save job ✅
+
+Duplicate item → no duplicate React keys, save job ✅
+
+Auto-save triggers only when expected (no save spam)
+
+Exec Summary
+
+Open exec summary for saved job
+
+Both buttons work:
+
+Create Quote (Revision)
+
+Create New Quote Number
+
+Snapshot created includes:
+
+divisionCode = "LJ"
+
+items[].drawingImageKey present (if drawings upload)
+
+items[].specValues has raw glass selections preserved
+
+items[].resolvedSpecs.rValue populated from cascade source-of-truth
+
+totalsBreakdown values correct, install/delivery default to 0
+
+Quote Manager
+
+New quote appears in list
+
+Status transitions still work:
+
+draft → review → sent → accepted/declined → archived
+
+Revisions increment correctly and audit trail remains intact
+
+Customer Preview
+
+/quote/:id/preview loads
+
+Branding/terms/schedule render correctly
+
+Drawing images load via /api/drawing-images/:key
+
+Spec display toggle:
+
+default keys from division settings
+
+override saves to revision
+
+override affects preview only
+
+Library filtering
+
+/api/library?type=frame_type&divisionCode=LJ returns NULL + LJ scoped
+
+Without divisionCode returns everything (back compat)
+
+Security
+
+/api/drawing-images/:key rejects invalid keys (path traversal)
+
+Upload route only accepts png (or enforced content-type handling)
+
+Deliverables
+
+Fix any bugs found during this pass without changing architecture
+
+Add lightweight dev logging only if needed (avoid permanent noisy logs)
+
+Acceptance
+
+Full flow works without errors; no regressions in estimator / quotes / revisions / status transitions.
+
+T010 — Settings UI (Org + Division)
+
+Goal: Build UI pages that manage settings rows already supported by API routes:
+
+GET/PATCH /api/settings/org
+
+GET /api/settings/divisions
+
+GET/PATCH /api/settings/divisions/:code
+
+Blocked by: none (APIs assumed present)
+
+Requirements
+Settings landing
+
+Keep existing Settings nav item
+
+Add tabs or sub-sections:
+
+“Organisation”
+
+“Divisions”
+
+Organisation settings form
+
+Fields:
+
+legal name
+
+gst
+
+nzbn
+
+address
+
+phone
+
+email
+
+bank details
+
+default blocks
+
+payment terms
+
+quote validity days
+
+Behavior:
+
+PATCH saves and shows toast
+
+Validate quoteValidityDays as integer >= 1
+
+Show success + error toasts with response text
+
+Division settings form
+
+Division selector: LJ / LE / LL
+
+Editable fields:
+
+trading_name
+
+logo_url
+
+required_legal_line
+
+template_key (readonly or controlled — do not allow breaking existing templates)
+
+schedule/totals layout variant (safe select)
+
+theme fields (font, accent, logo position, header variant)
+
+Spec display defaults editor
+
+Field: spec_display_defaults_json
+
+Provide checkbox list sourced from:
+
+/api/spec-dictionary?scope=LJ when divisionCode = LJ
+
+For LE/LL:
+
+show placeholder UI (“Spec dictionary not configured yet”)
+
+still allow saving other division fields
+
+Non-goals
+
+No PDF settings UI here
+
+Do not implement PDF generation UI; only store settings
+
+Implementation notes
+
+Use react-query queries/mutations
+
+Keep payloads minimal (only changed fields if possible)
+
+Acceptance
+
+Settings UI can view + update org and division settings successfully.
+No DB schema changes or server route changes beyond what already exists.
+
+T011 — PDF Generation Integration (Use existing engine untouched)
+
+Goal: Add a “Generate PDF” action that uses the existing PDF engine exactly as-is.
+
+Blocked by: working quote revisions + preview-data (assumed done)
+
+Constraints
+
+DO NOT modify the PDF engine implementation.
+
+Integration must be done by:
+
+calling an existing server endpoint if it exists, OR
+
+adding a thin orchestration route that delegates to the existing PDF module without altering it
+
+Tasks
+1) Locate existing PDF generation path
+
+Find current server route/service used for PDFs (likely in server routes / quote manager module)
+
+Confirm expected inputs: quoteId, revisionId, templateKey, snapshot, etc.
+
+2) Add “Generate PDF” button
+
+Location:
+
+Quote detail page (preferred) and/or Preview page
+
+On click:
+
+Call server endpoint to generate PDF for current revision
+
+Server stores pdfStorageKey on revision if that’s existing behavior
+
+Client downloads or opens the PDF
+
+3) If PDF download endpoint already exists
+
+Use it directly.
+
+4) If not, add a thin wrapper endpoint (only if needed)
+
+Example:
+
+GET /api/quotes/:id/revisions/:revId/pdf → streams PDF
+
+But ONLY if it’s a thin wrapper around existing PDF engine.
+
+5) Ensure template lock
+
+Must use quote_revisions.template_key for PDF generation
+
+Never use “latest division template” for historical revisions
+
+Acceptance
+
+From a quote, user can generate/download PDF for the current revision.
+No changes to PDF engine internals.
+Historical revisions generate PDFs using their locked template_key.
+
+Notes / Context (already implemented fixes)
+
+Previously fixed:
+
+UI duplicate item bug via uiId key (React-only identity)
+
+Save job failing due to config.id becoming undefined (every QuoteItem config must have id: string)
+
+Exec Summary crash getGlassRValue is not defined fixed by importing correctly
+
+Item drawing images stored/served via /api/drawing-images routes; snapshots store only filename key
+
+Division-aware architecture is long-term; LJ is first division
+
+Output expectation
+
+Work through T009 → T010 → T011 in order.
+After each task, provide:
+
+what was changed (files + summary)
+
+how to test
+
+any risks or regressions spotted

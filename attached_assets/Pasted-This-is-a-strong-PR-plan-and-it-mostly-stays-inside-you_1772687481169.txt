@@ -1,0 +1,113 @@
+This is a strong PR plan and it mostly stays inside your guardrails. I’d approve it with a few required corrections, mainly around react-query fetching, missing imports, and type/UX edge cases that can easily introduce subtle bugs.
+
+✅ Approve, but require these changes before implementation
+1) useEffect is used but not imported
+
+Plan shows useEffect(...) in both tabs but the “AFTER imports” only adds useState.
+
+Required fix: add:
+
+import { useState, useEffect } from "react";
+2) Division settings query is very likely fetching the wrong URL
+
+This is the biggest risk.
+
+They wrote:
+
+useQuery<DivisionSettings>({
+  queryKey: ["/api/settings/divisions", selectedCode],
+});
+
+If your app’s “default queryFn” constructs URLs from queryKey arrays, it might do something like:
+
+fetch "/api/settings/divisions" (ignoring the second element), or
+
+fetch "/api/settings/divisions?selectedCode=LJ" (not your route), etc.
+
+But your API is:
+
+GET /api/settings/divisions/:code
+
+Required fix: provide an explicit queryFn (same as spec dictionary), e.g.
+
+const { data: div, isLoading } = useQuery<DivisionSettings>({
+  queryKey: ["/api/settings/divisions", selectedCode],
+  queryFn: () => fetch(`/api/settings/divisions/${selectedCode}`).then(r => r.json()),
+});
+
+And make sure invalidate matches the same key:
+
+queryClient.invalidateQueries({ queryKey: ["/api/settings/divisions", selectedCode] });
+
+(Alternatively set queryKey to the literal URL string ["/api/settings/divisions/LJ"] and avoid custom queryFn entirely, but the above is fine.)
+
+3) quoteValidityDays will come from <input type="number"> as a string
+
+Right now the plan validates Number.isInteger(form.quoteValidityDays) and compares < 1. If quoteValidityDays becomes "15" (string), that validation fails even if the UI looks correct.
+
+Required fix: parse on change:
+
+onChange={(e) => {
+  const v = e.target.value;
+  setForm({ ...form, quoteValidityDays: v === "" ? undefined : parseInt(v, 10) });
+}}
+
+And keep the input controlled safely:
+
+value={form.quoteValidityDays ?? ""}
+4) Checkbox onCheckedChange can be "indeterminate" in shadcn
+
+onCheckedChange may pass boolean | "indeterminate". The plan treats it as boolean.
+
+Required fix:
+
+onCheckedChange={(v) => {
+  const isChecked = v === true;
+  ...
+}}
+5) Switching divisions needs a “form reset” to avoid stale values flashing
+
+When you click LE/LL, the form may briefly show LJ values until the query completes.
+
+Recommended fix (simple):
+
+set form to {} when selectedCode changes, and/or
+
+disable the form while loading.
+
+Example:
+
+useEffect(() => { setForm({}); }, [selectedCode]);
+
+and/or:
+
+disable Save button while isLoading || mutation.isPending
+
+6) queryClient import correctness
+
+Plan uses:
+
+import { queryClient, apiRequest } from "@/lib/queryClient";
+
+Make sure that’s how your project actually exposes it. Some codebases export queryClient as default or via getQueryClient().
+
+Not a blocker if confirmed, but if this import is wrong you’ll get runtime errors immediately.
+
+✅ Everything else looks good
+
+Single file change is ideal.
+
+Tab layout approach is safe.
+
+“Application” tab preserved exactly: good.
+
+templateKey readonly: good.
+
+Spec dictionary checkbox approach is correct (store keys, render labels).
+
+No schema/routes/shared changes: compliant.
+
+Final verdict
+
+✅ Approve T010 plan with the required fixes above (especially #2 and #3).
+After implementation, the test steps listed are good—just add one more: switch LJ → LE → back to LJ and confirm values reload correctly and don’t persist cross-division in the UI state.
