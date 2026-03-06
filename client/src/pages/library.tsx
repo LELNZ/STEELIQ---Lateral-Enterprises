@@ -75,10 +75,10 @@ function ScopeBadge({ entry }: { entry: LibraryEntry }) {
 
 function DivisionScopeSelector({ divisionCode, onChange }: { divisionCode: string | null; onChange: (code: string | null) => void }) {
   return (
-    <div className="flex items-center gap-2" data-testid="division-scope-selector">
+    <div className="flex items-center gap-2 flex-wrap" data-testid="division-scope-selector">
       <Filter className="w-4 h-4 text-muted-foreground" />
       <span className="text-sm font-medium text-muted-foreground">Division Scope:</span>
-      <div className="flex gap-1">
+      <div className="flex gap-1 flex-wrap">
         <Button
           size="sm"
           variant={divisionCode === null ? "default" : "outline"}
@@ -180,16 +180,16 @@ export default function Library() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="library-page">
-      <header className="border-b px-6 py-3 flex items-center justify-between gap-4 bg-card shrink-0">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4 bg-card shrink-0 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
+          <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary shrink-0">
             <BookOpen className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight" data-testid="text-library-title">
               Item Library
             </h1>
-            <p className="text-xs text-muted-foreground">Manage reference data for quotes</p>
+            <p className="text-xs text-muted-foreground hidden sm:block">Manage reference data for quotes</p>
           </div>
         </div>
         <Button
@@ -204,13 +204,13 @@ export default function Library() {
         </Button>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="mb-4">
           <DivisionScopeSelector divisionCode={selectedDivision} onChange={setDivisionAndUrl} />
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LibraryTab)}>
-          <TabsList className="mb-4" data-testid="library-tabs">
+          <TabsList className="mb-4 overflow-x-auto flex-wrap" data-testid="library-tabs">
             <TabsTrigger value="direct_materials" data-testid="tab-direct-materials">Direct Materials</TabsTrigger>
             <TabsTrigger value="manufacturing_labour" data-testid="tab-manufacturing-labour">Manufacturing Labour</TabsTrigger>
             <TabsTrigger value="glass" data-testid="tab-glass">Glass</TabsTrigger>
@@ -1360,7 +1360,7 @@ function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1628,7 +1628,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1980,6 +1980,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                 Aluminium Profiles ({profiles.length})
               </CollapsibleTrigger>
               <CollapsibleContent>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2021,6 +2022,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </CollapsibleContent>
             </Collapsible>
 
@@ -2030,6 +2032,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                 Accessories ({accessories.length})
               </CollapsibleTrigger>
               <CollapsibleContent>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2071,6 +2074,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </CollapsibleContent>
             </Collapsible>
           </CardContent>
@@ -2344,7 +2348,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
           </CardHeader>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -2506,7 +2510,7 @@ function InstallationSection({ divisionCode }: { divisionCode?: string | null })
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">{title}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -2669,7 +2673,7 @@ function DeliverySection({ divisionCode }: { divisionCode?: string | null }) {
       </div>
 
       <Card>
-        <CardContent className="pt-4">
+        <CardContent className="pt-4 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

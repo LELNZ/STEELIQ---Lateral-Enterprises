@@ -112,7 +112,7 @@ function OrgSettingsTab() {
               data-testid="input-org-legalName"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label className="text-sm font-medium mb-1 block">GST Number</Label>
               <Input
@@ -138,7 +138,7 @@ function OrgSettingsTab() {
               data-testid="input-org-address"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label className="text-sm font-medium mb-1 block">Phone</Label>
               <Input
@@ -361,7 +361,7 @@ function DivisionSettingsTab() {
                 <Input value={form.templateKey || ""} disabled data-testid="input-div-templateKey" />
                 <p className="text-xs text-muted-foreground mt-1">Locked — managed by system</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium mb-1 block">Schedule Layout</Label>
                   <Select
@@ -402,7 +402,7 @@ function DivisionSettingsTab() {
               <CardTitle className="text-base">Theme</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium mb-1 block">Font Family</Label>
                   <Input
@@ -422,7 +422,7 @@ function DivisionSettingsTab() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium mb-1 block">Logo Position</Label>
                   <Select
@@ -506,7 +506,7 @@ function DivisionSettingsTab() {
                 <p className="text-xs text-muted-foreground mb-3">
                   Select which specs appear by default on customer quotes for {selectedCode}
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {visibleSpecs.map((entry) => {
                     const checked = currentDefaults.includes(entry.key);
                     return (
@@ -557,7 +557,7 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="settings-page">
-      <header className="border-b px-6 py-3 flex items-center gap-3 bg-card shrink-0">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center gap-3 bg-card shrink-0">
         <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
           <SettingsIcon className="w-5 h-5 text-primary-foreground" />
         </div>
@@ -567,10 +567,10 @@ export default function Settings() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="max-w-2xl mx-auto">
           <Tabs defaultValue="application">
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 overflow-x-auto">
               <TabsTrigger value="application" data-testid="tab-application">Application</TabsTrigger>
               <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation</TabsTrigger>
               <TabsTrigger value="divisions" data-testid="tab-divisions">Divisions</TabsTrigger>

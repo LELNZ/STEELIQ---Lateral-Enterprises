@@ -26,7 +26,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
@@ -34,6 +34,20 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { downloadPng, compressImage, compressImageToBlob, svgToPngBlob, downloadBlob, sanitizeFilename } from "@/lib/export-png";
 import { jsPDF } from "jspdf";
+
+function useIsLargeScreen() {
+  const [isLarge, setIsLarge] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsLarge(mql.matches);
+    mql.addEventListener("change", onChange);
+    setIsLarge(mql.matches);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return isLarge;
+}
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Windows Standard" },
@@ -214,6 +228,8 @@ export default function QuoteBuilder() {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [formTab, setFormTab] = useState<string>("drawing");
+  const [mobileTab, setMobileTab] = useState<"config" | "preview" | "items">("config");
+  const isLargeScreen = useIsLargeScreen();
   const { quoteListPosition, usdToNzdRate } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef<SVGSVGElement>(null);
@@ -1122,99 +1138,200 @@ export default function QuoteBuilder() {
         data-testid="input-photo-capture"
       />
 
-      <header className="border-b px-6 py-3 bg-card shrink-0">
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" data-testid="button-back-to-jobs" onClick={() => {
+      <header className="border-b px-4 lg:px-6 py-3 bg-card shrink-0">
+        <div className="flex items-center justify-between gap-2 lg:gap-4 mb-3">
+          <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+            <Button variant="ghost" size="icon" className="shrink-0" data-testid="button-back-to-jobs" onClick={() => {
               if (hasUnsavedChanges) { setShowLeaveDialog(true); } else { navigate("/"); }
             }}>
               <ArrowLeftCircle className="w-5 h-5" />
             </Button>
-            <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
+            <div className="hidden lg:flex items-center justify-center w-9 h-9 rounded-md bg-primary shrink-0">
               <LayoutGrid className="w-5 h-5 text-primary-foreground" />
             </div>
-            <div>
-              <h1 className="text-lg font-semibold tracking-tight" data-testid="text-app-title">
-                Pro-Quote CAD Generator
+            <div className="min-w-0">
+              <h1 className="text-sm lg:text-lg font-semibold tracking-tight truncate" data-testid="text-app-title">
+                {isLargeScreen ? "Pro-Quote CAD Generator" : (savedJobId ? "Editing" : "New Estimate")}
               </h1>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground hidden lg:block">
                 {savedJobId ? "Editing Job" : "New Job"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {items.length > 0 && (
-              <Badge variant="secondary" data-testid="badge-item-count">
+              <Badge variant="secondary" data-testid="badge-item-count" className="hidden sm:inline-flex">
                 {items.length} item{items.length !== 1 ? "s" : ""}
               </Badge>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" data-testid="button-download-menu">
-                  <Download className="w-4 h-4 mr-1.5" /> Download <ChevronDown className="w-3 h-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-download-current-png">
-                  Current Drawing (PNG)
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-download-all-pngs">
-                  All Items (Individual PNGs)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-download-pdf">
-                  All Items (PDF)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {savedJobId && items.length > 0 && (
+            {isLargeScreen ? (
               <>
-                <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
-                  <FileText className="w-4 h-4 mr-1.5" /> Summary
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-exec-summary">
-                  <FileText className="w-4 h-4 mr-1.5" /> Exec Summary
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-download-menu">
+                      <Download className="w-4 h-4 mr-1.5" /> Download <ChevronDown className="w-3 h-3 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-download-current-png">
+                      Current Drawing (PNG)
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-download-all-pngs">
+                      All Items (Individual PNGs)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-download-pdf">
+                      All Items (PDF)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {savedJobId && items.length > 0 && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
+                      <FileText className="w-4 h-4 mr-1.5" /> Summary
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-exec-summary">
+                      <FileText className="w-4 h-4 mr-1.5" /> Exec Summary
+                    </Button>
+                  </>
+                )}
               </>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" data-testid="button-mobile-more">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-mobile-download-png">
+                    <Download className="w-4 h-4 mr-2" /> Current Drawing (PNG)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-mobile-download-all">
+                    <Download className="w-4 h-4 mr-2" /> All Items (PNGs)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-mobile-download-pdf">
+                    <Download className="w-4 h-4 mr-2" /> All Items (PDF)
+                  </DropdownMenuItem>
+                  {savedJobId && items.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="menu-mobile-summary">
+                        <FileText className="w-4 h-4 mr-2" /> Summary
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="menu-mobile-exec-summary">
+                        <FileText className="w-4 h-4 mr-2" /> Exec Summary
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            <Button onClick={saveJob} disabled={isSaving} data-testid="button-save-job">
-              <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save Job"}
+            <Button onClick={saveJob} disabled={isSaving} size={isLargeScreen ? "default" : "sm"} data-testid="button-save-job">
+              <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save"}
             </Button>
           </div>
         </div>
-        <div className="flex items-end gap-3">
-          <div className="flex-1 min-w-0">
-            <Label className="text-xs">Job Name *</Label>
-            <Input
-              value={jobName}
-              onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
-              placeholder="e.g. Smith Residence"
-              data-testid="input-job-name"
-            />
+        {isLargeScreen ? (
+          <div className="flex items-end gap-3">
+            <div className="flex-1 min-w-0">
+              <Label className="text-xs">Job Name *</Label>
+              <Input
+                value={jobName}
+                onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
+                placeholder="e.g. Smith Residence"
+                data-testid="input-job-name"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <Label className="text-xs">Address</Label>
+              <Input
+                value={jobAddress}
+                onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
+                placeholder="e.g. 123 Main St"
+                data-testid="input-job-address"
+              />
+            </div>
+            <div className="w-40 shrink-0">
+              <Label className="text-xs">Date</Label>
+              <Input
+                type="date"
+                value={jobDate}
+                onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
+                data-testid="input-job-date"
+              />
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <Label className="text-xs">Address</Label>
-            <Input
-              value={jobAddress}
-              onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
-              placeholder="e.g. 123 Main St"
-              data-testid="input-job-address"
-            />
+        ) : (
+          <div className="flex flex-col gap-2">
+            <div>
+              <Label className="text-xs">Job Name *</Label>
+              <Input
+                value={jobName}
+                onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
+                placeholder="e.g. Smith Residence"
+                data-testid="input-job-name"
+              />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs">Address</Label>
+                <Input
+                  value={jobAddress}
+                  onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
+                  placeholder="e.g. 123 Main St"
+                  data-testid="input-job-address"
+                />
+              </div>
+              <div className="w-32 shrink-0">
+                <Label className="text-xs">Date</Label>
+                <Input
+                  type="date"
+                  value={jobDate}
+                  onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
+                  data-testid="input-job-date"
+                />
+              </div>
+            </div>
           </div>
-          <div className="w-40 shrink-0">
-            <Label className="text-xs">Date</Label>
-            <Input
-              type="date"
-              value={jobDate}
-              onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
-              data-testid="input-job-date"
-            />
-          </div>
-        </div>
+        )}
       </header>
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-        <ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0">
+      {!isLargeScreen && (
+        <div className="flex border-b bg-card shrink-0">
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors ${mobileTab === "config" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            onClick={() => setMobileTab("config")}
+            data-testid="tab-mobile-config"
+          >
+            <Wrench className="w-4 h-4" /> Config
+          </button>
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors ${mobileTab === "preview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            onClick={() => setMobileTab("preview")}
+            data-testid="tab-mobile-preview"
+          >
+            <Eye className="w-4 h-4" /> Preview
+          </button>
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors ${mobileTab === "items" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            onClick={() => setMobileTab("items")}
+            data-testid="tab-mobile-items"
+          >
+            <List className="w-4 h-4" /> Items
+            {items.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{items.length}</Badge>
+            )}
+          </button>
+        </div>
+      )}
+
+      <div className={`flex-1 min-h-0 flex ${isLargeScreen ? "lg:flex-row" : ""} flex-col overflow-hidden`}>
+        {(isLargeScreen || mobileTab === "config") && (
+        <ScrollArea className={isLargeScreen ? "w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0" : "flex-1 min-h-0"}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-4">
             <Tabs value={formTab} onValueChange={setFormTab}>
               <TabsList className="w-full grid grid-cols-2 mb-3">
@@ -2444,8 +2561,12 @@ export default function QuoteBuilder() {
             </div>
           </form>
         </ScrollArea>
+        )}
 
-        <div className={`flex-1 min-h-0 flex flex-col ${quoteListPosition === "right" ? "lg:flex-row" : "lg:flex-col"} overflow-hidden`}>
+        {(isLargeScreen || mobileTab === "preview") && (
+        <div className={isLargeScreen
+          ? `flex-1 min-h-0 flex flex-col ${quoteListPosition === "right" ? "lg:flex-row" : "lg:flex-col"} overflow-hidden`
+          : "flex-1 min-h-0 flex flex-col overflow-hidden"}>
           <div className="flex-1 flex items-center justify-center p-4 min-h-0"
             style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)" }}>
             <div className="w-full h-full max-w-3xl max-h-[600px]" data-testid="drawing-preview">
@@ -2453,7 +2574,7 @@ export default function QuoteBuilder() {
             </div>
           </div>
 
-          {items.length > 0 && (
+          {isLargeScreen && items.length > 0 && (
             <div className={`${quoteListPosition === "right"
               ? "border-l bg-card flex flex-col shrink-0 overflow-hidden w-80 xl:w-96"
               : `border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "h-[55dvh]" : "h-[160px]"}`
@@ -2574,6 +2695,78 @@ export default function QuoteBuilder() {
             </div>
           )}
         </div>
+        )}
+
+        {!isLargeScreen && mobileTab === "items" && (
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-3 space-y-2">
+              {items.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p className="text-sm">No items yet. Switch to the Config tab to add items.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-xs text-muted-foreground font-medium px-1 pb-1" data-testid="text-mobile-items-summary">
+                    {items.length} item{items.length !== 1 ? "s" : ""} — {totalSqm} m² — ${formatPrice(totalPrice)}
+                  </div>
+                  {items.map((iwp, index) => (
+                    <div key={iwp.uiId} className="border rounded-md bg-card p-3" data-testid={`card-item-${iwp.uiId}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="font-medium text-sm truncate">{iwp.item.name}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{getCategoryLabel(iwp.item.category)}</div>
+                        </div>
+                        {(() => {
+                          const src = getPrimaryPhotoSrc(iwp);
+                          if (src) {
+                            return (
+                              <button type="button" onClick={() => setGalleryItemId(iwp.uiId)} className="shrink-0" data-testid={`button-card-photo-${iwp.uiId}`}>
+                                <img src={src} alt="Photo" className="w-10 h-10 rounded object-cover border" />
+                              </button>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 text-xs">
+                        <span className="font-mono">{iwp.item.width} × {iwp.item.height}</span>
+                        <span className="text-muted-foreground">Qty: {iwp.item.quantity}</span>
+                        <span className="font-mono">{calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity)} m²</span>
+                        <span className="ml-auto font-medium">${formatPrice(calcItemPrice(iwp.item))}</span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-2 border-t pt-2">
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => editItem(iwp)} data-testid={`button-card-edit-${iwp.uiId}`}>
+                          <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => duplicateItem(iwp)} data-testid={`button-card-duplicate-${iwp.uiId}`}>
+                          <Copy className="w-3.5 h-3.5 mr-1" /> Copy
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => {
+                          setPhotoTargetItemId(iwp.uiId);
+                          photoInputRef.current?.click();
+                        }} data-testid={`button-card-camera-${iwp.uiId}`}>
+                          <Camera className="w-3.5 h-3.5 mr-1" /> Photo
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => {
+                          const { id, ...rest } = iwp.item;
+                          handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "" }, iwp.uiId);
+                        }} data-testid={`button-card-download-${iwp.uiId}`}>
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-destructive ml-auto" onClick={() => deleteItem(iwp.uiId)} data-testid={`button-card-delete-${iwp.uiId}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </ScrollArea>
+        )}
       </div>
 
       {offscreenConfig && (

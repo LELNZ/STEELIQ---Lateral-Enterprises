@@ -54,10 +54,22 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - **Organisation**: Company details form (legalName, gstNumber, nzbn, address, phone, email), banking, quote defaults (quoteValidityDays, header/terms/exclusions/payment text blocks). Fetches GET /api/settings/org, saves via PATCH /api/settings/org.
 - **Divisions**: Division selector (LJ/LE/LL) with per-division settings — branding (tradingName, logoUrl, requiredLegalLine), template (templateKey readonly, scheduleLayoutVariant, totalsLayoutVariant selects), theme (fontFamily, accentColor, logoPosition, headerVariant), content overrides (terms/header/exclusions textareas), spec display defaults (checkbox list from /api/spec-dictionary?scope={code}, placeholder for LE/LL).
 
+## Responsive Mobile-First Framework
+**Breakpoint**: `lg` (1024px) divides mobile/desktop layouts. JS hook `useIsLargeScreen()` in quote-builder.tsx uses `window.matchMedia` with lazy initializer for SSR-safe first render.
+**Quote Builder (quote-builder.tsx)**: Unified layout — one form + one canvas instance, no dual mounting. Mobile shows 3 tabs (Config/Preview/Items) via `mobileTab` state. Desktop shows side-by-side form+preview+items panel unchanged. Header collapses Download/Summary/Exec Summary into "More" dropdown on mobile. Job fields stack vertically on mobile. Mobile items rendered as touch-friendly cards with all actions preserved (Edit, Copy, Photo, Download, Delete). Desktop bottom/right items panel hidden on mobile.
+**Estimates list (jobs-list.tsx)**: LJ branding ("Estimates" title + LJ badge), touch-friendly buttons (min-h-10).
+**Quotes list (quotes-list.tsx)**: Desktop table `hidden lg:block`, mobile cards `block lg:hidden` with status badges.
+**Quote detail (quote-detail.tsx)**: Responsive metric grid (1→2→4 cols), flex-wrap on action/status buttons, overflow-x-auto on revisions table.
+**Quote preview (quote-preview.tsx)**: Customer info stacks on mobile, responsive padding, schedule items stack drawing above specs, acceptance grid 1→3 cols.
+**Library (library.tsx)**: overflow-x-auto on all tables, flex-wrap tab list, responsive padding.
+**Settings (settings.tsx)**: Form grids 1→2 cols responsive, overflow-x-auto tab list.
+**Sidebar (app-sidebar.tsx)**: LE/LL placeholder items with "(Coming Soon)" disabled styling.
+**App.tsx**: `min-h-0` on flex wrapper for nested scroll safety.
+
 ## UI/UX Decisions
 - **Color Schemes**: Based on Shadcn UI defaults.
 - **Templates**: Various pre-defined categories for windows (Standard, Sliding, Bay), and doors (Sliding, Entrance, Hinge, French, Bi-folding, Stacker).
-- **Design Approaches**: Responsive design with a focus on intuitive configuration forms and clear visual feedback.
+- **Design Approaches**: Responsive mobile-first design with a focus on intuitive configuration forms and clear visual feedback.
 - **Custom Grid Layout**: A column-based system supports flexible design for most window/door categories.
 - **Drawing Legend**: A toggleable legend displays frame size and item type, positioned to the left of the height dimension.
 

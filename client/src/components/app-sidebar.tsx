@@ -54,6 +54,18 @@ export function AppSidebar() {
                           </Link>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton className="opacity-50 pointer-events-none" data-testid="link-sidebar-le-estimates">
+                          <Briefcase className="w-3.5 h-3.5" />
+                          <span>LE – Estimates <span className="text-[10px] text-muted-foreground">(Coming Soon)</span></span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton className="opacity-50 pointer-events-none" data-testid="link-sidebar-ll-estimates">
+                          <Briefcase className="w-3.5 h-3.5" />
+                          <span>LL – Estimates <span className="text-[10px] text-muted-foreground">(Coming Soon)</span></span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </SidebarMenuItem>

@@ -110,7 +110,7 @@ export default function QuotePreview() {
 
   return (
     <div className="max-w-4xl mx-auto print:max-w-none" data-testid="quote-preview-page">
-      <div className="flex items-center justify-between p-4 print:hidden border-b">
+      <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden border-b">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(`/quote/${quoteId}`)} data-testid="button-back-to-quote">
             <ArrowLeftCircle className="h-5 w-5" />
@@ -120,11 +120,11 @@ export default function QuotePreview() {
             <p className="text-sm text-muted-foreground">{quote.number}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Sheet open={specSheetOpen} onOpenChange={setSpecSheetOpen}>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm" data-testid="button-edit-spec-display">
-                <Settings2 className="h-4 w-4 mr-1" /> Edit Spec Display
+                <Settings2 className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Edit </span>Spec Display
               </Button>
             </SheetTrigger>
             <SheetContent className="w-[400px] overflow-y-auto">
@@ -167,9 +167,9 @@ export default function QuotePreview() {
         </div>
       </div>
 
-      <div className="p-8 print:p-4 space-y-8 print:space-y-6">
+      <div className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
         <div className="space-y-6">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold" data-testid="text-trading-name">
                 {divisionSettings.tradingName || orgSettings.legalName || "Pro-Quote"}
@@ -178,7 +178,7 @@ export default function QuotePreview() {
                 {divisionSettings.requiredLegalLine || "A trading division of Lateral Engineering Limited"}
               </p>
             </div>
-            <div className="text-right text-sm text-muted-foreground space-y-0.5">
+            <div className="sm:text-right text-sm text-muted-foreground space-y-0.5">
               {orgSettings.address && <p>{orgSettings.address}</p>}
               {orgSettings.phone && <p>{orgSettings.phone}</p>}
               {orgSettings.email && <p>{orgSettings.email}</p>}
@@ -189,12 +189,12 @@ export default function QuotePreview() {
 
           <Separator />
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Customer</p>
               <p className="text-lg font-semibold" data-testid="text-customer">{quote.customer}</p>
             </div>
-            <div className="text-right space-y-1">
+            <div className="sm:text-right space-y-1">
               <div><span className="text-xs text-muted-foreground">Quote #: </span><span className="font-mono font-semibold" data-testid="text-quote-number-preview">{quote.number}</span></div>
               <div><span className="text-xs text-muted-foreground">Date: </span><span data-testid="text-quote-date">{quoteDate}</span></div>
               <div><span className="text-xs text-muted-foreground">Valid Until: </span><span data-testid="text-quote-expiry">{expiryDate}</span></div>
@@ -252,7 +252,7 @@ export default function QuotePreview() {
 
           <div className="mt-8 space-y-4 border-t pt-4">
             <p className="text-sm font-semibold">Acceptance</p>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="border-b border-dashed pb-6">
                 <p className="text-xs text-muted-foreground">Signature</p>
               </div>
@@ -330,7 +330,7 @@ function ScheduleItem({
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {item.drawingImageKey && (
           <div className="flex items-center justify-center">
             <img
@@ -341,7 +341,7 @@ function ScheduleItem({
             />
           </div>
         )}
-        <div>
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <tbody>
               {(expanded ? visibleSpecs : visibleSpecs.slice(0, defaultShow)).map(({ key, label, value }) => (

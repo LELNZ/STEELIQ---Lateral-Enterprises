@@ -48,7 +48,7 @@ function App() {
           <SidebarProvider style={style as React.CSSProperties}>
             <div className="flex h-screen w-full">
               <AppSidebar />
-              <div className="flex flex-col flex-1 min-w-0">
+              <div className="flex flex-col flex-1 min-w-0 min-h-0">
                 <header className="flex items-center gap-2 p-2 border-b sticky top-0 z-50 bg-background">
                   <SidebarTrigger data-testid="button-sidebar-toggle" />
                 </header>

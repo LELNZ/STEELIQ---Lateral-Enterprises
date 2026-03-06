@@ -99,7 +99,7 @@ export default function QuoteDetail() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6" data-testid="quote-detail-page">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/quotes")} data-testid="button-back-to-quotes">
             <ArrowLeftCircle className="h-5 w-5" />
@@ -109,7 +109,7 @@ export default function QuoteDetail() {
             <p className="text-sm text-muted-foreground" data-testid="text-quote-customer">{quote.customer}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <TooltipProvider>
             <Button
               variant="outline"
@@ -141,7 +141,7 @@ export default function QuoteDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-lg border bg-card p-3">
           <p className="text-xs text-muted-foreground">Created</p>
           <p className="text-sm font-medium" data-testid="text-quote-created">
@@ -168,7 +168,7 @@ export default function QuoteDetail() {
       </div>
 
       {allowedTransitions.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {allowedTransitions.map((nextStatus) => (
             <Button
               key={nextStatus}
@@ -192,7 +192,7 @@ export default function QuoteDetail() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Revisions</h2>
         </div>
         {quote.revisions && quote.revisions.length > 0 ? (
-          <div className="rounded-lg border bg-card">
+          <div className="rounded-lg border bg-card overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

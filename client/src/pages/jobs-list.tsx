@@ -28,28 +28,31 @@ export default function JobsList() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="jobs-list">
-      <header className="border-b px-6 py-3 flex items-center justify-between gap-4 bg-card shrink-0">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
             <LayoutGrid className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight" data-testid="text-app-title">
-              Pro-Quote CAD Generator
-            </h1>
-            <p className="text-xs text-muted-foreground">Manage your quotation jobs</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-semibold tracking-tight" data-testid="text-app-title">
+                Estimates
+              </h1>
+              <Badge variant="outline" data-testid="badge-division-lj">LJ</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">Manage your quotation estimates</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/job/new">
             <Button data-testid="button-new-job">
-              <Plus className="w-4 h-4 mr-2" /> New Job
+              <Plus className="w-4 h-4 mr-2" /> New Estimate
             </Button>
           </Link>
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <p className="text-muted-foreground">Loading jobs...</p>
@@ -57,10 +60,10 @@ export default function JobsList() {
         ) : jobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4" data-testid="empty-jobs">
             <FolderOpen className="w-12 h-12 text-muted-foreground/50" />
-            <p className="text-muted-foreground text-lg">No jobs yet</p>
+            <p className="text-muted-foreground text-lg">No estimates yet</p>
             <Link href="/job/new">
               <Button data-testid="button-create-first-job">
-                <Plus className="w-4 h-4 mr-2" /> Create your first job
+                <Plus className="w-4 h-4 mr-2" /> Create your first estimate
               </Button>
             </Link>
           </div>
@@ -69,7 +72,7 @@ export default function JobsList() {
             {jobs.map((job) => (
               <Card key={job.id} data-testid={`card-job-${job.id}`}>
                 <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base" data-testid={`text-job-name-${job.id}`}>
                       {job.name}
                     </CardTitle>
@@ -99,15 +102,15 @@ export default function JobsList() {
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Link href={`/job/${job.id}`}>
-                      <Button size="sm" data-testid={`button-open-job-${job.id}`}>
+                      <Button className="min-h-10 sm:min-h-9" data-testid={`button-open-job-${job.id}`}>
                         <FolderOpen className="w-3.5 h-3.5 mr-1.5" /> Open
                       </Button>
                     </Link>
                     <Button
-                      size="sm"
                       variant="ghost"
+                      className="min-h-10 sm:min-h-9"
                       onClick={() => deleteMutation.mutate(job.id)}
                       disabled={deleteMutation.isPending}
                       data-testid={`button-delete-job-${job.id}`}
