@@ -1,0 +1,511 @@
+Full copy-paste prompt for Replit agent
+
+You are continuing development of STEELIQ / Pro-Quote CAD Generator.
+
+You have access to the current codebase. This app is evolving from a quote generator into a multi-division field operations platform for:
+
+LJ = Lateral Joinery
+
+LE = Lateral Engineering
+
+LL = Lateral Laser
+
+Important current context:
+
+The original Jobs page has been renamed conceptually to Estimates
+
+The first active tenant/module is LJ – Estimates
+
+We will later add LE – Estimates and LL – Estimates
+
+The app must become fully usable on phone, tablet, and desktop
+
+This is for real onsite/site-visit/field quoting, so mobile UX must be enterprise-grade
+
+Objective
+
+Implement the next architectural step of the build:
+
+Phase 1 — Responsive app framework
+
+Create a consistent responsive UX framework across the app shell and key pages.
+
+Phase 2 — Mobile-first pilot implementation
+
+Apply that framework to:
+
+Estimates list
+
+Quote Builder
+
+Quotes list
+
+Quote detail / preview flows
+
+The result must feel like an enterprise field app, not a desktop app shrunk onto a phone.
+
+Non-negotiable rules
+
+Do not break desktop workflows
+
+Do not change pricing, quote, snapshot, revision, or library business logic
+
+Do not create a new route architecture
+
+Do not duplicate existing logic
+
+Prefer responsive rendering over parallel duplicate components
+
+No unnecessary new files
+
+Preserve multi-division direction:
+
+current live area is LJ – Estimates
+
+app structure must be ready for LE – Estimates and LL – Estimates
+
+Product UX strategy to implement
+Device modes
+Desktop (lg+)
+
+Keep dense productivity layouts.
+
+Tablet (md to <lg)
+
+Use simplified split layouts where helpful.
+
+Phone (<md)
+
+Use single-focus task views.
+No desktop multi-panel layouts on phone.
+
+Global app shell requirements
+A) App shell must remain responsive
+
+Review and update:
+
+client/src/App.tsx
+
+sidebar usage
+
+page container sizing / scroll behavior
+
+Requirements
+
+Keep sidebar behavior on desktop
+
+On mobile, sidebar should continue using sheet behavior if already implemented
+
+Main app content area must support page-level scrolling reliably on mobile
+
+Headers should remain sticky where already appropriate, but must not cause scroll locking
+
+Avoid h-full traps on mobile where parent heights are ambiguous
+
+B) Create a consistent responsive page pattern
+
+Across key pages, use this rule:
+
+Phone
+
+Each major workflow page should use:
+
+single active content region
+
+tabs / segmented controls / card list layouts
+
+no side-by-side desktop layouts
+
+Tablet/Desktop
+
+Can keep side-by-side or table layouts where useful
+
+Multi-division navigation direction
+
+The sidebar currently shows:
+
+Estimates
+
+Quotes
+
+Library
+
+Settings
+
+Update the Estimates section so it is clearly structured for future multi-division growth.
+
+Requirements
+
+Keep the current LJ route behavior working
+
+Present the current section clearly as:
+
+LJ – Estimates
+
+Structure the navigation so future addition of:
+
+LE – Estimates
+
+LL – Estimates
+is straightforward
+
+Do not implement full LE/LL estimate flows yet unless trivial.
+This step is mainly navigation and IA readiness.
+
+Page-specific implementation requirements
+1) Estimates list (jobs-list.tsx)
+
+This is now conceptually the Estimates list.
+
+Desktop
+
+Current card-based layout is acceptable.
+
+Mobile
+
+Improve for field use:
+
+keep list usable as stacked cards
+
+ensure buttons are large enough
+
+ensure page spacing and scrolling are clean
+
+ensure “New Job” / “New Estimate” action is easy to access
+
+Naming
+
+Update visible language where appropriate from generic “jobs” to Estimates where that matches the new product direction, without breaking API routes or internal logic.
+
+Current live label should reflect:
+
+LJ – Estimates
+
+Do not rename backend endpoints in this task.
+
+2) Quote Builder (quote-builder.tsx) — highest priority
+
+This is the most important field workflow.
+
+Desktop
+
+Keep the existing desktop builder behavior intact.
+
+Phone
+
+Replace desktop split layout with a mobile-only tabbed workflow.
+
+Implement 3 top tabs for screens below lg:
+
+Config
+
+Preview
+
+Items
+
+Mobile tab behavior
+Config tab
+
+Show job header + item configuration/spec controls
+
+Must scroll vertically
+
+Must remain usable with one hand
+
+Preview tab
+
+Show generated drawing prominently
+
+No side-by-side form layout on phone
+
+Drawing should be the focus
+
+Items tab
+
+Show the quote item list
+
+If table is too wide, make it horizontally scrollable
+
+Prefer readability over density
+
+Mobile quote list behavior
+
+If the new Items tab fully replaces the need for the bottom quote list on phone:
+
+hide or disable the bottom-sheet quote list on mobile
+
+Desktop behavior for bottom/right list should remain intact.
+
+Tablet
+
+Tablet may still use a simplified split layout if practical, but do not overcomplicate this phase.
+If needed, phone-only tabs + current desktop for md+ is acceptable for now.
+
+Photos
+
+Preserve all current photo upload/gallery behavior.
+Do not regress the item photo work already completed.
+
+3) Quotes list (quotes-list.tsx)
+Desktop
+
+Current table is acceptable.
+
+Phone
+
+Do not force desktop table layout as the primary UX.
+Implement a mobile-friendly rendering such as:
+
+stacked cards, or
+
+a simpler responsive list
+
+Each quote should clearly show:
+
+quote number
+
+customer
+
+status
+
+created date
+
+tap/open action
+
+Keep desktop table unchanged if possible.
+
+4) Quote detail (quote-detail.tsx)
+Desktop
+
+Keep current desktop layout.
+
+Phone
+
+Restructure to a simpler stacked layout.
+Actions must remain easy to reach:
+
+preview
+
+print/save PDF
+
+status actions
+
+revisions
+
+If helpful, introduce mobile-only internal tabs/sections:
+
+Details
+
+Revisions
+
+Audit
+
+Do not change quote business rules.
+
+5) Quote preview (quote-preview.tsx)
+Desktop
+
+Keep current layout.
+
+Phone
+
+Ensure it is readable and printable-preview friendly.
+Do not shrink dense desktop layout without adjustment.
+Improve spacing, stacking, and readability.
+Spec display controls can remain in sheet/modal behavior.
+
+Do not implement the photo appendix in this task.
+
+6) Library (library.tsx)
+
+Do not do a full refactor in this task.
+
+But make sure the page remains usable on mobile/tablet:
+
+page scroll works
+
+tabs don’t explode layout
+
+tables can scroll horizontally if needed
+
+No major redesign required yet.
+
+7) Settings (settings.tsx)
+
+Do not redesign deeply yet.
+
+But ensure:
+
+mobile scrolling works
+
+forms stack cleanly
+
+controls are usable on phone/tablet
+
+Technical implementation guidance
+Shared responsive principles
+
+Apply these patterns where appropriate:
+
+use h-[100dvh] or min-h-[100dvh] where mobile viewport height matters
+
+use min-h-0 inside flex layouts where child scroll regions are needed
+
+avoid desktop overflow-hidden patterns that trap mobile scrolling
+
+wrap wide tables in overflow-x-auto
+
+use card/list layouts for phone where tables are not suitable
+
+Keep desktop intact
+
+Use responsive conditional rendering/classes:
+
+mobile-only layout below lg
+
+existing desktop layout at lg+
+
+Reuse existing logic
+
+Do not duplicate:
+
+form state
+
+mutations
+
+queries
+
+pricing logic
+
+photo logic
+
+snapshot logic
+
+Refactor layout/rendering only.
+
+Deliverables
+
+Implement the next step of the build in the existing codebase.
+
+Files most likely to change
+
+client/src/App.tsx
+
+client/src/components/app-sidebar.tsx
+
+client/src/pages/jobs-list.tsx
+
+client/src/pages/quote-builder.tsx
+
+client/src/pages/quotes-list.tsx
+
+client/src/pages/quote-detail.tsx
+
+client/src/pages/quote-preview.tsx
+
+client/src/pages/settings.tsx
+
+optionally very small adjustments in shared UI wrappers if required
+
+Files that should NOT have business logic changes
+
+pricing engine
+
+schema
+
+quote snapshot logic
+
+API routes
+
+storage
+
+library backend logic
+
+Acceptance criteria
+App shell
+
+mobile sidebar still works
+
+main content scroll works on phone/tablet
+
+no global scroll-lock issues
+
+Estimates
+
+current estimates area clearly supports LJ – Estimates
+
+structure is ready for future LE – Estimates and LL – Estimates
+
+Quote builder
+
+on phone portrait, user can fully work through:
+
+Config
+
+Preview
+
+Items
+
+no need to rotate to landscape
+
+desktop layout still works
+
+Quotes list
+
+mobile-friendly list/cards
+
+desktop table preserved
+
+Quote detail / preview
+
+mobile readable and navigable
+
+desktop preserved
+
+Overall
+
+no regressions to save, pricing, quote generation, revisions, or photos
+
+UX feels like a field app, not desktop squeezed onto mobile
+
+Output required from agent
+
+After implementation, provide:
+
+Summary of changed files
+
+Short explanation of how mobile vs desktop behavior now differs
+
+Any recommended follow-up tasks for:
+
+tablet optimization
+
+photo appendix
+
+full multi-division navigation expansion
+
+Proceed now.
+
+How we stay on track after this
+
+Use this sequence:
+
+Step 1
+
+Responsive shell + Quote Builder mobile tabs
+
+Step 2
+
+Quotes + Estimates mobile-friendly layouts
+
+Step 3
+
+Library + Settings mobile usability polish
+
+Step 4
+
+Tablet-specific optimization
+
+Step 5
+
+Photo appendix / field workflow enhancements

@@ -1,0 +1,81 @@
+Two small final refinements I would still add
+Refinement 1 — be explicit that the mobile Quote Builder tab state is local UI state only
+
+Add one sentence under T003:
+
+The active mobile tab is a presentational UI state only; do not persist it to backend or change routing for this phase.
+
+Why: this prevents Replit from overengineering URL/query syncing.
+
+Refinement 2 — add one acceptance check for mobile Quote Builder photos
+
+Because the photo workflow is field-critical, add this to T003 acceptance:
+
+On mobile, taking/uploading a photo from the Items tab still attaches the photo to the correct item and the gallery modal remains functional.
+
+That protects one of your most important onsite workflows.
+
+One optional wording improvement
+
+Under T005, I would slightly tighten:
+
+Current:
+
+tap-to-open action
+
+Better:
+
+full-card or primary CTA opens quote detail
+
+That nudges the agent toward a more touch-friendly enterprise card pattern.
+
+Final assessment by step
+T001
+
+Good. Safe and disciplined.
+
+T002
+
+Good. Clear and low risk.
+
+T003
+
+Strong. This is the core of the phase and now has the right constraints.
+
+T004
+
+Good. Label-only branding shift is exactly the right amount of change for now. The current page is still structurally a jobs list, so visible-language evolution is the smart path. 
+
+jobs-list
+
+T005
+
+Good. Quotes list is a classic mobile-card / desktop-table split.
+
+T006
+
+Good. Low-risk responsive containment for Quote Detail. That page is already structured in a way that should respond well to wrapping and overflow fixes. 
+
+quote-detail
+
+T007
+
+Good. Quote Preview already has strong content structure and a mobile-capable Sheet for spec display, so this is a safe readability pass rather than a redesign. 
+
+quote-preview
+
+T008
+
+Good. Correctly constrained now.
+
+Final verdict
+
+Yes — this plan is good to give to Replit now.
+
+The only two lines I’d add before execution are:
+
+Mobile Quote Builder tab state is local UI state only; no route/backend persistence in this phase.
+
+Mobile photo capture/upload must still attach to the correct item and gallery modal must remain functional.
+
+With those added, this is a strong enterprise-grade next-step brief.

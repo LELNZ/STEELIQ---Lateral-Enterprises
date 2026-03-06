@@ -1,0 +1,134 @@
+Final refinements I recommend
+Refinement 1 — In T003, explicitly forbid duplicate mounting of heavy sections
+
+This is the most important addition.
+
+In Quote Builder, if Replit renders:
+
+mobile tabs version
+
+and desktop layout version
+at the same time but only hides one with CSS, the page may still mount heavy content twice:
+
+drawing canvas
+
+queries
+
+item actions
+
+photo dialog state
+
+That can cause subtle bugs and performance issues.
+
+Add this instruction to T003
+
+Do not mount both full mobile and desktop builder trees at the same time if it duplicates expensive components or complex stateful sections. Prefer extracting shared section render functions within the same file and render only the needed layout branch for mobile vs desktop.
+
+This keeps state shared but avoids duplicate active canvases/forms.
+
+Refinement 2 — Be explicit that mobile tabs are phone-first, not necessarily tablet
+
+You currently say “below lg” for the mobile tabbed workflow.
+
+That is acceptable for phase 1, but it is broader than “phone.” It includes tablet portrait and some tablet landscape sizes.
+
+That’s okay if intentional — but say so clearly.
+
+Recommended wording
+
+For this phase, use the mobile tabbed workflow for all screens below lg, including phone and smaller tablets. Tablet-specific split optimization can come later.
+
+That prevents Replit from trying to “special case tablet” now.
+
+Refinement 3 — T004 branding should not over-edit the jobs page header
+
+The Jobs/Estimates page currently has a branded product header and “New Job” CTA. 
+
+jobs-list
+
+
+Changing visible language to LJ – Estimates is right, but don’t let the agent redesign the page identity too heavily yet.
+
+Add this guardrail
+
+Update visible labels only; do not restructure the page header architecture in this task.
+
+That keeps the branding change clean and low risk.
+
+Refinement 4 — T008 should include “no nested dialog redesign”
+
+Library and Settings already have a lot of dialogs, forms, tabs, and nested content.
+If Replit tries to “make dialogs mobile better” broadly, it may wander.
+
+Add this line to T008
+
+Do not redesign dialogs, nested CRUD flows, or form workflows in Library/Settings. Only address page-level scroll, tab overflow, and grid stacking.
+
+That keeps containment truly containment.
+
+Small wording improvements I’d make
+In T001
+
+Current wording is good, but I’d tighten one line:
+
+Instead of:
+
+Add min-h-0 to any flex parent wrapping <main>
+
+Use:
+
+Add min-h-0 only where required to allow nested page scroll containers to work; do not broadly add layout classes unnecessarily.
+
+That stops over-editing.
+
+In T003 Items cards
+
+Add:
+
+On mobile item cards, preserve all existing actions with clear touch targets; do not remove any existing item management action.
+
+That reinforces regression safety.
+
+In T007
+
+“Schedule items: Stack drawing above specs on narrow screens” is correct and aligned with your field/mobile direction, but note that Quote Preview already uses grouped preview/schedule rendering logic and spec-display sheet behavior. 
+
+quote-preview
+
+
+This is a good, safe layout adjustment.
+
+What I would approve exactly
+Approve as written:
+
+T002
+
+T005
+
+T006
+
+T007
+
+Approve with the small guardrails above:
+
+T001
+
+T003
+
+T004
+
+T008
+
+Final recommendation
+
+Yes — this revised plan is ready to give Replit after those small wording additions.
+
+The 3 most important lines to add before execution
+
+Do not duplicate mount full desktop and mobile builder trees
+
+Below lg mobile tabs apply to phone + smaller tablets for this phase
+
+T008 is containment only — no dialog/CRUD redesign
+
+With those included, this becomes a strong enterprise-grade phase plan.
