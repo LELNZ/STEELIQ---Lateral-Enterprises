@@ -1111,7 +1111,7 @@ export default function QuoteBuilder() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background" data-testid="quote-builder">
+    <div className="flex flex-col h-[100dvh] bg-background" data-testid="quote-builder">
       <input
         ref={photoInputRef}
         type="file"
@@ -1213,8 +1213,8 @@ export default function QuoteBuilder() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        <ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+        <ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0">
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-4">
             <Tabs value={formTab} onValueChange={setFormTab}>
               <TabsList className="w-full grid grid-cols-2 mb-3">
@@ -2445,7 +2445,7 @@ export default function QuoteBuilder() {
           </form>
         </ScrollArea>
 
-        <div className={`flex-1 flex ${quoteListPosition === "right" ? "flex-row" : "flex-col"} overflow-hidden`}>
+        <div className={`flex-1 min-h-0 flex flex-col ${quoteListPosition === "right" ? "lg:flex-row" : "lg:flex-col"} overflow-hidden`}>
           <div className="flex-1 flex items-center justify-center p-4 min-h-0"
             style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)" }}>
             <div className="w-full h-full max-w-3xl max-h-[600px]" data-testid="drawing-preview">
@@ -2456,7 +2456,7 @@ export default function QuoteBuilder() {
           {items.length > 0 && (
             <div className={`${quoteListPosition === "right"
               ? "border-l bg-card flex flex-col shrink-0 overflow-hidden w-80 xl:w-96"
-              : `border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "max-h-[50vh]" : "max-h-[33vh]"}`
+              : `border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "h-[55dvh]" : "h-[160px]"}`
             }`}>
               <div className="px-4 py-2 shrink-0 flex items-center justify-between">
                 <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
@@ -2476,6 +2476,8 @@ export default function QuoteBuilder() {
                 )}
               </div>
               <ScrollArea className="flex-1 min-h-0">
+                <div className="w-full overflow-x-auto">
+                <div className="min-w-max">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2566,6 +2568,8 @@ export default function QuoteBuilder() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
+                </div>
               </ScrollArea>
             </div>
           )}
