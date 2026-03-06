@@ -1,0 +1,74 @@
+A few tiny improvements will make it even more deterministic and easier to test.
+
+✅ Approved plan (with minor tweaks)
+T001 Root container — h-[100dvh]
+
+✅ Correct. This is the best practice fix for mobile viewport quirks.
+
+Optional: If you ever see clipping on some devices, switch to min-h-[100dvh] instead of h-[100dvh], but start with your plan.
+
+T002 Main wrapper — add min-h-0
+
+✅ Correct and essential.
+
+Small style improvement: Prefer ordering as flex-1 min-h-0 flex ... for readability, but functional either way.
+
+T003 Left ScrollArea — h-full min-h-0
+
+✅ Correct. This is the usual missing link for scroll areas inside flex parents.
+
+T004 Layout container — mobile-first column + min-h-0
+
+✅ Correct. This prevents mobile from ever switching into a side-by-side layout that can break scroll/touch.
+
+One tiny deterministic tweak: If you want to be extra safe, explicitly set lg:flex-col when not “right”:
+
+when right → lg:flex-row
+
+when not right → lg:flex-col
+
+But since flex-col is already present, your current plan is fine.
+
+T005 Table wrapper — overflow-x-auto
+
+✅ Correct and recommended. Helps mobile usability without affecting desktop.
+
+T006 Bottom quote list snap heights — fixed h-*
+
+✅ This is the right UX move. max-height often feels “floaty”; fixed heights feel like a real sheet.
+
+Two best-practice notes:
+
+h-[55dvh] is good. If you want it to be truly “half screen” you can use h-[60dvh], but 55% is fine.
+
+h-[160px] for ~3 rows is good; you may adjust once you see your row height on-device (some UI sets need 180–200px).
+
+T007 Chevron icons
+
+✅ Verify-only is correct; no changes needed.
+
+Add one acceptance test (prevents regressions)
+
+Add this to your checklist:
+
+After toggling the bottom sheet open/close, the page remains scrollable above it (no scroll-lock introduced by the bottom container).
+
+This catches the common “sheet overlay captures all touch events” issue.
+
+Suggested execution order (so you don’t get lost)
+
+Do it in two commits:
+
+Mobile scroll restore
+
+T001–T004
+
+Test: can scroll page + reach items and camera on mobile
+
+Bottom sheet UX + table usability
+
+T005–T006
+
+Test: collapsed shows ~3 items; expanded ~55% screen; list scroll works; table scrolls horizontally
+
+This keeps scope tight and avoids mixing “scroll fix” with “UX polish” if something still blocks scrolling.

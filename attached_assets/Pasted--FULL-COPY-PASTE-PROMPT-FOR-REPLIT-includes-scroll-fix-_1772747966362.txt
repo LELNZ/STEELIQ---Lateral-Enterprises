@@ -1,0 +1,123 @@
+✅ FULL COPY-PASTE PROMPT FOR REPLIT (includes scroll fix + bottom sheet behavior)
+
+You are working on client/src/pages/quote-builder.tsx.
+
+Goal: Fix mobile scrolling (currently cannot scroll at all) AND make the bottom quote list collapse/expand behave like a predictable 2-state bottom sheet:
+
+Collapsed: shows ~3 items with internal scroll
+
+Expanded: opens to ~55% of screen with internal scroll
+Chevron toggles between these two states.
+
+Constraints:
+
+No new files.
+
+Make minimal, targeted class changes.
+
+Keep desktop behavior unchanged.
+
+Do not alter business logic, only layout/scroll behavior.
+
+1) Root container: use dynamic viewport height
+
+Find the top-level wrapper:
+
+<div className="flex flex-col h-full bg-background" data-testid="quote-builder">
+
+Change h-full to h-[100dvh]:
+
+<div className="flex flex-col h-[100dvh] bg-background" data-testid="quote-builder">
+2) Main content wrapper: allow children to scroll (min-h-0)
+
+Find:
+
+<div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+
+Change to:
+
+<div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+3) Left form ScrollArea: ensure it can size and scroll within flex
+
+Find:
+
+<ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0">
+
+Change to:
+
+<ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0">
+4) Layout container: force mobile column layout regardless of quoteListPosition
+
+Find the container that currently does:
+
+<div className={`flex-1 flex ${quoteListPosition === "right" ? "flex-row" : "flex-col"} overflow-hidden`}>
+
+Replace with mobile-first column + desktop conditional row when quoteListPosition === "right":
+
+<div className={`flex-1 flex flex-col ${quoteListPosition === "right" ? "lg:flex-row" : ""} overflow-hidden min-h-0`}>
+5) Items table: allow horizontal scroll on narrow screens without breaking vertical scroll
+
+Inside the items list ScrollArea (the one wrapping the <Table>), wrap the table:
+
+Before:
+
+<ScrollArea className="flex-1 min-h-0">
+  <Table> ... </Table>
+</ScrollArea>
+
+After:
+
+<ScrollArea className="flex-1 min-h-0">
+  <div className="w-full overflow-x-auto">
+    <Table> ... </Table>
+  </div>
+</ScrollArea>
+6) Bottom quote list: change from max-height to deterministic snap heights
+
+When quoteListPosition is NOT "right", there is a bottom list container using max-h-[50vh] and max-h-[33vh].
+
+Find this class string (or equivalent):
+
+`border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "max-h-[50vh]" : "max-h-[33vh]"}`
+
+Replace it with fixed height states:
+
+Expanded: h-[55dvh]
+
+Collapsed: h-[160px]
+
+Use:
+
+`border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "h-[55dvh]" : "h-[160px]"}`
+
+Keep the list ScrollArea inside as:
+
+<ScrollArea className="flex-1 min-h-0">
+
+so the list scrolls internally in both collapsed and expanded states.
+
+7) Verify chevron toggle matches “tap to expand/collapse”
+
+Do NOT change the state logic; only ensure it toggles itemsExpanded and the icon reflects the action:
+
+When expanded: show ChevronDown (tap to collapse)
+
+When collapsed: show ChevronUp (tap to expand)
+
+Acceptance tests (must pass)
+
+On mobile: the quote builder page can scroll vertically.
+
+You can reach the items list + camera buttons.
+
+Bottom quote list:
+
+collapsed shows ~3 rows and internal scroll works
+
+expanded opens to ~55% screen height and internal scroll works
+
+chevron toggles predictably
+
+On desktop: layout still works; camera icon still opens file picker (expected).
+
+Implement these changes now, only in client/src/pages/quote-builder.tsx.
