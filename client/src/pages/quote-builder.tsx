@@ -229,6 +229,7 @@ export default function QuoteBuilder() {
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [formTab, setFormTab] = useState<string>("drawing");
   const [mobileTab, setMobileTab] = useState<"config" | "preview" | "items">("config");
+  const [siteType, setSiteType] = useState<"renovation" | "new_build" | null>(null);
   const isLargeScreen = useIsLargeScreen();
   const { quoteListPosition, usdToNzdRate } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
@@ -236,6 +237,7 @@ export default function QuoteBuilder() {
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
   const skipCategoryResetRef = useRef(false);
+  const lastAutoWindZone = useRef<string>("");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoTargetItemId, setPhotoTargetItemId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -374,6 +376,45 @@ export default function QuoteBuilder() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
+
+  const getPresetDefaults = useCallback((preset: "renovation" | "new_build" | null, cat?: string): Partial<InsertQuoteItem> => {
+    if (preset === "renovation") {
+      const effectiveCat = cat || "windows-standard";
+      const frameTypes = libFrameTypesForCategory(effectiveCat);
+      const es52Frame = frameTypes.find(ft => ft.value.startsWith("ES52"))?.value || frameTypes[0]?.value || "";
+      const iguType = "EnergySaver";
+      const combos = libGlassCombos(iguType);
+      const firstCombo = combos.find(c => c.toLowerCase().includes("clear")) || combos[0] || "";
+      const thicknesses = firstCombo ? libGlassThicknesses(iguType, firstCombo) : [];
+      const firstThickness = thicknesses[0] || "";
+      const linerValue = libLinerOptions.find(lt => lt.value.includes("MiterCut"))?.value || libLinerOptions[0]?.value || LINER_TYPES[0]?.value || "";
+      const handles = DOOR_CATEGORIES.includes(effectiveCat) ? libDoorHandles : libWindowHandles;
+      const handleValue = handles.length > 0
+        ? ((handles[0].data as any).value || "")
+        : (getHandlesForCategory(effectiveCat)[0]?.value || "");
+      return {
+        frameType: es52Frame,
+        glassIguType: iguType,
+        glassType: firstCombo,
+        glassThickness: firstThickness,
+        linerType: linerValue,
+        handleType: handleValue,
+        wallThickness: 90,
+        windZone: "Extra High",
+      };
+    }
+    if (preset === "new_build") {
+      return {
+        wallThickness: 140,
+      };
+    }
+    return {};
+  }, [libFrameTypes, libGlass, libLiners, libWindowHandles, libDoorHandles]);
+
+  const getNewItemDefaults = useCallback((preset: "renovation" | "new_build" | null): InsertQuoteItem => {
+    const presetOverrides = getPresetDefaults(preset);
+    return { ...defaultValues, ...presetOverrides };
+  }, [getPresetDefaults]);
 
   const form = useForm<InsertQuoteItem>({
     resolver: zodResolver(insertQuoteItemSchema),
@@ -540,6 +581,20 @@ export default function QuoteBuilder() {
     const frameTypes = libFrameTypesForCategory(category);
     if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
   }, [libFrameTypes]);
+
+  useEffect(() => {
+    const ft = w.frameType || "";
+    if (!ft) return;
+    const currentWindZone = form.getValues("windZone");
+    const isAutoSettable = !currentWindZone || currentWindZone === lastAutoWindZone.current;
+    if (ft.startsWith("ES52") && isAutoSettable) {
+      form.setValue("windZone", "Extra High");
+      lastAutoWindZone.current = "Extra High";
+    } else if (!ft.startsWith("ES52") && currentWindZone === lastAutoWindZone.current && lastAutoWindZone.current) {
+      form.setValue("windZone", "");
+      lastAutoWindZone.current = "";
+    }
+  }, [w.frameType]);
 
   useEffect(() => {
     if (configurations.length === 0) return;
@@ -845,12 +900,14 @@ export default function QuoteBuilder() {
       toast({ title: "Item added", description: `${finalData.name} added to quote.` });
     }
     setHasUnsavedChanges(true);
-    form.reset({ ...defaultValues });
+    form.reset(getNewItemDefaults(siteType));
+    lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
   }
 
   function editItem(iwp: ItemWithPhoto) {
     const { id, ...rest } = iwp.item;
     skipCategoryResetRef.current = true;
+    lastAutoWindZone.current = "";
     form.reset(rest);
     setEditingId(iwp.uiId);
   }
@@ -864,14 +921,15 @@ export default function QuoteBuilder() {
 
   function deleteItem(id: string) {
     setItems(items.filter((iwp) => iwp.uiId !== id));
-    if (editingId === id) { setEditingId(null); form.reset({ ...defaultValues }); }
+    if (editingId === id) { setEditingId(null); form.reset(getNewItemDefaults(siteType)); lastAutoWindZone.current = getPresetDefaults(siteType).windZone || ""; }
     setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
   }
 
   function cancelEdit() {
     setEditingId(null);
-    form.reset({ ...defaultValues });
+    form.reset(getNewItemDefaults(siteType));
+    lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1127,7 +1185,7 @@ export default function QuoteBuilder() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-background" data-testid="quote-builder">
+    <div className="flex flex-col h-full bg-background" data-testid="quote-builder">
       <input
         ref={photoInputRef}
         type="file"
@@ -1261,6 +1319,17 @@ export default function QuoteBuilder() {
                 data-testid="input-job-date"
               />
             </div>
+            <div className="w-36 shrink-0">
+              <Label className="text-xs">Site Type</Label>
+              <Select value={siteType || "__none__"} onValueChange={(v) => setSiteType(v === "__none__" ? null : v as "renovation" | "new_build")}>
+                <SelectTrigger data-testid="select-site-type"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="renovation">Renovation</SelectItem>
+                  <SelectItem value="new_build">New Build</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -1292,6 +1361,17 @@ export default function QuoteBuilder() {
                   data-testid="input-job-date"
                 />
               </div>
+            </div>
+            <div>
+              <Label className="text-xs">Site Type</Label>
+              <Select value={siteType || "__none__"} onValueChange={(v) => setSiteType(v === "__none__" ? null : v as "renovation" | "new_build")}>
+                <SelectTrigger data-testid="select-site-type-mobile"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="renovation">Renovation</SelectItem>
+                  <SelectItem value="new_build">New Build</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}
@@ -2300,6 +2380,12 @@ export default function QuoteBuilder() {
                         onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
                         placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
                         data-testid="input-height-from-floor" />
+                      {w.heightFromFloor > 0 && w.heightFromFloor < 800 && (
+                        <div className="flex items-start gap-1.5 mt-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="warning-height-from-floor">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <span className="text-xs text-amber-700 dark:text-amber-300">Height under 800mm — safety glazing / toughening may be required. Check glass selection.</span>
+                        </div>
+                      )}
                     </div>
                     )}
                   </div>

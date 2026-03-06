@@ -52,7 +52,7 @@ function App() {
                 <header className="flex items-center gap-2 p-2 border-b sticky top-0 z-50 bg-background">
                   <SidebarTrigger data-testid="button-sidebar-toggle" />
                 </header>
-                <main className="flex-1 overflow-auto">
+                <main className="flex-1 overflow-auto min-h-0">
                   <Router />
                 </main>
               </div>
