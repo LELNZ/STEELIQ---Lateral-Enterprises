@@ -221,7 +221,7 @@ export default function QuoteBuilder() {
   const [jobAddress, setJobAddress] = useState("");
   const [jobDate, setJobDate] = useState(new Date().toISOString().split("T")[0]);
   const [savedJobId, setSavedJobId] = useState<string | null>(jobId || null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
   const [galleryItemId, setGalleryItemId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -1310,7 +1310,7 @@ export default function QuoteBuilder() {
                         <FileText className="w-4 h-4 mr-2" /> Summary
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="menu-mobile-exec-summary">
-                        <FileText className="w-4 h-4 mr-2" /> Review Estimate
+                        <FileText className="w-4 h-4 mr-2" /> Review & Generate Estimate
                       </DropdownMenuItem>
                     </>
                   )}
@@ -2717,7 +2717,7 @@ export default function QuoteBuilder() {
               </Button>
               {savedJobId && items.length > 0 && (
                 <Button size="sm" className="flex-1" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-preview-review-estimate">
-                  <FileText className="w-4 h-4 mr-1.5" /> Review Estimate
+                  <FileText className="w-4 h-4 mr-1.5" /> Review & Generate Estimate
                 </Button>
               )}
             </div>
@@ -2966,17 +2966,6 @@ export default function QuoteBuilder() {
               <Save className="w-4 h-4 mr-1.5" /> Save & Leave
             </Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!photoPreview} onOpenChange={() => setPhotoPreview(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Site Photo</DialogTitle>
-          </DialogHeader>
-          {photoPreview && (
-            <img src={photoPreview} alt="Site photo" className="w-full rounded" data-testid="img-photo-preview" />
-          )}
         </DialogContent>
       </Dialog>
 
