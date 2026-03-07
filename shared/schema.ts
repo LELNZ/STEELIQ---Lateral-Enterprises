@@ -211,9 +211,12 @@ export type ConfigurationLabor = typeof configurationLabor.$inferSelect;
 export const QUOTE_STATUSES = ["draft", "review", "sent", "accepted", "declined", "archived"] as const;
 export type QuoteStatus = typeof QUOTE_STATUSES[number];
 
+export const QUOTE_TYPES = ["renovation", "new_build", "tender"] as const;
+export type QuoteType = typeof QUOTE_TYPES[number];
+
 export const VALID_STATUS_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
-  draft: ["review"],
-  review: ["sent"],
+  draft: ["review", "archived"],
+  review: ["sent", "archived"],
   sent: ["accepted", "declined"],
   accepted: ["archived"],
   declined: ["archived"],
@@ -233,8 +236,12 @@ export const quotes = pgTable("quotes", {
   divisionId: varchar("division_id"),
   customer: text("customer").notNull(),
   status: text("status").notNull().default("draft"),
+  quoteType: text("quote_type"),
   currentRevisionId: varchar("current_revision_id"),
   createdByUserId: varchar("created_by_user_id"),
+  totalValue: real("total_value"),
+  archivedAt: timestamp("archived_at"),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

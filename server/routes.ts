@@ -15,6 +15,15 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import {
+  handleEstimateDeleteCascade,
+  handleEstimateArchiveCascade,
+  archiveQuote,
+  hardDeleteQuote,
+  enrichQuotesWithOrphanState,
+  clearAllQuotes,
+  type QuoteCascadeAction,
+} from "./quote-lifecycle";
 
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
@@ -164,20 +173,26 @@ export async function registerRoutes(
   async function getReferencedPhotoKeys(jobId: string): Promise<Set<string>> {
     const referenced = new Set<string>();
     try {
-      const quote = await storage.getQuoteByJobId(jobId);
-      if (!quote) return referenced;
-      const revisions = await storage.getQuoteRevisions(quote.id);
-      for (const rev of revisions) {
-        try {
-          const snapshot = rev.snapshotJson as any;
-          const items = snapshot?.items || [];
-          for (const item of items) {
-            const photos = item.photos || [];
-            for (const p of photos) {
-              if (p.key) referenced.add(p.key);
+      const linkedQuotes = await storage.getQuotesByJobId(jobId);
+      const singleQuote = await storage.getQuoteByJobId(jobId);
+      const allQuotes = [...linkedQuotes];
+      if (singleQuote && !allQuotes.find(q => q.id === singleQuote.id)) {
+        allQuotes.push(singleQuote);
+      }
+      for (const quote of allQuotes) {
+        const revisions = await storage.getQuoteRevisions(quote.id);
+        for (const rev of revisions) {
+          try {
+            const snapshot = rev.snapshotJson as any;
+            const items = snapshot?.items || [];
+            for (const item of items) {
+              const photos = item.photos || [];
+              for (const p of photos) {
+                if (p.key) referenced.add(p.key);
+              }
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
     } catch {}
     return referenced;
@@ -194,6 +209,20 @@ export async function registerRoutes(
 
   app.delete("/api/jobs/:id", async (req, res) => {
     try {
+      const cascadeAction: QuoteCascadeAction = req.body?.quoteCascade || "archive";
+      const validActions: QuoteCascadeAction[] = ["archive", "delete", "keep"];
+      if (!validActions.includes(cascadeAction)) {
+        return res.status(400).json({ error: `Invalid quoteCascade value. Must be one of: ${validActions.join(", ")}` });
+      }
+
+      if (cascadeAction === "delete" && req.body?.confirmPermanent !== true) {
+        return res.status(400).json({
+          error: "Permanently deleting linked quotes requires confirmPermanent: true",
+        });
+      }
+
+      const cascadeResult = await handleEstimateDeleteCascade(req.params.id, cascadeAction);
+
       const items = await storage.getJobItems(req.params.id);
       const allPhotoKeys: string[] = [];
       for (const item of items) {
@@ -213,7 +242,49 @@ export async function registerRoutes(
         }
       }
 
-      res.json({ ok: true });
+      res.json({ ok: true, quotesAffected: cascadeResult.quotesAffected, cascadeAction });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/jobs/:id/quotes", async (req, res) => {
+    try {
+      const linkedQuotes = await storage.getQuotesByJobId(req.params.id);
+      res.json(linkedQuotes);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/jobs/:id/archive", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+
+      const cascadeAction: "archive" | "keep" = req.body?.quoteCascade || "archive";
+      const cascadeResult = await handleEstimateArchiveCascade(req.params.id, cascadeAction);
+
+      const items = await storage.getJobItems(req.params.id);
+      const allPhotoKeys: string[] = [];
+      for (const item of items) {
+        const photos = (item.photos as any[]) || [];
+        for (const p of photos) {
+          if (p.key) allPhotoKeys.push(p.key);
+        }
+      }
+
+      const referenced = await getReferencedPhotoKeys(req.params.id);
+
+      await storage.deleteJob(req.params.id);
+
+      for (const key of allPhotoKeys) {
+        if (!referenced.has(key)) {
+          safeDeletePhotoFile(key);
+        }
+      }
+
+      res.json({ ok: true, quotesAffected: cascadeResult.quotesAffected, cascadeAction });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -732,7 +803,8 @@ export async function registerRoutes(
   app.get("/api/quotes", async (_req, res) => {
     try {
       const allQuotes = await storage.getAllQuotes();
-      res.json(allQuotes);
+      const enriched = await enrichQuotesWithOrphanState(allQuotes);
+      res.json(enriched);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -763,6 +835,11 @@ export async function registerRoutes(
         });
       }
 
+      if (status === "archived") {
+        const archived = await archiveQuote(req.params.id);
+        return res.json(archived);
+      }
+
       const updated = await storage.updateQuoteStatus(req.params.id, status);
       await storage.createAuditLog({
         entityType: "quote",
@@ -773,6 +850,51 @@ export async function registerRoutes(
       res.json(updated);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/quotes/:id/archive", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (quote.archivedAt) return res.status(400).json({ error: "Quote is already archived" });
+
+      const archived = await archiveQuote(req.params.id);
+      res.json(archived);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/quotes/:id", async (req, res) => {
+    try {
+      const confirm = req.query.confirm;
+      if (confirm !== "permanent") {
+        return res.status(400).json({
+          error: "Hard delete requires explicit confirmation. Use ?confirm=permanent",
+        });
+      }
+
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      await hardDeleteQuote(req.params.id);
+      res.json({ ok: true, deleted: quote.number });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/dev/clear-quotes", async (_req, res) => {
+    try {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(403).json({ error: "This endpoint is not available in production" });
+      }
+      const count = await clearAllQuotes();
+      console.log(`[DEV] Cleared all quotes: ${count} deleted`);
+      res.json({ ok: true, deleted: count });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 

@@ -19,7 +19,7 @@ import {
   orgSettings, divisionSettings, specDictionary,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, asc, desc, and, sql } from "drizzle-orm";
+import { eq, asc, desc, and, sql, isNull, isNotNull, inArray } from "drizzle-orm";
 import pg from "pg";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL! });
@@ -79,9 +79,13 @@ export interface IStorage {
   createQuote(data: InsertQuote): Promise<Quote>;
   getQuote(id: string): Promise<Quote | undefined>;
   getQuoteByJobId(jobId: string): Promise<Quote | undefined>;
+  getQuotesByJobId(jobId: string): Promise<Quote[]>;
   getAllQuotes(): Promise<Quote[]>;
+  updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined>;
   updateQuoteStatus(id: string, status: string): Promise<Quote | undefined>;
   updateQuoteCurrentRevision(id: string, revisionId: string): Promise<Quote | undefined>;
+  deleteQuoteAndRevisions(id: string): Promise<void>;
+  deleteAllQuotesAndRevisions(): Promise<number>;
 
   createQuoteRevision(data: InsertQuoteRevision): Promise<QuoteRevision>;
   getQuoteRevisions(quoteId: string): Promise<QuoteRevision[]>;
@@ -306,8 +310,24 @@ export class DatabaseStorage implements IStorage {
     return quote;
   }
 
+  async getQuotesByJobId(jobId: string): Promise<Quote[]> {
+    return db.select().from(quotes)
+      .where(and(eq(quotes.sourceJobId, jobId), isNull(quotes.deletedAt)))
+      .orderBy(desc(quotes.createdAt));
+  }
+
   async getAllQuotes(): Promise<Quote[]> {
-    return db.select().from(quotes).orderBy(desc(quotes.createdAt));
+    return db.select().from(quotes)
+      .where(isNull(quotes.deletedAt))
+      .orderBy(desc(quotes.createdAt));
+  }
+
+  async updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined> {
+    const [updated] = await db.update(quotes)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(quotes.id, id))
+      .returning();
+    return updated;
   }
 
   async updateQuoteStatus(id: string, status: string): Promise<Quote | undefined> {
@@ -316,6 +336,21 @@ export class DatabaseStorage implements IStorage {
       .where(eq(quotes.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteQuoteAndRevisions(id: string): Promise<void> {
+    await db.delete(quoteRevisions).where(eq(quoteRevisions.quoteId, id));
+    await db.delete(quotes).where(eq(quotes.id, id));
+  }
+
+  async deleteAllQuotesAndRevisions(): Promise<number> {
+    const allQuotes = await db.select({ id: quotes.id }).from(quotes);
+    const count = allQuotes.length;
+    if (count > 0) {
+      await db.delete(quoteRevisions);
+      await db.delete(quotes);
+    }
+    return count;
   }
 
   async updateQuoteCurrentRevision(id: string, revisionId: string): Promise<Quote | undefined> {
