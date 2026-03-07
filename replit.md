@@ -69,8 +69,18 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - **T003 Preview Submit**: Preview tab footer now has "Add to Quote"/"Update Item" button using same `form.handleSubmit(onSubmit)` path.
 - **T004 Unsaved Changes**: `guardedNavigate()` wraps all in-app navigation paths. `pendingNavigateTo` state supports navigating to arbitrary destinations after dialog. Site type changes tracked. Unsaved local items (no savedJobId) tracked. `saveJob()` returns boolean; Save & Leave only navigates on success. Save & Leave dialog stays open during save with loading spinner and disabled buttons (`isSaveAndLeaving` state).
 - **T005 First-Item Speed**: Job created on first `onSubmit()` via `ensureJobExists()` (no pre-create effect). Immediate auto-save (0ms delay) after first item on new job to persist item to server right away.
-- **T006 Collapsible Header**: `headerCollapsed` state with auto-collapse after first item (focus-aware). Compact summary vs full editable fields. Manual toggle.
+- **T006 Collapsible Header**: `headerCollapsed` state with auto-collapse after first item (focus-aware). Compact summary vs full editable fields. Manual toggle always available (no item count requirement).
 - **T007 Exec Summary Layout**: Responsive padding (`p-4 sm:p-6`), spacing (`space-y-4 sm:space-y-6`), `overflow-x-hidden`, `flex-wrap` on action buttons, responsive table header sizing.
+
+## Phase 4: Phone Dry-Run Fixes
+- **Header Collapse**: "Done" button always visible on mobile (removed `items.length > 0` gate). Re-expand resets auto-collapse ref.
+- **Keyboard Ergonomics**: `inputMode="decimal"` on numeric fields (width, height, wallThickness, heightFromFloor, sidelightWidth). `inputMode="numeric"` on quantity. Auto-collapse header on first config field focus (mobile only, one-shot, resets on manual expand). `scroll-margin-bottom: 60px` on native-scroll inputs.
+- **Exec Summary Reorder**: Mobile uses CSS `order` classes: Summary Cards → Per-Item Breakdown → Installation → Delivery → Financial Summary. Desktop retains original order.
+- **Markup Overflow**: Installation override/markup fields use responsive grid (`grid-cols-2` mobile, flex desktop). Labels shortened ("Override ($)", "Markup (%)"). Delivery fields similarly responsive.
+- **Financial Summary Mobile**: Stacked card layout on mobile (`md:hidden`), desktop table preserved (`hidden md:block`). Gross profit grid uses `grid-cols-2 md:grid-cols-3`.
+- **Photo Cache**: In-memory `Map<string, Buffer>` cache (max 200 entries, LRU eviction) in server/routes.ts. POST caches uploaded photo data; GET checks cache first, then disk. Fixes broken images within server session. Note: photos don't survive full server restarts — durable storage is a future follow-up.
+- **Preview Tab Photo**: Camera button in Preview tab footer. When editing an item, triggers photo capture. When no item is being edited, shows toast "Add item to quote first."
+- **Preset Defaults**: `handleSiteTypeChange()` applies presets immediately if form is fresh (not dirty, not editing). If form has been edited, defers to next new item. Both desktop and mobile site type selects use this handler.
 
 ## Quote Document Model (Phase 2)
 - **Location**: `client/src/lib/quote-document.ts`

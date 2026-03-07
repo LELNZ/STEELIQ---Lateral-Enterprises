@@ -844,6 +844,17 @@ export async function registerRoutes(
   const ITEM_PHOTO_DIR = path.resolve("uploads/item-photos");
   fs.mkdirSync(ITEM_PHOTO_DIR, { recursive: true });
 
+  const photoCache = new Map<string, Buffer>();
+  const PHOTO_CACHE_MAX = 200;
+
+  function photoCacheSet(key: string, data: Buffer) {
+    if (photoCache.size >= PHOTO_CACHE_MAX) {
+      const oldest = photoCache.keys().next().value;
+      if (oldest) photoCache.delete(oldest);
+    }
+    photoCache.set(key, data);
+  }
+
   const itemPhotoUpload = multer({
     storage: multer.diskStorage({
       destination: ITEM_PHOTO_DIR,
@@ -860,6 +871,10 @@ export async function registerRoutes(
 
   app.post("/api/item-photos", itemPhotoUpload.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    try {
+      const data = fs.readFileSync(req.file.path);
+      photoCacheSet(req.file.filename, data);
+    } catch {}
     res.json({ key: req.file.filename });
   });
 
@@ -873,10 +888,16 @@ export async function registerRoutes(
     if (!filePath.startsWith(resolvedDir)) {
       return res.status(400).json({ error: "Invalid key" });
     }
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: "Image not found" });
+    const cached = photoCache.get(key);
+    if (cached) {
+      return res.type("image/jpeg").send(cached);
     }
-    res.type("image/jpeg").sendFile(filePath);
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath);
+      photoCacheSet(key, data);
+      return res.type("image/jpeg").send(data);
+    }
+    return res.status(404).json({ error: "Image not found" });
   });
 
   const DRAWING_DIR = path.resolve("uploads/drawing-images");

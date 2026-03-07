@@ -243,6 +243,7 @@ export default function QuoteBuilder() {
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
   const skipCategoryResetRef = useRef(false);
   const hydratedJobRef = useRef(false);
+  const didAutoCollapseOnFocusRef = useRef(false);
   const lastAutoWindZone = useRef<string>("");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoTargetItemId, setPhotoTargetItemId] = useState<string | null>(null);
@@ -574,6 +575,13 @@ export default function QuoteBuilder() {
     });
     return () => unregisterGuard();
   }, [hasUnsavedChanges, formIsDirty, registerGuard, unregisterGuard]);
+
+  const handleConfigFieldFocus = useCallback(() => {
+    if (!isLargeScreen && !headerCollapsed && !didAutoCollapseOnFocusRef.current) {
+      didAutoCollapseOnFocusRef.current = true;
+      setHeaderCollapsed(true);
+    }
+  }, [isLargeScreen, headerCollapsed]);
 
   useEffect(() => {
     if (skipCategoryResetRef.current) {
@@ -1009,6 +1017,15 @@ export default function QuoteBuilder() {
     }
   }
 
+  function handleSiteTypeChange(newType: "renovation" | "new_build" | null) {
+    setSiteType(newType);
+    setHasUnsavedChanges(true);
+    if (!editingId && !formIsDirty) {
+      form.reset(getNewItemDefaults(newType));
+      lastAutoWindZone.current = getPresetDefaults(newType).windZone || "";
+    }
+  }
+
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !photoTargetItemId) return;
@@ -1431,7 +1448,7 @@ export default function QuoteBuilder() {
             </div>
             <div className="w-36 shrink-0">
               <Label className="text-xs">Site Type</Label>
-              <Select value={siteType || "__none__"} onValueChange={(v) => { setSiteType(v === "__none__" ? null : v as "renovation" | "new_build"); setHasUnsavedChanges(true); }}>
+              <Select value={siteType || "__none__"} onValueChange={(v) => handleSiteTypeChange(v === "__none__" ? null : v as "renovation" | "new_build")}>
                 <SelectTrigger data-testid="select-site-type"><SelectValue placeholder="Select..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
@@ -1446,7 +1463,7 @@ export default function QuoteBuilder() {
             <button
               type="button"
               className="w-full flex items-center gap-2 text-left py-1"
-              onClick={() => setHeaderCollapsed(false)}
+              onClick={() => { setHeaderCollapsed(false); didAutoCollapseOnFocusRef.current = false; }}
               data-testid="button-expand-header"
             >
               <span className="text-sm font-medium truncate flex-1 min-w-0">{jobName.trim() || "Untitled"}</span>
@@ -1489,7 +1506,7 @@ export default function QuoteBuilder() {
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <Label className="text-xs">Site Type</Label>
-                  <Select value={siteType || "__none__"} onValueChange={(v) => { setSiteType(v === "__none__" ? null : v as "renovation" | "new_build"); setHasUnsavedChanges(true); }}>
+                  <Select value={siteType || "__none__"} onValueChange={(v) => handleSiteTypeChange(v === "__none__" ? null : v as "renovation" | "new_build")}>
                     <SelectTrigger data-testid="select-site-type-mobile"><SelectValue placeholder="Select..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">None</SelectItem>
@@ -1498,11 +1515,9 @@ export default function QuoteBuilder() {
                     </SelectContent>
                   </Select>
                 </div>
-                {items.length > 0 && (
-                  <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setHeaderCollapsed(true)} data-testid="button-collapse-header">
-                    <ChevronUp className="w-4 h-4 mr-1" /> Done
-                  </Button>
-                )}
+                <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setHeaderCollapsed(true)} data-testid="button-collapse-header">
+                  <ChevronUp className="w-4 h-4 mr-1" /> Done
+                </Button>
               </div>
             </div>
           )
@@ -1622,8 +1637,9 @@ export default function QuoteBuilder() {
                 </div>
                 <div>
                   <Label htmlFor="quantity" className="text-xs">Quantity</Label>
-                  <Input id="quantity" type="number" min={1}
+                  <Input id="quantity" type="number" inputMode="numeric" min={1}
                     {...form.register("quantity", { valueAsNumber: true })}
+                    onFocus={handleConfigFieldFocus}
                     data-testid="input-quantity" />
                 </div>
               </div>
@@ -1650,14 +1666,16 @@ export default function QuoteBuilder() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label htmlFor="width" className="text-xs">Width (mm)</Label>
-                    <Input id="width" type="number" min={200}
+                    <Input id="width" type="number" inputMode="decimal" min={200}
                       {...form.register("width", { valueAsNumber: true })}
+                      onFocus={handleConfigFieldFocus}
                       data-testid="input-width" />
                   </div>
                   <div>
                     <Label htmlFor="height" className="text-xs">Height (mm)</Label>
-                    <Input id="height" type="number" min={200}
+                    <Input id="height" type="number" inputMode="decimal" min={200}
                       {...form.register("height", { valueAsNumber: true })}
+                      onFocus={handleConfigFieldFocus}
                       data-testid="input-height" />
                   </div>
                 </div>
@@ -1757,8 +1775,9 @@ export default function QuoteBuilder() {
                     </div>
                     <div>
                       <Label htmlFor="sidelightWidth" className="text-xs">Sidelight Width (mm)</Label>
-                      <Input id="sidelightWidth" type="number" min={100}
+                      <Input id="sidelightWidth" type="number" inputMode="decimal" min={100}
                         {...form.register("sidelightWidth", { valueAsNumber: true })}
+                        onFocus={handleConfigFieldFocus}
                         data-testid="input-sidelight-width" />
                     </div>
                   </>
@@ -2498,18 +2517,20 @@ export default function QuoteBuilder() {
                     {isSpecVisible("wallThickness") && (
                     <div>
                       <Label className="text-xs">Wall Thickness (mm)</Label>
-                      <Input type="number" min={0}
+                      <Input type="number" inputMode="decimal" min={0}
                         value={w.wallThickness || ""}
                         onChange={(e) => form.setValue("wallThickness", Number(e.target.value) || 0)}
+                        onFocus={handleConfigFieldFocus}
                         data-testid="input-wall-thickness" />
                     </div>
                     )}
                     {isSpecVisible("heightFromFloor") && (
                     <div>
                       <Label className="text-xs">Height from Floor (mm)</Label>
-                      <Input type="number" min={0}
+                      <Input type="number" inputMode="decimal" min={0}
                         value={w.heightFromFloor || ""}
                         onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
+                        onFocus={handleConfigFieldFocus}
                         placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
                         data-testid="input-height-from-floor" />
                       {w.heightFromFloor > 0 && w.heightFromFloor < 800 && (
@@ -2821,6 +2842,23 @@ export default function QuoteBuilder() {
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1" onClick={startNewItem} data-testid="button-preview-add-next">
                   <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="shrink-0 h-8 w-8"
+                  onClick={() => {
+                    if (editingId) {
+                      setPhotoTargetItemId(editingId);
+                      photoInputRef.current?.click();
+                    } else {
+                      toast({ title: "Add item to quote first, then capture photo" });
+                    }
+                  }}
+                  title="Capture Photo"
+                  data-testid="button-preview-photo"
+                >
+                  <Camera className="w-4 h-4" />
                 </Button>
               </div>
               {savedJobId && items.length > 0 && (

@@ -615,7 +615,7 @@ export default function ExecSummary() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-x-hidden print:p-2 print:space-y-4" data-testid="exec-summary-page">
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 overflow-x-hidden print:p-2 print:gap-4" data-testid="exec-summary-page">
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(`/job/${jobId}`)} data-testid="button-back-to-job">
@@ -658,61 +658,111 @@ export default function ExecSummary() {
         {job.date && <p className="text-sm">{job.date}</p>}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="summary-totals">
+      <div className="order-1 grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="summary-totals">
         <SummaryCard label="Total m²" value={`${totals.totalSqm.toFixed(2)} m²`} testId="text-total-sqm" />
         <SummaryCard label="Total Weight" value={`${totals.totalWeight.toFixed(1)} kg`} testId="text-total-weight" />
         <SummaryCard label="Total Items" value={String(itemPricings.length)} testId="text-total-items" />
         <SummaryCard label="USD → NZD Rate" value={`${usdToNzdRate}`} testId="text-usd-rate" />
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
+      <div className="order-5 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Financial Summary</h2>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[120px] sm:w-[180px] text-xs sm:text-sm">Category</TableHead>
-              <TableHead className="text-right text-xs sm:text-sm">Detail</TableHead>
-              <TableHead className="text-right text-xs sm:text-sm">Cost</TableHead>
-              <TableHead className="text-right text-xs sm:text-sm">Sell</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow data-testid="row-manuf-materials">
-              <TableCell className="text-sm font-medium" rowSpan={3}>Manufacturing</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">Materials</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-materials">${fmt(totals.totalMaterials)}</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
-            </TableRow>
-            <TableRow data-testid="row-manuf-labour">
-              <TableCell className="text-right text-sm text-muted-foreground">Labour</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-labor">${fmt(totals.totalLabor)}</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
-            </TableRow>
-            <TableRow className="border-b-2" data-testid="row-manuf-total">
-              <TableCell className="text-right text-sm font-semibold">Total</TableCell>
-              <TableCell className="text-right text-base font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
-              <TableCell className="text-right text-base font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
-            </TableRow>
-            <TableRow data-testid="row-installation">
-              <TableCell className="text-sm font-medium">Installation</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-install-cost">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-install-sell">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</TableCell>
-            </TableRow>
-            <TableRow className="border-b-2" data-testid="row-delivery">
-              <TableCell className="text-sm font-medium">Delivery</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-delivery-cost">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-delivery-sell">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</TableCell>
-            </TableRow>
-            <TableRow className="bg-muted/30" data-testid="row-grand-total-cost">
-              <TableCell colSpan={2} className="text-base font-bold">Grand Total Cost (COGS)</TableCell>
-              <TableCell className="text-right text-base font-bold" data-testid="text-grand-total">${fmt(totals.grandTotalCost)}</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[180px] text-sm">Category</TableHead>
+                <TableHead className="text-right text-sm">Detail</TableHead>
+                <TableHead className="text-right text-sm">Cost</TableHead>
+                <TableHead className="text-right text-sm">Sell</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow data-testid="row-manuf-materials">
+                <TableCell className="text-sm font-medium" rowSpan={3}>Manufacturing</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">Materials</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-materials">${fmt(totals.totalMaterials)}</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+              </TableRow>
+              <TableRow data-testid="row-manuf-labour">
+                <TableCell className="text-right text-sm text-muted-foreground">Labour</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-labor">${fmt(totals.totalLabor)}</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+              </TableRow>
+              <TableRow className="border-b-2" data-testid="row-manuf-total">
+                <TableCell className="text-right text-sm font-semibold">Total</TableCell>
+                <TableCell className="text-right text-base font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
+                <TableCell className="text-right text-base font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
+              </TableRow>
+              <TableRow data-testid="row-installation">
+                <TableCell className="text-sm font-medium">Installation</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-install-cost">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-install-sell">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</TableCell>
+              </TableRow>
+              <TableRow className="border-b-2" data-testid="row-delivery">
+                <TableCell className="text-sm font-medium">Delivery</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-delivery-cost">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-delivery-sell">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</TableCell>
+              </TableRow>
+              <TableRow className="bg-muted/30" data-testid="row-grand-total-cost">
+                <TableCell colSpan={2} className="text-base font-bold">Grand Total Cost (COGS)</TableCell>
+                <TableCell className="text-right text-base font-bold" data-testid="text-grand-total">${fmt(totals.grandTotalCost)}</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="md:hidden space-y-3" data-testid="financial-summary-mobile">
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Manufacturing</p>
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="text-muted-foreground">Materials</span>
+              <span className="text-right" data-testid="text-total-materials-mobile">${fmt(totals.totalMaterials)}</span>
+              <span className="text-muted-foreground">Labour</span>
+              <span className="text-right" data-testid="text-total-labor-mobile">${fmt(totals.totalLabor)}</span>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-semibold">Total Cost</span>
+              <span className="text-right font-bold">${fmt(totals.totalManufCost)}</span>
+              <span className="font-semibold">Total Sell</span>
+              <span className="text-right font-bold">${fmt(totals.itemSaleTotal)}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-medium">Installation</span>
+              <span className="text-right text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</span>
+              <span className="text-muted-foreground">Cost</span>
+              <span className="text-right">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</span>
+              <span className="text-muted-foreground">Sell</span>
+              <span className="text-right">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-medium">Delivery</span>
+              <span className="text-right text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</span>
+              <span className="text-muted-foreground">Cost</span>
+              <span className="text-right">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</span>
+              <span className="text-muted-foreground">Sell</span>
+              <span className="text-right">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="grid grid-cols-2 gap-1">
+              <span className="text-base font-bold">Grand Total (COGS)</span>
+              <span className="text-right text-base font-bold">${fmt(totals.grandTotalCost)}</span>
+            </div>
+          </div>
+        </div>
 
         <Separator />
 
@@ -744,7 +794,7 @@ export default function ExecSummary() {
 
         <Separator />
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div data-testid="text-gross-profit">
             <p className="text-sm text-muted-foreground">Gross Profit</p>
             <p className={`text-2xl font-bold ${totals.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
@@ -766,7 +816,7 @@ export default function ExecSummary() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-3 print:break-before-page" data-testid="installation-section">
+      <div className="order-3 rounded-lg border bg-card p-4 space-y-3 print:break-before-page" data-testid="installation-section">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Installation Labour</h2>
           <div className="flex items-center gap-2 print:hidden">
@@ -822,32 +872,36 @@ export default function ExecSummary() {
                 <span className="text-muted-foreground ml-3">Per-unit sell: </span>
                 <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.sellTotal, 0))}</span>
               </div>
-              <div className="flex items-center gap-2 print:hidden">
-                <Label className="text-sm whitespace-nowrap">Subcontractor Override ($)</Label>
-                <Input
-                  type="number"
-                  className="w-28"
-                  placeholder="—"
-                  value={installOverride}
-                  onChange={(e) => {
-                    setInstallOverride(e.target.value);
-                    const val = parseFloat(e.target.value);
-                    persistJobField("installationOverride", val > 0 ? val : null);
-                  }}
-                  data-testid="input-installation-override"
-                />
-                <Label className="text-sm whitespace-nowrap">Markup (%)</Label>
-                <Input
-                  type="number"
-                  className="w-20"
-                  value={installMarkup}
-                  onChange={(e) => {
-                    setInstallMarkup(e.target.value);
-                    const val = parseFloat(e.target.value);
-                    persistJobField("installationMarkup", val >= 0 ? val : null);
-                  }}
-                  data-testid="input-installation-markup"
-                />
+              <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2 print:hidden">
+                <div className="col-span-1">
+                  <Label className="text-sm">Override ($)</Label>
+                  <Input
+                    type="number"
+                    className="md:w-28"
+                    placeholder="—"
+                    value={installOverride}
+                    onChange={(e) => {
+                      setInstallOverride(e.target.value);
+                      const val = parseFloat(e.target.value);
+                      persistJobField("installationOverride", val > 0 ? val : null);
+                    }}
+                    data-testid="input-installation-override"
+                  />
+                </div>
+                <div className="col-span-1">
+                  <Label className="text-sm">Markup (%)</Label>
+                  <Input
+                    type="number"
+                    className="md:w-20"
+                    value={installMarkup}
+                    onChange={(e) => {
+                      setInstallMarkup(e.target.value);
+                      const val = parseFloat(e.target.value);
+                      persistJobField("installationMarkup", val >= 0 ? val : null);
+                    }}
+                    data-testid="input-installation-markup"
+                  />
+                </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-4 font-bold text-sm">
@@ -862,7 +916,7 @@ export default function ExecSummary() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
+      <div className="order-4 rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
           <div className="flex items-center gap-2 print:hidden">
@@ -880,8 +934,8 @@ export default function ExecSummary() {
         </div>
         {deliveryEnabled && (
           <>
-            <div className="flex items-center gap-4 flex-wrap print:hidden">
-              <div className="flex-1 min-w-[200px]">
+            <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-4 print:hidden">
+              <div className="col-span-2 md:flex-1 md:min-w-[200px]">
                 <Label className="text-sm">Delivery Method</Label>
                 <Select
                   value={deliveryMethodId}
@@ -902,7 +956,7 @@ export default function ExecSummary() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-28">
+              <div className="col-span-1 md:w-28">
                 <Label className="text-sm">Custom Cost ($)</Label>
                 <Input
                   type="number"
@@ -916,7 +970,7 @@ export default function ExecSummary() {
                   data-testid="input-delivery-custom"
                 />
               </div>
-              <div className="w-20">
+              <div className="col-span-1 md:w-20">
                 <Label className="text-sm">Markup (%)</Label>
                 <Input
                   type="number"
@@ -942,7 +996,7 @@ export default function ExecSummary() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card" data-testid="items-breakdown">
+      <div className="order-2 md:order-5 rounded-lg border bg-card" data-testid="items-breakdown">
         <div className="p-4 border-b">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Per-Item Breakdown</h2>
         </div>

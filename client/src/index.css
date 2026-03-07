@@ -294,3 +294,11 @@
 .native-scroll [data-radix-scroll-area-scrollbar] {
   display: none !important;
 }
+
+@media (max-width: 1023px) {
+  .native-scroll input,
+  .native-scroll select,
+  .native-scroll textarea {
+    scroll-margin-bottom: 60px;
+  }
+}
