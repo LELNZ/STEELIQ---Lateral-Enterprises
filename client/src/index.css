@@ -286,3 +286,11 @@
     inset: -1px;
   }
 }
+
+.native-scroll > [data-radix-scroll-area-viewport] {
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+}
+.native-scroll [data-radix-scroll-area-scrollbar] {
+  display: none !important;
+}

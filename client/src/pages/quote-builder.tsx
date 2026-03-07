@@ -226,7 +226,10 @@ export default function QuoteBuilder() {
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [pendingNavigateTo, setPendingNavigateTo] = useState<string | null>(null);
   const [itemsExpanded, setItemsExpanded] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const headerFieldsRef = useRef<HTMLDivElement>(null);
   const [formTab, setFormTab] = useState<string>("drawing");
   const [mobileTab, setMobileTab] = useState<"config" | "preview" | "items">("config");
   const [siteType, setSiteType] = useState<"renovation" | "new_build" | null>(null);
@@ -531,6 +534,31 @@ export default function QuoteBuilder() {
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
   }, [formIsDirty]);
+
+  useEffect(() => {
+    if (items.length > 0 && !savedJobId) setHasUnsavedChanges(true);
+  }, [items.length, savedJobId]);
+
+  const prevItemCountRef = useRef(items.length);
+  useEffect(() => {
+    const prev = prevItemCountRef.current;
+    prevItemCountRef.current = items.length;
+    if (prev === 0 && items.length > 0 && !isLargeScreen && !headerCollapsed) {
+      const focusInHeader = headerFieldsRef.current?.contains(document.activeElement);
+      if (!focusInHeader) {
+        setHeaderCollapsed(true);
+      }
+    }
+  }, [items.length, isLargeScreen]);
+
+  const guardedNavigate = useCallback((to: string) => {
+    if (hasUnsavedChanges || formIsDirty) {
+      setPendingNavigateTo(to);
+      setShowLeaveDialog(true);
+    } else {
+      navigate(to);
+    }
+  }, [hasUnsavedChanges, formIsDirty, navigate]);
 
   useEffect(() => {
     if (skipCategoryResetRef.current) {
@@ -1106,14 +1134,14 @@ export default function QuoteBuilder() {
     }
   }
 
-  async function saveJob() {
+  async function saveJob(): Promise<boolean> {
     if (!jobName.trim()) {
       toast({ title: "Job name is required", variant: "destructive" });
-      return;
+      return false;
     }
     if (items.length === 0) {
       toast({ title: "Add at least one item before saving", variant: "destructive" });
-      return;
+      return false;
     }
     setIsSaving(true);
     try {
@@ -1154,8 +1182,10 @@ export default function QuoteBuilder() {
       if (isNewJob) {
         navigate(`/job/${currentJobId}`, { replace: true });
       }
+      return true;
     } catch (e: any) {
       toast({ title: "Failed to save job", description: e.message, variant: "destructive" });
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -1172,6 +1202,23 @@ export default function QuoteBuilder() {
     }, 3000);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate]);
+
+  const preCreateAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (savedJobId || preCreateAttemptedRef.current || !jobName.trim()) return;
+    preCreateAttemptedRef.current = true;
+    (async () => {
+      try {
+        const res = await apiRequest("POST", "/api/jobs", {
+          name: jobName, address: jobAddress, date: jobDate,
+        });
+        const job = await res.json();
+        setSavedJobId(job.id);
+        navigate(`/job/${job.id}`, { replace: true });
+        queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      } catch {}
+    })();
+  }, [jobName, savedJobId]);
 
   function calcSqm(width: number, height: number, quantity: number): string {
     return ((width * height * quantity) / 1_000_000).toFixed(2);
@@ -1224,7 +1271,7 @@ export default function QuoteBuilder() {
         <div className="flex items-center justify-between gap-2 lg:gap-4 mb-3">
           <div className="flex items-center gap-2 lg:gap-3 min-w-0">
             <Button variant="ghost" size="icon" className="shrink-0" data-testid="button-back-to-jobs" onClick={() => {
-              if (hasUnsavedChanges) { setShowLeaveDialog(true); } else { navigate("/"); }
+              guardedNavigate("/");
             }}>
               <ArrowLeftCircle className="w-5 h-5" />
             </Button>
@@ -1277,10 +1324,10 @@ export default function QuoteBuilder() {
                 </DropdownMenu>
                 {savedJobId && items.length > 0 && (
                   <>
-                    <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
+                    <Button variant="outline" size="sm" onClick={() => guardedNavigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
                       <FileText className="w-4 h-4 mr-1.5" /> Summary
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-exec-summary">
+                    <Button variant="outline" size="sm" onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-exec-summary">
                       <FileText className="w-4 h-4 mr-1.5" /> Exec Summary
                     </Button>
                   </>
@@ -1306,10 +1353,10 @@ export default function QuoteBuilder() {
                   {savedJobId && items.length > 0 && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="menu-mobile-summary">
+                      <DropdownMenuItem onClick={() => guardedNavigate(`/job/${savedJobId}/summary`)} data-testid="menu-mobile-summary">
                         <FileText className="w-4 h-4 mr-2" /> Summary
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="menu-mobile-exec-summary">
+                      <DropdownMenuItem onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="menu-mobile-exec-summary">
                         <FileText className="w-4 h-4 mr-2" /> Review & Generate Estimate
                       </DropdownMenuItem>
                     </>
@@ -1353,7 +1400,7 @@ export default function QuoteBuilder() {
             </div>
             <div className="w-36 shrink-0">
               <Label className="text-xs">Site Type</Label>
-              <Select value={siteType || "__none__"} onValueChange={(v) => setSiteType(v === "__none__" ? null : v as "renovation" | "new_build")}>
+              <Select value={siteType || "__none__"} onValueChange={(v) => { setSiteType(v === "__none__" ? null : v as "renovation" | "new_build"); setHasUnsavedChanges(true); }}>
                 <SelectTrigger data-testid="select-site-type"><SelectValue placeholder="Select..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
@@ -1364,48 +1411,70 @@ export default function QuoteBuilder() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            <div>
-              <Label className="text-xs">Job Name *</Label>
-              <Input
-                value={jobName}
-                onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
-                placeholder="e.g. Smith Residence"
-                data-testid="input-job-name"
-              />
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1 min-w-0">
-                <Label className="text-xs">Address</Label>
+          headerCollapsed ? (
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 text-left py-1"
+              onClick={() => setHeaderCollapsed(false)}
+              data-testid="button-expand-header"
+            >
+              <span className="text-sm font-medium truncate flex-1 min-w-0">{jobName.trim() || "Untitled"}</span>
+              {jobAddress.trim() && <span className="text-xs text-muted-foreground truncate max-w-[100px]">{jobAddress}</span>}
+              {siteType && <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{siteType === "renovation" ? "Reno" : "New"}</Badge>}
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 shrink-0">{items.length} item{items.length !== 1 ? "s" : ""}</Badge>
+              <Pencil className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            </button>
+          ) : (
+            <div ref={headerFieldsRef} className="flex flex-col gap-2">
+              <div>
+                <Label className="text-xs">Job Name *</Label>
                 <Input
-                  value={jobAddress}
-                  onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
-                  placeholder="e.g. 123 Main St"
-                  data-testid="input-job-address"
+                  value={jobName}
+                  onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
+                  placeholder="e.g. Smith Residence"
+                  data-testid="input-job-name"
                 />
               </div>
-              <div className="w-32 shrink-0">
-                <Label className="text-xs">Date</Label>
-                <Input
-                  type="date"
-                  value={jobDate}
-                  onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
-                  data-testid="input-job-date"
-                />
+              <div className="flex gap-2">
+                <div className="flex-1 min-w-0">
+                  <Label className="text-xs">Address</Label>
+                  <Input
+                    value={jobAddress}
+                    onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
+                    placeholder="e.g. 123 Main St"
+                    data-testid="input-job-address"
+                  />
+                </div>
+                <div className="w-32 shrink-0">
+                  <Label className="text-xs">Date</Label>
+                  <Input
+                    type="date"
+                    value={jobDate}
+                    onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
+                    data-testid="input-job-date"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Label className="text-xs">Site Type</Label>
+                  <Select value={siteType || "__none__"} onValueChange={(v) => { setSiteType(v === "__none__" ? null : v as "renovation" | "new_build"); setHasUnsavedChanges(true); }}>
+                    <SelectTrigger data-testid="select-site-type-mobile"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      <SelectItem value="renovation">Renovation</SelectItem>
+                      <SelectItem value="new_build">New Build</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {items.length > 0 && (
+                  <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setHeaderCollapsed(true)} data-testid="button-collapse-header">
+                    <ChevronUp className="w-4 h-4 mr-1" /> Done
+                  </Button>
+                )}
               </div>
             </div>
-            <div>
-              <Label className="text-xs">Site Type</Label>
-              <Select value={siteType || "__none__"} onValueChange={(v) => setSiteType(v === "__none__" ? null : v as "renovation" | "new_build")}>
-                <SelectTrigger data-testid="select-site-type-mobile"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  <SelectItem value="renovation">Renovation</SelectItem>
-                  <SelectItem value="new_build">New Build</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          )
         )}
       </header>
 
@@ -1443,7 +1512,7 @@ export default function QuoteBuilder() {
 
       <div className={`flex-1 min-h-0 flex ${isLargeScreen ? "lg:flex-row" : ""} flex-col overflow-hidden`}>
         {(isLargeScreen || mobileTab === "config") && (
-        <ScrollArea ref={configScrollRef} className={isLargeScreen ? "w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0" : "flex-1 min-h-0"}>
+        <ScrollArea ref={configScrollRef} className={isLargeScreen ? "w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0" : "flex-1 min-h-0 native-scroll"}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-4">
             <Tabs value={formTab} onValueChange={setFormTab}>
               <TabsList className="w-full grid grid-cols-2 mb-3">
@@ -2661,22 +2730,25 @@ export default function QuoteBuilder() {
               </TabsContent>
             </Tabs>
 
-            <Separator />
-
-            <div className="flex gap-2">
-              <Button type="submit" className="flex-1" data-testid="button-add-item">
-                {editingId ? (
-                  <><Pencil className="w-4 h-4 mr-2" /> Update Item</>
-                ) : (
-                  <><Plus className="w-4 h-4 mr-2" /> Add to Quote</>
-                )}
-              </Button>
-              {editingId && (
-                <Button type="button" variant="outline" onClick={cancelEdit} data-testid="button-cancel-edit">
-                  Cancel
-                </Button>
-              )}
-            </div>
+            {isLargeScreen && (
+              <>
+                <Separator />
+                <div className="flex gap-2">
+                  <Button type="submit" className="flex-1" data-testid="button-add-item">
+                    {editingId ? (
+                      <><Pencil className="w-4 h-4 mr-2" /> Update Item</>
+                    ) : (
+                      <><Plus className="w-4 h-4 mr-2" /> Add to Quote</>
+                    )}
+                  </Button>
+                  {editingId && (
+                    <Button type="button" variant="outline" onClick={cancelEdit} data-testid="button-cancel-edit">
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
           </form>
           {!isLargeScreen && (
             <div className="sticky bottom-0 bg-card border-t px-3 py-2 flex items-center gap-2 z-10" data-testid="mobile-config-action-bar">
@@ -2711,12 +2783,17 @@ export default function QuoteBuilder() {
           </div>
 
           {!isLargeScreen && (
-            <div className="px-4 py-3 border-t bg-card shrink-0 flex items-center gap-2">
-              <Button variant="outline" size="sm" className="flex-1" onClick={startNewItem} data-testid="button-preview-add-next">
-                <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
-              </Button>
+            <div className="px-4 py-3 border-t bg-card shrink-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <Button size="sm" className="flex-1" onClick={form.handleSubmit(onSubmit)} data-testid="button-preview-submit">
+                  {editingId ? <><Pencil className="w-3.5 h-3.5 mr-1" /> Update Item</> : <><Plus className="w-3.5 h-3.5 mr-1" /> Add to Quote</>}
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={startNewItem} data-testid="button-preview-add-next">
+                  <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
+                </Button>
+              </div>
               {savedJobId && items.length > 0 && (
-                <Button size="sm" className="flex-1" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-preview-review-estimate">
+                <Button size="sm" variant="outline" className="w-full" onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-preview-review-estimate">
                   <FileText className="w-4 h-4 mr-1.5" /> Review & Generate Estimate
                 </Button>
               )}
@@ -2847,7 +2924,7 @@ export default function QuoteBuilder() {
         )}
 
         {!isLargeScreen && mobileTab === "items" && (
-          <ScrollArea className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="p-3 space-y-2">
               {items.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
@@ -2926,7 +3003,7 @@ export default function QuoteBuilder() {
                       <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
                     </Button>
                     {savedJobId && (
-                      <Button className="w-full" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-items-review-estimate">
+                      <Button className="w-full" onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-items-review-estimate">
                         <FileText className="w-4 h-4 mr-1.5" /> Review & Generate Estimate
                       </Button>
                     )}
@@ -2934,7 +3011,7 @@ export default function QuoteBuilder() {
                 </>
               )}
             </div>
-          </ScrollArea>
+          </div>
         )}
       </div>
 
@@ -2956,13 +3033,13 @@ export default function QuoteBuilder() {
             You have unsaved changes. Would you like to save before leaving?
           </p>
           <div className="flex justify-end gap-2 mt-2">
-            <Button variant="outline" onClick={() => setShowLeaveDialog(false)} data-testid="button-leave-cancel">
+            <Button variant="outline" onClick={() => { setShowLeaveDialog(false); setPendingNavigateTo(null); }} data-testid="button-leave-cancel">
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => { setShowLeaveDialog(false); setHasUnsavedChanges(false); navigate("/"); }} data-testid="button-leave-discard">
+            <Button variant="destructive" onClick={() => { const dest = pendingNavigateTo || "/"; setShowLeaveDialog(false); setHasUnsavedChanges(false); setPendingNavigateTo(null); navigate(dest); }} data-testid="button-leave-discard">
               Discard
             </Button>
-            <Button onClick={async () => { setShowLeaveDialog(false); await saveJob(); if (jobName.trim() && items.length > 0) navigate("/"); }} data-testid="button-leave-save">
+            <Button onClick={async () => { const dest = pendingNavigateTo || "/"; setShowLeaveDialog(false); const ok = await saveJob(); if (ok) { setPendingNavigateTo(null); navigate(dest); } }} data-testid="button-leave-save">
               <Save className="w-4 h-4 mr-1.5" /> Save & Leave
             </Button>
           </div>

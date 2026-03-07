@@ -615,7 +615,7 @@ export default function ExecSummary() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6 print:p-2 print:space-y-4" data-testid="exec-summary-page">
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-x-hidden print:p-2 print:space-y-4" data-testid="exec-summary-page">
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(`/job/${jobId}`)} data-testid="button-back-to-job">
@@ -626,7 +626,7 @@ export default function ExecSummary() {
             <p className="text-sm text-muted-foreground">Executive Summary</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="default"
             size="sm"
@@ -671,10 +671,10 @@ export default function ExecSummary() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[180px] text-sm">Category</TableHead>
-              <TableHead className="text-right text-sm">Detail</TableHead>
-              <TableHead className="text-right text-sm">Cost</TableHead>
-              <TableHead className="text-right text-sm">Sell</TableHead>
+              <TableHead className="w-[120px] sm:w-[180px] text-xs sm:text-sm">Category</TableHead>
+              <TableHead className="text-right text-xs sm:text-sm">Detail</TableHead>
+              <TableHead className="text-right text-xs sm:text-sm">Cost</TableHead>
+              <TableHead className="text-right text-xs sm:text-sm">Sell</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -50,7 +50,8 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 ## Mobile Scroll Architecture
 - Quote Builder root uses `h-full` (not `h-[100dvh]`) to fill `<main>` without overflow.
 - App.tsx `<main>` has `min-h-0` for flex shrinking. Still uses `overflow-auto` for other pages.
-- Config tab uses single `<ScrollArea>` — no nested scroll layers.
+- Config tab on mobile uses `ScrollArea` with `native-scroll` CSS class that forces `-webkit-overflow-scrolling: touch` and hides custom Radix scrollbars. Desktop retains standard `ScrollArea`.
+- Items tab on mobile uses plain `<div className="overflow-y-auto">` — no Radix ScrollArea.
 - Tab switching (`mobileTab` state) does NOT reinitialize the form — form state is preserved across Config/Preview/Items switches.
 
 ## Mobile Field-Readiness (Phase 1)
@@ -58,9 +59,18 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - **Add Next Item**: Available in Items tab and Preview tab. Reuses `resetFormForNewItem()` + tab switch.
 - **Sticky Action Bar**: Mobile Config tab has sticky bottom bar with Add/Update, Cancel, Preview, Items actions — always reachable without scrolling.
 - **Enhanced Item Cards**: Mobile cards show frame type, glass/IGU summary, photo count, dimensions (font-semibold).
-- **Compact Header**: Mobile header shows job name (truncated), address, site type badge, item count.
-- **Review & Generate Estimate**: Prominent CTA in Items tab navigates to exec-summary. Labels updated throughout (Generate Preliminary Estimate, Create New Estimate, Preview Customer Document).
+- **Collapsible Header (Phase 3)**: Mobile header auto-collapses after first item is added (respects focus). Collapsed view shows job name, address, site type badge, item count, pencil icon. Manual expand/collapse toggle always available. Desktop header unchanged.
+- **Review & Generate Estimate**: Prominent CTA in Items tab and Preview tab navigates to exec-summary. Labels updated throughout (Generate Preliminary Estimate, Create New Estimate, Preview Customer Document).
 - **Quote Preview Polish**: Preliminary disclaimer after header, project address in customer info, clean print layout.
+
+## Phase 3: Mobile UX Fixes
+- **T001 Mobile Scroll**: Config tab uses `native-scroll` CSS class on mobile; Items tab uses plain div with overflow-y-auto.
+- **T002 Duplicate Button**: Inline form submit button hidden on mobile (`isLargeScreen` conditional). Only sticky action bar visible.
+- **T003 Preview Submit**: Preview tab footer now has "Add to Quote"/"Update Item" button using same `form.handleSubmit(onSubmit)` path.
+- **T004 Unsaved Changes**: `guardedNavigate()` wraps all in-app navigation paths. `pendingNavigateTo` state supports navigating to arbitrary destinations after dialog. Site type changes tracked. Unsaved local items (no savedJobId) tracked. `saveJob()` returns boolean; Save & Leave only navigates on success.
+- **T005 First-Item Speed**: Draft job pre-created when `jobName` becomes non-empty (before any item is added). Uses `preCreateAttemptedRef` guard.
+- **T006 Collapsible Header**: `headerCollapsed` state with auto-collapse after first item (focus-aware). Compact summary vs full editable fields. Manual toggle.
+- **T007 Exec Summary Layout**: Responsive padding (`p-4 sm:p-6`), spacing (`space-y-4 sm:space-y-6`), `overflow-x-hidden`, `flex-wrap` on action buttons, responsive table header sizing.
 
 ## Quote Document Model (Phase 2)
 - **Location**: `client/src/lib/quote-document.ts`
