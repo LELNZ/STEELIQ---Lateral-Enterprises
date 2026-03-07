@@ -109,6 +109,14 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - `shared/estimate-snapshot.ts` — EstimateSnapshot type definitions
 - `server/routes.ts` — API routes (includes upload endpoints)
 
+## Protected Documentation
+Do not modify any files in `/docs/` unless the user explicitly requests a documentation update. These are controlled project context files managed directly by the user (via the Replit file editor or by uploading replacement files).
+
+Protected files:
+- `docs/STEELIQ_PROJECT_MEMORY.md`
+- `docs/STEELIQ_ARCHITECTURE.md`
+- `docs/STEELIQ_CURRENT_STATE.md`
+
 ## Remaining Work
 - **Full Preset CRUD**: Backend API + DB storage for division-specific site visit presets, then migrate quote-builder from hardcoded `getPresetDefaults()` to settings-backed presets.
 - **Quote Engine**: Full document generation pipeline, PDF templates per division, customer delivery flow.
