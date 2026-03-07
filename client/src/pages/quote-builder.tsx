@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
+import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -224,6 +225,7 @@ export default function QuoteBuilder() {
 
   const [galleryItemId, setGalleryItemId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaveAndLeaving, setIsSaveAndLeaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [pendingNavigateTo, setPendingNavigateTo] = useState<string | null>(null);
@@ -240,6 +242,7 @@ export default function QuoteBuilder() {
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
   const skipCategoryResetRef = useRef(false);
+  const hydratedJobRef = useRef(false);
   const lastAutoWindZone = useRef<string>("");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoTargetItemId, setPhotoTargetItemId] = useState<string | null>(null);
@@ -346,7 +349,8 @@ export default function QuoteBuilder() {
   };
 
   useEffect(() => {
-    if (existingJob) {
+    if (existingJob && !hydratedJobRef.current) {
+      hydratedJobRef.current = true;
       setJobName(existingJob.name);
       setJobAddress(existingJob.address || "");
       setJobDate(existingJob.date || "");
@@ -559,6 +563,17 @@ export default function QuoteBuilder() {
       navigate(to);
     }
   }, [hasUnsavedChanges, formIsDirty, navigate]);
+
+  const { registerGuard, unregisterGuard } = useNavigationGuard();
+  useEffect(() => {
+    registerGuard(() => {
+      if (hasUnsavedChanges || formIsDirty) {
+        return "You have unsaved changes in the quote builder. Leave without saving?";
+      }
+      return false;
+    });
+    return () => unregisterGuard();
+  }, [hasUnsavedChanges, formIsDirty, registerGuard, unregisterGuard]);
 
   useEffect(() => {
     if (skipCategoryResetRef.current) {
@@ -902,7 +917,14 @@ export default function QuoteBuilder() {
     }
   }
 
+  const immediateAutoSaveRef = useRef(false);
+
   async function onSubmit(data: InsertQuoteItem) {
+    const wasNewJob = !savedJobId;
+    if (wasNewJob && !editingId) {
+      const newJobId = await ensureJobExists();
+      if (!newJobId) return;
+    }
     const sig = deriveConfigSignature(data as QuoteItem);
     const matchingConfig = findMatchingConfiguration(sig, configurations);
     let finalData = { ...data };
@@ -929,6 +951,9 @@ export default function QuoteBuilder() {
       toast({ title: "Item added", description: `${finalData.name} added to quote.` });
     }
     setHasUnsavedChanges(true);
+    if (wasNewJob) {
+      immediateAutoSaveRef.current = true;
+    }
     form.reset(getNewItemDefaults(siteType));
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
   }
@@ -1197,28 +1222,34 @@ export default function QuoteBuilder() {
   useEffect(() => {
     if (!savedJobId || !hasUnsavedChanges || items.length === 0 || !jobName.trim()) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    const delay = immediateAutoSaveRef.current ? 0 : 3000;
+    immediateAutoSaveRef.current = false;
     autoSaveTimerRef.current = setTimeout(() => {
       saveJobRef.current();
-    }, 3000);
+    }, delay);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate]);
 
-  const preCreateAttemptedRef = useRef(false);
-  useEffect(() => {
-    if (savedJobId || preCreateAttemptedRef.current || !jobName.trim()) return;
-    preCreateAttemptedRef.current = true;
-    (async () => {
-      try {
-        const res = await apiRequest("POST", "/api/jobs", {
-          name: jobName, address: jobAddress, date: jobDate,
-        });
-        const job = await res.json();
-        setSavedJobId(job.id);
-        navigate(`/job/${job.id}`, { replace: true });
-        queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
-      } catch {}
-    })();
-  }, [jobName, savedJobId]);
+  async function ensureJobExists(): Promise<string | null> {
+    if (savedJobId) return savedJobId;
+    if (!jobName.trim()) {
+      toast({ title: "Job name is required", variant: "destructive" });
+      return null;
+    }
+    try {
+      const res = await apiRequest("POST", "/api/jobs", {
+        name: jobName, address: jobAddress, date: jobDate,
+      });
+      const job = await res.json();
+      setSavedJobId(job.id);
+      navigate(`/job/${job.id}`, { replace: true });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      return job.id;
+    } catch (e: any) {
+      toast({ title: "Failed to create job", description: e.message, variant: "destructive" });
+      return null;
+    }
+  }
 
   function calcSqm(width: number, height: number, quantity: number): string {
     return ((width * height * quantity) / 1_000_000).toFixed(2);
@@ -3021,7 +3052,7 @@ export default function QuoteBuilder() {
         </div>
       )}
 
-      <Dialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+      <Dialog open={showLeaveDialog} onOpenChange={(open) => { if (!open && !isSaveAndLeaving) { setShowLeaveDialog(false); setPendingNavigateTo(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -3033,14 +3064,14 @@ export default function QuoteBuilder() {
             You have unsaved changes. Would you like to save before leaving?
           </p>
           <div className="flex justify-end gap-2 mt-2">
-            <Button variant="outline" onClick={() => { setShowLeaveDialog(false); setPendingNavigateTo(null); }} data-testid="button-leave-cancel">
+            <Button variant="outline" disabled={isSaveAndLeaving} onClick={() => { setShowLeaveDialog(false); setPendingNavigateTo(null); }} data-testid="button-leave-cancel">
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => { const dest = pendingNavigateTo || "/"; setShowLeaveDialog(false); setHasUnsavedChanges(false); setPendingNavigateTo(null); navigate(dest); }} data-testid="button-leave-discard">
+            <Button variant="destructive" disabled={isSaveAndLeaving} onClick={() => { const dest = pendingNavigateTo || "/"; setShowLeaveDialog(false); setHasUnsavedChanges(false); setPendingNavigateTo(null); navigate(dest); }} data-testid="button-leave-discard">
               Discard
             </Button>
-            <Button onClick={async () => { const dest = pendingNavigateTo || "/"; setShowLeaveDialog(false); const ok = await saveJob(); if (ok) { setPendingNavigateTo(null); navigate(dest); } }} data-testid="button-leave-save">
-              <Save className="w-4 h-4 mr-1.5" /> Save & Leave
+            <Button disabled={isSaveAndLeaving} onClick={async () => { const dest = pendingNavigateTo || "/"; setIsSaveAndLeaving(true); try { const ok = await saveJob(); if (ok) { setShowLeaveDialog(false); setPendingNavigateTo(null); navigate(dest); } } finally { setIsSaveAndLeaving(false); } }} data-testid="button-leave-save">
+              {isSaveAndLeaving ? (<><span className="w-4 h-4 mr-1.5 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" /> Saving...</>) : (<><Save className="w-4 h-4 mr-1.5" /> Save & Leave</>)}
             </Button>
           </div>
         </DialogContent>

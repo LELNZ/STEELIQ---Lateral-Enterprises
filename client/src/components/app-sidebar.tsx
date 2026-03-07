@@ -1,11 +1,12 @@
+import { useCallback } from "react";
 import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useNavigationGuard } from "@/lib/navigation-guard";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -17,7 +18,19 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export function AppSidebar() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const { checkGuard } = useNavigationGuard();
+
+  const guardedClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    const guard = checkGuard();
+    if (guard.blocked) {
+      e.preventDefault();
+      const msg = guard.message || "You have unsaved changes. Leave without saving?";
+      if (window.confirm(msg)) {
+        navigate(href);
+      }
+    }
+  }, [checkGuard, navigate]);
 
   const isEstimatesActive = location === "/" || location.startsWith("/job");
   const isQuotesActive = location === "/quotes" || location.startsWith("/quote/");
@@ -48,7 +61,7 @@ export function AppSidebar() {
                     <SidebarMenuSub>
                       <SidebarMenuSubItem>
                         <SidebarMenuSubButton asChild isActive={isEstimatesActive}>
-                          <Link href="/" data-testid="link-sidebar-lj-estimates">
+                          <Link href="/" onClick={(e) => guardedClick(e, "/")} data-testid="link-sidebar-lj-estimates">
                             <Briefcase className="w-3.5 h-3.5" />
                             <span>LJ – Estimates</span>
                           </Link>
@@ -73,7 +86,7 @@ export function AppSidebar() {
 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isQuotesActive} tooltip="Quotes">
-                  <Link href="/quotes" data-testid="link-sidebar-quotes">
+                  <Link href="/quotes" onClick={(e) => guardedClick(e, "/quotes")} data-testid="link-sidebar-quotes">
                     <FileText />
                     <span>Quotes</span>
                   </Link>
@@ -82,7 +95,7 @@ export function AppSidebar() {
 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isLibraryActive} tooltip="Library">
-                  <Link href="/library" data-testid="link-sidebar-library">
+                  <Link href="/library" onClick={(e) => guardedClick(e, "/library")} data-testid="link-sidebar-library">
                     <BookOpen />
                     <span>Library</span>
                   </Link>
@@ -91,7 +104,7 @@ export function AppSidebar() {
 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isSettingsActive} tooltip="Settings">
-                  <Link href="/settings" data-testid="link-sidebar-settings">
+                  <Link href="/settings" onClick={(e) => guardedClick(e, "/settings")} data-testid="link-sidebar-settings">
                     <Settings />
                     <span>Settings</span>
                   </Link>

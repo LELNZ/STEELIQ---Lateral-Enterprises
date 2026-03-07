@@ -67,8 +67,8 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - **T001 Mobile Scroll**: Config tab uses `native-scroll` CSS class on mobile; Items tab uses plain div with overflow-y-auto.
 - **T002 Duplicate Button**: Inline form submit button hidden on mobile (`isLargeScreen` conditional). Only sticky action bar visible.
 - **T003 Preview Submit**: Preview tab footer now has "Add to Quote"/"Update Item" button using same `form.handleSubmit(onSubmit)` path.
-- **T004 Unsaved Changes**: `guardedNavigate()` wraps all in-app navigation paths. `pendingNavigateTo` state supports navigating to arbitrary destinations after dialog. Site type changes tracked. Unsaved local items (no savedJobId) tracked. `saveJob()` returns boolean; Save & Leave only navigates on success.
-- **T005 First-Item Speed**: Draft job pre-created when `jobName` becomes non-empty (before any item is added). Uses `preCreateAttemptedRef` guard.
+- **T004 Unsaved Changes**: `guardedNavigate()` wraps all in-app navigation paths. `pendingNavigateTo` state supports navigating to arbitrary destinations after dialog. Site type changes tracked. Unsaved local items (no savedJobId) tracked. `saveJob()` returns boolean; Save & Leave only navigates on success. Save & Leave dialog stays open during save with loading spinner and disabled buttons (`isSaveAndLeaving` state).
+- **T005 First-Item Speed**: Job created on first `onSubmit()` via `ensureJobExists()` (no pre-create effect). Immediate auto-save (0ms delay) after first item on new job to persist item to server right away.
 - **T006 Collapsible Header**: `headerCollapsed` state with auto-collapse after first item (focus-aware). Compact summary vs full editable fields. Manual toggle.
 - **T007 Exec Summary Layout**: Responsive padding (`p-4 sm:p-6`), spacing (`space-y-4 sm:space-y-6`), `overflow-x-hidden`, `flex-wrap` on action buttons, responsive table header sizing.
 
@@ -93,6 +93,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - `client/src/pages/quote-detail.tsx` — Quote detail management page
 - `client/src/pages/settings.tsx` — Org, division, and app settings (includes logo upload + preset display)
 - `client/src/lib/quote-document.ts` — QuoteDocumentModel types and builder
+- `client/src/lib/navigation-guard.tsx` — NavigationGuardContext for sidebar unsaved-changes protection
 - `client/src/lib/site-visit-presets.ts` — SiteVisitPreset types and seed data
 - `shared/schema.ts` — Database schema and types
 - `shared/estimate-snapshot.ts` — EstimateSnapshot type definitions

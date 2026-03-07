@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SettingsProvider } from "@/lib/settings-context";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { NavigationGuardProvider } from "@/lib/navigation-guard";
 import NotFound from "@/pages/not-found";
 import JobsList from "@/pages/jobs-list";
 import QuoteBuilder from "@/pages/quote-builder";
@@ -44,22 +45,24 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SettingsProvider>
-        <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 min-w-0 min-h-0">
-                <header className="flex items-center gap-2 p-2 border-b sticky top-0 z-50 bg-background">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                </header>
-                <main className="flex-1 overflow-auto min-h-0">
-                  <Router />
-                </main>
+        <NavigationGuardProvider>
+          <TooltipProvider>
+            <SidebarProvider style={style as React.CSSProperties}>
+              <div className="flex h-screen w-full">
+                <AppSidebar />
+                <div className="flex flex-col flex-1 min-w-0 min-h-0">
+                  <header className="flex items-center gap-2 p-2 border-b sticky top-0 z-50 bg-background">
+                    <SidebarTrigger data-testid="button-sidebar-toggle" />
+                  </header>
+                  <main className="flex-1 overflow-auto min-h-0">
+                    <Router />
+                  </main>
+                </div>
               </div>
-            </div>
-          </SidebarProvider>
-          <Toaster />
-        </TooltipProvider>
+            </SidebarProvider>
+            <Toaster />
+          </TooltipProvider>
+        </NavigationGuardProvider>
       </SettingsProvider>
     </QueryClientProvider>
   );
