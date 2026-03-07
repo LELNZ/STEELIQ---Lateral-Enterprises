@@ -240,6 +240,7 @@ export default function QuoteBuilder() {
   const lastAutoWindZone = useRef<string>("");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoTargetItemId, setPhotoTargetItemId] = useState<string | null>(null);
+  const configScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const { data: existingJob, isLoading: jobLoading } = useQuery<{
@@ -904,12 +905,23 @@ export default function QuoteBuilder() {
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
   }
 
+  function scrollConfigToTop() {
+    requestAnimationFrame(() => {
+      const viewport = configScrollRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+      if (viewport) viewport.scrollTop = 0;
+    });
+  }
+
   function editItem(iwp: ItemWithPhoto) {
     const { id, ...rest } = iwp.item;
     skipCategoryResetRef.current = true;
     lastAutoWindZone.current = "";
     form.reset(rest);
     setEditingId(iwp.uiId);
+    if (!isLargeScreen) {
+      setMobileTab("config");
+      scrollConfigToTop();
+    }
   }
 
   function duplicateItem(iwp: ItemWithPhoto) {
@@ -926,10 +938,22 @@ export default function QuoteBuilder() {
     toast({ title: "Item removed" });
   }
 
-  function cancelEdit() {
+  function resetFormForNewItem() {
     setEditingId(null);
     form.reset(getNewItemDefaults(siteType));
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
+  }
+
+  function cancelEdit() {
+    resetFormForNewItem();
+  }
+
+  function startNewItem() {
+    resetFormForNewItem();
+    if (!isLargeScreen) {
+      setMobileTab("config");
+      scrollConfigToTop();
+    }
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1209,11 +1233,19 @@ export default function QuoteBuilder() {
             </div>
             <div className="min-w-0">
               <h1 className="text-sm lg:text-lg font-semibold tracking-tight truncate" data-testid="text-app-title">
-                {isLargeScreen ? "Pro-Quote CAD Generator" : (savedJobId ? "Editing" : "New Estimate")}
+                {isLargeScreen ? "Pro-Quote CAD Generator" : (jobName.trim() || (savedJobId ? "Editing" : "New Estimate"))}
               </h1>
-              <p className="text-xs text-muted-foreground hidden lg:block">
-                {savedJobId ? "Editing Job" : "New Job"}
-              </p>
+              {isLargeScreen ? (
+                <p className="text-xs text-muted-foreground">
+                  {savedJobId ? "Editing Job" : "New Job"}
+                </p>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+                  {jobAddress.trim() && <span className="truncate max-w-[120px]">{jobAddress}</span>}
+                  {siteType && <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{siteType === "renovation" ? "Reno" : "New Build"}</Badge>}
+                  {items.length > 0 && <span className="shrink-0">{items.length} item{items.length !== 1 ? "s" : ""}</span>}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -1278,7 +1310,7 @@ export default function QuoteBuilder() {
                         <FileText className="w-4 h-4 mr-2" /> Summary
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="menu-mobile-exec-summary">
-                        <FileText className="w-4 h-4 mr-2" /> Exec Summary
+                        <FileText className="w-4 h-4 mr-2" /> Review Estimate
                       </DropdownMenuItem>
                     </>
                   )}
@@ -1411,7 +1443,7 @@ export default function QuoteBuilder() {
 
       <div className={`flex-1 min-h-0 flex ${isLargeScreen ? "lg:flex-row" : ""} flex-col overflow-hidden`}>
         {(isLargeScreen || mobileTab === "config") && (
-        <ScrollArea className={isLargeScreen ? "w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0" : "flex-1 min-h-0"}>
+        <ScrollArea ref={configScrollRef} className={isLargeScreen ? "w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0" : "flex-1 min-h-0"}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-4">
             <Tabs value={formTab} onValueChange={setFormTab}>
               <TabsList className="w-full grid grid-cols-2 mb-3">
@@ -2646,6 +2678,24 @@ export default function QuoteBuilder() {
               )}
             </div>
           </form>
+          {!isLargeScreen && (
+            <div className="sticky bottom-0 bg-card border-t px-3 py-2 flex items-center gap-2 z-10" data-testid="mobile-config-action-bar">
+              <Button size="sm" className="flex-1" onClick={form.handleSubmit(onSubmit)} data-testid="button-sticky-submit">
+                {editingId ? <><Pencil className="w-3.5 h-3.5 mr-1" /> Update Item</> : <><Plus className="w-3.5 h-3.5 mr-1" /> Add to Quote</>}
+              </Button>
+              {editingId && (
+                <Button size="sm" variant="outline" onClick={cancelEdit} data-testid="button-sticky-cancel">
+                  <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                </Button>
+              )}
+              <Button size="icon" variant="ghost" className="shrink-0 h-8 w-8" onClick={() => setMobileTab("preview")} title="Preview" data-testid="button-sticky-preview">
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="ghost" className="shrink-0 h-8 w-8" onClick={() => setMobileTab("items")} title="Items" data-testid="button-sticky-items">
+                <List className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </ScrollArea>
         )}
 
@@ -2659,6 +2709,19 @@ export default function QuoteBuilder() {
               <DrawingCanvas ref={drawingRef} config={drawingConfig} />
             </div>
           </div>
+
+          {!isLargeScreen && (
+            <div className="px-4 py-3 border-t bg-card shrink-0 flex items-center gap-2">
+              <Button variant="outline" size="sm" className="flex-1" onClick={startNewItem} data-testid="button-preview-add-next">
+                <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
+              </Button>
+              {savedJobId && items.length > 0 && (
+                <Button size="sm" className="flex-1" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-preview-review-estimate">
+                  <FileText className="w-4 h-4 mr-1.5" /> Review Estimate
+                </Button>
+              )}
+            </div>
+          )}
 
           {isLargeScreen && items.length > 0 && (
             <div className={`${quoteListPosition === "right"
@@ -2795,33 +2858,42 @@ export default function QuoteBuilder() {
                   <div className="text-xs text-muted-foreground font-medium px-1 pb-1" data-testid="text-mobile-items-summary">
                     {items.length} item{items.length !== 1 ? "s" : ""} — {totalSqm} m² — ${formatPrice(totalPrice)}
                   </div>
-                  {items.map((iwp, index) => (
+                  {items.map((iwp, index) => {
+                    const cardPhotoCount = (iwp.photos || []).length;
+                    const cardPhotoSrc = getPrimaryPhotoSrc(iwp);
+                    return (
                     <div key={iwp.uiId} className="border rounded-md bg-card p-3" data-testid={`card-item-${iwp.uiId}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="text-xs font-bold text-muted-foreground shrink-0">{index + 1}.</span>
                             <span className="font-medium text-sm truncate">{iwp.item.name}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{getCategoryLabel(iwp.item.category)}</Badge>
                           </div>
-                          <div className="text-xs text-muted-foreground mt-0.5">{getCategoryLabel(iwp.item.category)}</div>
+                          <div className="flex items-center gap-2 mt-1 text-sm font-semibold font-mono" data-testid={`text-card-dims-${iwp.uiId}`}>
+                            {iwp.item.width} × {iwp.item.height}
+                            <span className="text-xs font-normal text-muted-foreground">Qty: {iwp.item.quantity}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                            {iwp.item.frameType && <span data-testid={`text-card-frame-${iwp.uiId}`}>{iwp.item.frameType}</span>}
+                            {iwp.item.glassIguType && (
+                              <span data-testid={`text-card-glass-${iwp.uiId}`}>
+                                {[iwp.item.glassIguType, iwp.item.glassType].filter(Boolean).join(" / ")}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        {(() => {
-                          const src = getPrimaryPhotoSrc(iwp);
-                          if (src) {
-                            return (
-                              <button type="button" onClick={() => setGalleryItemId(iwp.uiId)} className="shrink-0" data-testid={`button-card-photo-${iwp.uiId}`}>
-                                <img src={src} alt="Photo" className="w-10 h-10 rounded object-cover border" />
-                              </button>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-3 mt-2 text-xs">
-                        <span className="font-mono">{iwp.item.width} × {iwp.item.height}</span>
-                        <span className="text-muted-foreground">Qty: {iwp.item.quantity}</span>
-                        <span className="font-mono">{calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity)} m²</span>
-                        <span className="ml-auto font-medium">${formatPrice(calcItemPrice(iwp.item))}</span>
+                        <div className="shrink-0 flex flex-col items-end gap-1">
+                          {cardPhotoSrc ? (
+                            <button type="button" onClick={() => setGalleryItemId(iwp.uiId)} className="relative" data-testid={`button-card-photo-${iwp.uiId}`}>
+                              <img src={cardPhotoSrc} alt="Photo" className="w-10 h-10 rounded object-cover border" />
+                              {cardPhotoCount > 1 && (
+                                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">+{cardPhotoCount - 1}</span>
+                              )}
+                            </button>
+                          ) : null}
+                          <span className="text-sm font-medium">${formatPrice(calcItemPrice(iwp.item))}</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 mt-2 border-t pt-2">
                         <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => editItem(iwp)} data-testid={`button-card-edit-${iwp.uiId}`}>
@@ -2834,7 +2906,7 @@ export default function QuoteBuilder() {
                           setPhotoTargetItemId(iwp.uiId);
                           photoInputRef.current?.click();
                         }} data-testid={`button-card-camera-${iwp.uiId}`}>
-                          <Camera className="w-3.5 h-3.5 mr-1" /> Photo
+                          <Camera className="w-3.5 h-3.5 mr-1" /> {cardPhotoCount > 0 ? `Photos (${cardPhotoCount})` : "Photo"}
                         </Button>
                         <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => {
                           const { id, ...rest } = iwp.item;
@@ -2847,7 +2919,18 @@ export default function QuoteBuilder() {
                         </Button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
+                  <div className="pt-2 space-y-2">
+                    <Button variant="outline" className="w-full" onClick={startNewItem} data-testid="button-items-add-next">
+                      <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
+                    </Button>
+                    {savedJobId && (
+                      <Button className="w-full" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-items-review-estimate">
+                        <FileText className="w-4 h-4 mr-1.5" /> Review & Generate Estimate
+                      </Button>
+                    )}
+                  </div>
                 </>
               )}
             </div>

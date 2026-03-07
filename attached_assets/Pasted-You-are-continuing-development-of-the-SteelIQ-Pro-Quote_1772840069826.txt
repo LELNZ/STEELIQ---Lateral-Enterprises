@@ -1,0 +1,528 @@
+You are continuing development of the SteelIQ Pro-Quote system.
+
+Important:
+This work now has TWO phases.
+
+Phase 1 is the priority and must be completed first:
+- Monday field-readiness improvements
+- especially the mobile item workflow
+
+Phase 2 comes only after Phase 1 is implemented and verified:
+- Quote Document Model foundation
+- division logo upload foundation
+- settings-backed Site Visit Preset foundation
+
+Do not start Phase 2 until Phase 1 is completed and checked.
+
+Do NOT redesign the Quote Builder.
+Do NOT change pricing logic.
+Do NOT change configuration derivation logic.
+Do NOT change library lookup logic.
+Do NOT change backend services, schema, or API routes unless absolutely required for low-risk foundation work.
+Do NOT break the current quote builder flow.
+Desktop layout must remain effectively unchanged.
+
+Important business rule:
+If a configuration already exists in the library/model, the system should use that existing configuration.
+Do NOT force auto-create of a new configuration.
+Only preserve the current behavior where a new configuration is created if one does not already exist.
+
+The previous baseline T001–T008 is already considered implemented:
+- mobile tabs
+- scroll fix
+- site type selector
+- renovation/new build defaults in Quote Builder
+- wind zone autofill
+- height-from-floor warning
+
+Only fix T001–T008 if you discover a regression during analysis or QA.
+
+==================================================
+PHASE 1 — MONDAY FIELD READINESS (DO THIS FIRST)
+==================================================
+
+Goal:
+Polish the existing SteelIQ Pro-Quote system for real field use by Monday.
+
+Focus on:
+- mobile item workflow speed
+- item card clarity
+- photo workflow polish
+- estimate header clarity
+- review/generate estimate flow
+- light quote preview polish
+
+--------------------------------
+STEP 1 — ANALYZE CURRENT CODEBASE
+--------------------------------
+
+Before changing anything, inspect the current implementation and verify:
+
+1. Mobile Config / Preview / Items tabs are working
+2. Scroll architecture is already fixed
+3. Site Type presets and warning logic already exist
+4. Photo capture/upload/gallery already works
+5. Where editItem/new-item flow currently lives
+6. How quote preview currently renders
+7. Whether the following usability gaps still exist:
+
+- tapping Edit on a mobile item card does not switch to Config tab
+- no clear Add Next Item action from Items or Preview
+- no sticky action bar on Config tab
+- mobile item cards missing frame/glass/photo clarity
+- photo count not prominent enough on mobile
+- header not compact/clear enough on mobile
+- review/generate estimate path not obvious enough
+- quote preview still too generic for Monday customer use
+
+If a Phase 1 feature is already implemented well, do not redo it.
+
+--------------------------------
+PHASE 1 — TASK A
+MOBILE EDIT + ADD NEXT ITEM FLOW
+--------------------------------
+
+File:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+
+1. Edit from item card on mobile
+When user taps Edit on a mobile item card:
+- switch to Config tab automatically
+- scroll the Config form to the top
+- preserve the current edit state and form population logic
+
+2. Add Next Item action
+Add a clear “Add Next Item” action in:
+- Items tab
+- Preview tab
+
+Behavior:
+- start a fresh new-item flow
+- preserve the current existing item/configuration logic
+- switch to Config tab
+- use the current new-item defaults behavior
+- do not disturb pricing/config/library rules
+
+Acceptance criteria:
+- estimator can edit an item and immediately land in Config
+- estimator can move quickly to the next opening from Items or Preview
+
+--------------------------------
+PHASE 1 — TASK B
+MOBILE CONFIG STICKY ACTION BAR
+--------------------------------
+
+File:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Add a sticky bottom action bar on mobile while working in the Config tab.
+
+Include actions such as:
+- Add to Quote / Update Item
+- Cancel Edit (only when editing)
+- Preview
+- Items
+
+Requirements:
+- mobile only
+- reuse existing submit/update handlers
+- do not duplicate business logic
+- desktop layout unchanged
+
+Acceptance criteria:
+- save/update is always reachable without scrolling to the form bottom
+
+--------------------------------
+PHASE 1 — TASK C
+IMPROVE MOBILE ITEM CARDS
+--------------------------------
+
+File:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Improve mobile item card readability.
+
+At minimum each card should clearly show:
+- item number or name
+- category/type
+- dimensions prominently
+- frame type
+- glass / IGU summary
+- photo count
+
+Keep actions:
+- Edit
+- Duplicate / Copy
+- Photos
+- Delete
+- keep any existing safe actions already present
+
+Do not redesign the desktop table/panel.
+
+Acceptance criteria:
+- estimator can scan multiple openings quickly from Items tab
+
+--------------------------------
+PHASE 1 — TASK D
+PHOTO WORKFLOW POLISH
+--------------------------------
+
+File:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Improve the existing photo workflow on mobile.
+
+Ensure:
+- Photo / Photos action is clearly labeled on item cards
+- photo count is visible on mobile cards
+- count updates immediately after photo capture/upload
+- gallery modal remains readable on mobile
+- success toast/feedback still appears
+
+Do not change photo storage architecture.
+
+Acceptance criteria:
+- estimator can attach site photos quickly without losing place
+
+--------------------------------
+PHASE 1 — TASK E
+MOBILE HEADER CLARITY
+--------------------------------
+
+File:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Improve mobile estimate header clarity.
+
+Show compact visible context such as:
+- job/estimate name
+- address
+- site type
+- optionally item count
+
+Keep it compact.
+Do not make the header bulky.
+Desktop should remain effectively unchanged.
+
+Acceptance criteria:
+- estimator can confirm the correct property/job immediately
+
+--------------------------------
+PHASE 1 — TASK F
+REVIEW / GENERATE ESTIMATE FLOW
+--------------------------------
+
+Files:
+- client/src/pages/quote-builder.tsx
+- client/src/pages/exec-summary.tsx
+- client/src/pages/quote-detail.tsx
+- client/src/pages/quote-preview.tsx
+
+Tasks:
+
+Make the path from Quote Builder to customer-facing output obvious.
+
+Add or improve visible CTA wording such as:
+- Review Estimate
+- Review & Generate Estimate
+- Generate Preliminary Estimate
+- Preview Customer Document
+- Print / Save PDF
+
+Requirements:
+- use the existing exec summary / quote generation flow
+- do not change backend quote generation logic
+
+Acceptance criteria:
+- estimator can move from builder to customer document without guessing
+
+--------------------------------
+PHASE 1 — TASK G
+LIGHT QUOTE PREVIEW POLISH
+--------------------------------
+
+File:
+- client/src/pages/quote-preview.tsx
+
+Tasks:
+
+Polish the preview enough for Monday customer use.
+
+Focus on:
+- customer/project info clarity
+- totals clarity
+- readable schedule/items
+- clean print spacing
+- clearer wording if helpful
+
+Add a light disclaimer if appropriate, such as:
+- Preliminary Estimate — subject to final measure and confirmation
+
+Do not redesign the whole page.
+
+Acceptance criteria:
+- document looks professional enough for Monday field use
+- prints cleanly
+
+--------------------------------
+PHASE 1 — QA
+--------------------------------
+
+After Phase 1 implementation, manually test this workflow:
+
+1. Open Estimates
+2. Create new estimate
+3. Select Renovation
+4. Add item
+5. Enter dimensions/specs
+6. Edit an existing item from card and confirm it switches to Config
+7. Use Add Next Item from Items or Preview
+8. Confirm drawing appears in Preview
+9. Attach photos
+10. Review items
+11. Go to Review / Generate Estimate
+12. Open preview/customer document
+13. Print or Save PDF
+
+Check for:
+- mobile scroll regressions
+- form state loss
+- broken library-backed configuration behavior
+- photo workflow issues
+- navigation confusion
+- console errors
+
+Do not proceed to Phase 2 until this works.
+
+==================================================
+PHASE 2 — FOUNDATION FOR NEXT STAGE
+ONLY START AFTER PHASE 1 IS STABLE
+==================================================
+
+Goal:
+Lay the correct foundation for:
+1. customer-facing Quote Engine
+2. division logo upload
+3. settings-backed Site Visit Presets
+
+This is foundation/scaffolding work only.
+Do not attempt a full quote-engine rewrite in this phase.
+
+--------------------------------
+PHASE 2 — STEP 1
+ANALYZE CURRENT QUOTE / SETTINGS ARCHITECTURE
+--------------------------------
+
+Inspect and summarize:
+
+1. Where quote preview data currently comes from
+2. Whether quote-preview.tsx uses snapshot/live/job/item data directly
+3. Where branding settings are loaded from
+4. Where Logo URL is currently stored/used
+5. Whether uploaded assets already exist in the system
+6. Where Renovation / New Build defaults currently live
+7. Whether settings already support division-specific data
+8. Which parts can safely move toward a model-driven quote renderer
+
+--------------------------------
+PHASE 2 — STEP 2
+INTRODUCE QUOTE DOCUMENT MODEL
+--------------------------------
+
+Create a typed Quote Document Model foundation.
+
+Preferred location:
+- client/src/lib/quote-document.ts
+or similar
+
+The model should support:
+- metadata
+- branding
+- customer
+- project
+- items[]
+- totals
+- content/notes/terms
+- optional drawing/photo references
+
+Create a helper such as:
+- buildQuoteDocumentModel(...)
+
+This helper should map existing quote/job/item/settings data into the normalized model.
+
+Important:
+- additive only
+- do not rewrite pricing logic
+- do not break current preview flow
+
+Acceptance criteria:
+- typed Quote Document Model exists
+- builder/helper exists
+- existing quote data can be mapped into it
+
+--------------------------------
+PHASE 2 — STEP 3
+ADAPT QUOTE PREVIEW TOWARD THE MODEL
+--------------------------------
+
+File:
+- client/src/pages/quote-preview.tsx
+
+Carefully adapt quote preview so it begins consuming the Quote Document Model where feasible.
+
+Use the model as the primary source for:
+- branding
+- customer/project info
+- item schedule
+- totals
+- notes/terms
+
+Do not redesign the page.
+Do not break current quote preview flow.
+
+Acceptance criteria:
+- quote preview still works
+- quote preview now has a normalized data source
+
+--------------------------------
+PHASE 2 — STEP 4
+DIVISION LOGO UPLOAD FOUNDATION
+--------------------------------
+
+We do NOT want Logo URL to be the preferred long-term solution.
+
+Implement the safest low-risk foundation for:
+- one uploaded logo per division
+
+Target divisions:
+- LJ
+- LE
+- LL
+
+Tasks:
+1. Inspect current branding settings UI and storage path
+2. Replace or de-emphasize Logo URL as the preferred admin workflow
+3. Add support for uploaded logo per division
+4. Reuse any existing upload/asset mechanism if present
+5. Quote preview should use the division logo if present
+
+Important:
+- upload should be the preferred path
+- if full persistence is not available yet, scaffold the cleanest low-risk path possible and document limitations
+
+Acceptance criteria:
+- settings support one logo per division, or a clear low-risk scaffold exists
+- quote preview can render division logo from settings if available
+
+--------------------------------
+PHASE 2 — STEP 5
+SITE VISIT PRESET FOUNDATION IN SETTINGS
+--------------------------------
+
+Current Renovation / New Build defaults inside Quote Builder are temporary.
+
+Create the settings-side foundation for division-specific Site Visit Presets, starting with LJ.
+
+Tasks:
+1. Identify the best existing settings structure for division-based defaults
+2. Add a settings model / structure for presets with fields such as:
+   - division
+   - preset key (renovation / new_build)
+   - label
+   - defaults object
+3. Defaults should be able to store:
+   - frameType
+   - glassIguType
+   - glassType
+   - glassThickness
+   - linerType
+   - handleType
+   - wallThickness
+   - windZone
+4. Add minimal LJ preset visibility/editing in Settings if low risk
+5. If full CRUD is too much for this phase, create the structure and seeded/default LJ read path
+
+Important rules:
+- do not remove working Quote Builder preset behavior unless the settings-backed read path is ready
+- presets apply only to new item initialization
+- users can still override manually
+- existing items must not change
+
+Acceptance criteria:
+- a clear settings-backed preset structure exists
+- Quote Builder can be migrated to read from it in a later phase
+- no regressions in current quoting flow
+
+--------------------------------
+PHASE 2 — STEP 6
+DOCUMENT REMAINING WORK
+--------------------------------
+
+In summary/comments, document:
+
+1. What still uses temporary Quote Builder preset logic
+2. What now uses Quote Document Model
+3. How division logo upload is wired
+4. What remains to fully complete the customer-facing quote engine
+5. What remains to fully migrate presets into Settings
+
+==================================================
+FILES MOST LIKELY TO CHANGE
+==================================================
+
+Likely files:
+- client/src/pages/quote-builder.tsx
+- client/src/pages/quote-preview.tsx
+- client/src/pages/quote-detail.tsx
+- client/src/pages/exec-summary.tsx
+- client/src/pages/settings.tsx
+- client/src/lib/... new helper/model files
+- existing settings utility/store files
+- existing upload/asset helper files if present
+
+You may add small new files if they improve separation.
+
+==================================================
+DO NOT CHANGE
+==================================================
+
+Do not change:
+- pricing logic
+- configuration derivation logic
+- library-backed configuration logic
+- schema unless absolutely required
+- API routes unless absolutely required
+- backend quote generation logic unless absolutely required for non-breaking model mapping
+- overall desktop page layout
+
+==================================================
+DELIVERABLE
+==================================================
+
+When finished, provide:
+
+PHASE 1
+1. Analysis summary
+2. Changes made for mobile workflow and Monday readiness
+3. Files modified
+4. Results of the Monday QA flow
+5. Any remaining blockers for Monday
+
+PHASE 2
+6. Current quote/settings architecture summary
+7. What Quote Document Model files/functions were added
+8. How quote preview now consumes the model
+9. How division logo upload is handled
+10. How Site Visit Presets are now represented in Settings
+11. Limitations or blockers still remaining
+12. Confirmation that current quote builder workflow remained intact

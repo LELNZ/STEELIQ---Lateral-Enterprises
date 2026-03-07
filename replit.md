@@ -45,9 +45,50 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
   - **New Build**: wallThickness=140 only (Phase 1, easily extensible via `NEW_BUILD_DEFAULTS` placeholder)
 - **Wind Zone Auto-fill**: When `frameType` starts with "ES52", windZone auto-fills to "Extra High" if empty or still matching the last auto-set value. Uses `lastAutoWindZone` ref to track. User edits are never overridden. Editing existing items clears the ref to prevent unexpected changes.
 - **Height-from-floor Warning**: Non-blocking amber warning below the height-from-floor input when value is 1-799mm. Text: "Height under 800mm — safety glazing / toughening may be required." Uses AlertTriangle icon. Visible on both desktop and mobile.
+- **Preset Foundation**: Typed `SiteVisitPreset` model exists in `client/src/lib/site-visit-presets.ts` with seed data for LJ division (renovation + new_build). Read-only display in Settings division tab. Quote builder still uses its own hardcoded `getPresetDefaults()` — migration to settings-backed presets is a future step (requires backend CRUD for presets).
 
 ## Mobile Scroll Architecture
 - Quote Builder root uses `h-full` (not `h-[100dvh]`) to fill `<main>` without overflow.
 - App.tsx `<main>` has `min-h-0` for flex shrinking. Still uses `overflow-auto` for other pages.
 - Config tab uses single `<ScrollArea>` — no nested scroll layers.
 - Tab switching (`mobileTab` state) does NOT reinitialize the form — form state is preserved across Config/Preview/Items switches.
+
+## Mobile Field-Readiness (Phase 1)
+- **Edit → Config Tab**: Tapping Edit on a mobile item card auto-switches to Config tab and scrolls to top.
+- **Add Next Item**: Available in Items tab and Preview tab. Reuses `resetFormForNewItem()` + tab switch.
+- **Sticky Action Bar**: Mobile Config tab has sticky bottom bar with Add/Update, Cancel, Preview, Items actions — always reachable without scrolling.
+- **Enhanced Item Cards**: Mobile cards show frame type, glass/IGU summary, photo count, dimensions (font-semibold).
+- **Compact Header**: Mobile header shows job name (truncated), address, site type badge, item count.
+- **Review & Generate Estimate**: Prominent CTA in Items tab navigates to exec-summary. Labels updated throughout (Generate Preliminary Estimate, Create New Estimate, Preview Customer Document).
+- **Quote Preview Polish**: Preliminary disclaimer after header, project address in customer info, clean print layout.
+
+## Quote Document Model (Phase 2)
+- **Location**: `client/src/lib/quote-document.ts`
+- **Purpose**: Normalized, typed model (`QuoteDocumentModel`) that maps raw preview-data API response into clean sections: metadata, branding, org, customer, project, items[], totals, content, specDisplay.
+- **Builder**: `buildQuoteDocumentModel(preview: PreviewData)` handles all fallback logic (division overrides → org defaults), date computation, snapshot item mapping.
+- **Usage**: `quote-preview.tsx` now uses the document model exclusively — all direct `preview.orgSettings`/`preview.snapshot` references replaced with `doc.*` fields.
+- **Additive**: No backend changes, no schema changes. Pure client-side normalization layer.
+
+## Division Logo Upload (Phase 2)
+- **Mechanism**: Reuses existing `/api/drawing-images` upload endpoint (accepts PNG). No new API routes or schema changes.
+- **Storage**: Uploaded logo key stored in existing `logoUrl` field as `/api/drawing-images/{key}`.
+- **UI**: `LogoUploadField` component in settings.tsx — upload button (primary), URL entry (fallback toggle), preview thumbnail with remove button.
+- **Client Processing**: Images resized to max 600px dimension and converted to PNG client-side before upload.
+- **Quote Preview**: Already renders division logo from `logoUrl` — uploaded logos work automatically.
+
+## Key Files
+- `client/src/pages/quote-builder.tsx` — Main quote builder with mobile site visit mode
+- `client/src/pages/quote-preview.tsx` — Customer-facing quote document preview (uses QuoteDocumentModel)
+- `client/src/pages/exec-summary.tsx` — Executive summary / review & generate estimate page
+- `client/src/pages/quote-detail.tsx` — Quote detail management page
+- `client/src/pages/settings.tsx` — Org, division, and app settings (includes logo upload + preset display)
+- `client/src/lib/quote-document.ts` — QuoteDocumentModel types and builder
+- `client/src/lib/site-visit-presets.ts` — SiteVisitPreset types and seed data
+- `shared/schema.ts` — Database schema and types
+- `shared/estimate-snapshot.ts` — EstimateSnapshot type definitions
+- `server/routes.ts` — API routes (includes upload endpoints)
+
+## Remaining Work
+- **Full Preset CRUD**: Backend API + DB storage for division-specific site visit presets, then migrate quote-builder from hardcoded `getPresetDefaults()` to settings-backed presets.
+- **Quote Engine**: Full document generation pipeline, PDF templates per division, customer delivery flow.
+- **Logo Management**: Dedicated logo upload endpoint (currently reuses drawing-images), logo sizing/positioning options per template.

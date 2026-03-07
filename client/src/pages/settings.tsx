@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Settings as SettingsIcon, Save, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, ClipboardList } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
+import { getPresetsForDivision, PRESET_FIELD_LABELS, type SiteVisitPreset } from "@/lib/site-visit-presets";
 
 interface OrgSettings {
   id: string;
@@ -251,6 +252,178 @@ function OrgSettingsTab() {
   );
 }
 
+function SiteVisitPresetsCard({ divisionCode }: { divisionCode: string }) {
+  const presets = getPresetsForDivision(divisionCode);
+
+  if (presets.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-muted-foreground" data-testid="text-presets-placeholder">
+          <ClipboardList className="w-5 h-5 mx-auto mb-2 opacity-50" />
+          No site visit presets configured for {divisionCode} yet
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Site Visit Presets</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Default values applied when an estimator selects a site type in the quote builder. These are read-only for now — full editing coming soon.
+        </p>
+        {presets.map((preset) => (
+          <div key={preset.presetKey} className="border rounded-lg p-3" data-testid={`preset-card-${preset.presetKey}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-medium text-sm">{preset.label}</span>
+              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{preset.presetKey}</span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2">{preset.description}</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {(Object.entries(preset.defaults) as [keyof typeof PRESET_FIELD_LABELS, string | number | undefined][])
+                .filter(([, v]) => v !== undefined)
+                .map(([key, value]) => (
+                  <div key={key} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">{PRESET_FIELD_LABELS[key]}</span>
+                    <span className="font-mono">{String(value)}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LogoUploadField({ logoUrl, onLogoChange }: { logoUrl: string; onLogoChange: (url: string) => void }) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [showUrlFallback, setShowUrlFallback] = useState(false);
+
+  const isUploadedLogo = logoUrl.startsWith("/api/drawing-images/");
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please select an image file", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const canvas = document.createElement("canvas");
+      const img = new Image();
+      const blobUrl = URL.createObjectURL(file);
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = blobUrl;
+      });
+
+      const MAX_DIM = 600;
+      let w = img.width;
+      let h = img.height;
+      if (w > MAX_DIM || h > MAX_DIM) {
+        const scale = Math.min(MAX_DIM / w, MAX_DIM / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(blobUrl);
+
+      const pngBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed to convert"))), "image/png");
+      });
+
+      const formData = new FormData();
+      formData.append("file", pngBlob, "logo.png");
+      const res = await fetch("/api/drawing-images", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { key } = await res.json();
+      onLogoChange(`/api/drawing-images/${key}`);
+      toast({ title: "Logo uploaded" });
+    } catch (err) {
+      toast({ title: "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div>
+      <Label className="text-sm font-medium mb-1 block">Division Logo</Label>
+      {logoUrl && (
+        <div className="mb-2 flex items-start gap-2">
+          <img
+            src={logoUrl}
+            alt="Division logo"
+            className="max-h-16 max-w-[200px] object-contain rounded border bg-white p-1"
+            data-testid="img-div-logo-preview"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 h-6 w-6"
+            onClick={() => onLogoChange("")}
+            title="Remove logo"
+            data-testid="button-remove-logo"
+          >
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleUpload}
+          data-testid="input-logo-upload"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          data-testid="button-upload-logo"
+        >
+          <Upload className="w-3.5 h-3.5 mr-1.5" />
+          {uploading ? "Uploading..." : "Upload Logo"}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowUrlFallback(!showUrlFallback)}
+          data-testid="button-toggle-logo-url"
+        >
+          {showUrlFallback ? "Hide URL" : "Enter URL instead"}
+        </Button>
+      </div>
+      {showUrlFallback && (
+        <Input
+          value={isUploadedLogo ? "" : logoUrl}
+          onChange={(e) => onLogoChange(e.target.value)}
+          placeholder="https://..."
+          className="mt-2"
+          data-testid="input-div-logoUrl"
+        />
+      )}
+    </div>
+  );
+}
+
 function DivisionSettingsTab() {
   const { toast } = useToast();
   const [selectedCode, setSelectedCode] = useState("LJ");
@@ -331,15 +504,10 @@ function DivisionSettingsTab() {
                   data-testid="input-div-tradingName"
                 />
               </div>
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Logo URL</Label>
-                <Input
-                  value={form.logoUrl || ""}
-                  onChange={(e) => setForm({ ...form, logoUrl: e.target.value })}
-                  placeholder="https://..."
-                  data-testid="input-div-logoUrl"
-                />
-              </div>
+              <LogoUploadField
+                logoUrl={form.logoUrl || ""}
+                onLogoChange={(url) => setForm({ ...form, logoUrl: url })}
+              />
               <div>
                 <Label className="text-sm font-medium mb-1 block">Required Legal Line</Label>
                 <Input
@@ -536,6 +704,8 @@ function DivisionSettingsTab() {
               </CardContent>
             </Card>
           )}
+
+          <SiteVisitPresetsCard divisionCode={selectedCode} />
 
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={isLoading || mutation.isPending} data-testid="button-save-division">

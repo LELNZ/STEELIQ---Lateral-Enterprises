@@ -10,22 +10,19 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ArrowLeftCircle, Printer, Settings2, ChevronDown, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { OrgSettings, DivisionSettings, Quote, QuoteRevision, SpecDictionaryEntry } from "@shared/schema";
-import type { EstimateSnapshot, SnapshotItem } from "@shared/estimate-snapshot";
-
-interface PreviewData {
-  orgSettings: OrgSettings;
-  divisionSettings: DivisionSettings;
-  quote: Quote;
-  currentRevision: QuoteRevision;
-  snapshot: EstimateSnapshot;
-  templateKey: string;
-  specDictionaryGrouped: Record<string, SpecDictionaryEntry[]>;
-  effectiveSpecDisplayKeys: string[];
-}
+import type { Job } from "@shared/schema";
+import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem } from "@/lib/quote-document";
+import { buildQuoteDocumentModel } from "@/lib/quote-document";
 
 function fmt(n: number): string {
   return n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export default function QuotePreview() {
@@ -41,18 +38,31 @@ export default function QuotePreview() {
     enabled: !!quoteId,
   });
 
+  const doc: QuoteDocumentModel | null = useMemo(() => {
+    if (!preview) return null;
+    return buildQuoteDocumentModel(preview);
+  }, [preview]);
+
+  const sourceJobId = doc?.project.sourceJobId;
+  const { data: sourceJob } = useQuery<Job>({
+    queryKey: ["/api/jobs", sourceJobId],
+    enabled: !!sourceJobId,
+  });
+
+  const projectAddress = sourceJob?.address || doc?.project.address || "";
+
   const [localKeys, setLocalKeys] = useState<string[] | null>(null);
 
-  const effectiveKeys = localKeys ?? preview?.effectiveSpecDisplayKeys ?? [];
+  const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
 
   const allSpecKeys = useMemo(() => {
-    if (!preview) return [];
-    const entries: SpecDictionaryEntry[] = [];
-    for (const group of Object.values(preview.specDictionaryGrouped)) {
+    if (!doc) return [];
+    const entries: { key: string; label: string; sortOrder?: number | null; customerVisibleAllowed?: boolean | null }[] = [];
+    for (const group of Object.values(doc.specDisplay.specDictionaryGrouped)) {
       entries.push(...group);
     }
     return entries.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  }, [preview]);
+  }, [doc]);
 
   const specKeyToLabel = useMemo(() => {
     const m: Record<string, string> = {};
@@ -70,14 +80,17 @@ export default function QuotePreview() {
 
   const saveSpecDisplayMutation = useMutation({
     mutationFn: async () => {
-      if (!preview || !localKeys) return;
-      await apiRequest("PATCH", `/api/quotes/${quoteId}/revisions/${preview.currentRevision.id}/spec-display`, {
+      if (!preview || !localKeys || !doc) return;
+      await apiRequest("PATCH", `/api/quotes/${quoteId}/revisions/${doc.metadata.revisionId}/spec-display`, {
         specDisplayKeys: localKeys,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "preview-data"] });
       toast({ title: "Spec display saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save spec display", description: err.message, variant: "destructive" });
     },
   });
 
@@ -93,20 +106,15 @@ export default function QuotePreview() {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Loading preview...</p></div>;
   }
 
-  if (!preview) {
+  if (!doc) {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Quote not found</p></div>;
   }
 
-  const { orgSettings, divisionSettings, quote, snapshot } = preview;
-  const items = snapshot.items || [];
-  const tb = snapshot.totalsBreakdown || { itemsSubtotal: 0, installationTotal: 0, deliveryTotal: 0, subtotalExclGst: 0, gstAmount: 0, totalInclGst: 0 };
-  const legacyTotals = snapshot.totals;
+  const { metadata, branding, org, customer, totals, content, specDisplay } = doc;
+  const items = doc.items;
 
-  const quoteDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" }) : "—";
-  const validityDays = orgSettings.quoteValidityDays || 30;
-  const expiryDate = quote.createdAt
-    ? new Date(new Date(quote.createdAt).getTime() + validityDays * 24 * 60 * 60 * 1000).toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" })
-    : "—";
+  const quoteDate = formatDate(metadata.createdAt);
+  const expiryDate = formatDate(metadata.validUntil);
 
   return (
     <div className="max-w-4xl mx-auto print:max-w-none" data-testid="quote-preview-page">
@@ -117,7 +125,7 @@ export default function QuotePreview() {
           </Button>
           <div>
             <h1 className="text-lg font-bold">Customer Quote Preview</h1>
-            <p className="text-sm text-muted-foreground">{quote.number}</p>
+            <p className="text-sm text-muted-foreground">{metadata.quoteNumber}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -132,7 +140,7 @@ export default function QuotePreview() {
                 <SheetTitle>Visible Specs</SheetTitle>
               </SheetHeader>
               <div className="mt-4 space-y-4">
-                {Object.entries(preview.specDictionaryGrouped).map(([group, specs]) => (
+                {Object.entries(specDisplay.specDictionaryGrouped).map(([group, specs]) => (
                   <div key={group}>
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{group}</p>
                     <div className="space-y-1.5">
@@ -170,32 +178,52 @@ export default function QuotePreview() {
       <div className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold" data-testid="text-trading-name">
-                {divisionSettings.tradingName || orgSettings.legalName || "Pro-Quote"}
-              </h2>
-              <p className="text-sm text-muted-foreground italic" data-testid="text-legal-line">
-                {divisionSettings.requiredLegalLine || "A trading division of Lateral Engineering Limited"}
-              </p>
+            <div className="flex items-start gap-4">
+              {branding.logoUrl && (
+                <img
+                  src={branding.logoUrl}
+                  alt={`${branding.tradingName} logo`}
+                  className="max-h-14 max-w-[160px] object-contain print:max-h-12"
+                  data-testid="img-branding-logo"
+                />
+              )}
+              <div>
+                <h2 className="text-2xl font-bold" data-testid="text-trading-name">
+                  {branding.tradingName}
+                </h2>
+                <p className="text-sm text-muted-foreground italic" data-testid="text-legal-line">
+                  {branding.legalLine}
+                </p>
+              </div>
             </div>
             <div className="sm:text-right text-sm text-muted-foreground space-y-0.5">
-              {orgSettings.address && <p>{orgSettings.address}</p>}
-              {orgSettings.phone && <p>{orgSettings.phone}</p>}
-              {orgSettings.email && <p>{orgSettings.email}</p>}
-              {orgSettings.gstNumber && <p>GST: {orgSettings.gstNumber}</p>}
-              {orgSettings.nzbn && <p>NZBN: {orgSettings.nzbn}</p>}
+              {org.address && <p>{org.address}</p>}
+              {org.phone && <p>{org.phone}</p>}
+              {org.email && <p>{org.email}</p>}
+              {org.gstNumber && <p>GST: {org.gstNumber}</p>}
+              {org.nzbn && <p>NZBN: {org.nzbn}</p>}
             </div>
           </div>
 
           <Separator />
 
+          <p className="text-sm italic text-muted-foreground print:text-gray-500" data-testid="text-preliminary-disclaimer">
+            Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.
+          </p>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Customer</p>
-              <p className="text-lg font-semibold" data-testid="text-customer">{quote.customer}</p>
+              <p className="text-lg font-semibold" data-testid="text-customer">{customer.name}</p>
+              {projectAddress && (
+                <div className="mt-1">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Project Address</p>
+                  <p className="text-sm" data-testid="text-project-address">{projectAddress}</p>
+                </div>
+              )}
             </div>
             <div className="sm:text-right space-y-1">
-              <div><span className="text-xs text-muted-foreground">Quote #: </span><span className="font-mono font-semibold" data-testid="text-quote-number-preview">{quote.number}</span></div>
+              <div><span className="text-xs text-muted-foreground">Quote #: </span><span className="font-mono font-semibold" data-testid="text-quote-number-preview">{metadata.quoteNumber}</span></div>
               <div><span className="text-xs text-muted-foreground">Date: </span><span data-testid="text-quote-date">{quoteDate}</span></div>
               <div><span className="text-xs text-muted-foreground">Valid Until: </span><span data-testid="text-quote-expiry">{expiryDate}</span></div>
             </div>
@@ -203,19 +231,19 @@ export default function QuotePreview() {
 
           <div className="rounded-lg border p-4 space-y-2" data-testid="totals-block">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote Summary</h3>
-            {(tb.itemsSubtotal > 0 || (legacyTotals && legacyTotals.sell > 0)) ? (
+            {(totals.itemsSubtotal > 0 || (totals.legacySell !== null && totals.legacySell > 0)) ? (
               <div className="space-y-1 text-sm">
-                {tb.itemsSubtotal > 0 && <div className="flex justify-between"><span>Items Subtotal</span><span data-testid="text-items-subtotal">${fmt(tb.itemsSubtotal)}</span></div>}
-                {tb.installationTotal > 0 && <div className="flex justify-between"><span>Installation</span><span data-testid="text-install-total">${fmt(tb.installationTotal)}</span></div>}
-                {tb.deliveryTotal > 0 && <div className="flex justify-between"><span>Delivery</span><span data-testid="text-delivery-total">${fmt(tb.deliveryTotal)}</span></div>}
+                {totals.itemsSubtotal > 0 && <div className="flex justify-between"><span>Items Subtotal</span><span data-testid="text-items-subtotal">${fmt(totals.itemsSubtotal)}</span></div>}
+                {totals.installationTotal > 0 && <div className="flex justify-between"><span>Installation</span><span data-testid="text-install-total">${fmt(totals.installationTotal)}</span></div>}
+                {totals.deliveryTotal > 0 && <div className="flex justify-between"><span>Delivery</span><span data-testid="text-delivery-total">${fmt(totals.deliveryTotal)}</span></div>}
                 <Separator />
-                <div className="flex justify-between font-medium"><span>Subtotal (excl. GST)</span><span data-testid="text-subtotal-ex-gst">${fmt(tb.subtotalExclGst || tb.itemsSubtotal)}</span></div>
-                <div className="flex justify-between text-muted-foreground"><span>GST (15%)</span><span data-testid="text-gst">${fmt(tb.gstAmount)}</span></div>
-                <div className="flex justify-between text-lg font-bold"><span>Total (incl. GST)</span><span data-testid="text-total-inc-gst">${fmt(tb.totalInclGst)}</span></div>
+                <div className="flex justify-between font-medium"><span>Subtotal (excl. GST)</span><span data-testid="text-subtotal-ex-gst">${fmt(totals.subtotalExclGst)}</span></div>
+                <div className="flex justify-between text-muted-foreground"><span>GST (15%)</span><span data-testid="text-gst">${fmt(totals.gstAmount)}</span></div>
+                <div className="flex justify-between text-lg font-bold"><span>Total (incl. GST)</span><span data-testid="text-total-inc-gst">${fmt(totals.totalInclGst)}</span></div>
               </div>
-            ) : legacyTotals ? (
+            ) : totals.legacySell !== null ? (
               <div className="space-y-1 text-sm">
-                <div className="flex justify-between font-medium"><span>Quoted Price (excl. GST)</span><span>${fmt(legacyTotals.sell)}</span></div>
+                <div className="flex justify-between font-medium"><span>Quoted Price (excl. GST)</span><span>${fmt(totals.legacySell)}</span></div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No pricing data available.</p>
@@ -225,28 +253,28 @@ export default function QuotePreview() {
 
         <div className="print:break-before-page space-y-4">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Terms & Conditions</h3>
-          {(divisionSettings.exclusionsOverrideBlock || orgSettings.defaultExclusionsBlock) && (
+          {content.exclusions && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase">Exclusions</p>
-              <p className="text-sm whitespace-pre-wrap">{divisionSettings.exclusionsOverrideBlock || orgSettings.defaultExclusionsBlock}</p>
+              <p className="text-sm whitespace-pre-wrap">{content.exclusions}</p>
             </div>
           )}
-          {(divisionSettings.termsOverrideBlock || orgSettings.defaultTermsBlock) && (
+          {content.terms && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase">Terms</p>
-              <p className="text-sm whitespace-pre-wrap">{divisionSettings.termsOverrideBlock || orgSettings.defaultTermsBlock}</p>
+              <p className="text-sm whitespace-pre-wrap">{content.terms}</p>
             </div>
           )}
-          {orgSettings.paymentTermsBlock && (
+          {content.paymentTerms && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase">Payment Terms</p>
-              <p className="text-sm whitespace-pre-wrap">{orgSettings.paymentTermsBlock}</p>
+              <p className="text-sm whitespace-pre-wrap">{content.paymentTerms}</p>
             </div>
           )}
-          {orgSettings.bankDetails && (
+          {org.bankDetails && (
             <div className="space-y-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase">Bank Details</p>
-              <p className="text-sm whitespace-pre-wrap">{orgSettings.bankDetails}</p>
+              <p className="text-sm whitespace-pre-wrap">{org.bankDetails}</p>
             </div>
           )}
 
@@ -296,7 +324,7 @@ function ScheduleItem({
   displayKeys,
   specKeyToLabel,
 }: {
-  item: SnapshotItem;
+  item: QuoteDocumentItem;
   index: number;
   expanded: boolean;
   onToggle: () => void;

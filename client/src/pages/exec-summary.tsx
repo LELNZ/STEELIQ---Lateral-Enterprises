@@ -635,7 +635,7 @@ export default function ExecSummary() {
             data-testid="button-generate-quote"
           >
             <FileText className="h-4 w-4 mr-1" />
-            {generateQuoteMutation.isPending ? "Generating..." : "Create Quote (Revision)"}
+            {generateQuoteMutation.isPending ? "Generating..." : "Generate Preliminary Estimate"}
           </Button>
           <Button
             variant="outline"
@@ -644,7 +644,7 @@ export default function ExecSummary() {
             disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
             data-testid="button-generate-new-quote"
           >
-            {generateNewQuoteMutation.isPending ? "Creating..." : "Create New Quote Number"}
+            {generateNewQuoteMutation.isPending ? "Creating..." : "Create New Estimate"}
           </Button>
           <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
             <Printer className="h-4 w-4 mr-1" /> Print

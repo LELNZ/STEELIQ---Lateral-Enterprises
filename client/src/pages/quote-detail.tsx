@@ -133,7 +133,7 @@ export default function QuoteDetail() {
             </Tooltip>
           </TooltipProvider>
           <Button variant="outline" size="sm" onClick={() => navigate(`/quote/${quoteId}/preview`)} data-testid="button-preview-quote">
-            <Eye className="h-4 w-4 mr-1" /> Preview Customer Quote
+            <Eye className="h-4 w-4 mr-1" /> Preview Customer Document
           </Button>
           <Badge variant={STATUS_VARIANT[quote.status] || "secondary"} className="text-sm px-3 py-1" data-testid="badge-quote-status">
             {STATUS_LABELS[quote.status] || quote.status}
