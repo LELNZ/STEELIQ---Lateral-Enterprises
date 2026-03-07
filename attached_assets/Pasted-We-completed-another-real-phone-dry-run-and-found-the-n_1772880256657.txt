@@ -1,0 +1,174 @@
+We completed another real phone dry-run and found the next set of issues. Please focus only on these items now.
+
+Do NOT change pricing logic, library logic, or configuration derivation.
+Focus on mobile UX fixes, exec-summary mobile layout, photo reliability, and preset consistency.
+
+--------------------------------
+ISSUE 1 — Header needs visible collapse control
+--------------------------------
+
+Current problem:
+The top estimate section (job name, address, date, site type) only collapses automatically after adding an item. There is no obvious user-controlled way to close it earlier.
+
+Fix:
+- Add a clearly visible mobile collapse control when the header is expanded
+- Use either:
+  - a chevron up/down
+  - or a Done button
+- User should be able to collapse the header manually before creating an item
+- Keep expand/edit control visible when collapsed
+
+Acceptance:
+User can manually collapse and expand the header at any time on mobile.
+
+--------------------------------
+ISSUE 2 — Improve keyboard ergonomics
+--------------------------------
+
+Current problem:
+The mobile keyboard occupies a lot of screen space and the app becomes awkward while typing.
+
+Note:
+Do not try to resize the phone keyboard itself. Instead improve the app behavior while keyboard is open.
+
+Fix:
+- Ensure active field scrolls fully into view
+- Minimize header/UI interference while typing
+- Ensure sticky action bar does not fight the keyboard
+- Use correct input types so numeric keypad appears for numeric fields
+- Reduce any unnecessary fixed/sticky UI height on mobile while typing if needed
+
+Acceptance:
+Typing on mobile feels smoother and fields are not obscured by the keyboard.
+
+--------------------------------
+ISSUE 3 — Exec Summary totals should be lower on the page
+--------------------------------
+
+Current problem:
+The user makes selections throughout the exec page, but the financial totals are too early in the layout.
+
+Fix:
+- Reorder mobile exec-summary layout so the final financial totals appear near the bottom after the selectable sections
+- Keep desktop acceptable
+- Do not change calculations or data logic
+
+Acceptance:
+User can make selections while scrolling down and see the final totals near the end of the flow.
+
+--------------------------------
+ISSUE 4 — Markup % runs off screen
+--------------------------------
+
+Current problem:
+Markup input/label overflows on mobile.
+
+Fix:
+- Rework that row for mobile so it stacks cleanly or uses smaller/mobile-safe layout
+- No horizontal overflow
+
+Acceptance:
+Markup field is fully visible and usable on mobile.
+
+--------------------------------
+ISSUE 5 — Financial summary overflows on mobile
+--------------------------------
+
+Current problem:
+The financial summary/table is too wide and requires sideways interpretation.
+
+Fix:
+- Convert wide mobile table sections into a stacked/card-style summary layout where practical
+- Keep desktop table layout if desired
+- Avoid horizontal overflow on mobile
+- Abbreviate column labels if needed
+- No sideways scrolling for core finance summary content
+
+Acceptance:
+Financial summary is readable on mobile without awkward horizontal overflow.
+
+--------------------------------
+ISSUE 6 — Photo upload shows broken image after brief load
+--------------------------------
+
+Current problem:
+After taking a photo, the image appears briefly and then becomes a broken image.
+
+Fix:
+- Investigate the full photo flow:
+  - temporary preview
+  - upload response
+  - saved file URL/path
+  - rendered image source in gallery/card
+- Fix the image persistence/rendering issue
+- Verify uploaded item photos display correctly after save and reload
+
+Acceptance:
+Captured/uploaded photos remain visible and do not turn into broken images.
+
+--------------------------------
+ISSUE 7 — Add photo action needed in Preview tab
+--------------------------------
+
+Current problem:
+If the user is working from Preview and has not yet gone back to Items, there is no direct photo capture flow.
+
+Fix:
+- Add a Photo / Capture Photo action to the Preview tab
+- The flow must safely attach the image to the current item
+- If the item must exist first, make the UX explicit and safe:
+  - either require Add to Quote first
+  - or reuse an existing safe current-item save path before photo capture
+- Do not create a risky duplicate item path
+
+Acceptance:
+User can take or attach a photo from the Preview workflow without awkwardly switching tabs.
+
+--------------------------------
+ISSUE 8 — Preset defaults are not consistently applied
+--------------------------------
+
+Current problem:
+Some new items created after selecting Renovation / New Build are not getting the expected defaults.
+
+Fix:
+- Audit all new-item initialization paths
+- Ensure a single source of truth is used for new item defaults
+- Reuse the same initializer for:
+  - first new item
+  - Add Next Item
+  - Cancel edit to new item
+  - Preview-based next-item flow
+  - Items-tab next-item flow
+- Do not apply defaults when editing existing items
+- Do not mutate existing items
+
+Acceptance:
+All new-item creation paths consistently apply the selected site-type defaults.
+
+--------------------------------
+ISSUE 9 — Generated quote still too generic
+--------------------------------
+
+This is acknowledged, but do NOT solve it in this task batch unless required for a small low-risk improvement.
+Only note any blockers discovered while working on the above issues.
+
+--------------------------------
+ISSUE 10 — Generated quote missing item images
+--------------------------------
+
+This is also acknowledged, but do NOT start the full quote-engine/image-rendering phase yet unless it overlaps directly with the photo bug investigation.
+Only document what is currently missing and what data paths exist.
+
+--------------------------------
+DELIVERABLE
+--------------------------------
+
+When finished, provide:
+1. files changed
+2. which mobile layout issues were fixed
+3. root cause of the broken photo issue
+4. what was changed to make preset defaults consistent
+5. confirmation that header can now be manually collapsed
+6. confirmation that Preview tab now supports a photo flow
+7. note any remaining blockers for the next dry run
