@@ -112,10 +112,11 @@ export const jobs = pgTable("jobs", {
   deliveryMethod: text("delivery_method"),
   deliveryAmount: real("delivery_amount"),
   deliveryMarkup: real("delivery_markup"),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, archivedAt: true, createdAt: true });
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobs.$inferSelect;
 

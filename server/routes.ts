@@ -126,9 +126,12 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/jobs", async (_req, res) => {
+  app.get("/api/jobs", async (req, res) => {
     try {
-      const allJobs = await storage.getAllJobs();
+      const scope = req.query.scope as string | undefined;
+      const allJobs = scope === "archived"
+        ? await storage.getArchivedJobs()
+        : await storage.getAllJobs();
       const jobsWithCounts = await Promise.all(
         allJobs.map(async (job) => {
           const items = await storage.getJobItems(job.id);
@@ -209,6 +212,9 @@ export async function registerRoutes(
 
   app.delete("/api/jobs/:id", async (req, res) => {
     try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+
       const cascadeAction: QuoteCascadeAction = req.body?.quoteCascade || "archive";
       const validActions: QuoteCascadeAction[] = ["archive", "delete", "keep"];
       if (!validActions.includes(cascadeAction)) {
@@ -261,30 +267,31 @@ export async function registerRoutes(
     try {
       const job = await storage.getJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.archivedAt) return res.status(400).json({ error: "Job is already archived" });
 
-      const cascadeAction: "archive" | "keep" = req.body?.quoteCascade || "archive";
-      const cascadeResult = await handleEstimateArchiveCascade(req.params.id, cascadeAction);
-
-      const items = await storage.getJobItems(req.params.id);
-      const allPhotoKeys: string[] = [];
-      for (const item of items) {
-        const photos = (item.photos as any[]) || [];
-        for (const p of photos) {
-          if (p.key) allPhotoKeys.push(p.key);
-        }
+      const cascadeAction = req.body?.quoteCascade || "archive";
+      const validArchiveActions = ["archive", "keep"];
+      if (!validArchiveActions.includes(cascadeAction)) {
+        return res.status(400).json({ error: `Invalid quoteCascade value. Must be one of: ${validArchiveActions.join(", ")}` });
       }
+      const cascadeResult = await handleEstimateArchiveCascade(req.params.id, cascadeAction as "archive" | "keep");
 
-      const referenced = await getReferencedPhotoKeys(req.params.id);
-
-      await storage.deleteJob(req.params.id);
-
-      for (const key of allPhotoKeys) {
-        if (!referenced.has(key)) {
-          safeDeletePhotoFile(key);
-        }
-      }
+      await storage.archiveJob(req.params.id);
 
       res.json({ ok: true, quotesAffected: cascadeResult.quotesAffected, cascadeAction });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/jobs/:id/unarchive", async (req, res) => {
+    try {
+      const job = await storage.getJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      if (!job.archivedAt) return res.status(400).json({ error: "Job is not archived" });
+
+      const updated = await storage.unarchiveJob(req.params.id);
+      res.json({ ok: true, job: updated });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

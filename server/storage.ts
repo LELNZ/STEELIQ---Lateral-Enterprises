@@ -34,6 +34,9 @@ export interface IStorage {
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
   getAllJobs(): Promise<Job[]>;
+  getArchivedJobs(): Promise<Job[]>;
+  archiveJob(id: string): Promise<Job | undefined>;
+  unarchiveJob(id: string): Promise<Job | undefined>;
   updateJob(id: string, data: Partial<InsertJob>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<void>;
 
@@ -133,7 +136,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllJobs(): Promise<Job[]> {
-    return db.select().from(jobs);
+    return db.select().from(jobs).where(isNull(jobs.archivedAt));
+  }
+
+  async getArchivedJobs(): Promise<Job[]> {
+    return db.select().from(jobs).where(isNotNull(jobs.archivedAt));
+  }
+
+  async archiveJob(id: string): Promise<Job | undefined> {
+    const job = await this.getJob(id);
+    if (!job) return undefined;
+    const [updated] = await db.update(jobs).set({ archivedAt: new Date() } as any).where(eq(jobs.id, id)).returning();
+    return updated;
+  }
+
+  async unarchiveJob(id: string): Promise<Job | undefined> {
+    const [updated] = await db.update(jobs).set({ archivedAt: null } as any).where(eq(jobs.id, id)).returning();
+    return updated;
   }
 
   async updateJob(id: string, data: Partial<InsertJob>): Promise<Job | undefined> {

@@ -1,4 +1,7 @@
-# Pro-Quote CAD Generator
+# SteelIQ Pro-Quote CAD Generator
+
+## Current Milestone
+Phase A — Lifecycle Hardening: true estimate archive, quote lifecycle management, quote page filters, regression testing.
 
 ## Overview
 The Pro-Quote CAD Generator is a professional quotation tool for the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within "Jobs" and "Quotes." The system aims to streamline the quotation process from configuration and visualization to pricing and export, providing a robust, user-friendly platform for accurate and visually rich quotes. Key capabilities include real-time drawing previews, comprehensive job and quote management, item photo capture, and detailed pricing breakdowns. The project targets enhanced efficiency for businesses in the window and door market.
@@ -8,6 +11,41 @@ I want iterative development.
 Ask before making major changes.
 I prefer detailed explanations.
 Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/estimate-snapshot.ts (approved).
+
+## Estimate (Job) Lifecycle
+- Backend entity is `job`/`jobs`; UI label is "Estimate".
+- **Archive** (`PATCH /api/jobs/:id/archive`): Sets `archivedAt` timestamp. Estimate stays in DB, photos preserved. Can cascade to linked quotes (archive or keep).
+- **Unarchive** (`PATCH /api/jobs/:id/unarchive`): Clears `archivedAt`. Estimate returns to active scope. Does NOT automatically unarchive linked quotes.
+- **Delete** (`DELETE /api/jobs/:id`): Permanently removes the estimate from the DB. Cleans up unreferenced photos. Can cascade to linked quotes (archive, delete, or keep).
+- **Listing**: `GET /api/jobs` returns active estimates; `GET /api/jobs?scope=archived` returns archived estimates.
+- **Defensive guards**: Cannot archive an already-archived estimate. Cannot unarchive an active estimate.
+
+## Quote Lifecycle
+- Statuses: Draft → Review → Sent → Accepted/Declined. Can also transition to Archived.
+- **archivedAt** (timestamp): Canonical archive truth. Set when quote is archived.
+- **deletedAt** (timestamp): Canonical soft-delete truth. Soft-deleted quotes are excluded from normal queries.
+- **quoteType** (text, nullable): `renovation`, `new_build`, `tender`, or null (General).
+- **totalValue** (real, nullable): Cached total for display/sort.
+- Hard delete requires `?confirm=permanent` query param.
+
+## Orphan Detection
+- Computed (not persisted) by `enrichQuotesWithOrphanState()` in `server/quote-lifecycle.ts`.
+- Rule: linked job exists in DB → quote is NOT orphaned. Linked job missing → quote IS orphaned.
+- **Archived estimates still exist in DB**, so their linked quotes are NOT orphaned.
+- **Deleted estimates are removed from DB**, so their linked quotes ARE orphaned and show "Estimate Removed" badge.
+
+## Quotes Page Filters
+- **Tabs** (primary organizer): Active, Renovations, New Builds, Tenders, Archived.
+- **Search**: By quote number or customer name.
+- **Sort**: By updated date, created date, customer, value, quote number.
+- **Filters**: Division, status, customer (dropdown from unique names), quote type, date range (from/to on createdAt).
+- Estimator filter deferred until user/identity support is implemented.
+
+## Estimates Page
+- Active/Archived tabs.
+- Active tab: shows non-archived estimates with Open, Archive, Delete actions.
+- Archived tab: shows archived estimates with Unarchive, Delete Permanently actions.
+- Archive/Delete dialogs show cascade options when linked quotes exist.
 
 ## System Architecture
 **Frontend**: React with TypeScript and Shadcn UI components, utilizing a responsive mobile-first design approach.
@@ -28,6 +66,10 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Mobile Architecture**: Optimized for mobile with `native-scroll` for specific components, sticky action bars, enhanced item cards, and a collapsible header.
 **Quote Document Model**: Client-side normalized, typed model (`QuoteDocumentModel`) for mapping raw preview data into structured sections for display.
 **Division Logo Upload**: Reuses existing image upload endpoint, storing logo URLs in division settings.
+**Lifecycle Service**: `server/quote-lifecycle.ts` centralizes archive, soft-delete, hard-delete, cascade handling, orphan detection, and dev cleanup.
+
+## Testing
+- **Regression tests**: `tests/lifecycle-regression.ts` — 27 automated API integration tests covering archive/delete/unarchive semantics, orphan detection, cascade behavior, and defensive guards. Run with `npx tsx tests/lifecycle-regression.ts`.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

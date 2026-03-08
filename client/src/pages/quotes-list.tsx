@@ -14,9 +14,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  FileText, ArrowRight, Search, ArrowUpDown, Filter,
+  FileText, ArrowRight, Search, ArrowUpDown, Filter, Calendar, X,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type EnrichedQuote = Quote & {
   isOrphaned: boolean;
@@ -75,12 +76,34 @@ export default function QuotesList() {
   const [sortOption, setSortOption] = useState("updatedAt-desc");
   const [filterDivision, setFilterDivision] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterCustomer, setFilterCustomer] = useState("all");
+  const [filterQuoteType, setFilterQuoteType] = useState("all");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
 
   const divisions = useMemo(() => {
     if (!quotes) return [];
     const divs = new Set(quotes.map(q => q.divisionId).filter(Boolean) as string[]);
     return Array.from(divs).sort();
   }, [quotes]);
+
+  const customers = useMemo(() => {
+    if (!quotes) return [];
+    const custs = new Set(quotes.map(q => q.customer).filter(Boolean) as string[]);
+    return Array.from(custs).sort();
+  }, [quotes]);
+
+  const hasActiveFilters = filterCustomer !== "all" || filterQuoteType !== "all" || filterDateFrom || filterDateTo;
+
+  function clearAllFilters() {
+    setFilterCustomer("all");
+    setFilterQuoteType("all");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setFilterDivision("all");
+    setFilterStatus("all");
+    setSearchQuery("");
+  }
 
   const filteredQuotes = useMemo(() => {
     if (!quotes) return [];
@@ -112,6 +135,26 @@ export default function QuotesList() {
       filtered = filtered.filter(q => q.status === filterStatus);
     }
 
+    if (filterCustomer !== "all") {
+      filtered = filtered.filter(q => q.customer === filterCustomer);
+    }
+
+    if (filterQuoteType !== "all") {
+      filtered = filtered.filter(q => (q.quoteType || "general") === filterQuoteType);
+    }
+
+    if (filterDateFrom) {
+      const fromDate = new Date(filterDateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(q => q.createdAt && new Date(q.createdAt) >= fromDate);
+    }
+
+    if (filterDateTo) {
+      const toDate = new Date(filterDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(q => q.createdAt && new Date(q.createdAt) <= toDate);
+    }
+
     const [field, direction] = sortOption.split("-") as [string, string];
     filtered.sort((a, b) => {
       let cmp = 0;
@@ -138,7 +181,7 @@ export default function QuotesList() {
     });
 
     return filtered;
-  }, [quotes, activeTab, searchQuery, sortOption, filterDivision, filterStatus]);
+  }, [quotes, activeTab, searchQuery, sortOption, filterDivision, filterStatus, filterCustomer, filterQuoteType, filterDateFrom, filterDateTo]);
 
   const tabCounts = useMemo(() => {
     if (!quotes) return { active: 0, renovation: 0, new_build: 0, tender: 0, archived: 0 };
@@ -196,57 +239,147 @@ export default function QuotesList() {
             </TabsList>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 mt-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by quote number or customer..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-                data-testid="input-search-quotes"
-              />
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {divisions.length > 0 && (
-                <Select value={filterDivision} onValueChange={setFilterDivision}>
-                  <SelectTrigger className="w-[140px]" data-testid="select-filter-division">
-                    <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                    <SelectValue placeholder="Division" />
+          <div className="flex flex-col gap-3 mt-4">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by quote number or customer..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-quotes"
+                />
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {divisions.length > 0 && (
+                  <Select value={filterDivision} onValueChange={setFilterDivision}>
+                    <SelectTrigger className="w-[140px]" data-testid="select-filter-division">
+                      <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                      <SelectValue placeholder="Division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Divisions</SelectItem>
+                      {divisions.map(d => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[130px]" data-testid="select-filter-status">
+                    <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Divisions</SelectItem>
-                    {divisions.map(d => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="review">Review</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="accepted">Accepted</SelectItem>
+                    <SelectItem value="declined">Declined</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={sortOption} onValueChange={setSortOption}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-sort-quotes">
+                    <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SORT_OPTIONS.map(opt => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex gap-2 flex-wrap items-center">
+              {customers.length > 0 && (
+                <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+                  <SelectTrigger className="w-[160px]" data-testid="select-filter-customer">
+                    <SelectValue placeholder="Customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Customers</SelectItem>
+                    {customers.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[130px]" data-testid="select-filter-status">
-                  <SelectValue placeholder="Status" />
+              <Select value={filterQuoteType} onValueChange={setFilterQuoteType}>
+                <SelectTrigger className="w-[140px]" data-testid="select-filter-quote-type">
+                  <SelectValue placeholder="Quote Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="review">Review</SelectItem>
-                  <SelectItem value="sent">Sent</SelectItem>
-                  <SelectItem value="accepted">Accepted</SelectItem>
-                  <SelectItem value="declined">Declined</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="general">General</SelectItem>
+                  <SelectItem value="renovation">Renovation</SelectItem>
+                  <SelectItem value="new_build">New Build</SelectItem>
+                  <SelectItem value="tender">Tender</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={sortOption} onValueChange={setSortOption}>
-                <SelectTrigger className="w-[160px]" data-testid="select-sort-quotes">
-                  <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SORT_OPTIONS.map(opt => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 gap-1.5" data-testid="button-date-range-filter">
+                    <Calendar className="h-3.5 w-3.5" />
+                    {filterDateFrom || filterDateTo
+                      ? `${filterDateFrom || "..."} – ${filterDateTo || "..."}`
+                      : "Date Range"
+                    }
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-4" align="start">
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium">Filter by creation date</p>
+                    <div className="flex gap-2 items-center">
+                      <div>
+                        <label className="text-xs text-muted-foreground">From</label>
+                        <Input
+                          type="date"
+                          value={filterDateFrom}
+                          onChange={(e) => setFilterDateFrom(e.target.value)}
+                          className="w-[150px]"
+                          data-testid="input-date-from"
+                        />
+                      </div>
+                      <span className="text-muted-foreground mt-4">–</span>
+                      <div>
+                        <label className="text-xs text-muted-foreground">To</label>
+                        <Input
+                          type="date"
+                          value={filterDateTo}
+                          onChange={(e) => setFilterDateTo(e.target.value)}
+                          className="w-[150px]"
+                          data-testid="input-date-to"
+                        />
+                      </div>
+                    </div>
+                    {(filterDateFrom || filterDateTo) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setFilterDateFrom(""); setFilterDateTo(""); }}
+                        data-testid="button-clear-date-range"
+                      >
+                        Clear dates
+                      </Button>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="h-9 gap-1"
+                  data-testid="button-clear-all-filters"
+                >
+                  <X className="h-3.5 w-3.5" /> Clear filters
+                </Button>
+              )}
             </div>
           </div>
 
