@@ -15,6 +15,7 @@ import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/l
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
 import { generateQuotePdf } from "@/lib/pdf-engine";
+import { SYSTEM_TEMPLATE, isSectionVisible } from "@/lib/quote-template";
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -186,31 +187,50 @@ export default function QuotePreview() {
 
       <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
 
-      <div className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
-        <div className="space-y-6">
-          <HeaderSection branding={branding} orgContact={orgContact} />
-          <Separator />
+      <div className="p-4 sm:p-8 print:p-4 space-y-6 print:space-y-4">
+        {isSectionVisible(SYSTEM_TEMPLATE, "header") && (
+          <div className="space-y-4">
+            <HeaderSection branding={branding} orgContact={orgContact} />
+            <Separator />
+          </div>
+        )}
+
+        {isSectionVisible(SYSTEM_TEMPLATE, "disclaimer") && (
           <p className="text-sm italic text-muted-foreground print:text-gray-500" data-testid="text-preliminary-disclaimer">
             {disclaimerText}
           </p>
+        )}
+
+        {isSectionVisible(SYSTEM_TEMPLATE, "customerProject") && (
           <CustomerProjectSection header={header} customerProject={customerProject} />
+        )}
+
+        {isSectionVisible(SYSTEM_TEMPLATE, "totals") && (
           <TotalsSection totals={totals} />
-        </div>
+        )}
 
-        <LegalSection legal={legal} />
+        {isSectionVisible(SYSTEM_TEMPLATE, "legal") && (
+          <LegalSection legal={legal} />
+        )}
 
-        <div className="print:break-before-page space-y-6">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Schedule of Items</h3>
-          {liveScheduleItems.length === 0 && (
-            <p className="text-sm text-muted-foreground">No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
-          )}
-          {liveScheduleItems.map((item) => (
-            <ScheduleItemCard
-              key={item.index}
-              item={item}
-            />
-          ))}
-        </div>
+        {isSectionVisible(SYSTEM_TEMPLATE, "schedule") && (
+          <div className="print:break-before-page space-y-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>Schedule of Items</h3>
+            {liveScheduleItems.length === 0 && (
+              <p className="text-sm text-muted-foreground">No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
+            )}
+            {liveScheduleItems.map((item) => (
+              <ScheduleItemCard
+                key={item.index}
+                item={item}
+              />
+            ))}
+          </div>
+        )}
+
+        {isSectionVisible(SYSTEM_TEMPLATE, "acceptance") && (
+          <AcceptanceSection />
+        )}
       </div>
     </div>
   );
@@ -332,32 +352,33 @@ function TotalsLineRow({ line }: { line: RenderTotalsLine }) {
 function LegalSection({ legal }: { legal: QuoteRenderModel["legal"] }) {
   return (
     <div className="print:break-before-page space-y-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Terms & Conditions</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>Terms & Conditions</h3>
       {legal.sections.map((section) => (
         <div key={section.heading} className="space-y-1">
-          <p className="text-xs font-semibold text-muted-foreground uppercase">{section.heading}</p>
+          <p className="text-xs font-semibold uppercase" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>{section.heading}</p>
           <p className="text-sm whitespace-pre-wrap">{section.body}</p>
         </div>
       ))}
       {legal.hasBankDetails && (
         <div className="space-y-1">
-          <p className="text-xs font-semibold text-muted-foreground uppercase">Bank Details</p>
+          <p className="text-xs font-semibold uppercase" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>Bank Details</p>
           <p className="text-sm whitespace-pre-wrap">{legal.bankDetails}</p>
         </div>
       )}
-      <div className="mt-8 space-y-4 border-t pt-4">
-        <p className="text-sm font-semibold">Acceptance</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="border-b border-dashed pb-6">
-            <p className="text-xs text-muted-foreground">Signature</p>
+    </div>
+  );
+}
+
+function AcceptanceSection() {
+  return (
+    <div className="space-y-4 border-t pt-4" data-testid="acceptance-section">
+      <p className="text-sm font-semibold" data-testid="text-acceptance-heading">Acceptance</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {SYSTEM_TEMPLATE.acceptance.fields.map((field) => (
+          <div key={field} className="border-b border-dashed pb-6" data-testid={`acceptance-field-${field.toLowerCase()}`}>
+            <p className="text-xs text-muted-foreground">{field}</p>
           </div>
-          <div className="border-b border-dashed pb-6">
-            <p className="text-xs text-muted-foreground">Name</p>
-          </div>
-          <div className="border-b border-dashed pb-6">
-            <p className="text-xs text-muted-foreground">Date</p>
-          </div>
-        </div>
+        ))}
       </div>
     </div>
   );

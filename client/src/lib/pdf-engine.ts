@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine, RenderSpecEntry } from "./quote-renderer";
+import { SYSTEM_TEMPLATE, isSectionVisible } from "./quote-template";
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -8,11 +9,12 @@ const CW = PAGE_W - MARGIN * 2;
 const MAX_Y = PAGE_H - MARGIN;
 
 const FONT_NORMAL = "helvetica";
-const COLOR_BLACK = "#1a1a1a";
-const COLOR_MUTED = "#6b7280";
-const COLOR_ACCENT = "#374151";
-const COLOR_BORDER = "#d1d5db";
-const COLOR_BG_MUTED = "#f3f4f6";
+const T = SYSTEM_TEMPLATE;
+const COLOR_BLACK = T.colors.bodyText;
+const COLOR_MUTED = T.colors.headingMuted;
+const COLOR_ACCENT = T.colors.accent;
+const COLOR_BORDER = T.colors.border;
+const COLOR_BG_MUTED = T.colors.bgMuted;
 
 type Pdf = jsPDF;
 
@@ -68,20 +70,37 @@ export async function generateQuotePdf(
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   let y = MARGIN;
 
-  y = await renderHeader(pdf, y, model);
-  y = renderSeparator(pdf, y);
-  y = renderDisclaimer(pdf, y, model.disclaimerText);
-  y = renderCustomerProject(pdf, y, model);
-  y = renderTotals(pdf, y, model);
+  if (isSectionVisible(T, "header")) {
+    y = await renderHeader(pdf, y, model);
+    y = renderSeparator(pdf, y);
+  }
 
-  onProgress?.("Rendering terms...");
-  y = renderLegal(pdf, y, model);
+  if (isSectionVisible(T, "disclaimer")) {
+    y = renderDisclaimer(pdf, y, model.disclaimerText);
+  }
 
-  onProgress?.("Rendering schedule...");
-  y = await renderSchedule(pdf, y, model, onProgress);
+  if (isSectionVisible(T, "customerProject")) {
+    y = renderCustomerProject(pdf, y, model);
+  }
 
-  onProgress?.("Rendering acceptance...");
-  y = renderAcceptance(pdf, y);
+  if (isSectionVisible(T, "totals")) {
+    y = renderTotals(pdf, y, model);
+  }
+
+  if (isSectionVisible(T, "legal")) {
+    onProgress?.("Rendering terms...");
+    y = renderLegal(pdf, y, model);
+  }
+
+  if (isSectionVisible(T, "schedule")) {
+    onProgress?.("Rendering schedule...");
+    y = await renderSchedule(pdf, y, model, onProgress);
+  }
+
+  if (isSectionVisible(T, "acceptance")) {
+    onProgress?.("Rendering acceptance...");
+    y = renderAcceptance(pdf, y);
+  }
 
   const safeName = (model.header.quoteNumber || "quote").replace(/[^a-zA-Z0-9-_]/g, "_");
   onProgress?.("Saving...");
@@ -527,7 +546,7 @@ function renderAcceptance(pdf: Pdf, y: number): number {
   pdf.text("Acceptance", MARGIN, y + 3);
   y += 10;
 
-  const fields = ["Signature", "Name", "Date"];
+  const fields = T.acceptance.fields;
   const fieldW = CW / 3;
 
   for (let i = 0; i < fields.length; i++) {

@@ -13,10 +13,12 @@ import {
   type OrgSettings, type InsertOrgSettings,
   type DivisionSettings, type InsertDivisionSettings,
   type SpecDictionaryEntry, type InsertSpecDictionary,
+  type ItemPhoto,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
   orgSettings, divisionSettings, specDictionary,
+  itemPhotos,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, sql, isNull, isNotNull, inArray } from "drizzle-orm";
@@ -107,6 +109,11 @@ export interface IStorage {
   getAllSpecEntries(): Promise<SpecDictionaryEntry[]>;
 
   getLibraryEntriesWithScope(type?: string, divisionCode?: string): Promise<LibraryEntry[]>;
+
+  saveItemPhoto(key: string, data: Buffer, mimeType: string): Promise<void>;
+  getItemPhoto(key: string): Promise<{ data: Buffer; mimeType: string } | undefined>;
+  deleteItemPhoto(key: string): Promise<void>;
+  deleteItemPhotos(keys: string[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -471,6 +478,35 @@ export class DatabaseStorage implements IStorage {
         .orderBy(asc(libraryEntries.sortOrder));
     }
     return db.select().from(libraryEntries).orderBy(asc(libraryEntries.sortOrder));
+  }
+
+  async saveItemPhoto(key: string, data: Buffer, mimeType: string): Promise<void> {
+    await db.insert(itemPhotos).values({
+      key,
+      data,
+      mimeType,
+      sizeBytes: data.length,
+    }).onConflictDoUpdate({
+      target: itemPhotos.key,
+      set: { data, mimeType, sizeBytes: data.length },
+    });
+  }
+
+  async getItemPhoto(key: string): Promise<{ data: Buffer; mimeType: string } | undefined> {
+    const [row] = await db.select({ data: itemPhotos.data, mimeType: itemPhotos.mimeType })
+      .from(itemPhotos)
+      .where(eq(itemPhotos.key, key));
+    if (!row) return undefined;
+    return { data: Buffer.from(row.data), mimeType: row.mimeType };
+  }
+
+  async deleteItemPhoto(key: string): Promise<void> {
+    await db.delete(itemPhotos).where(eq(itemPhotos.key, key));
+  }
+
+  async deleteItemPhotos(keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+    await db.delete(itemPhotos).where(inArray(itemPhotos.key, keys));
   }
 }
 

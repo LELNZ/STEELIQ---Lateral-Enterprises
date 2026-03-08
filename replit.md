@@ -1,7 +1,9 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-True PDF engine (T025–T030) complete. Print stabilization (T015–T018) complete. Monday-readiness (T009–T013) complete.
+Photo persistence (T031–T033) complete. Shared template (T034–T037) complete. True PDF engine (T025–T030) complete. Print stabilization (T015–T018) complete. Monday-readiness (T009–T013) complete.
+- **Photo persistence (T031–T033)**: Item photos now stored in PostgreSQL `item_photos` table (bytea column) instead of volatile filesystem. Upload route uses `multer.memoryStorage()` → DB save. Serve route: in-memory cache → DB → filesystem legacy fallback (auto-migrates to DB). Delete cascade clears DB + cache + legacy file. Photos survive workspace restarts.
+- **Shared template (T034–T037)**: `client/src/lib/quote-template.ts` defines `QuoteTemplate` and `SYSTEM_TEMPLATE` — single source of truth for section ordering, typography sizes, spacing, colors, item layout, and acceptance fields. Both `quote-preview.tsx` (HTML) and `pdf-engine.ts` (PDF) import and use the template for section visibility (`isSectionVisible`) and acceptance field list. Acceptance block extracted from LegalSection into standalone `AcceptanceSection` component. PDF engine colors derive from template constants.
 - **PDF engine (T025–T030)**: True document PDF engine at `client/src/lib/pdf-engine.ts`. Generates vector-text selectable PDFs from `QuoteRenderModel` data via jsPDF — no html2canvas/screenshot dependency. Controlled A4 pagination, section rendering (header, customer/project, totals, legal, schedule items with drawings/photos, acceptance block). Quote Detail "Export PDF" fetches preview data and generates directly (no new tab). Preview "Export PDF" uses live schedule items (respects unsaved spec display toggles). Old `pdf-export.ts` (html2canvas approach) removed. Pipeline: QuoteDocumentModel → QuoteRenderModel → PDF Engine → jsPDF → PDF file.
 - **Monday-readiness (T009–T013)**: Quote type simplified to Renovation / New Build. Legacy quotes (null/general/tender) display as "Unclassified" (not mislabeled). `POST /api/dev/clear-quotes` requires `ENABLE_DESTRUCTIVE_DEV_TOOLS=true` env var — blocked by default. Persistence audit confirmed: Replit PostgreSQL is persistent; quote disappearances caused by test scripts calling the clear-quotes endpoint.
 - **siteType propagation**: `site_type` column on `jobs` table. Quote builder persists/hydrates siteType. Exec summary auto-derives `quoteType` from `job.siteType`. On revisions, existing `quote_type` preserved. Server-side validation: `renovation | new_build | null` via `insertJobSchema`.
@@ -62,7 +64,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Global Settings**: Managed via React Context with localStorage for persistence.
 **Routing**: Wouter for client-side navigation.
 **Export Capabilities**: SVG to PNG conversion and multi-page PDF generation via jsPDF.
-**Storage**: Item photos and drawing PNGs are uploaded to designated folders (`uploads/item-photos/`, `uploads/drawing-images/`) and referenced in the database.
+**Storage**: Item photos stored in PostgreSQL `item_photos` table (bytea) with in-memory cache (max 200 entries). Filesystem `uploads/item-photos/` kept as legacy fallback only. Drawing PNGs uploaded to `uploads/drawing-images/` (filesystem-only — regenerated on every item save, so persistence is not an issue).
 **Multi-Division Architecture**: Supports organizational and division-specific settings, with `division_scope` for library entries.
 **Spec Dictionary System**: Configurable `spec_dictionary` entries for dynamic specification display and override functionality in quotes.
 **Quote Management**: Full lifecycle management (Draft, Review, Sent, Accepted/Declined, Archived) with atomic sequential numbering, immutable revision history, and server-side status transition enforcement. Quotes include `EstimateSnapshot` for immutable revision data.

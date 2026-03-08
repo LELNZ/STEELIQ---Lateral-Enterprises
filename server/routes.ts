@@ -201,13 +201,19 @@ export async function registerRoutes(
     return referenced;
   }
 
-  function safeDeletePhotoFile(key: string) {
+  async function safeDeletePhotoFile(key: string): Promise<void> {
+    try {
+      await storage.deleteItemPhoto(key);
+    } catch (e) {
+      console.error(`[photo-cleanup] DB delete failed for ${key}:`, e);
+    }
     try {
       const filePath = path.resolve(ITEM_PHOTO_DIR, key);
       if (filePath.startsWith(path.resolve(ITEM_PHOTO_DIR)) && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     } catch {}
+    photoCache.delete(key);
   }
 
   app.delete("/api/jobs/:id", async (req, res) => {
@@ -244,7 +250,7 @@ export async function registerRoutes(
 
       for (const key of allPhotoKeys) {
         if (!referenced.has(key)) {
-          safeDeletePhotoFile(key);
+          await safeDeletePhotoFile(key);
         }
       }
 
@@ -389,7 +395,7 @@ export async function registerRoutes(
 
       for (const key of photoKeys) {
         if (!referenced.has(key)) {
-          safeDeletePhotoFile(key);
+          await safeDeletePhotoFile(key);
         }
       }
 
@@ -1077,12 +1083,7 @@ export async function registerRoutes(
   }
 
   const itemPhotoUpload = multer({
-    storage: multer.diskStorage({
-      destination: ITEM_PHOTO_DIR,
-      filename: (_req, _file, cb) => {
-        cb(null, `${crypto.randomUUID()}.jpg`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       if (file.mimetype === "image/jpeg") cb(null, true);
@@ -1090,33 +1091,42 @@ export async function registerRoutes(
     },
   });
 
-  app.post("/api/item-photos", itemPhotoUpload.single("file"), (req, res) => {
+  app.post("/api/item-photos", itemPhotoUpload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     try {
-      const data = fs.readFileSync(req.file.path);
-      photoCacheSet(req.file.filename, data);
-    } catch {}
-    res.json({ key: req.file.filename });
+      const key = `${crypto.randomUUID()}.jpg`;
+      const data = req.file.buffer;
+      await storage.saveItemPhoto(key, data, "image/jpeg");
+      photoCacheSet(key, data);
+      res.json({ key });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to save photo" });
+    }
   });
 
-  app.get("/api/item-photos/:key", (req, res) => {
+  app.get("/api/item-photos/:key", async (req, res) => {
     const key = req.params.key;
     if (!/^[A-Za-z0-9._-]+\.jpg$/.test(key)) {
-      return res.status(400).json({ error: "Invalid key" });
-    }
-    const filePath = path.resolve(ITEM_PHOTO_DIR, key);
-    const resolvedDir = path.resolve(ITEM_PHOTO_DIR);
-    if (!filePath.startsWith(resolvedDir)) {
       return res.status(400).json({ error: "Invalid key" });
     }
     const cached = photoCache.get(key);
     if (cached) {
       return res.type("image/jpeg").send(cached);
     }
-    if (fs.existsSync(filePath)) {
+    const dbPhoto = await storage.getItemPhoto(key);
+    if (dbPhoto) {
+      photoCacheSet(key, dbPhoto.data);
+      return res.type(dbPhoto.mimeType).send(dbPhoto.data);
+    }
+    const filePath = path.resolve(ITEM_PHOTO_DIR, key);
+    const resolvedDir = path.resolve(ITEM_PHOTO_DIR);
+    if (filePath.startsWith(resolvedDir) && fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath);
-      photoCacheSet(key, data);
-      return res.type("image/jpeg").send(data);
+      if (data.length > 100) {
+        photoCacheSet(key, data);
+        storage.saveItemPhoto(key, data, "image/jpeg").catch(() => {});
+        return res.type("image/jpeg").send(data);
+      }
     }
     return res.status(404).json({ error: "Image not found" });
   });

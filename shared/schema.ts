@@ -1,7 +1,13 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() { return "bytea"; },
+  toDriver(value: Buffer): Buffer { return value; },
+  fromDriver(value: Buffer): Buffer { return Buffer.from(value); },
+});
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -347,3 +353,13 @@ export const specDictionary = pgTable("spec_dictionary", {
 export const insertSpecDictionarySchema = createInsertSchema(specDictionary);
 export type InsertSpecDictionary = z.infer<typeof insertSpecDictionarySchema>;
 export type SpecDictionaryEntry = typeof specDictionary.$inferSelect;
+
+export const itemPhotos = pgTable("item_photos", {
+  key: varchar("key").primaryKey(),
+  data: bytea("data").notNull(),
+  mimeType: text("mime_type").notNull().default("image/jpeg"),
+  sizeBytes: integer("size_bytes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ItemPhoto = typeof itemPhotos.$inferSelect;
