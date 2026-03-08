@@ -190,11 +190,13 @@ export default function QuotePreview() {
 
       <div className="p-4 sm:p-8 print:p-4 space-y-6 print:space-y-4">
         {isSectionVisible(T, "header") && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <HeaderSection branding={branding} orgContact={orgContact} template={T} />
-            <Separator />
+            <Separator style={{ borderColor: T.colors.border }} />
           </div>
         )}
+
+        <h2 className="text-xl font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">Quotation</h2>
 
         {isSectionVisible(T, "disclaimer") && (
           <p className="text-sm italic" style={{ color: T.colors.headingMuted }} data-testid="text-preliminary-disclaimer">
@@ -207,15 +209,14 @@ export default function QuotePreview() {
         )}
 
         {isSectionVisible(T, "totals") && (
-          <TotalsSection totals={totals} template={T} />
-        )}
-
-        {isSectionVisible(T, "legal") && (
-          <LegalSection legal={legal} template={T} />
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Quote Summary</p>
+            <TotalsSection totals={totals} template={T} />
+          </div>
         )}
 
         {isSectionVisible(T, "schedule") && (
-          <div className="print:break-before-page space-y-4">
+          <div className="print:break-before-page space-y-4 pt-2">
             <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
             {liveScheduleItems.length === 0 && (
               <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
@@ -230,8 +231,15 @@ export default function QuotePreview() {
           </div>
         )}
 
+        {isSectionVisible(T, "legal") && (
+          <div className="pt-2">
+            <Separator style={{ borderColor: T.colors.border }} className="mb-5" />
+            <LegalSection legal={legal} template={T} />
+          </div>
+        )}
+
         {isSectionVisible(T, "acceptance") && (
-          <AcceptanceSection template={T} />
+          <AcceptanceSection template={T} quoteNumber={header.quoteNumber} />
         )}
       </div>
     </div>
@@ -374,30 +382,33 @@ function TotalsLineRow({ line, template }: { line: RenderTotalsLine; template: Q
 
 function LegalSection({ legal, template }: { legal: QuoteRenderModel["legal"]; template: QuoteTemplate }) {
   return (
-    <div className="print:break-before-page space-y-5">
+    <div className="space-y-5">
       <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: template.colors.accent }}>Terms & Conditions</h3>
       {legal.sections.map((section) => (
         <div key={section.heading} className="space-y-1.5">
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>{section.heading}</p>
-          <p className="text-sm whitespace-pre-wrap" style={{ color: template.colors.bodyText }}>{section.body}</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: template.colors.bodyText }}>{section.body}</p>
         </div>
       ))}
       {legal.hasBankDetails && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Bank Details</p>
-          <p className="text-sm whitespace-pre-wrap" style={{ color: template.colors.bodyText }}>{legal.bankDetails}</p>
+        <div className="space-y-1.5 pt-2">
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Remittance / Bank Details</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: template.colors.bodyText }}>{legal.bankDetails}</p>
         </div>
       )}
     </div>
   );
 }
 
-function AcceptanceSection({ template }: { template: QuoteTemplate }) {
+function AcceptanceSection({ template, quoteNumber }: { template: QuoteTemplate; quoteNumber: string }) {
   return (
-    <div className="space-y-5 pt-5" data-testid="acceptance-section">
-      <div style={{ borderTopColor: template.colors.border, borderTopWidth: 1, borderTopStyle: "solid" }} />
-      <p className="text-base font-bold" style={{ color: template.colors.bodyText }} data-testid="text-acceptance-heading">Acceptance</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+    <div className="space-y-4 pt-4" data-testid="acceptance-section">
+      <Separator style={{ borderColor: template.colors.border }} />
+      <p className="text-base font-bold uppercase tracking-wider" style={{ color: template.colors.accent }} data-testid="text-acceptance-heading">Acceptance</p>
+      <p className="text-sm" style={{ color: template.colors.bodyText }}>
+        I accept the works described in {quoteNumber || "this quotation"} and agree to the terms and conditions outlined above.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-2">
         {template.acceptance.fields.map((field) => (
           <div key={field} className="pb-6" style={{ borderBottomWidth: 1, borderBottomStyle: "dashed", borderBottomColor: template.colors.border }} data-testid={`acceptance-field-${field.toLowerCase()}`}>
             <p className="text-xs" style={{ color: template.colors.headingMuted }}>{field}</p>
@@ -505,13 +516,15 @@ function ScheduleItemCard({
 
   return (
     <div className="rounded-lg overflow-hidden print:break-inside-avoid" style={{ border: `1px solid ${template.colors.border}` }} data-testid={`schedule-item-${item.index}`}>
-      <div className="px-4 py-3" style={{ backgroundColor: template.colors.bgMuted }}>
-        <h4 className="font-bold text-base" style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
-          {item.title}
-        </h4>
-        <p className="text-sm" style={{ color: template.colors.headingMuted }}>
-          {item.quantityLabel} | {item.dimensionLabel}
-        </p>
+      <div className="px-4 py-3 flex items-start justify-between gap-3" style={{ backgroundColor: template.colors.bgMuted, borderBottom: `1px solid ${template.colors.border}` }}>
+        <div>
+          <h4 className="font-bold text-base" style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
+            {item.title}
+          </h4>
+          <p className="text-sm mt-0.5" style={{ color: template.colors.headingMuted }}>
+            {item.quantityLabel} &middot; {item.dimensionLabel}
+          </p>
+        </div>
       </div>
 
       <div className="p-4 space-y-3">

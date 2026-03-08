@@ -66,8 +66,8 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
     { key: "disclaimer", visible: true },
     { key: "customerProject", visible: true },
     { key: "totals", visible: true },
-    { key: "legal", visible: true },
     { key: "schedule", visible: true },
+    { key: "legal", visible: true },
     { key: "acceptance", visible: true },
   ],
   typography: {

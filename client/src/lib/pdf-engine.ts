@@ -129,6 +129,8 @@ export async function generateQuotePdf(
     y = renderSeparator(pdf, y);
   }
 
+  y = renderQuotationTitle(pdf, y);
+
   if (isSectionVisible(T, "disclaimer")) {
     y = renderDisclaimer(pdf, y, model.disclaimerText);
   }
@@ -141,20 +143,22 @@ export async function generateQuotePdf(
     y = renderTotals(pdf, y, model);
   }
 
-  if (isSectionVisible(T, "legal")) {
-    onProgress?.("Rendering terms...");
-    y = renderLegal(pdf, y, model);
-  }
-
   if (isSectionVisible(T, "schedule")) {
     onProgress?.("Rendering schedule...");
     y = await renderSchedule(pdf, y, model, onProgress);
   }
 
+  if (isSectionVisible(T, "legal")) {
+    onProgress?.("Rendering terms...");
+    y = renderLegal(pdf, y, model);
+  }
+
   if (isSectionVisible(T, "acceptance")) {
     onProgress?.("Rendering acceptance...");
-    y = renderAcceptance(pdf, y);
+    y = renderAcceptance(pdf, y, model);
   }
+
+  renderPageNumbers(pdf);
 
   const safeName = (model.header.quoteNumber || "quote").replace(/[^a-zA-Z0-9-_]/g, "_");
   onProgress?.("Saving...");
@@ -216,10 +220,31 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
 }
 
 function renderSeparator(pdf: Pdf, y: number): number {
-  y += 2;
+  y += 1;
   drawLine(pdf, y);
-  y += INNER_PAD;
+  y += 3;
   return y;
+}
+
+function renderQuotationTitle(pdf: Pdf, y: number): number {
+  pdf.setFont(FONT_NORMAL, "bold");
+  pdf.setFontSize(14);
+  pdf.setTextColor(COLOR_ACCENT);
+  pdf.text("QUOTATION", MARGIN, y + 4);
+  y += 10;
+  return y;
+}
+
+function renderPageNumbers(pdf: Pdf) {
+  const totalPages = pdf.getNumberOfPages();
+  if (totalPages <= 1) return;
+  for (let i = 1; i <= totalPages; i++) {
+    pdf.setPage(i);
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(COLOR_MUTED);
+    pdf.text(`Page ${i} of ${totalPages}`, MARGIN + CW, PAGE_H - 8, { align: "right" });
+  }
 }
 
 function renderDisclaimer(pdf: Pdf, y: number, text: string): number {
@@ -292,6 +317,12 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
 function renderTotals(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   const { totals } = model;
   if (totals.isEmpty) return y;
+
+  pdf.setFont(FONT_NORMAL, "bold");
+  pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
+  pdf.setTextColor(COLOR_MUTED);
+  pdf.text("QUOTE SUMMARY", MARGIN, y + 3);
+  y += SECTION_GAP;
 
   if (TOTALS_LAYOUT === "totals_inline_v1") {
     return renderTotalsInline(pdf, y, totals);
@@ -390,8 +421,10 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   const { legal } = model;
   if (legal.sections.length === 0 && !legal.hasBankDetails) return y;
 
-  pdf.addPage();
-  y = MARGIN;
+  y = ensureSpace(pdf, y, 30);
+  y += SECTION_GAP;
+  drawLine(pdf, y);
+  y += SECTION_GAP;
 
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(mmSize(T.typography.itemTitleSize));
@@ -423,12 +456,13 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   }
 
   if (legal.hasBankDetails && legal.bankDetails) {
-    y = ensureSpace(pdf, y, 15);
+    y = ensureSpace(pdf, y, 20);
+    y += INNER_PAD;
 
     pdf.setFont(FONT_NORMAL, "bold");
     pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
-    pdf.text("BANK DETAILS", MARGIN, y + 3);
+    pdf.text("REMITTANCE / BANK DETAILS", MARGIN, y + 3);
     y += SECTION_GAP;
 
     pdf.setFont(FONT_NORMAL, "normal");
@@ -521,7 +555,7 @@ async function renderScheduleItem(
   pdf.setFont(FONT_NORMAL, "normal");
   pdf.setFontSize(mmSize(T.typography.bodyTextSize));
   pdf.setTextColor(COLOR_MUTED);
-  pdf.text(`${item.quantityLabel}  |  ${item.dimensionLabel}`, MARGIN + pad, y + 3);
+  pdf.text(`${item.quantityLabel}  \u00B7  ${item.dimensionLabel}`, MARGIN + pad, y + 3);
   y += 7;
 
   if (SCHEDULE_LAYOUT === "specs_only_v1") {
@@ -689,8 +723,8 @@ function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[
   return y;
 }
 
-function renderAcceptance(pdf: Pdf, y: number): number {
-  y = ensureSpace(pdf, y, 45);
+function renderAcceptance(pdf: Pdf, y: number, model: QuoteRenderModel): number {
+  y = ensureSpace(pdf, y, 60);
 
   y += SECTION_GAP;
   drawLine(pdf, y);
@@ -698,9 +732,18 @@ function renderAcceptance(pdf: Pdf, y: number): number {
 
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(mmSize(T.typography.itemTitleSize));
+  pdf.setTextColor(COLOR_ACCENT);
+  pdf.text("ACCEPTANCE", MARGIN, y + 4);
+  y += 8;
+
+  pdf.setFont(FONT_NORMAL, "normal");
+  pdf.setFontSize(mmSize(T.typography.bodyTextSize));
   pdf.setTextColor(COLOR_BLACK);
-  pdf.text("Acceptance", MARGIN, y + 3);
-  y += 10;
+  const qRef = model.header.quoteNumber || "this quotation";
+  const acceptText = `I accept the works described in ${qRef} and agree to the terms and conditions outlined above.`;
+  const acceptLines = wrapText(pdf, acceptText, CW);
+  pdf.text(acceptLines, MARGIN, y + 3);
+  y += acceptLines.length * 3.5 + 6;
 
   const fields = T.acceptance.fields;
   const fieldW = CW / fields.length;
@@ -719,6 +762,6 @@ function renderAcceptance(pdf: Pdf, y: number): number {
     pdf.setLineDashPattern([], 0);
   }
 
-  y += 20;
+  y += 22;
   return y;
 }
