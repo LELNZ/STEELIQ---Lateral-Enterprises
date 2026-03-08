@@ -69,8 +69,8 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Lifecycle Service**: `server/quote-lifecycle.ts` centralizes archive, soft-delete, hard-delete, cascade handling, orphan detection, and dev cleanup.
 
 ## Testing
-- **Regression tests**: `tests/lifecycle-regression.ts` — 33 automated API integration tests covering archive/delete/unarchive semantics, orphan detection, cascade behavior, defensive guards, and input validation. Run with `npx tsx tests/lifecycle-regression.ts`.
-- **Filter UI tests**: `tests/quote-filters-e2e.ts` — browser-driven Playwright test plan for quote page filters (customer, quote type, date range, clear filters, control visibility). Exports `QUOTE_FILTERS_TEST_PLAN` and `QUOTE_FILTERS_TECHNICAL_DOCS` constants; run via `runTest()` in the code execution sandbox.
+- **Lifecycle regression tests**: `tests/lifecycle-regression.ts` — 6 scenario groups / 33 assertions covering archive/delete/unarchive semantics, orphan detection, cascade behavior, defensive guards, and input validation. Run with `npx tsx tests/lifecycle-regression.ts`.
+- **Filter UI tests**: `tests/quote-filters-e2e.ts` — browser-driven Playwright test plan for quote page filters (customer, quote type, date range, clear filters, control visibility). Exports `QUOTE_FILTERS_TEST_PLAN` and `QUOTE_FILTERS_TECHNICAL_DOCS` constants for use with the Playwright testing framework.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
