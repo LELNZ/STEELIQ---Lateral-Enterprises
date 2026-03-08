@@ -1091,6 +1091,14 @@ export async function registerRoutes(
       const divDefaults = divisionSettings?.specDisplayDefaultsJson as string[] | null;
       const effectiveSpecDisplayKeys = revOverride || divDefaults || [];
 
+      let projectAddress: string | null = null;
+      if (quote.sourceJobId) {
+        const sourceJob = await storage.getJob(quote.sourceJobId);
+        if (sourceJob) {
+          projectAddress = sourceJob.address || null;
+        }
+      }
+
       res.json({
         orgSettings: orgSettings || {},
         divisionSettings: divisionSettings || {},
@@ -1100,6 +1108,7 @@ export async function registerRoutes(
         templateKey: currentRevision.templateKey || "base_v1",
         specDictionaryGrouped: grouped,
         effectiveSpecDisplayKeys,
+        projectAddress,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

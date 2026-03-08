@@ -10,6 +10,7 @@ export interface PreviewData {
   templateKey: string;
   specDictionaryGrouped: Record<string, SpecDictionaryEntry[]>;
   effectiveSpecDisplayKeys: string[];
+  projectAddress: string | null;
 }
 
 export interface QuoteDocumentMetadata {
@@ -185,7 +186,7 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       name: quote.customer,
     },
     project: {
-      address: "",
+      address: preview.projectAddress || "",
       sourceJobId: quote.sourceJobId || null,
     },
     items: (snapshot.items || []).map(mapSnapshotItem),

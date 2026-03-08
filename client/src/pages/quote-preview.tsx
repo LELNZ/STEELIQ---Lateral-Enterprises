@@ -3,14 +3,12 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ArrowLeftCircle, Printer, Settings2, ChevronDown, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { Job } from "@shared/schema";
 import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem } from "@/lib/quote-document";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
 
@@ -43,14 +41,6 @@ export default function QuotePreview() {
     return buildQuoteDocumentModel(preview);
   }, [preview]);
 
-  const sourceJobId = doc?.project.sourceJobId;
-  const { data: sourceJob } = useQuery<Job>({
-    queryKey: ["/api/jobs", sourceJobId],
-    enabled: !!sourceJobId,
-  });
-
-  const projectAddress = sourceJob?.address || doc?.project.address || "";
-
   const [localKeys, setLocalKeys] = useState<string[] | null>(null);
 
   const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
@@ -80,8 +70,8 @@ export default function QuotePreview() {
 
   const saveSpecDisplayMutation = useMutation({
     mutationFn: async () => {
-      if (!preview || !localKeys || !doc) return;
-      await apiRequest("PATCH", `/api/quotes/${quoteId}/revisions/${doc.metadata.revisionId}/spec-display`, {
+      if (!doc || !localKeys) return;
+      await apiRequest("PATCH", `/api/quotes/${doc.metadata.quoteId}/revisions/${doc.metadata.revisionId}/spec-display`, {
         specDisplayKeys: localKeys,
       });
     },
@@ -215,10 +205,10 @@ export default function QuotePreview() {
             <div>
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Customer</p>
               <p className="text-lg font-semibold" data-testid="text-customer">{customer.name}</p>
-              {projectAddress && (
+              {doc.project.address && (
                 <div className="mt-1">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Project Address</p>
-                  <p className="text-sm" data-testid="text-project-address">{projectAddress}</p>
+                  <p className="text-sm" data-testid="text-project-address">{doc.project.address}</p>
                 </div>
               )}
             </div>

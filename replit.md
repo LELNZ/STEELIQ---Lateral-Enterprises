@@ -1,7 +1,7 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-Phase A — Lifecycle Hardening: true estimate archive, quote lifecycle management, quote page filters, regression testing.
+T017 complete — QuoteDocument integration into preview. Quote preview renders entirely from QuoteDocumentModel. Next: T018 (QuoteRenderer architecture).
 
 ## Overview
 SteelIQ is a professional quotation and estimating platform built for Lateral Enterprises, serving the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within estimates and quotes. The system streamlines the quotation process from configuration and visualization to pricing and export, providing a robust, user-friendly platform for accurate and visually rich quotes. Key capabilities include real-time drawing previews, comprehensive estimate and quote lifecycle management, item photo capture, and detailed pricing breakdowns.
@@ -64,7 +64,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Master Library Systems**: Centralized libraries for direct materials, manufacturing labor, installation labor, and delivery methods to ensure consistency.
 **Site Visit Mode**: Client-only `siteType` state for jobs, allowing preset defaults for "renovation" and "new_build" contexts. Includes features like wind zone auto-fill and height-from-floor warnings.
 **Mobile Architecture**: Optimized for mobile with `native-scroll` for specific components, sticky action bars, enhanced item cards, and a collapsible header.
-**Quote Document Model**: Client-side normalized, typed model (`QuoteDocumentModel`) for mapping raw preview data into structured sections for display.
+**Quote Document Model**: `client/src/lib/quote-document.ts` defines `PreviewData` (API response shape), `QuoteDocumentModel` (normalized rendering contract), and `buildQuoteDocumentModel()` (mapper). The preview page (`quote-preview.tsx`) renders exclusively from `QuoteDocumentModel` — raw preview data is only used as input to the builder. The API endpoint `GET /api/quotes/:id/preview-data` provides all data including `projectAddress` (resolved from linked job), so no secondary queries are needed for rendering.
 **Division Logo Upload**: Reuses existing image upload endpoint, storing logo URLs in division settings.
 **Lifecycle Service**: `server/quote-lifecycle.ts` centralizes archive, soft-delete, hard-delete, cascade handling, orphan detection, and dev cleanup.
 
