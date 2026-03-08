@@ -4,7 +4,7 @@
 Phase A — Lifecycle Hardening: true estimate archive, quote lifecycle management, quote page filters, regression testing.
 
 ## Overview
-The Pro-Quote CAD Generator is a professional quotation tool for the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within "Jobs" and "Quotes." The system aims to streamline the quotation process from configuration and visualization to pricing and export, providing a robust, user-friendly platform for accurate and visually rich quotes. Key capabilities include real-time drawing previews, comprehensive job and quote management, item photo capture, and detailed pricing breakdowns. The project targets enhanced efficiency for businesses in the window and door market.
+SteelIQ is a professional quotation and estimating platform built for Lateral Enterprises, serving the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within estimates and quotes. The system streamlines the quotation process from configuration and visualization to pricing and export, providing a robust, user-friendly platform for accurate and visually rich quotes. Key capabilities include real-time drawing previews, comprehensive estimate and quote lifecycle management, item photo capture, and detailed pricing breakdowns.
 
 ## User Preferences
 I want iterative development.
@@ -70,7 +70,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 
 ## Testing
 - **Regression tests**: `tests/lifecycle-regression.ts` — 33 automated API integration tests covering archive/delete/unarchive semantics, orphan detection, cascade behavior, defensive guards, and input validation. Run with `npx tsx tests/lifecycle-regression.ts`.
-- **Filter tests**: `tests/quote-filters-e2e.ts` — 16 automated tests verifying quote page filters (customer, quote type, date range, search, clear filters). Run with `npx tsx tests/quote-filters-e2e.ts`.
+- **Filter UI tests**: `tests/quote-filters-e2e.ts` — browser-driven Playwright test plan for quote page filters (customer, quote type, date range, clear filters, control visibility). Exports `QUOTE_FILTERS_TEST_PLAN` and `QUOTE_FILTERS_TECHNICAL_DOCS` constants; run via `runTest()` in the code execution sandbox.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

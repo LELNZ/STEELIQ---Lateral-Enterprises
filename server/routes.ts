@@ -679,12 +679,13 @@ export async function registerRoutes(
     customer: z.string().min(1),
     divisionCode: z.string().optional().default("LJ"),
     mode: z.enum(["revision", "new_quote"]).optional().default("revision"),
+    quoteType: z.enum(["renovation", "new_build", "tender"]).optional(),
   });
 
   app.post("/api/quotes", async (req, res) => {
     try {
       const parsed = createQuoteBodySchema.parse(req.body);
-      const { snapshot, sourceJobId, customer, divisionCode, mode } = parsed;
+      const { snapshot, sourceJobId, customer, divisionCode, mode, quoteType } = parsed;
 
       const divSettings = await storage.getDivisionSettings(divisionCode);
       const templateKey = divSettings?.templateKey || "base_v1";
@@ -752,9 +753,9 @@ export async function registerRoutes(
         const number = formatQuoteNumber(seqResult.rows[0].current_value);
 
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', NOW(), NOW()) RETURNING *`,
-          [number, mode === "new_quote" ? null : (sourceJobId || null), divisionCode, customer]
+          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, NOW(), NOW()) RETURNING *`,
+          [number, mode === "new_quote" ? null : (sourceJobId || null), divisionCode, customer, quoteType || null]
         );
         const quote = quoteInsert.rows[0];
 
