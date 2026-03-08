@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ArrowLeftCircle, Printer, Settings2, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeftCircle, Printer, Settings2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { PreviewData, QuoteDocumentModel } from "@/lib/quote-document";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
@@ -22,7 +22,6 @@ export default function QuotePreview() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const quoteId = params?.id;
-  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [specSheetOpen, setSpecSheetOpen] = useState(false);
 
   const { data: preview, isLoading } = useQuery<PreviewData>({
@@ -76,14 +75,6 @@ export default function QuotePreview() {
     },
   });
 
-  const toggleItemExpand = (idx: number) => {
-    setExpandedItems(prev => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx); else next.add(idx);
-      return next;
-    });
-  };
-
   if (isLoading) {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Loading preview...</p></div>;
   }
@@ -103,7 +94,7 @@ export default function QuotePreview() {
           </Button>
           <div>
             <h1 className="text-lg font-bold">Customer Quote Preview</h1>
-            <p className="text-sm text-muted-foreground">{header.quoteNumber}</p>
+            <p className="text-sm text-muted-foreground">{header.quoteNumber} &middot; Revision {header.revisionVersion}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -153,6 +144,8 @@ export default function QuotePreview() {
         </div>
       </div>
 
+      <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
+
       <div className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
         <div className="space-y-6">
           <HeaderSection branding={branding} orgContact={orgContact} />
@@ -164,7 +157,7 @@ export default function QuotePreview() {
           <TotalsSection totals={totals} />
         </div>
 
-        <LegalSection legal={legal} orgContact={orgContact} />
+        <LegalSection legal={legal} />
 
         <div className="print:break-before-page space-y-6">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Schedule of Items</h3>
@@ -175,11 +168,35 @@ export default function QuotePreview() {
             <ScheduleItemCard
               key={item.index}
               item={item}
-              expanded={expandedItems.has(item.index)}
-              onToggle={() => toggleItemExpand(item.index)}
             />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SnapshotBanner({ revisionVersion, sourceJobId }: { revisionVersion: number; sourceJobId: string | null }) {
+  const [, navigate] = useLocation();
+  return (
+    <div className="print:hidden bg-muted/50 border-b px-4 py-2.5 flex items-start gap-2.5 text-sm" data-testid="snapshot-banner">
+      <Info className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+      <div className="space-y-0.5">
+        <p className="text-muted-foreground">
+          This preview reflects <span className="font-medium text-foreground">Revision {revisionVersion}</span>.
+          Changes to specs, photos, or pricing in the estimate will appear here after you update the quote from the Executive Summary.
+        </p>
+        {sourceJobId && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-auto p-0 text-xs underline text-muted-foreground hover:text-foreground"
+            onClick={() => navigate(`/job/${sourceJobId}/exec-summary`)}
+            data-testid="link-go-to-exec-summary"
+          >
+            Go to Executive Summary to update
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -272,7 +289,7 @@ function TotalsLineRow({ line }: { line: RenderTotalsLine }) {
   );
 }
 
-function LegalSection({ legal, orgContact }: { legal: QuoteRenderModel["legal"]; orgContact: QuoteRenderModel["orgContact"] }) {
+function LegalSection({ legal }: { legal: QuoteRenderModel["legal"] }) {
   return (
     <div className="print:break-before-page space-y-4">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Terms & Conditions</h3>
@@ -355,39 +372,76 @@ function MediaImage({
   );
 }
 
+function SpecTable({ specs, itemIndex }: { specs: { key: string; label: string; value: string }[]; itemIndex: number }) {
+  if (specs.length === 0) {
+    return <p className="text-sm text-muted-foreground italic">No specification data available for this item.</p>;
+  }
+
+  const useTwoCol = specs.length > 6;
+  const midpoint = Math.ceil(specs.length / 2);
+
+  if (useTwoCol) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4" data-testid={`spec-table-${itemIndex}`}>
+        <table className="w-full text-sm">
+          <tbody>
+            {specs.slice(0, midpoint).map(({ key, label, value }) => (
+              <tr key={key} className="border-b last:border-b-0">
+                <td className="py-1 pr-2 text-muted-foreground text-xs leading-snug align-top" style={{ minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
+                <td className="py-1 font-medium text-sm leading-snug align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table className="w-full text-sm">
+          <tbody>
+            {specs.slice(midpoint).map(({ key, label, value }) => (
+              <tr key={key} className="border-b last:border-b-0">
+                <td className="py-1 pr-2 text-muted-foreground text-xs leading-snug align-top" style={{ minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
+                <td className="py-1 font-medium text-sm leading-snug align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return (
+    <table className="w-full text-sm" data-testid={`spec-table-${itemIndex}`}>
+      <tbody>
+        {specs.map(({ key, label, value }) => (
+          <tr key={key} className="border-b last:border-b-0">
+            <td className="py-1 pr-3 text-muted-foreground text-xs leading-snug align-top" style={{ minWidth: "80px", maxWidth: "140px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
+            <td className="py-1 font-medium text-sm leading-snug align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function ScheduleItemCard({
   item,
-  expanded,
-  onToggle,
 }: {
   item: RenderScheduleItem;
-  expanded: boolean;
-  onToggle: () => void;
 }) {
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("");
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
   const [drawingFailed, setDrawingFailed] = useState(false);
 
-  const { visibleSpecs, defaultSpecCount, hasMoreSpecs, useTwoColPrint, media } = item;
+  const { visibleSpecs, media } = item;
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3 print:break-inside-avoid" data-testid={`schedule-item-${item.index}`}>
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="font-semibold" data-testid={`text-item-title-${item.index}`}>
-            {item.title}
-          </h4>
-          <p className="text-sm text-muted-foreground">
-            {item.quantityLabel} | {item.dimensionLabel}
-          </p>
-        </div>
-        {hasMoreSpecs && (
-          <Button variant="ghost" size="sm" onClick={onToggle} className="print:hidden" data-testid={`button-toggle-specs-${item.index}`}>
-            {expanded ? <ChevronDown className="h-4 w-4 mr-1" /> : <ChevronRight className="h-4 w-4 mr-1" />}
-            {expanded ? "Show less" : "Show more details"}
-          </Button>
-        )}
+      <div>
+        <h4 className="font-semibold" data-testid={`text-item-title-${item.index}`}>
+          {item.title}
+        </h4>
+        <p className="text-sm text-muted-foreground">
+          {item.quantityLabel} | {item.dimensionLabel}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -414,64 +468,8 @@ function ScheduleItemCard({
             </div>
           </div>
         )}
-        <div className="overflow-x-auto">
-          <table className={`w-full text-sm ${useTwoColPrint ? "print:hidden" : ""}`}>
-            <tbody>
-              {(expanded ? visibleSpecs : visibleSpecs.slice(0, defaultSpecCount)).map(({ key, label, value }) => (
-                <tr key={key} className="border-b last:border-b-0">
-                  <td className="py-1 pr-3 text-muted-foreground whitespace-nowrap max-w-[140px] truncate">{label}</td>
-                  <td className="py-1 font-medium overflow-wrap-anywhere" style={{ overflowWrap: "break-word" }} data-testid={`text-spec-${key}-${item.index}`}>{value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {useTwoColPrint && (
-            <table className="hidden print:table w-full text-sm">
-              <tbody>
-                <tr>
-                  <td className="align-top pr-4 w-1/2">
-                    <table className="w-full text-sm">
-                      <tbody>
-                        {visibleSpecs.slice(0, Math.ceil(visibleSpecs.length / 2)).map(({ key, label, value }) => (
-                          <tr key={key} className="border-b last:border-b-0">
-                            <td className="py-0.5 pr-2 text-muted-foreground whitespace-nowrap max-w-[140px] truncate text-xs">{label}</td>
-                            <td className="py-0.5 font-medium text-xs" style={{ overflowWrap: "break-word" }}>{value}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </td>
-                  <td className="align-top w-1/2">
-                    <table className="w-full text-sm">
-                      <tbody>
-                        {visibleSpecs.slice(Math.ceil(visibleSpecs.length / 2)).map(({ key, label, value }) => (
-                          <tr key={key} className="border-b last:border-b-0">
-                            <td className="py-0.5 pr-2 text-muted-foreground whitespace-nowrap max-w-[140px] truncate text-xs">{label}</td>
-                            <td className="py-0.5 font-medium text-xs" style={{ overflowWrap: "break-word" }}>{value}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          )}
-          {!useTwoColPrint && (
-            <table className="hidden print:table w-full text-sm">
-              <tbody>
-                {visibleSpecs.map(({ key, label, value }) => (
-                  <tr key={key} className="border-b last:border-b-0">
-                    <td className="py-0.5 pr-3 text-muted-foreground whitespace-nowrap max-w-[140px] truncate text-xs">{label}</td>
-                    <td className="py-0.5 font-medium text-xs" style={{ overflowWrap: "break-word" }}>{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {visibleSpecs.length === 0 && (
-            <p className="text-sm text-muted-foreground italic">No specification data available for this item.</p>
-          )}
+        <div>
+          <SpecTable specs={visibleSpecs} itemIndex={item.index} />
         </div>
       </div>
 

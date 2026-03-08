@@ -79,9 +79,6 @@ export interface RenderScheduleItem {
   dimensionLabel: string;
   quantityLabel: string;
   visibleSpecs: RenderSpecEntry[];
-  defaultSpecCount: number;
-  hasMoreSpecs: boolean;
-  useTwoColPrint: boolean;
   media: RenderItemMedia;
 }
 
@@ -163,9 +160,6 @@ function buildScheduleItem(
     .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
     .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
 
-  const defaultSpecCount = Math.min(visibleSpecs.length, 14);
-  const useTwoColPrint = visibleSpecs.length > 14;
-
   const customerPhotos = (item.photos || [])
     .filter((p: QuoteDocumentItemPhoto) => p.includeInCustomerPdf)
     .map((p: QuoteDocumentItemPhoto, pIdx: number) => ({
@@ -184,9 +178,6 @@ function buildScheduleItem(
     dimensionLabel: `${item.width}mm x ${item.height}mm`,
     quantityLabel: `Qty: ${item.quantity || 1}`,
     visibleSpecs,
-    defaultSpecCount,
-    hasMoreSpecs: visibleSpecs.length > defaultSpecCount,
-    useTwoColPrint,
     media: {
       drawingUrl,
       drawingLabel: `Drawing — Item ${item.itemNumber || index + 1}`,
