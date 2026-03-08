@@ -122,7 +122,7 @@ function fmtCurrency(n: number): string {
 
 function buildTotals(doc: QuoteDocumentModel): RenderTotals {
   const t = doc.totals;
-  const hasBreakdown = t.itemsSubtotal > 0;
+  const hasBreakdown = t.itemsSubtotal > 0 || t.installationTotal > 0 || t.deliveryTotal > 0;
   const hasLegacyOnly = !hasBreakdown && t.legacySell !== null;
 
   if (!hasBreakdown && !hasLegacyOnly) {

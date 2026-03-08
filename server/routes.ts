@@ -822,7 +822,7 @@ export async function registerRoutes(
       const allQuotes = await storage.getAllQuotes();
       const enriched = await enrichQuotesWithOrphanState(allQuotes);
 
-      const jobIds = [...new Set(enriched.map(q => q.sourceJobId).filter(Boolean))] as string[];
+      const jobIds = Array.from(new Set(enriched.map(q => q.sourceJobId).filter(Boolean))) as string[];
       const jobNameMap: Record<string, string> = {};
       for (const jid of jobIds) {
         const job = await storage.getJob(jid);

@@ -555,7 +555,7 @@ export default function ExecSummary() {
         quantity: ip.item.quantity || 1,
         sqm: ip.sqm,
         salePrice: ip.salePrice,
-        cost: ip.pricing?.totalCost || 0,
+        cost: ip.pricing?.netCostNzd || 0,
       })),
       lineItems: [],
       operations: [],

@@ -42,6 +42,8 @@ export default function QuotePreview() {
 
   const [localKeys, setLocalKeys] = useState<string[] | null>(null);
 
+  useEffect(() => { setLocalKeys(null); }, [quoteId]);
+
   const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
 
   const liveScheduleItems: RenderScheduleItem[] = useMemo(() => {

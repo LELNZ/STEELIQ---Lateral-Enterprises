@@ -156,8 +156,8 @@ export default function QuoteDetail() {
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Source Job</p>
             <Button
-              variant="link"
-              className="p-0 h-auto text-sm"
+              variant="ghost"
+              className="p-0 h-auto text-sm underline"
               onClick={() => navigate(`/job/${quote.sourceJobId}`)}
               data-testid="link-source-job"
             >

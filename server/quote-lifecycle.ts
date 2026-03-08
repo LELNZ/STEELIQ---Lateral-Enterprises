@@ -139,7 +139,7 @@ export async function handleEstimateArchiveCascade(
 }
 
 export async function enrichQuotesWithOrphanState(quotes: Quote[]): Promise<EnrichedQuote[]> {
-  const jobIds = [...new Set(quotes.map(q => q.sourceJobId).filter(Boolean))] as string[];
+  const jobIds = Array.from(new Set(quotes.map(q => q.sourceJobId).filter(Boolean))) as string[];
 
   const existingJobIds = new Set<string>();
   for (const jobId of jobIds) {
