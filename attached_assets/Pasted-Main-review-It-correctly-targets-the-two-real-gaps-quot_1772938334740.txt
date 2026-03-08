@@ -1,0 +1,161 @@
+Main review
+
+It correctly targets the two real gaps:
+
+quote preview does not render customer photos
+
+drawing image capture into the quote snapshot is failing somewhere in the snapshot-generation path
+
+It also correctly treats local file persistence as a separate infrastructure concern, not the immediate feature bug.
+
+But the plan needs tightening in one important area:
+
+Main issue
+T001 is too DOM-fragile
+
+Right now the plan doubles down on this pattern:
+
+find SVG in the DOM
+
+screenshot/convert it
+
+upload it
+
+store the key in snapshot
+
+That may be how the current system works, but if the bug is caused by drawings not being mounted in the DOM at snapshot time, then “fix the selector / timing” is only the most fragile way to solve it.
+
+For T017b, I’d want the plan to explicitly prefer this order:
+
+Verify whether the drawing SVG exists in the DOM at snapshot time
+
+If yes, fix the selector/capture flow
+
+If no, use the same drawing generation source used by the preview item renderer rather than relying on a page-level query if possible
+
+In other words, do not lock the task to “document.querySelector must be made to work” if there is a cleaner drawing-generation path available in code.
+
+What I would change
+Change T001 to focus on “reliable drawing snapshot generation”
+
+Not “fix querySelector”.
+
+Suggested rewrite:
+
+T001: Diagnose and fix drawing image generation for quote snapshots
+Blocked By: []
+
+Details:
+
+Investigate buildSnapshotAndPost in exec-summary.tsx
+
+Confirm whether drawing SVGs are actually present in the DOM at snapshot time
+
+Confirm whether data-testid="drawing-svg-${idx}" exists on the rendered SVG elements
+
+If DOM capture is reliable, fix the selector/timing/capture flow so drawingImageKey is populated
+
+If DOM capture is not reliable, refactor snapshot generation to use a more deterministic drawing source/path already available in the codebase rather than scraping page DOM
+
+Ensure snapshot creation does not silently fail when a drawing cannot be captured; log or surface a warning in dev
+
+Acceptance:
+
+Generating a quote from an estimate with drawings results in populated drawingImageKey values for items with drawings
+
+Failures do not happen silently in development
+
+That keeps the goal architecture-safe without forcing the most brittle implementation.
+
+Additional improvements I recommend
+1. Add a data verification substep before T001
+
+Your diagnosis is helpful, but I’d explicitly require one real record verification:
+
+inspect one newly generated quote snapshot after the fix
+
+confirm snapshot.items[n].drawingImageKey is populated
+
+confirm the key resolves via /api/drawing-images/:key
+
+That makes the acceptance more concrete.
+
+2. T002 is good
+
+This is correct as written:
+
+render from QuoteDocumentModel
+
+only show includeInCustomerPdf === true
+
+no placeholder when there are no eligible photos
+
+I would keep it.
+
+3. T003 is good, but use accessible fallbacks
+
+Instead of only visual placeholder text, make the fallback identifiable for tests and accessible.
+
+For example:
+
+Drawing unavailable
+
+Photo unavailable
+
+with data-testid on the fallback container if your tests use it.
+
+4. T004 should avoid dependency on random existing files
+
+This line is risky:
+
+“use a valid key from the existing files on disk”
+
+That makes the test brittle and environment-dependent.
+
+Better:
+
+create/upload a dedicated test drawing image during the test setup, or
+
+create a quote using the real snapshot-generation path and verify the result
+
+For deterministic testing, I’d prefer:
+
+explicit test fixture upload or seeded test media
+
+not “whatever happens to exist on disk”
+
+So T004 should be revised.
+
+Recommended revised T004
+
+T004: Browser regression test for media rendering
+Blocked By: [T003]
+
+Details:
+Create a Playwright browser test that:
+
+creates a job via API
+
+creates or uploads deterministic test media during setup
+
+creates a quote whose snapshot includes:
+
+one item with a valid drawingImageKey
+
+one item photo with includeInCustomerPdf: true
+
+opens the quote preview page
+
+verifies drawing image renders, or if deliberately testing missing media, verifies graceful fallback
+
+verifies included customer photo renders
+
+verifies excluded customer photos do not render
+
+verifies no broken image UI appears
+
+cleans up test data
+
+Acceptance:
+
+test passes deterministically without relying on pre-existing local files

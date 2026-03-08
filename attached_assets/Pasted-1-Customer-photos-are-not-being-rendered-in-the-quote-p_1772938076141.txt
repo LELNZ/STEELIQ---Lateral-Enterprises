@@ -1,0 +1,127 @@
+1. Customer photos are not being rendered in the quote preview
+
+In the current build, the quote document model includes item photos, but quote-preview.tsx does not render item.photos anywhere.
+
+So even if the photo is saved correctly, the actual quote preview will still not show it.
+
+That part is a confirmed UI/rendering gap.
+
+2. The generated drawing image is likely failing for a different reason
+
+The preview page does try to render the generated drawing using:
+
+/api/drawing-images/:key
+
+So if you are seeing a broken image when clicking it, that usually means one of these is happening:
+
+the drawingImageKey is saved in the quote snapshot, but the PNG file is missing on disk
+
+the drawingImageKey is empty / stale / invalid for that revision
+
+the image route is returning 404 or invalid data
+
+the quote item list is referencing the image key correctly, but the file no longer exists
+
+So for the generated image, this looks more like a media integrity / file availability problem, not just a rendering omission.
+
+My diagnosis
+Confirmed
+
+Quote photos: present in model path, not rendered
+
+Generated drawing image: likely rendered path exists, but the file/key is bad or unavailable
+
+So the correct next step is a focused bugfix pass:
+
+Recommended next task
+T017b — Quote media integrity and preview rendering fix
+Scope
+A. Render customer photos in quote preview
+
+In quote-preview.tsx:
+
+render item.photos
+
+only show photos where includeInCustomerPdf === true
+
+use /api/item-photos/:key
+
+keep this fully driven from QuoteDocumentModel
+
+B. Diagnose and fix broken generated drawing images
+
+For one failing quote revision, verify:
+
+snapshot_json.items[n].drawingImageKey exists
+
+/api/drawing-images/:key returns 200
+
+the file exists in uploads/drawing-images
+
+the key matches an actual stored file
+
+If the file is missing, fix whichever step is breaking:
+
+drawing upload
+
+snapshot persistence
+
+revision retrieval
+
+media file retention
+
+C. Add graceful fallbacks
+
+If a drawing or photo key is missing/broken:
+
+do not show a broken <img>
+
+show a small placeholder or hide the block cleanly
+
+D. Add browser regression coverage
+
+Add a test that:
+
+creates a quote with a generated drawing image
+
+creates a quote item with a customer-visible photo
+
+opens the quote preview
+
+verifies drawing renders
+
+verifies customer photo renders
+
+verifies no broken image placeholder appears
+
+What I’d ask Replit to verify first
+
+Before coding, have it check one real failing quote and answer these four questions:
+
+Does quote_revisions.snapshot_json.items[].drawingImageKey exist for the broken item?
+
+Does quote_revisions.snapshot_json.items[].photos[] exist for the same item?
+
+Does GET /api/drawing-images/:key return 200 or 404 for that key?
+
+Does GET /api/item-photos/:key return 200 or 404 for the photo key?
+
+That will immediately tell us whether this is:
+
+rendering only
+
+storage only
+
+or both
+
+My recommendation
+
+Do not move on to QuoteRenderer yet.
+
+Fix this media path first, because drawings and optional photos are explicitly part of the upcoming customer-facing quote output work, and this will otherwise contaminate the next milestone.
+
+Best next move
+
+Ask Replit for a plan for:
+
+T017b — Quote media integrity and preview rendering fix
