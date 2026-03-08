@@ -1,0 +1,176 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT collapse quote vs revision semantics.
+Do NOT move photo/media controls into Visible Specs.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add new endpoints unless explicitly instructed.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+IMPLEMENTATION BEHAVIOR
+Implement the tasks exactly as written.
+Use existing patterns and components.
+Make the smallest safe changes needed.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any risks or limitations remaining
+5. Confirmation architecture guards were preserved
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+Objective:
+Implement T018 — QuoteRenderer architecture.
+
+Context:
+The current system already has:
+- Quote lifecycle hardening complete
+- multiple quotes per estimate
+- multiple revisions per quote
+- QuoteDocument-driven preview working
+- project address flowing into preview/model
+- drawing image capture working
+- customer photo inclusion controls working
+- print-friendly preview improvements complete
+
+The next milestone is to create a dedicated renderer layer that consumes QuoteDocumentModel and prepares structured presentation output for preview first, while also setting up future PDF export.
+
+Current architecture that must remain intact:
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Important existing source of truth:
+- `client/src/lib/quote-document.ts`
+  - `PreviewData`
+  - `QuoteDocumentModel`
+  - `buildQuoteDocumentModel(...)`
+
+Current preview page:
+- `client/src/pages/quote-preview.tsx`
+
+Scope:
+Create the first QuoteRenderer architecture pass without redesigning the app.
+
+Required implementation tasks:
+
+1. Create a dedicated renderer module layer under client/src/lib or client/src/components that accepts `QuoteDocumentModel` and returns a structured render model.
+   - Name it clearly, for example:
+     - `client/src/lib/quote-renderer.ts`
+     - or equivalent small supporting files
+   - It must consume `QuoteDocumentModel`
+   - It must NOT consume raw preview API data directly
+
+2. Define a normalized renderer output structure for preview/layout composition.
+   The renderer output should be suitable for:
+   - quote header/meta
+   - branding block
+   - customer/project block
+   - totals block
+   - item schedule/content sections
+   - terms/exclusions/payment sections
+   - optional media-aware item sections
+   Keep it simple and typed.
+   Do not over-engineer this into a full PDF engine yet.
+
+3. Refactor quote preview so it uses:
+   - preview API data -> `buildQuoteDocumentModel(...)`
+   - `QuoteDocumentModel` -> `buildQuoteRenderModel(...)` (or equivalent renderer entrypoint)
+   - UI renders from the renderer output structure
+   This should preserve current user-visible behavior as much as possible.
+
+4. Keep all current semantics intact:
+   - drawings remain included by default when present
+   - customer photos only render when `includeInCustomerPdf === true`
+   - spec visibility remains driven by current preview/spec-display rules
+   - quote/revision semantics stay untouched
+
+5. Add layout preparation for future presentation modes, but do NOT implement full mode switching yet.
+   The renderer structure should be able to support future:
+   - cover page
+   - renovation homeowner layout
+   - new build schedule layout grouped by SED identifiers
+   - improved preview structure
+   - later PDF export
+   This step is architectural preparation only.
+
+6. Do NOT add schema changes unless absolutely required.
+   Avoid backend changes.
+   Avoid endpoint changes.
+   Avoid changing snapshot shape.
+   Prefer frontend-only renderer architecture work.
+
+7. Keep the change set focused and small.
+   This is an architecture milestone, not a visual redesign milestone.
+
+Explicitly do NOT do the following:
+- Do NOT redesign snapshot schema
+- Do NOT move builder logic into renderer
+- Do NOT bypass QuoteDocument
+- Do NOT directly start PDF export implementation
+- Do NOT introduce a second competing rendering pipeline
+- Do NOT perform a broad rewrite of quote-preview styling
+- Do NOT add speculative settings/system complexity
+
+Suggested implementation shape:
+- Add a typed renderer model, e.g. `QuoteRenderModel`
+- Add a pure mapper function, e.g. `buildQuoteRenderModel(doc: QuoteDocumentModel): QuoteRenderModel`
+- Split renderer output into clean sections, such as:
+  - metadata/header
+  - branding
+  - customer/project
+  - totals
+  - item sections
+  - legal/content sections
+- Update `quote-preview.tsx` to render from that renderer model rather than directly from raw document internals
+
+Acceptance criteria:
+- Quote preview still works end-to-end
+- No regression to drawings/photos/spec visibility
+- Renderer layer now exists as a dedicated architectural stage between QuoteDocument and preview rendering
+- Existing architecture guard is preserved
+- Code is clearly structured for future T011/T012/T013/T014 work
+
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any risks or limitations remaining
+5. Confirmation architecture guards were preserved

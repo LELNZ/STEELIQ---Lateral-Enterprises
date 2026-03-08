@@ -9,20 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ArrowLeftCircle, Printer, Settings2, ChevronDown, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem } from "@/lib/quote-document";
+import type { PreviewData, QuoteDocumentModel } from "@/lib/quote-document";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
+import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/lib/quote-renderer";
+import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
-
-function fmt(n: number): string {
-  return n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-NZ", { day: "numeric", month: "long", year: "numeric" });
-}
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -44,24 +35,20 @@ export default function QuotePreview() {
     return buildQuoteDocumentModel(preview);
   }, [preview]);
 
+  const renderModel: QuoteRenderModel | null = useMemo(() => {
+    if (!doc) return null;
+    return buildQuoteRenderModel(doc);
+  }, [doc]);
+
   const [localKeys, setLocalKeys] = useState<string[] | null>(null);
 
   const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
 
-  const allSpecKeys = useMemo(() => {
+  const liveScheduleItems: RenderScheduleItem[] = useMemo(() => {
     if (!doc) return [];
-    const entries: { key: string; label: string; sortOrder?: number | null; customerVisibleAllowed?: boolean | null }[] = [];
-    for (const group of Object.values(doc.specDisplay.specDictionaryGrouped)) {
-      entries.push(...group);
-    }
-    return entries.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  }, [doc]);
-
-  const specKeyToLabel = useMemo(() => {
-    const m: Record<string, string> = {};
-    allSpecKeys.forEach(s => { m[s.key] = s.label; });
-    return m;
-  }, [allSpecKeys]);
+    if (localKeys) return rebuildScheduleItems(doc, localKeys);
+    return renderModel?.scheduleItems ?? [];
+  }, [doc, localKeys, renderModel]);
 
   const toggleSpecKey = (key: string) => {
     setLocalKeys(prev => {
@@ -99,15 +86,11 @@ export default function QuotePreview() {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Loading preview...</p></div>;
   }
 
-  if (!doc) {
+  if (!renderModel || !doc) {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Quote not found</p></div>;
   }
 
-  const { metadata, branding, org, customer, totals, content, specDisplay } = doc;
-  const items = doc.items;
-
-  const quoteDate = formatDate(metadata.createdAt);
-  const expiryDate = formatDate(metadata.validUntil);
+  const { header, branding, orgContact, customerProject, totals, legal, disclaimerText } = renderModel;
 
   return (
     <div className="max-w-4xl mx-auto print:max-w-none" data-testid="quote-preview-page">
@@ -118,7 +101,7 @@ export default function QuotePreview() {
           </Button>
           <div>
             <h1 className="text-lg font-bold">Customer Quote Preview</h1>
-            <p className="text-sm text-muted-foreground">{metadata.quoteNumber}</p>
+            <p className="text-sm text-muted-foreground">{header.quoteNumber}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -133,7 +116,7 @@ export default function QuotePreview() {
                 <SheetTitle>Visible Specs</SheetTitle>
               </SheetHeader>
               <div className="mt-4 space-y-4">
-                {Object.entries(specDisplay.specDictionaryGrouped).map(([group, specs]) => (
+                {Object.entries(doc.specDisplay.specDictionaryGrouped).map(([group, specs]) => (
                   <div key={group}>
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{group}</p>
                     <div className="space-y-1.5">
@@ -170,139 +153,151 @@ export default function QuotePreview() {
 
       <div className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              {branding.logoUrl && (
-                <img
-                  src={branding.logoUrl}
-                  alt={`${branding.tradingName} logo`}
-                  className="max-h-14 max-w-[160px] object-contain print:max-h-12"
-                  data-testid="img-branding-logo"
-                />
-              )}
-              <div>
-                <h2 className="text-2xl font-bold" data-testid="text-trading-name">
-                  {branding.tradingName}
-                </h2>
-                <p className="text-sm text-muted-foreground italic" data-testid="text-legal-line">
-                  {branding.legalLine}
-                </p>
-              </div>
-            </div>
-            <div className="sm:text-right text-sm text-muted-foreground space-y-0.5">
-              {org.address && <p>{org.address}</p>}
-              {org.phone && <p>{org.phone}</p>}
-              {org.email && <p>{org.email}</p>}
-              {org.gstNumber && <p>GST: {org.gstNumber}</p>}
-              {org.nzbn && <p>NZBN: {org.nzbn}</p>}
-            </div>
-          </div>
-
+          <HeaderSection branding={branding} orgContact={orgContact} />
           <Separator />
-
           <p className="text-sm italic text-muted-foreground print:text-gray-500" data-testid="text-preliminary-disclaimer">
-            Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.
+            {disclaimerText}
           </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">Customer</p>
-              <p className="text-lg font-semibold" data-testid="text-customer">{customer.name}</p>
-              {doc.project.address && (
-                <div className="mt-1">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Project Address</p>
-                  <p className="text-sm" data-testid="text-project-address">{doc.project.address}</p>
-                </div>
-              )}
-            </div>
-            <div className="sm:text-right space-y-1">
-              <div><span className="text-xs text-muted-foreground">Quote #: </span><span className="font-mono font-semibold" data-testid="text-quote-number-preview">{metadata.quoteNumber}</span></div>
-              <div><span className="text-xs text-muted-foreground">Date: </span><span data-testid="text-quote-date">{quoteDate}</span></div>
-              <div><span className="text-xs text-muted-foreground">Valid Until: </span><span data-testid="text-quote-expiry">{expiryDate}</span></div>
-            </div>
-          </div>
-
-          <div className="rounded-lg border p-4 space-y-2" data-testid="totals-block">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote Summary</h3>
-            {(totals.itemsSubtotal > 0 || (totals.legacySell !== null && totals.legacySell > 0)) ? (
-              <div className="space-y-1 text-sm">
-                {totals.itemsSubtotal > 0 && <div className="flex justify-between"><span>Items Subtotal</span><span data-testid="text-items-subtotal">${fmt(totals.itemsSubtotal)}</span></div>}
-                {totals.installationTotal > 0 && <div className="flex justify-between"><span>Installation</span><span data-testid="text-install-total">${fmt(totals.installationTotal)}</span></div>}
-                {totals.deliveryTotal > 0 && <div className="flex justify-between"><span>Delivery</span><span data-testid="text-delivery-total">${fmt(totals.deliveryTotal)}</span></div>}
-                <Separator />
-                <div className="flex justify-between font-medium"><span>Subtotal (excl. GST)</span><span data-testid="text-subtotal-ex-gst">${fmt(totals.subtotalExclGst)}</span></div>
-                <div className="flex justify-between text-muted-foreground"><span>GST (15%)</span><span data-testid="text-gst">${fmt(totals.gstAmount)}</span></div>
-                <div className="flex justify-between text-lg font-bold"><span>Total (incl. GST)</span><span data-testid="text-total-inc-gst">${fmt(totals.totalInclGst)}</span></div>
-              </div>
-            ) : totals.legacySell !== null ? (
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between font-medium"><span>Quoted Price (excl. GST)</span><span>${fmt(totals.legacySell)}</span></div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No pricing data available.</p>
-            )}
-          </div>
+          <CustomerProjectSection header={header} customerProject={customerProject} />
+          <TotalsSection totals={totals} />
         </div>
 
-        <div className="print:break-before-page space-y-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Terms & Conditions</h3>
-          {content.exclusions && (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Exclusions</p>
-              <p className="text-sm whitespace-pre-wrap">{content.exclusions}</p>
-            </div>
-          )}
-          {content.terms && (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Terms</p>
-              <p className="text-sm whitespace-pre-wrap">{content.terms}</p>
-            </div>
-          )}
-          {content.paymentTerms && (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Payment Terms</p>
-              <p className="text-sm whitespace-pre-wrap">{content.paymentTerms}</p>
-            </div>
-          )}
-          {org.bankDetails && (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Bank Details</p>
-              <p className="text-sm whitespace-pre-wrap">{org.bankDetails}</p>
-            </div>
-          )}
-
-          <div className="mt-8 space-y-4 border-t pt-4">
-            <p className="text-sm font-semibold">Acceptance</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="border-b border-dashed pb-6">
-                <p className="text-xs text-muted-foreground">Signature</p>
-              </div>
-              <div className="border-b border-dashed pb-6">
-                <p className="text-xs text-muted-foreground">Name</p>
-              </div>
-              <div className="border-b border-dashed pb-6">
-                <p className="text-xs text-muted-foreground">Date</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <LegalSection legal={legal} orgContact={orgContact} />
 
         <div className="print:break-before-page space-y-6">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Schedule of Items</h3>
-          {items.length === 0 && (
+          {liveScheduleItems.length === 0 && (
             <p className="text-sm text-muted-foreground">No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
           )}
-          {items.map((item, idx) => (
-            <ScheduleItem
-              key={idx}
+          {liveScheduleItems.map((item) => (
+            <ScheduleItemCard
+              key={item.index}
               item={item}
-              index={idx}
-              expanded={expandedItems.has(idx)}
-              onToggle={() => toggleItemExpand(idx)}
-              displayKeys={effectiveKeys}
-              specKeyToLabel={specKeyToLabel}
+              expanded={expandedItems.has(item.index)}
+              onToggle={() => toggleItemExpand(item.index)}
             />
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeaderSection({ branding, orgContact }: { branding: QuoteRenderModel["branding"]; orgContact: QuoteRenderModel["orgContact"] }) {
+  return (
+    <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+      <div className="flex items-start gap-4">
+        {branding.logoUrl && (
+          <img
+            src={branding.logoUrl}
+            alt={`${branding.tradingName} logo`}
+            className="max-h-14 max-w-[160px] object-contain print:max-h-12"
+            data-testid="img-branding-logo"
+          />
+        )}
+        <div>
+          <h2 className="text-2xl font-bold" data-testid="text-trading-name">
+            {branding.tradingName}
+          </h2>
+          <p className="text-sm text-muted-foreground italic" data-testid="text-legal-line">
+            {branding.legalLine}
+          </p>
+        </div>
+      </div>
+      <div className="sm:text-right text-sm text-muted-foreground space-y-0.5">
+        {orgContact.address && <p>{orgContact.address}</p>}
+        {orgContact.phone && <p>{orgContact.phone}</p>}
+        {orgContact.email && <p>{orgContact.email}</p>}
+        {orgContact.gstNumber && <p>GST: {orgContact.gstNumber}</p>}
+        {orgContact.nzbn && <p>NZBN: {orgContact.nzbn}</p>}
+      </div>
+    </div>
+  );
+}
+
+function CustomerProjectSection({ header, customerProject }: { header: QuoteRenderModel["header"]; customerProject: QuoteRenderModel["customerProject"] }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div>
+        <p className="text-xs uppercase tracking-wider text-muted-foreground">Customer</p>
+        <p className="text-lg font-semibold" data-testid="text-customer">{customerProject.customerName}</p>
+        {customerProject.hasProjectAddress && (
+          <div className="mt-1">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">Project Address</p>
+            <p className="text-sm" data-testid="text-project-address">{customerProject.projectAddress}</p>
+          </div>
+        )}
+      </div>
+      <div className="sm:text-right space-y-1">
+        <div><span className="text-xs text-muted-foreground">Quote #: </span><span className="font-mono font-semibold" data-testid="text-quote-number-preview">{header.quoteNumber}</span></div>
+        <div><span className="text-xs text-muted-foreground">Date: </span><span data-testid="text-quote-date">{header.dateFormatted}</span></div>
+        <div><span className="text-xs text-muted-foreground">Valid Until: </span><span data-testid="text-quote-expiry">{header.expiryFormatted}</span></div>
+      </div>
+    </div>
+  );
+}
+
+function TotalsSection({ totals }: { totals: QuoteRenderModel["totals"] }) {
+  if (totals.isEmpty) {
+    return (
+      <div className="rounded-lg border p-4 space-y-2" data-testid="totals-block">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote Summary</h3>
+        <p className="text-sm text-muted-foreground">No pricing data available.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border p-4 space-y-2" data-testid="totals-block">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote Summary</h3>
+      <div className="space-y-1 text-sm">
+        {totals.lines.map((line, idx) => (
+          <TotalsLineRow key={idx} line={line} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TotalsLineRow({ line }: { line: RenderTotalsLine }) {
+  if (line.emphasis === "separator") return <Separator />;
+  const testId = line.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+  return (
+    <div className={`flex justify-between ${line.emphasis === "bold" ? "text-lg font-bold" : ""} ${line.emphasis === "muted" ? "text-muted-foreground" : ""} ${line.emphasis === "normal" ? "font-medium" : ""}`}>
+      <span>{line.label}</span>
+      <span data-testid={`text-${testId}`}>{line.formatted}</span>
+    </div>
+  );
+}
+
+function LegalSection({ legal, orgContact }: { legal: QuoteRenderModel["legal"]; orgContact: QuoteRenderModel["orgContact"] }) {
+  return (
+    <div className="print:break-before-page space-y-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Terms & Conditions</h3>
+      {legal.sections.map((section) => (
+        <div key={section.heading} className="space-y-1">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">{section.heading}</p>
+          <p className="text-sm whitespace-pre-wrap">{section.body}</p>
+        </div>
+      ))}
+      {legal.hasBankDetails && (
+        <div className="space-y-1">
+          <p className="text-xs font-semibold text-muted-foreground uppercase">Bank Details</p>
+          <p className="text-sm whitespace-pre-wrap">{legal.bankDetails}</p>
+        </div>
+      )}
+      <div className="mt-8 space-y-4 border-t pt-4">
+        <p className="text-sm font-semibold">Acceptance</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="border-b border-dashed pb-6">
+            <p className="text-xs text-muted-foreground">Signature</p>
+          </div>
+          <div className="border-b border-dashed pb-6">
+            <p className="text-xs text-muted-foreground">Name</p>
+          </div>
+          <div className="border-b border-dashed pb-6">
+            <p className="text-xs text-muted-foreground">Date</p>
+          </div>
         </div>
       </div>
     </div>
@@ -350,48 +345,33 @@ function MediaImage({
   );
 }
 
-function ScheduleItem({
+function ScheduleItemCard({
   item,
-  index,
   expanded,
   onToggle,
-  displayKeys,
-  specKeyToLabel,
 }: {
-  item: QuoteDocumentItem;
-  index: number;
+  item: RenderScheduleItem;
   expanded: boolean;
   onToggle: () => void;
-  displayKeys: string[];
-  specKeyToLabel: Record<string, string>;
 }) {
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("");
 
-  const specs = item.resolvedSpecs || {};
-  const visibleSpecs = displayKeys
-    .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
-    .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
-
-  const defaultShow = Math.min(visibleSpecs.length, 14);
-  const hasMore = visibleSpecs.length > defaultShow;
-  const useTwoColPrint = visibleSpecs.length > 14;
-
-  const customerPhotos = (item.photos || []).filter(p => p.includeInCustomerPdf);
+  const { visibleSpecs, defaultSpecCount, hasMoreSpecs, useTwoColPrint, media } = item;
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-3 print:break-inside-avoid" data-testid={`schedule-item-${index}`}>
+    <div className="rounded-lg border bg-card p-4 space-y-3 print:break-inside-avoid" data-testid={`schedule-item-${item.index}`}>
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="font-semibold" data-testid={`text-item-title-${index}`}>
-            Item {item.itemNumber || index + 1} — {item.itemRef || item.title || `Item ${index + 1}`}
+          <h4 className="font-semibold" data-testid={`text-item-title-${item.index}`}>
+            {item.title}
           </h4>
           <p className="text-sm text-muted-foreground">
-            Qty: {item.quantity || 1} | {item.width}mm x {item.height}mm
+            {item.quantityLabel} | {item.dimensionLabel}
           </p>
         </div>
-        {hasMore && (
-          <Button variant="ghost" size="sm" onClick={onToggle} className="print:hidden" data-testid={`button-toggle-specs-${index}`}>
+        {hasMoreSpecs && (
+          <Button variant="ghost" size="sm" onClick={onToggle} className="print:hidden" data-testid={`button-toggle-specs-${item.index}`}>
             {expanded ? <ChevronDown className="h-4 w-4 mr-1" /> : <ChevronRight className="h-4 w-4 mr-1" />}
             {expanded ? "Show less" : "Show more details"}
           </Button>
@@ -399,21 +379,21 @@ function ScheduleItem({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {item.drawingImageKey && (
+        {media.drawingUrl && (
           <div className="flex items-center justify-center">
             <div
               className="cursor-pointer print:cursor-default"
               onClick={() => {
-                setViewerSrc(`/api/drawing-images/${item.drawingImageKey}`);
-                setViewerTitle(`Drawing — Item ${item.itemNumber || index + 1}`);
+                setViewerSrc(media.drawingUrl);
+                setViewerTitle(media.drawingLabel);
               }}
             >
               <MediaImage
-                src={`/api/drawing-images/${item.drawingImageKey}`}
-                alt={`Drawing for item ${index + 1}`}
+                src={media.drawingUrl}
+                alt={`Drawing for item ${item.index + 1}`}
                 className="max-h-64 object-contain rounded border"
-                testId={`img-drawing-${index}`}
-                fallbackTestId={`fallback-drawing-${index}`}
+                testId={`img-drawing-${item.index}`}
+                fallbackTestId={`fallback-drawing-${item.index}`}
                 fallbackText="Drawing unavailable"
               />
             </div>
@@ -422,10 +402,10 @@ function ScheduleItem({
         <div className="overflow-x-auto">
           <table className={`w-full text-sm ${useTwoColPrint ? "print:hidden" : ""}`}>
             <tbody>
-              {(expanded ? visibleSpecs : visibleSpecs.slice(0, defaultShow)).map(({ key, label, value }) => (
+              {(expanded ? visibleSpecs : visibleSpecs.slice(0, defaultSpecCount)).map(({ key, label, value }) => (
                 <tr key={key} className="border-b last:border-b-0">
                   <td className="py-1 pr-3 text-muted-foreground whitespace-nowrap max-w-[140px] truncate">{label}</td>
-                  <td className="py-1 font-medium overflow-wrap-anywhere" style={{ overflowWrap: "break-word" }} data-testid={`text-spec-${key}-${index}`}>{value}</td>
+                  <td className="py-1 font-medium overflow-wrap-anywhere" style={{ overflowWrap: "break-word" }} data-testid={`text-spec-${key}-${item.index}`}>{value}</td>
                 </tr>
               ))}
             </tbody>
@@ -480,25 +460,25 @@ function ScheduleItem({
         </div>
       </div>
 
-      {customerPhotos.length > 0 && (
-        <div className="space-y-2" data-testid={`photos-section-${index}`}>
+      {media.customerPhotos.length > 0 && (
+        <div className="space-y-2" data-testid={`photos-section-${item.index}`}>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Site Photos</p>
           <div className="flex flex-wrap gap-3">
-            {customerPhotos.map((photo, pIdx) => (
+            {media.customerPhotos.map((photo, pIdx) => (
               <div key={photo.key} className="space-y-1">
                 <div
                   className="cursor-pointer print:cursor-default"
                   onClick={() => {
-                    setViewerSrc(`/api/item-photos/${photo.key}`);
-                    setViewerTitle(photo.caption || `Photo ${pIdx + 1} — Item ${index + 1}`);
+                    setViewerSrc(photo.url);
+                    setViewerTitle(photo.caption);
                   }}
                 >
                   <MediaImage
-                    src={`/api/item-photos/${photo.key}`}
-                    alt={photo.caption || `Photo ${pIdx + 1} for item ${index + 1}`}
+                    src={photo.url}
+                    alt={photo.caption}
                     className="max-h-48 max-w-[200px] object-contain rounded border"
-                    testId={`img-photo-${index}-${pIdx}`}
-                    fallbackTestId={`fallback-photo-${index}-${pIdx}`}
+                    testId={`img-photo-${item.index}-${pIdx}`}
+                    fallbackTestId={`fallback-photo-${item.index}-${pIdx}`}
                     fallbackText="Photo unavailable"
                   />
                 </div>

@@ -1,14 +1,8 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-Pre-T018 UX pass complete — 7 improvement tasks applied:
-- T001: Quote vs revision action labels clarified in ExecSummary (Generate Quote / Update Existing Quote / Create New Quote with subtexts).
-- T002: Source estimate name shown in quotes list table; related quotes section in quote-detail; quote history section in exec-summary. API enrichment for `sourceEstimateName`.
-- T003: Photo inclusion controls (per-item checkboxes for `includeInCustomerPdf`) in ExecSummary per-item breakdown.
-- T004: Reusable `MediaViewer` lightbox component with zoom, download, close. Wired into quote-preview and quote-builder.
-- T005: Print layout improvements — all specs expanded in print, two-column spec layout for 14+ specs, `overflow-wrap: break-word`, `max-w-[140px]` on spec labels, interactive controls `print:hidden`.
-- T006: Builder performance — `useMemo` on `totalSqm`, `totalPrice`, `specGroups`; `useCallback` on `libFrameTypesForCategory`.
-Next: T018 (QuoteRenderer architecture).
+T018 (QuoteRenderer architecture) complete. Pre-T018 UX pass (T001–T006) also complete.
+- T018: Dedicated renderer layer at `client/src/lib/quote-renderer.ts`. Defines `QuoteRenderModel` (typed presentation model) and `buildQuoteRenderModel()` (pure mapper from `QuoteDocumentModel`). Preview page refactored to render from the render model via decomposed section components (`HeaderSection`, `CustomerProjectSection`, `TotalsSection`, `LegalSection`, `ScheduleItemCard`). `rebuildScheduleItems()` enables live spec display toggling. `PresentationMode` type prepared for future layout variants.
 
 ## Overview
 SteelIQ is a professional quotation and estimating platform built for Lateral Enterprises, serving the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within estimates and quotes. The system streamlines the quotation process from configuration and visualization to pricing and export, providing a robust, user-friendly platform for accurate and visually rich quotes. Key capabilities include real-time drawing previews, comprehensive estimate and quote lifecycle management, item photo capture, and detailed pricing breakdowns.
@@ -71,7 +65,8 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Master Library Systems**: Centralized libraries for direct materials, manufacturing labor, installation labor, and delivery methods to ensure consistency.
 **Site Visit Mode**: Client-only `siteType` state for jobs, allowing preset defaults for "renovation" and "new_build" contexts. Includes features like wind zone auto-fill and height-from-floor warnings.
 **Mobile Architecture**: Optimized for mobile with `native-scroll` for specific components, sticky action bars, enhanced item cards, and a collapsible header.
-**Quote Document Model**: `client/src/lib/quote-document.ts` defines `PreviewData` (API response shape), `QuoteDocumentModel` (normalized rendering contract), and `buildQuoteDocumentModel()` (mapper). The preview page (`quote-preview.tsx`) renders exclusively from `QuoteDocumentModel` — raw preview data is only used as input to the builder. The API endpoint `GET /api/quotes/:id/preview-data` provides all data including `projectAddress` (resolved from linked job), so no secondary queries are needed for rendering.
+**Quote Document Model**: `client/src/lib/quote-document.ts` defines `PreviewData` (API response shape), `QuoteDocumentModel` (normalized rendering contract), and `buildQuoteDocumentModel()` (mapper). The API endpoint `GET /api/quotes/:id/preview-data` provides all data including `projectAddress` (resolved from linked job), so no secondary queries are needed for rendering.
+**Quote Renderer**: `client/src/lib/quote-renderer.ts` defines `QuoteRenderModel` (presentation-ready structure) and `buildQuoteRenderModel()` (pure mapper from `QuoteDocumentModel`). The preview page (`quote-preview.tsx`) renders from `QuoteRenderModel` via decomposed section components. Pipeline: `PreviewData → buildQuoteDocumentModel() → buildQuoteRenderModel() → UI`. `rebuildScheduleItems()` enables live spec key toggling. `PresentationMode` type supports future layout variants (cover-page, renovation-homeowner, new-build-schedule).
 **Division Logo Upload**: Reuses existing image upload endpoint, storing logo URLs in division settings.
 **Lifecycle Service**: `server/quote-lifecycle.ts` centralizes archive, soft-delete, hard-delete, cascade handling, orphan detection, and dev cleanup.
 
