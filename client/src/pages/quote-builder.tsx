@@ -254,7 +254,7 @@ export default function QuoteBuilder() {
   const { toast } = useToast();
 
   const { data: existingJob, isLoading: jobLoading } = useQuery<{
-    id: string; name: string; address: string | null; date: string | null; items: JobItem[];
+    id: string; name: string; address: string | null; date: string | null; siteType?: string | null; items: JobItem[];
   }>({
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
@@ -358,6 +358,9 @@ export default function QuoteBuilder() {
       setJobName(existingJob.name);
       setJobAddress(existingJob.address || "");
       setJobDate(existingJob.date || "");
+      if (existingJob.siteType === "renovation" || existingJob.siteType === "new_build") {
+        setSiteType(existingJob.siteType);
+      }
       setSavedJobId(existingJob.id);
       setItems(existingJob.items.map((ji: any) => ({
         uiId: ji.id || crypto.randomUUID(),
@@ -1194,14 +1197,14 @@ export default function QuoteBuilder() {
       let currentJobId = savedJobId;
       if (!currentJobId) {
         const res = await apiRequest("POST", "/api/jobs", {
-          name: jobName, address: jobAddress, date: jobDate,
+          name: jobName, address: jobAddress, date: jobDate, siteType: siteType || null,
         });
         const job = await res.json();
         currentJobId = job.id;
         setSavedJobId(job.id);
       } else {
         await apiRequest("PATCH", `/api/jobs/${currentJobId}`, {
-          name: jobName, address: jobAddress, date: jobDate,
+          name: jobName, address: jobAddress, date: jobDate, siteType: siteType || null,
         });
         const existingItems = await fetch(`/api/jobs/${currentJobId}`).then(r => r.json());
         for (const ei of (existingItems.items || [])) {
@@ -1249,7 +1252,7 @@ export default function QuoteBuilder() {
       saveJobRef.current();
     }, delay);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-  }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate]);
+  }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate, siteType]);
 
   async function ensureJobExists(): Promise<string | null> {
     if (savedJobId) return savedJobId;

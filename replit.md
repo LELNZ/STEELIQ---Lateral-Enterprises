@@ -1,7 +1,8 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-Quote list & lifecycle audit complete. T018 (QuoteRenderer architecture) complete. Pre-T018 UX pass (T001–T006) also complete.
+siteType → quoteType propagation complete (T005–T008). Quote list & lifecycle audit complete. T018 (QuoteRenderer architecture) complete.
+- **siteType propagation**: `site_type` column added to `jobs` table. Quote builder persists siteType on save (POST/PATCH) and hydrates on load. Exec summary auto-derives `quoteType` from `job.siteType` when generating quotes. On revisions, existing `quote_type` is preserved (not overwritten). Server-side validation enforces `renovation | new_build | null` via `insertJobSchema`.
 - **Quote list audit**: `totalValue` populated from `snapshot.totals.sell` on create/revision. Renovation/New Build/Tender tabs removed (filter-only). Quote type editable on detail page via `PATCH /api/quotes/:id/type`. Backfill endpoint for existing quotes.
 - T018: Dedicated renderer layer at `client/src/lib/quote-renderer.ts`. Defines `QuoteRenderModel` (typed presentation model) and `buildQuoteRenderModel()` (pure mapper from `QuoteDocumentModel`). Preview page refactored to render from the render model via decomposed section components (`HeaderSection`, `CustomerProjectSection`, `TotalsSection`, `LegalSection`, `ScheduleItemCard`). `rebuildScheduleItems()` enables live spec display toggling. `PresentationMode` type prepared for future layout variants.
 

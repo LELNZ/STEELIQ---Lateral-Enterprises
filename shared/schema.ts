@@ -105,6 +105,7 @@ export const jobs = pgTable("jobs", {
   name: text("name").notNull(),
   address: text("address").default(""),
   date: text("date").default(""),
+  siteType: text("site_type"),
   installationEnabled: boolean("installation_enabled").default(false),
   installationOverride: real("installation_override"),
   installationMarkup: real("installation_markup"),
@@ -116,7 +117,9 @@ export const jobs = pgTable("jobs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, archivedAt: true, createdAt: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, archivedAt: true, createdAt: true }).extend({
+  siteType: z.enum(["renovation", "new_build"]).nullable().optional(),
+});
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobs.$inferSelect;
 

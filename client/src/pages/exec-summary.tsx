@@ -54,6 +54,7 @@ interface JobData {
   name: string;
   address?: string;
   date?: string;
+  siteType?: string | null;
   installationEnabled?: boolean;
   installationOverride?: number | null;
   installationMarkup?: number | null;
@@ -569,12 +570,15 @@ export default function ExecSummary() {
       },
     };
 
+    const derivedQuoteType = (job?.siteType === "renovation" || job?.siteType === "new_build") ? job.siteType : undefined;
+
     const res = await apiRequest("POST", "/api/quotes", {
       snapshot,
       sourceJobId: jobId,
       customer: job?.name || "Unknown",
       divisionCode: "LJ",
       mode,
+      ...(derivedQuoteType ? { quoteType: derivedQuoteType } : {}),
     });
     return res.json();
   };
