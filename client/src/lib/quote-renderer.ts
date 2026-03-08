@@ -3,6 +3,8 @@ import type {
   QuoteDocumentItem,
   QuoteDocumentItemPhoto,
 } from "./quote-document";
+import type { QuoteTemplate } from "./quote-template";
+import { resolveQuoteTemplate } from "./quote-template";
 
 export type PresentationMode =
   | "standard"
@@ -95,6 +97,7 @@ export interface RenderLegalBlock {
 
 export interface QuoteRenderModel {
   presentationMode: PresentationMode;
+  resolvedTemplate: QuoteTemplate;
   header: RenderHeader;
   branding: RenderBranding;
   orgContact: RenderOrgContact;
@@ -216,8 +219,15 @@ export function buildQuoteRenderModel(
   const mode = options?.presentationMode ?? "standard";
   const specKeyToLabel = buildSpecKeyToLabel(doc);
 
+  const resolved = resolveQuoteTemplate({
+    accentColor: doc.branding.accentColor,
+    scheduleLayoutVariant: doc.branding.scheduleLayoutVariant,
+    totalsLayoutVariant: doc.branding.totalsLayoutVariant,
+  });
+
   return {
     presentationMode: mode,
+    resolvedTemplate: resolved,
     header: {
       quoteNumber: doc.metadata.quoteNumber,
       dateFormatted: formatDateNZ(doc.metadata.createdAt),

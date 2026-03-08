@@ -521,17 +521,18 @@ function DivisionSettingsTab() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Template & Layout</CardTitle>
+              <CardTitle className="text-base">Quote Presentation</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Company master template controls document structure, section ordering, and acceptance block. Division overrides control branding and layout options below.</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm font-medium mb-1 block">Template Key</Label>
-                <Input value={form.templateKey || ""} disabled data-testid="input-div-templateKey" />
-                <p className="text-xs text-muted-foreground mt-1">Locked — managed by system</p>
+                <Label className="text-sm font-medium mb-1 block">Company Template</Label>
+                <Input value="company_master_v1" disabled data-testid="input-div-templateKey" />
+                <p className="text-xs text-muted-foreground mt-1">System-controlled — shared across all divisions</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium mb-1 block">Schedule Layout</Label>
+                  <Label className="text-sm font-medium mb-1 block">Schedule Layout (Division Override)</Label>
                   <Select
                     value={form.scheduleLayoutVariant || ""}
                     onValueChange={(v) => setForm({ ...form, scheduleLayoutVariant: v })}
@@ -547,7 +548,7 @@ function DivisionSettingsTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium mb-1 block">Totals Layout</Label>
+                  <Label className="text-sm font-medium mb-1 block">Totals Layout (Division Override)</Label>
                   <Select
                     value={form.totalsLayoutVariant || ""}
                     onValueChange={(v) => setForm({ ...form, totalsLayoutVariant: v })}

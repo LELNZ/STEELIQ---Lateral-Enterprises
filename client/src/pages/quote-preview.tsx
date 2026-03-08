@@ -15,7 +15,8 @@ import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/l
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
 import { generateQuotePdf } from "@/lib/pdf-engine";
-import { SYSTEM_TEMPLATE, isSectionVisible } from "@/lib/quote-template";
+import { isSectionVisible } from "@/lib/quote-template";
+import type { QuoteTemplate } from "@/lib/quote-template";
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -106,7 +107,7 @@ export default function QuotePreview() {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Quote not found</p></div>;
   }
 
-  const { header, branding, orgContact, customerProject, totals, legal, disclaimerText } = renderModel;
+  const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = renderModel;
 
   return (
     <div className="max-w-4xl mx-auto print:max-w-none" data-testid="quote-preview-page">
@@ -188,34 +189,34 @@ export default function QuotePreview() {
       <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
 
       <div className="p-4 sm:p-8 print:p-4 space-y-6 print:space-y-4">
-        {isSectionVisible(SYSTEM_TEMPLATE, "header") && (
+        {isSectionVisible(T, "header") && (
           <div className="space-y-4">
             <HeaderSection branding={branding} orgContact={orgContact} />
             <Separator />
           </div>
         )}
 
-        {isSectionVisible(SYSTEM_TEMPLATE, "disclaimer") && (
+        {isSectionVisible(T, "disclaimer") && (
           <p className="text-sm italic text-muted-foreground print:text-gray-500" data-testid="text-preliminary-disclaimer">
             {disclaimerText}
           </p>
         )}
 
-        {isSectionVisible(SYSTEM_TEMPLATE, "customerProject") && (
+        {isSectionVisible(T, "customerProject") && (
           <CustomerProjectSection header={header} customerProject={customerProject} />
         )}
 
-        {isSectionVisible(SYSTEM_TEMPLATE, "totals") && (
+        {isSectionVisible(T, "totals") && (
           <TotalsSection totals={totals} />
         )}
 
-        {isSectionVisible(SYSTEM_TEMPLATE, "legal") && (
-          <LegalSection legal={legal} />
+        {isSectionVisible(T, "legal") && (
+          <LegalSection legal={legal} template={T} />
         )}
 
-        {isSectionVisible(SYSTEM_TEMPLATE, "schedule") && (
+        {isSectionVisible(T, "schedule") && (
           <div className="print:break-before-page space-y-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>Schedule of Items</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Schedule of Items</h3>
             {liveScheduleItems.length === 0 && (
               <p className="text-sm text-muted-foreground">No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
             )}
@@ -228,8 +229,8 @@ export default function QuotePreview() {
           </div>
         )}
 
-        {isSectionVisible(SYSTEM_TEMPLATE, "acceptance") && (
-          <AcceptanceSection />
+        {isSectionVisible(T, "acceptance") && (
+          <AcceptanceSection template={T} />
         )}
       </div>
     </div>
@@ -349,19 +350,19 @@ function TotalsLineRow({ line }: { line: RenderTotalsLine }) {
   );
 }
 
-function LegalSection({ legal }: { legal: QuoteRenderModel["legal"] }) {
+function LegalSection({ legal, template }: { legal: QuoteRenderModel["legal"]; template: QuoteTemplate }) {
   return (
     <div className="print:break-before-page space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>Terms & Conditions</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Terms & Conditions</h3>
       {legal.sections.map((section) => (
         <div key={section.heading} className="space-y-1">
-          <p className="text-xs font-semibold uppercase" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>{section.heading}</p>
+          <p className="text-xs font-semibold uppercase" style={{ color: template.colors.headingMuted }}>{section.heading}</p>
           <p className="text-sm whitespace-pre-wrap">{section.body}</p>
         </div>
       ))}
       {legal.hasBankDetails && (
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase" style={{ color: SYSTEM_TEMPLATE.colors.headingMuted }}>Bank Details</p>
+          <p className="text-xs font-semibold uppercase" style={{ color: template.colors.headingMuted }}>Bank Details</p>
           <p className="text-sm whitespace-pre-wrap">{legal.bankDetails}</p>
         </div>
       )}
@@ -369,12 +370,12 @@ function LegalSection({ legal }: { legal: QuoteRenderModel["legal"] }) {
   );
 }
 
-function AcceptanceSection() {
+function AcceptanceSection({ template }: { template: QuoteTemplate }) {
   return (
     <div className="space-y-4 border-t pt-4" data-testid="acceptance-section">
       <p className="text-sm font-semibold" data-testid="text-acceptance-heading">Acceptance</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {SYSTEM_TEMPLATE.acceptance.fields.map((field) => (
+        {template.acceptance.fields.map((field) => (
           <div key={field} className="border-b border-dashed pb-6" data-testid={`acceptance-field-${field.toLowerCase()}`}>
             <p className="text-xs text-muted-foreground">{field}</p>
           </div>

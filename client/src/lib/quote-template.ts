@@ -16,9 +16,9 @@ export interface TemplateTypography {
 }
 
 export interface TemplateSpacing {
-  sectionGap: number;
-  itemGap: number;
-  innerPadding: number;
+  sectionGapMm: number;
+  itemGapMm: number;
+  innerPaddingMm: number;
 }
 
 export interface TemplateItemLayout {
@@ -26,12 +26,20 @@ export interface TemplateItemLayout {
   specsPosition: "right";
   drawingMaxWidthPercent: number;
   photosPosition: "below";
-  photoMaxSize: number;
+  photoMaxSizeMm: number;
 }
 
 export interface TemplateAcceptanceBlock {
   visible: boolean;
   fields: string[];
+}
+
+export interface TemplateColors {
+  headingMuted: string;
+  bodyText: string;
+  border: string;
+  bgMuted: string;
+  accent: string;
 }
 
 export interface QuoteTemplate {
@@ -42,18 +50,12 @@ export interface QuoteTemplate {
   spacing: TemplateSpacing;
   itemLayout: TemplateItemLayout;
   acceptance: TemplateAcceptanceBlock;
-  colors: {
-    headingMuted: string;
-    bodyText: string;
-    border: string;
-    bgMuted: string;
-    accent: string;
-  };
+  colors: TemplateColors;
 }
 
-export const SYSTEM_TEMPLATE: QuoteTemplate = {
-  id: "system_v1",
-  name: "Standard Quote",
+export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
+  id: "company_master_v1",
+  name: "Lateral Enterprises — Master Quote Template",
   sections: [
     { key: "header", visible: true },
     { key: "disclaimer", visible: true },
@@ -75,16 +77,16 @@ export const SYSTEM_TEMPLATE: QuoteTemplate = {
     totalsBoldSize: "lg",
   },
   spacing: {
-    sectionGap: 24,
-    itemGap: 16,
-    innerPadding: 16,
+    sectionGapMm: 6,
+    itemGapMm: 4,
+    innerPaddingMm: 4,
   },
   itemLayout: {
     drawingPosition: "left",
     specsPosition: "right",
     drawingMaxWidthPercent: 50,
     photosPosition: "below",
-    photoMaxSize: 120,
+    photoMaxSizeMm: 30,
   },
   acceptance: {
     visible: true,
@@ -98,6 +100,31 @@ export const SYSTEM_TEMPLATE: QuoteTemplate = {
     accent: "#374151",
   },
 };
+
+export const SYSTEM_TEMPLATE = COMPANY_MASTER_TEMPLATE;
+
+export interface DivisionOverrides {
+  accentColor?: string | null;
+  scheduleLayoutVariant?: string;
+  totalsLayoutVariant?: string;
+}
+
+export function resolveQuoteTemplate(
+  overrides?: DivisionOverrides | null,
+): QuoteTemplate {
+  if (!overrides) return COMPANY_MASTER_TEMPLATE;
+
+  const resolved = { ...COMPANY_MASTER_TEMPLATE };
+
+  if (overrides.accentColor) {
+    resolved.colors = {
+      ...COMPANY_MASTER_TEMPLATE.colors,
+      accent: overrides.accentColor,
+    };
+  }
+
+  return resolved;
+}
 
 export function isSectionVisible(template: QuoteTemplate, key: string): boolean {
   const section = template.sections.find(s => s.key === key);

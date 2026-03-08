@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine, RenderSpecEntry } from "./quote-renderer";
-import { SYSTEM_TEMPLATE, isSectionVisible } from "./quote-template";
+import { isSectionVisible, COMPANY_MASTER_TEMPLATE } from "./quote-template";
+import type { QuoteTemplate } from "./quote-template";
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -9,12 +10,22 @@ const CW = PAGE_W - MARGIN * 2;
 const MAX_Y = PAGE_H - MARGIN;
 
 const FONT_NORMAL = "helvetica";
-const T = SYSTEM_TEMPLATE;
-const COLOR_BLACK = T.colors.bodyText;
-const COLOR_MUTED = T.colors.headingMuted;
-const COLOR_ACCENT = T.colors.accent;
-const COLOR_BORDER = T.colors.border;
-const COLOR_BG_MUTED = T.colors.bgMuted;
+
+let T: QuoteTemplate;
+let COLOR_BLACK: string;
+let COLOR_MUTED: string;
+let COLOR_ACCENT: string;
+let COLOR_BORDER: string;
+let COLOR_BG_MUTED: string;
+
+function applyTemplate(template: QuoteTemplate) {
+  T = template;
+  COLOR_BLACK = T.colors.bodyText;
+  COLOR_MUTED = T.colors.headingMuted;
+  COLOR_ACCENT = T.colors.accent;
+  COLOR_BORDER = T.colors.border;
+  COLOR_BG_MUTED = T.colors.bgMuted;
+}
 
 type Pdf = jsPDF;
 
@@ -66,6 +77,8 @@ export async function generateQuotePdf(
   onProgress?: (status: string) => void,
 ): Promise<void> {
   onProgress?.("Initializing PDF...");
+
+  applyTemplate(model.resolvedTemplate ?? COMPANY_MASTER_TEMPLATE);
 
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   let y = MARGIN;
