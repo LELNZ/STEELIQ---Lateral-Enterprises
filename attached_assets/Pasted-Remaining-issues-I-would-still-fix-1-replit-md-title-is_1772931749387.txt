@@ -1,0 +1,93 @@
+Remaining issues I would still fix
+1. replit.md title is still stale
+
+It still begins with:
+
+# SteelIQ Pro-Quote CAD Generator
+
+That should be cleaned up to match the project identity, for example:
+
+# SteelIQ – Lateral Enterprises
+
+2. Quotes page filter completion still needs one quick verification
+
+The grep confirms lifecycle fields, but I’d still want the actual UI checked for:
+
+customer filter wired and working
+
+quote type filter wired and working
+
+date range filter wired and working
+
+clear filters behavior working cleanly
+
+Your summary says they’re done, and that may be true, but this is the one remaining area I’d want visually verified in-app.
+
+3. Test count is inconsistent
+
+You said:
+
+33 automated API integration tests
+
+But replit.md says:
+
+27 automated API integration tests
+
+That should be reconciled so the engineering memory stays accurate.
+
+4. One defensive improvement in storage
+
+archiveJob() currently guards for missing job, but I did not see a stronger state guard at the storage layer beyond route-level checks. That is not a blocker, but it would be cleaner if storage also safely rejected invalid lifecycle transitions rather than relying only on routes.
+
+Verdict
+
+I would mark Phase A as:
+
+Implemented, with a short cleanup pass still recommended.
+
+Not a redesign pass — just cleanup/verification.
+
+Recommended immediate next steps
+Finish the cleanup pass
+
+Do these first:
+
+fix replit.md title and test count
+
+visually verify the new quote filters end-to-end
+
+add any missing storage-level lifecycle guard if you want stricter safety
+
+Then move to the next milestone
+
+After that, the correct next development step is:
+
+T017 — QuoteDocument integration into preview
+
+That should be next because the project is now ready to move from lifecycle hardening back into the documented Quote Engine path:
+
+QuoteDocument integration
+
+QuoteRenderer
+
+branded quote presentation
+
+improved preview
+
+PDF export 
+
+STEELIQ_CURRENT_STATE
+
+ 
+
+STEELIQ_BUILD_TRACKER
+
+What I need now
+
+To keep moving cleanly, I need one of these:
+
+confirmation that the small cleanup items above are done, or
+
+the next Replit plan for T017 QuoteDocument integration, and I’ll review/harden it before you run it
+
+My recommendation: do the tiny cleanup pass, then send me the T017 plan.
