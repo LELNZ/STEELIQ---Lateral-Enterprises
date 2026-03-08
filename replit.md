@@ -1,7 +1,7 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-Monday-readiness pass complete (T009–T011). siteType → quoteType propagation (T005–T008) complete.
+Print stabilization complete (T015–T018). Monday-readiness pass (T009–T013) complete. siteType → quoteType propagation (T005–T008) complete.
 - **Monday-readiness (T009–T013)**: Quote type simplified to Renovation / New Build. Legacy quotes (null/general/tender) display as "Unclassified" (not mislabeled). `POST /api/dev/clear-quotes` requires `ENABLE_DESTRUCTIVE_DEV_TOOLS=true` env var — blocked by default. Persistence audit confirmed: Replit PostgreSQL is persistent; quote disappearances caused by test scripts calling the clear-quotes endpoint.
 - **siteType propagation**: `site_type` column on `jobs` table. Quote builder persists/hydrates siteType. Exec summary auto-derives `quoteType` from `job.siteType`. On revisions, existing `quote_type` preserved. Server-side validation: `renovation | new_build | null` via `insertJobSchema`.
 - **Quote list audit**: `totalValue` from `snapshot.totals.sell`. Quote type editable on detail page via `PATCH /api/quotes/:id/type`. Backfill endpoint for existing quotes.
