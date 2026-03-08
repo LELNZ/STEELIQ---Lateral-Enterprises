@@ -24,7 +24,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, Printer, FileText, Image } from "lucide-react";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
@@ -692,9 +692,6 @@ export default function ExecSummary() {
               <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates the first quote for this estimate</span>
             </div>
           )}
-          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
-            <Printer className="h-4 w-4 mr-1" /> Print
-          </Button>
         </div>
       </div>
 

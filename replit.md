@@ -1,7 +1,8 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-Print stabilization complete (T015–T018). Monday-readiness pass (T009–T013) complete. siteType → quoteType propagation (T005–T008) complete.
+PDF export (T020–T023) complete. Print stabilization (T015–T018) complete. Monday-readiness (T009–T013) complete.
+- **PDF export**: Client-side PDF generation via `html2canvas` + `jsPDF` in `client/src/lib/pdf-export.ts`. Export button on Customer Preview page and Quote Detail page (auto-triggers via `?export=pdf` query param). Exec Summary print button removed. Quote Detail controls cleaned up: "Customer Preview" (inline nav) + "Export PDF" (opens preview with auto-export). Pipeline: QuoteDocumentModel → QuoteRenderModel → Preview DOM → html2canvas → jsPDF → PDF file.
 - **Monday-readiness (T009–T013)**: Quote type simplified to Renovation / New Build. Legacy quotes (null/general/tender) display as "Unclassified" (not mislabeled). `POST /api/dev/clear-quotes` requires `ENABLE_DESTRUCTIVE_DEV_TOOLS=true` env var — blocked by default. Persistence audit confirmed: Replit PostgreSQL is persistent; quote disappearances caused by test scripts calling the clear-quotes endpoint.
 - **siteType propagation**: `site_type` column on `jobs` table. Quote builder persists/hydrates siteType. Exec summary auto-derives `quoteType` from `job.siteType`. On revisions, existing `quote_type` preserved. Server-side validation: `renovation | new_build | null` via `insertJobSchema`.
 - **Quote list audit**: `totalValue` from `snapshot.totals.sell`. Quote type editable on detail page via `PATCH /api/quotes/:id/type`. Backfill endpoint for existing quotes.

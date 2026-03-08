@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -7,13 +7,14 @@ import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ArrowLeftCircle, Printer, Settings2, Info } from "lucide-react";
+import { ArrowLeftCircle, Download, Settings2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { PreviewData, QuoteDocumentModel } from "@/lib/quote-document";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/lib/quote-renderer";
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
+import { exportQuotePreviewToPdf } from "@/lib/pdf-export";
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -23,6 +24,8 @@ export default function QuotePreview() {
   const { toast } = useToast();
   const quoteId = params?.id;
   const [specSheetOpen, setSpecSheetOpen] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const { data: preview, isLoading } = useQuery<PreviewData>({
     queryKey: ["/api/quotes", quoteId, "preview-data"],
@@ -44,6 +47,28 @@ export default function QuotePreview() {
   useEffect(() => { setLocalKeys(null); }, [quoteId]);
 
   const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
+
+  const autoExportTriggered = useRef(false);
+  useEffect(() => {
+    if (autoExportTriggered.current || !renderModel || !contentRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("export") !== "pdf") return;
+    autoExportTriggered.current = true;
+    const timer = setTimeout(async () => {
+      if (!contentRef.current) return;
+      setPdfExporting(true);
+      try {
+        const safeName = (renderModel.header.quoteNumber || "quote").replace(/[^a-zA-Z0-9-_]/g, "_");
+        await exportQuotePreviewToPdf(contentRef.current, `${safeName}.pdf`);
+        toast({ title: "PDF exported successfully" });
+      } catch (err: any) {
+        toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
+      } finally {
+        setPdfExporting(false);
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [renderModel, toast]);
 
   const liveScheduleItems: RenderScheduleItem[] = useMemo(() => {
     if (!doc) return [];
@@ -138,15 +163,33 @@ export default function QuotePreview() {
               </div>
             </SheetContent>
           </Sheet>
-          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print-preview">
-            <Printer className="h-4 w-4 mr-1" /> Print
+          <Button
+            variant="default"
+            size="sm"
+            disabled={pdfExporting}
+            onClick={async () => {
+              if (!contentRef.current) return;
+              setPdfExporting(true);
+              try {
+                const safeName = (header.quoteNumber || "quote").replace(/[^a-zA-Z0-9-_]/g, "_");
+                await exportQuotePreviewToPdf(contentRef.current, `${safeName}.pdf`);
+                toast({ title: "PDF exported successfully" });
+              } catch (err: any) {
+                toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
+              } finally {
+                setPdfExporting(false);
+              }
+            }}
+            data-testid="button-export-pdf"
+          >
+            <Download className="h-4 w-4 mr-1" /> {pdfExporting ? "Exporting..." : "Export PDF"}
           </Button>
         </div>
       </div>
 
       <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
 
-      <div className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
+      <div ref={contentRef} className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
         <div className="space-y-6">
           <HeaderSection branding={branding} orgContact={orgContact} />
           <Separator />
