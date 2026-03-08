@@ -1,0 +1,232 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create a second competing quote rendering pipeline if the existing QuoteDocument / QuoteRenderer path can be reused.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any PDF engine / layout pipeline changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Replace snapshot-style PDF export with a true document PDF engine that generates customer quote PDFs from the quote data/render model itself.
+
+Current problem:
+- Export currently opens a new browser tab
+- Export is effectively a snapshot of the preview DOM
+- Output is not acceptable as a professional customer document
+- PDF must become a real controlled document output, not a screenshot
+
+This pass is the full engine pass for customer quote PDF export.
+
+
+--------------------------------------------------
+T025 — Remove snapshot-based export approach
+--------------------------------------------------
+
+Problem:
+The current export path depends on preview DOM capture (html2canvas/jsPDF image slicing), which is not acceptable.
+
+Required implementation:
+
+1. Remove the current DOM snapshot export path as the primary export method.
+2. Do NOT rely on:
+   - html2canvas page screenshots
+   - rasterized full-page preview capture
+   - opening a new preview window purely to auto-export screenshots
+3. Keep any fallback only if absolutely necessary, but the main export path must be true document generation.
+
+Acceptance criteria:
+- PDF export no longer depends on screenshotting the preview page
+- Export does not require a temporary preview browser tab just to generate output
+
+
+--------------------------------------------------
+T026 — Build a true PDF document engine from QuoteDocument / QuoteRenderer output
+--------------------------------------------------
+
+Problem:
+PDF export must be generated from structured quote data, not from page pixels.
+
+Required implementation:
+
+1. Build the PDF export from the existing architecture:
+   - Quote revision snapshot
+   - QuoteDocumentModel
+   - QuoteRenderModel / renderer output
+   - dedicated PDF layout/export layer
+
+2. Reuse the existing renderer/data structures as much as safely possible.
+
+3. If needed, introduce a small PDF-specific adapter layer, for example:
+   - QuoteRenderModel -> PdfRenderModel
+   but keep it small and explicit.
+
+4. The PDF engine must produce:
+   - true laid-out PDF pages
+   - controlled sections
+   - controlled pagination
+   - repeatable output independent of browser print quirks
+
+Acceptance criteria:
+- PDF export is generated from structured document data
+- No screenshot-based rendering is used as the main export
+- Output is meaningfully closer to a real document engine
+
+
+--------------------------------------------------
+T027 — Generate controlled A4 pages with real pagination
+--------------------------------------------------
+
+Problem:
+Customer PDFs need proper page construction, not browser-controlled or image-sliced output.
+
+Required implementation:
+
+1. Implement true A4 portrait page generation.
+2. Apply controlled page margins and usable content width.
+3. Support multi-page documents with explicit pagination logic.
+4. Prevent awkward splitting of critical sections where practical.
+5. Keep content readable and professionally scaled.
+
+Required content support:
+- header / branding
+- customer and project details
+- quote number / revision / dates
+- totals summary
+- exclusions / terms / payment blocks
+- schedule of items
+- drawings
+- included site photos where applicable
+
+Acceptance criteria:
+- PDF pages are generated as true A4 pages
+- Multi-page output is controlled by the engine, not by browser print
+- Content is readable and appropriately scaled
+
+
+--------------------------------------------------
+T028 — Keep preview and PDF aligned without requiring identical implementations
+--------------------------------------------------
+
+Problem:
+Preview and PDF should stay aligned, but PDF may need its own layout execution layer.
+
+Required implementation:
+
+1. Keep the preview and PDF based on the same source-of-truth content model.
+2. It is acceptable for PDF to have its own layout primitives if needed, but:
+   - data source must remain shared
+   - section ordering and content semantics must stay aligned
+3. Do NOT build a completely unrelated PDF content system.
+
+Acceptance criteria:
+- Preview and PDF remain conceptually aligned
+- PDF engine fits after Quote Renderer in the architecture
+- Future changes can be made without duplicating business logic everywhere
+
+
+--------------------------------------------------
+T029 — Clean up export controls to match the true engine
+--------------------------------------------------
+
+Problem:
+Current export controls reflect the snapshot/export-tab workaround.
+
+Required implementation:
+
+1. Update UI controls so they match the new engine behavior.
+2. Quote Detail should expose clear actions, such as:
+   - Customer Preview
+   - Export PDF
+3. Export PDF should directly trigger the new engine output.
+4. Do not open a redundant browser tab purely for export generation unless absolutely required by the chosen library/runtime.
+5. Keep Exec Summary free of customer-document print/export confusion.
+
+Acceptance criteria:
+- Export controls match actual behavior
+- Export PDF feels like a real export action, not a preview workaround
+
+
+--------------------------------------------------
+T030 — Choose the smallest safe true-engine implementation
+--------------------------------------------------
+
+Implementation guidance:
+
+Use the smallest safe approach that creates a real document PDF engine.
+
+Preferred characteristics:
+- text-based/vector-based PDF where possible
+- controlled layout and pagination
+- stable enough for Monday operational use
+
+Acceptable approaches may include a proper PDF library/layout system, provided it respects the architecture guards.
+
+Do NOT:
+- introduce a broad template-builder system
+- redesign the renderer architecture unnecessarily
+- add customer portal/email logic
+- redesign lifecycle
+- add speculative future systems
+
+This is a focused full PDF engine pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Export PDF no longer relies on preview snapshots.
+2. Export does not depend on opening a temporary preview tab as the main mechanism.
+3. PDF output is generated from structured quote data/render output.
+4. PDF pages are true controlled A4 pages with managed pagination.
+5. The architecture remains:
+   Estimate / Project → Quotes → Revisions → Snapshot → QuoteDocument → Quote Renderer → PDF Export
+
+
+END OF IMPLEMENTATION

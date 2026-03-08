@@ -11,8 +11,13 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowLeftCircle, Clock, Download, Eye, FileText, History } from "lucide-react";
+import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { buildQuoteDocumentModel } from "@/lib/quote-document";
+import type { PreviewData } from "@/lib/quote-document";
+import { buildQuoteRenderModel } from "@/lib/quote-renderer";
+import { generateQuotePdf } from "@/lib/pdf-engine";
 
 interface QuoteWithRevisions extends Quote {
   revisions: QuoteRevision[];
@@ -53,6 +58,25 @@ export default function QuoteDetail() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const quoteId = params?.id;
+  const [pdfExporting, setPdfExporting] = useState(false);
+
+  async function handleExportPdf() {
+    if (!quoteId || pdfExporting) return;
+    setPdfExporting(true);
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}/preview-data`);
+      if (!res.ok) throw new Error("Failed to load quote data");
+      const preview: PreviewData = await res.json();
+      const doc = buildQuoteDocumentModel(preview);
+      const renderModel = buildQuoteRenderModel(doc);
+      await generateQuotePdf(renderModel);
+      toast({ title: "PDF exported successfully" });
+    } catch (err: any) {
+      toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPdfExporting(false);
+    }
+  }
 
   const { data: quote, isLoading } = useQuery<QuoteWithRevisions>({
     queryKey: ["/api/quotes", quoteId],
@@ -134,10 +158,12 @@ export default function QuoteDetail() {
           <Button
             variant="default"
             size="sm"
-            onClick={() => quoteId && window.open(`/quote/${quoteId}/preview?export=pdf`, "_blank", "noopener,noreferrer")}
+            disabled={pdfExporting}
+            onClick={handleExportPdf}
             data-testid="button-export-pdf"
           >
-            <Download className="h-4 w-4 mr-1" /> Export PDF
+            {pdfExporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+            {pdfExporting ? "Exporting..." : "Export PDF"}
           </Button>
           <Badge variant={STATUS_VARIANT[quote.status] || "secondary"} className="text-sm px-3 py-1" data-testid="badge-quote-status">
             {STATUS_LABELS[quote.status] || quote.status}

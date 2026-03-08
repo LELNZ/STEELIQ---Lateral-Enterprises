@@ -14,7 +14,7 @@ import { buildQuoteDocumentModel } from "@/lib/quote-document";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/lib/quote-renderer";
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
-import { exportQuotePreviewToPdf } from "@/lib/pdf-export";
+import { generateQuotePdf } from "@/lib/pdf-engine";
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -25,7 +25,6 @@ export default function QuotePreview() {
   const quoteId = params?.id;
   const [specSheetOpen, setSpecSheetOpen] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
 
   const { data: preview, isLoading } = useQuery<PreviewData>({
     queryKey: ["/api/quotes", quoteId, "preview-data"],
@@ -50,23 +49,21 @@ export default function QuotePreview() {
 
   const autoExportTriggered = useRef(false);
   useEffect(() => {
-    if (autoExportTriggered.current || !renderModel || !contentRef.current) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("export") !== "pdf") return;
+    if (autoExportTriggered.current || !renderModel) return;
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("export") !== "pdf") return;
     autoExportTriggered.current = true;
     const timer = setTimeout(async () => {
-      if (!contentRef.current) return;
       setPdfExporting(true);
       try {
-        const safeName = (renderModel.header.quoteNumber || "quote").replace(/[^a-zA-Z0-9-_]/g, "_");
-        await exportQuotePreviewToPdf(contentRef.current, `${safeName}.pdf`);
+        await generateQuotePdf(renderModel);
         toast({ title: "PDF exported successfully" });
       } catch (err: any) {
         toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
       } finally {
         setPdfExporting(false);
       }
-    }, 800);
+    }, 300);
     return () => clearTimeout(timer);
   }, [renderModel, toast]);
 
@@ -168,11 +165,11 @@ export default function QuotePreview() {
             size="sm"
             disabled={pdfExporting}
             onClick={async () => {
-              if (!contentRef.current) return;
+              if (!renderModel) return;
               setPdfExporting(true);
               try {
-                const safeName = (header.quoteNumber || "quote").replace(/[^a-zA-Z0-9-_]/g, "_");
-                await exportQuotePreviewToPdf(contentRef.current, `${safeName}.pdf`);
+                const exportModel = { ...renderModel, scheduleItems: liveScheduleItems };
+                await generateQuotePdf(exportModel);
                 toast({ title: "PDF exported successfully" });
               } catch (err: any) {
                 toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
@@ -189,7 +186,7 @@ export default function QuotePreview() {
 
       <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
 
-      <div ref={contentRef} className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
+      <div className="p-4 sm:p-8 print:p-4 space-y-8 print:space-y-6">
         <div className="space-y-6">
           <HeaderSection branding={branding} orgContact={orgContact} />
           <Separator />
