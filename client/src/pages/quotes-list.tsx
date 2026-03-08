@@ -369,7 +369,7 @@ export default function QuotesList() {
             </div>
           </div>
 
-          {["active", "renovation", "new_build", "tender", "archived"].map(tabValue => (
+          {["active", "archived"].map(tabValue => (
             <TabsContent key={tabValue} value={tabValue}>
               {filteredQuotes.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground" data-testid="text-no-quotes-filtered">

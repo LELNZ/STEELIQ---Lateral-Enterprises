@@ -915,26 +915,35 @@ export async function registerRoutes(
         `SELECT q.id, q.current_revision_id FROM quotes q WHERE q.total_value IS NULL AND q.current_revision_id IS NOT NULL`
       );
       let updated = 0;
+      let skipped = 0;
       for (const row of quotesWithoutValue.rows) {
-        const revResult = await pool.query(
-          `SELECT snapshot_json FROM quote_revisions WHERE id = $1`,
-          [row.current_revision_id]
-        );
-        if (revResult.rows.length > 0) {
-          const snap = typeof revResult.rows[0].snapshot_json === "string"
-            ? JSON.parse(revResult.rows[0].snapshot_json)
-            : revResult.rows[0].snapshot_json;
-          const sellValue = snap?.totals?.sell ?? null;
-          if (sellValue != null) {
-            await pool.query(
-              `UPDATE quotes SET total_value = $1 WHERE id = $2`,
-              [sellValue, row.id]
-            );
-            updated++;
+        try {
+          const revResult = await pool.query(
+            `SELECT snapshot_json FROM quote_revisions WHERE id = $1`,
+            [row.current_revision_id]
+          );
+          if (revResult.rows.length > 0) {
+            const snap = typeof revResult.rows[0].snapshot_json === "string"
+              ? JSON.parse(revResult.rows[0].snapshot_json)
+              : revResult.rows[0].snapshot_json;
+            const sellValue = snap?.totals?.sell;
+            if (typeof sellValue === "number" && isFinite(sellValue)) {
+              await pool.query(
+                `UPDATE quotes SET total_value = $1 WHERE id = $2`,
+                [sellValue, row.id]
+              );
+              updated++;
+            } else {
+              skipped++;
+            }
+          } else {
+            skipped++;
           }
+        } catch {
+          skipped++;
         }
       }
-      res.json({ message: `Backfilled ${updated} of ${quotesWithoutValue.rows.length} quotes` });
+      res.json({ message: `Backfilled ${updated} of ${quotesWithoutValue.rows.length} quotes`, skipped });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
