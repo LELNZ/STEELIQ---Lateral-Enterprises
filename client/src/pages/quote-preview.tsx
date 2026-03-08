@@ -313,6 +313,7 @@ function MediaImage({
   testId,
   fallbackTestId,
   fallbackText,
+  onLoadStatusChange,
 }: {
   src: string;
   alt: string;
@@ -320,10 +321,14 @@ function MediaImage({
   testId: string;
   fallbackTestId: string;
   fallbackText: string;
+  onLoadStatusChange?: (loaded: boolean) => void;
 }) {
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => { setFailed(false); }, [src]);
+  useEffect(() => {
+    setFailed(false);
+    onLoadStatusChange?.(true);
+  }, [src]);
 
   if (failed) {
     return (
@@ -342,7 +347,10 @@ function MediaImage({
       alt={alt}
       className={className}
       data-testid={testId}
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true);
+        onLoadStatusChange?.(false);
+      }}
     />
   );
 }
@@ -358,6 +366,8 @@ function ScheduleItemCard({
 }) {
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("");
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
+  const [drawingFailed, setDrawingFailed] = useState(false);
 
   const { visibleSpecs, defaultSpecCount, hasMoreSpecs, useTwoColPrint, media } = item;
 
@@ -384,10 +394,12 @@ function ScheduleItemCard({
         {media.drawingUrl && (
           <div className="flex items-center justify-center">
             <div
-              className="cursor-pointer print:cursor-default"
+              className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
               onClick={() => {
-                setViewerSrc(media.drawingUrl);
-                setViewerTitle(media.drawingLabel);
+                if (!drawingFailed) {
+                  setViewerSrc(media.drawingUrl);
+                  setViewerTitle(media.drawingLabel);
+                }
               }}
             >
               <MediaImage
@@ -397,6 +409,7 @@ function ScheduleItemCard({
                 testId={`img-drawing-${item.index}`}
                 fallbackTestId={`fallback-drawing-${item.index}`}
                 fallbackText="Drawing unavailable"
+                onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
               />
             </div>
           </div>
@@ -466,29 +479,39 @@ function ScheduleItemCard({
         <div className="space-y-2" data-testid={`photos-section-${item.index}`}>
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Site Photos</p>
           <div className="flex flex-wrap gap-3">
-            {media.customerPhotos.map((photo, pIdx) => (
-              <div key={photo.key} className="space-y-1">
-                <div
-                  className="cursor-pointer print:cursor-default"
-                  onClick={() => {
-                    setViewerSrc(photo.url);
-                    setViewerTitle(photo.caption);
-                  }}
-                >
-                  <MediaImage
-                    src={photo.url}
-                    alt={photo.caption}
-                    className="max-h-48 max-w-[200px] object-contain rounded border"
-                    testId={`img-photo-${item.index}-${pIdx}`}
-                    fallbackTestId={`fallback-photo-${item.index}-${pIdx}`}
-                    fallbackText="Photo unavailable"
-                  />
+            {media.customerPhotos.map((photo, pIdx) => {
+              const isFailed = failedPhotos.has(photo.key);
+              return (
+                <div key={photo.key} className="space-y-1">
+                  <div
+                    className={isFailed ? "" : "cursor-pointer print:cursor-default"}
+                    onClick={() => {
+                      if (!isFailed) {
+                        setViewerSrc(photo.url);
+                        setViewerTitle(photo.caption);
+                      }
+                    }}
+                  >
+                    <MediaImage
+                      src={photo.url}
+                      alt={photo.caption}
+                      className="max-h-48 max-w-[200px] object-contain rounded border"
+                      testId={`img-photo-${item.index}-${pIdx}`}
+                      fallbackTestId={`fallback-photo-${item.index}-${pIdx}`}
+                      fallbackText="Photo unavailable"
+                      onLoadStatusChange={(loaded) => {
+                        if (!loaded) {
+                          setFailedPhotos(prev => new Set(prev).add(photo.key));
+                        }
+                      }}
+                    />
+                  </div>
+                  {photo.caption && !isFailed && (
+                    <p className="text-xs text-muted-foreground text-center max-w-[200px]">{photo.caption}</p>
+                  )}
                 </div>
-                {photo.caption && (
-                  <p className="text-xs text-muted-foreground text-center max-w-[200px]">{photo.caption}</p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
