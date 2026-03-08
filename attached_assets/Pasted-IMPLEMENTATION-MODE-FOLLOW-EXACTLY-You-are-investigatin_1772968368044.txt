@@ -1,0 +1,70 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are investigating a scoped image persistence/storage issue in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT redesign architecture unless a concrete root cause proves it is necessary.
+2. Do NOT add new schema fields, endpoints, or storage systems unless explicitly instructed.
+3. Do NOT guess. Inspect the actual code paths, records, files, and serving behavior.
+4. Compare one working image and one broken image side by side.
+5. Preserve Quote/Revision/Snapshot semantics.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Exact item rows inspected
+2. Whether photo metadata exists for each row
+3. Whether the actual file exists for each row
+4. Exact storage path/key used for each row
+5. Exact served URL used for each row
+6. Whether the failure is:
+   - missing file
+   - broken path mapping
+   - partial upload persistence
+   - cleanup deletion
+   - Replit filesystem persistence issue
+   - other
+7. Files inspected
+8. Any code changes made
+9. Confirmation architecture guards were preserved
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+Objective:
+Determine why only one image in the quote persists while the other item images are broken.
+
+Required tasks:
+1. Pick one working image row and one broken image row from the current quote.
+2. Trace both from:
+   - item/source metadata
+   - DB/json photo record
+   - snapshot/revision data
+   - stored file key/path
+   - physical file existence
+   - served image route
+   - browser/network result
+3. Confirm whether Replit build/restart behavior is causing file loss.
+4. Confirm whether the DB still has metadata for broken rows.
+5. Confirm whether cleanup/deletion logic removed files incorrectly.
+6. Do not implement a broad fix until root cause is proven.
+7. If the root cause is confirmed, propose the smallest safe fix for Monday.
+
+Acceptance criteria:
+- exact root cause identified
+- no guessing
+- no speculative redesign
+- clear recommendation whether this is DB, file persistence, path mapping, or cleanup logic
