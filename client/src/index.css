@@ -302,3 +302,10 @@
     scroll-margin-bottom: 60px;
   }
 }
+
+@media print {
+  .overflow-wrap-anywhere {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+}

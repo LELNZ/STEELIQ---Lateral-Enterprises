@@ -257,7 +257,16 @@ export async function registerRoutes(
   app.get("/api/jobs/:id/quotes", async (req, res) => {
     try {
       const linkedQuotes = await storage.getQuotesByJobId(req.params.id);
-      res.json(linkedQuotes);
+      const enriched = await Promise.all(linkedQuotes.map(async (q) => {
+        const revisions = await storage.getQuoteRevisions(q.id);
+        const currentRev = revisions.find(r => r.id === q.currentRevisionId);
+        return {
+          ...q,
+          revisionCount: revisions.length,
+          currentRevisionNumber: currentRev?.versionNumber || revisions.length || 1,
+        };
+      }));
+      res.json(enriched);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -755,7 +764,7 @@ export async function registerRoutes(
         const quoteInsert = await client.query(
           `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, created_at, updated_at)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, NOW(), NOW()) RETURNING *`,
-          [number, mode === "new_quote" ? null : (sourceJobId || null), divisionCode, customer, quoteType || null]
+          [number, sourceJobId || null, divisionCode, customer, quoteType || null]
         );
         const quote = quoteInsert.rows[0];
 
@@ -812,7 +821,20 @@ export async function registerRoutes(
     try {
       const allQuotes = await storage.getAllQuotes();
       const enriched = await enrichQuotesWithOrphanState(allQuotes);
-      res.json(enriched);
+
+      const jobIds = [...new Set(enriched.map(q => q.sourceJobId).filter(Boolean))] as string[];
+      const jobNameMap: Record<string, string> = {};
+      for (const jid of jobIds) {
+        const job = await storage.getJob(jid);
+        if (job) jobNameMap[jid] = job.name;
+      }
+
+      const withEstimateName = enriched.map(q => ({
+        ...q,
+        sourceEstimateName: q.sourceJobId ? (jobNameMap[q.sourceJobId] || null) : null,
+      }));
+
+      res.json(withEstimateName);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

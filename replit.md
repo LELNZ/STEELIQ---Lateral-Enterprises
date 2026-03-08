@@ -1,7 +1,14 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-T017b complete — Quote media integrity and preview rendering fix. Drawing images are now captured into snapshots via offscreen DrawingCanvas rendering in ExecSummary. Customer photos with `includeInCustomerPdf` render in quote preview. Graceful fallback component for broken/missing media. Next: T018 (QuoteRenderer architecture).
+Pre-T018 UX pass complete — 7 improvement tasks applied:
+- T001: Quote vs revision action labels clarified in ExecSummary (Generate Quote / Update Existing Quote / Create New Quote with subtexts).
+- T002: Source estimate name shown in quotes list table; related quotes section in quote-detail; quote history section in exec-summary. API enrichment for `sourceEstimateName`.
+- T003: Photo inclusion controls (per-item checkboxes for `includeInCustomerPdf`) in ExecSummary per-item breakdown.
+- T004: Reusable `MediaViewer` lightbox component with zoom, download, close. Wired into quote-preview and quote-builder.
+- T005: Print layout improvements — all specs expanded in print, two-column spec layout for 14+ specs, `overflow-wrap: break-word`, `max-w-[140px]` on spec labels, interactive controls `print:hidden`.
+- T006: Builder performance — `useMemo` on `totalSqm`, `totalPrice`, `specGroups`; `useCallback` on `libFrameTypesForCategory`.
+Next: T018 (QuoteRenderer architecture).
 
 ## Overview
 SteelIQ is a professional quotation and estimating platform built for Lateral Enterprises, serving the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within estimates and quotes. The system streamlines the quotation process from configuration and visualization to pricing and export, providing a robust, user-friendly platform for accurate and visually rich quotes. Key capabilities include real-time drawing previews, comprehensive estimate and quote lifecycle management, item photo capture, and detailed pricing breakdowns.

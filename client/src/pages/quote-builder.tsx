@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
@@ -11,6 +11,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
+import { MediaViewer } from "@/components/media-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -224,6 +225,8 @@ export default function QuoteBuilder() {
   const [savedJobId, setSavedJobId] = useState<string | null>(jobId || null);
 
   const [galleryItemId, setGalleryItemId] = useState<string | null>(null);
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null);
+  const [viewerTitle, setViewerTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSaveAndLeaving, setIsSaveAndLeaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -296,7 +299,7 @@ export default function QuoteBuilder() {
     "wallThickness","heightFromFloor"
   ];
 
-  const specGroups = (() => {
+  const specGroups = useMemo(() => {
     const groups: Record<string, SpecDictionaryEntry[]> = {};
     const layoutKeys = new Set(["layout","windowType","hingeSide","openDirection","halfSolid","panels",
       "sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"]);
@@ -306,19 +309,19 @@ export default function QuoteBuilder() {
       groups[spec.group].push(spec);
     }
     return groups;
-  })();
+  }, [specDictionary]);
 
   const isSpecVisible = (key: string) => showAllSpecs || defaultSpecKeys.includes(key);
   const hiddenSpecCount = specDictionary.filter(s => !defaultSpecKeys.includes(s.key) && !["layout","windowType","hingeSide","openDirection","halfSolid","panels","sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"].includes(s.key)).length;
 
-  const libFrameTypesForCategory = (cat: string) => {
+  const libFrameTypesForCategory = useCallback((cat: string) => {
     const fromDb = libFrameTypes.filter((e) => {
       const d = e.data as any;
       return d.categories?.includes(cat);
     }).map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }));
     if (fromDb.length > 0) return fromDb;
     return getFrameTypesForCategory(cat).map((ft) => ({ value: ft.value, label: ft.label }));
-  };
+  }, [libFrameTypes]);
   const libFrameColorOptions = libFrameColors.length > 0
     ? libFrameColors.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
     : FRAME_COLORS.map((fc) => ({ value: fc.value, label: fc.label }));
@@ -526,15 +529,16 @@ export default function QuoteBuilder() {
   })();
 
   const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
-  const currentPricing: PricingBreakdown | null = hasConfigData
-    ? calculatePricing(
-        w.width || 0, w.height || 0, w.quantity || 1,
-        configProfiles, configAccessories, configLabor,
-        usdToNzdRate, w.pricePerSqm || 500,
-        { glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput },
-        { masterProfiles, masterAccessories, masterLabour }
-      )
-    : null;
+  const currentPricing: PricingBreakdown | null = useMemo(() => {
+    if (!hasConfigData) return null;
+    return calculatePricing(
+      w.width || 0, w.height || 0, w.quantity || 1,
+      configProfiles, configAccessories, configLabor,
+      usdToNzdRate, w.pricePerSqm || 500,
+      { glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput },
+      { masterProfiles, masterAccessories, masterLabour }
+    );
+  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -1281,11 +1285,11 @@ export default function QuoteBuilder() {
     return amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  const totalSqm = items.reduce((sum, iwp) => {
+  const totalSqm = useMemo(() => items.reduce((sum, iwp) => {
     return sum + (iwp.item.width * iwp.item.height * (iwp.item.quantity || 1)) / 1_000_000;
-  }, 0).toFixed(2);
+  }, 0).toFixed(2), [items]);
 
-  const totalPrice = items.reduce((sum, iwp) => sum + calcItemPrice(iwp.item), 0);
+  const totalPrice = useMemo(() => items.reduce((sum, iwp) => sum + calcItemPrice(iwp.item), 0), [items]);
 
   const drawingConfig: InsertQuoteItem = {
     ...w,
@@ -3139,7 +3143,15 @@ export default function QuoteBuilder() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {photos.map((p, idx) => (
                     <div key={p.key} className={`relative rounded-lg border-2 overflow-hidden ${p.isPrimary ? "border-primary" : "border-border"}`} data-testid={`gallery-photo-${idx}`}>
-                      <img src={`/api/item-photos/${p.key}`} alt={p.caption || `Photo ${idx + 1}`} className="w-full h-32 object-cover" />
+                      <img
+                        src={`/api/item-photos/${p.key}`}
+                        alt={p.caption || `Photo ${idx + 1}`}
+                        className="w-full h-32 object-cover cursor-pointer"
+                        onClick={() => {
+                          setViewerSrc(`/api/item-photos/${p.key}`);
+                          setViewerTitle(p.caption || `Photo ${idx + 1}`);
+                        }}
+                      />
                       {p.isPrimary && (
                         <Badge className="absolute top-1 left-1 text-[10px] px-1 py-0" data-testid={`badge-primary-${idx}`}>Primary</Badge>
                       )}
@@ -3204,6 +3216,15 @@ export default function QuoteBuilder() {
           })()}
         </DialogContent>
       </Dialog>
+
+      <MediaViewer
+        open={!!viewerSrc}
+        onOpenChange={(open) => { if (!open) setViewerSrc(null); }}
+        src={viewerSrc || ""}
+        alt={viewerTitle}
+        title={viewerTitle}
+        downloadFilename={`${viewerTitle.replace(/\s+/g, "_")}.png`}
+      />
     </div>
   );
 }

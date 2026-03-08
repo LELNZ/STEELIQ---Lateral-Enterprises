@@ -11,6 +11,7 @@ import { ArrowLeftCircle, Printer, Settings2, ChevronDown, ChevronRight } from "
 import { useToast } from "@/hooks/use-toast";
 import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem } from "@/lib/quote-document";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
+import { MediaViewer } from "@/components/media-viewer";
 
 function fmt(n: number): string {
   return n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -364,6 +365,9 @@ function ScheduleItem({
   displayKeys: string[];
   specKeyToLabel: Record<string, string>;
 }) {
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null);
+  const [viewerTitle, setViewerTitle] = useState("");
+
   const specs = item.resolvedSpecs || {};
   const visibleSpecs = displayKeys
     .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
@@ -371,6 +375,7 @@ function ScheduleItem({
 
   const defaultShow = Math.min(visibleSpecs.length, 14);
   const hasMore = visibleSpecs.length > defaultShow;
+  const useTwoColPrint = visibleSpecs.length > 14;
 
   const customerPhotos = (item.photos || []).filter(p => p.includeInCustomerPdf);
 
@@ -396,27 +401,79 @@ function ScheduleItem({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {item.drawingImageKey && (
           <div className="flex items-center justify-center">
-            <MediaImage
-              src={`/api/drawing-images/${item.drawingImageKey}`}
-              alt={`Drawing for item ${index + 1}`}
-              className="max-h-64 object-contain rounded border"
-              testId={`img-drawing-${index}`}
-              fallbackTestId={`fallback-drawing-${index}`}
-              fallbackText="Drawing unavailable"
-            />
+            <div
+              className="cursor-pointer print:cursor-default"
+              onClick={() => {
+                setViewerSrc(`/api/drawing-images/${item.drawingImageKey}`);
+                setViewerTitle(`Drawing — Item ${item.itemNumber || index + 1}`);
+              }}
+            >
+              <MediaImage
+                src={`/api/drawing-images/${item.drawingImageKey}`}
+                alt={`Drawing for item ${index + 1}`}
+                className="max-h-64 object-contain rounded border"
+                testId={`img-drawing-${index}`}
+                fallbackTestId={`fallback-drawing-${index}`}
+                fallbackText="Drawing unavailable"
+              />
+            </div>
           </div>
         )}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className={`w-full text-sm ${useTwoColPrint ? "print:hidden" : ""}`}>
             <tbody>
               {(expanded ? visibleSpecs : visibleSpecs.slice(0, defaultShow)).map(({ key, label, value }) => (
                 <tr key={key} className="border-b last:border-b-0">
-                  <td className="py-1 pr-3 text-muted-foreground whitespace-nowrap">{label}</td>
-                  <td className="py-1 font-medium" data-testid={`text-spec-${key}-${index}`}>{value}</td>
+                  <td className="py-1 pr-3 text-muted-foreground whitespace-nowrap max-w-[140px] truncate">{label}</td>
+                  <td className="py-1 font-medium overflow-wrap-anywhere" style={{ overflowWrap: "break-word" }} data-testid={`text-spec-${key}-${index}`}>{value}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {useTwoColPrint && (
+            <table className="hidden print:table w-full text-sm">
+              <tbody>
+                <tr>
+                  <td className="align-top pr-4 w-1/2">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {visibleSpecs.slice(0, Math.ceil(visibleSpecs.length / 2)).map(({ key, label, value }) => (
+                          <tr key={key} className="border-b last:border-b-0">
+                            <td className="py-0.5 pr-2 text-muted-foreground whitespace-nowrap max-w-[140px] truncate text-xs">{label}</td>
+                            <td className="py-0.5 font-medium text-xs" style={{ overflowWrap: "break-word" }}>{value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                  <td className="align-top w-1/2">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {visibleSpecs.slice(Math.ceil(visibleSpecs.length / 2)).map(({ key, label, value }) => (
+                          <tr key={key} className="border-b last:border-b-0">
+                            <td className="py-0.5 pr-2 text-muted-foreground whitespace-nowrap max-w-[140px] truncate text-xs">{label}</td>
+                            <td className="py-0.5 font-medium text-xs" style={{ overflowWrap: "break-word" }}>{value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+          {!useTwoColPrint && (
+            <table className="hidden print:table w-full text-sm">
+              <tbody>
+                {visibleSpecs.map(({ key, label, value }) => (
+                  <tr key={key} className="border-b last:border-b-0">
+                    <td className="py-0.5 pr-3 text-muted-foreground whitespace-nowrap max-w-[140px] truncate text-xs">{label}</td>
+                    <td className="py-0.5 font-medium text-xs" style={{ overflowWrap: "break-word" }}>{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
           {visibleSpecs.length === 0 && (
             <p className="text-sm text-muted-foreground italic">No specification data available for this item.</p>
           )}
@@ -429,14 +486,22 @@ function ScheduleItem({
           <div className="flex flex-wrap gap-3">
             {customerPhotos.map((photo, pIdx) => (
               <div key={photo.key} className="space-y-1">
-                <MediaImage
-                  src={`/api/item-photos/${photo.key}`}
-                  alt={photo.caption || `Photo ${pIdx + 1} for item ${index + 1}`}
-                  className="max-h-48 max-w-[200px] object-contain rounded border"
-                  testId={`img-photo-${index}-${pIdx}`}
-                  fallbackTestId={`fallback-photo-${index}-${pIdx}`}
-                  fallbackText="Photo unavailable"
-                />
+                <div
+                  className="cursor-pointer print:cursor-default"
+                  onClick={() => {
+                    setViewerSrc(`/api/item-photos/${photo.key}`);
+                    setViewerTitle(photo.caption || `Photo ${pIdx + 1} — Item ${index + 1}`);
+                  }}
+                >
+                  <MediaImage
+                    src={`/api/item-photos/${photo.key}`}
+                    alt={photo.caption || `Photo ${pIdx + 1} for item ${index + 1}`}
+                    className="max-h-48 max-w-[200px] object-contain rounded border"
+                    testId={`img-photo-${index}-${pIdx}`}
+                    fallbackTestId={`fallback-photo-${index}-${pIdx}`}
+                    fallbackText="Photo unavailable"
+                  />
+                </div>
                 {photo.caption && (
                   <p className="text-xs text-muted-foreground text-center max-w-[200px]">{photo.caption}</p>
                 )}
@@ -445,6 +510,15 @@ function ScheduleItem({
           </div>
         </div>
       )}
+
+      <MediaViewer
+        open={!!viewerSrc}
+        onOpenChange={(open) => { if (!open) setViewerSrc(null); }}
+        src={viewerSrc || ""}
+        alt={viewerTitle}
+        title={viewerTitle}
+        downloadFilename={`${viewerTitle.replace(/\s+/g, "_")}.png`}
+      />
     </div>
   );
 }

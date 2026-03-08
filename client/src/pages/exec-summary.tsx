@@ -23,7 +23,8 @@ import {
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, Printer, FileText } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, Printer, FileText, Image } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
@@ -99,6 +100,13 @@ export default function ExecSummary() {
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
   });
+
+  const { data: existingQuotes = [] } = useQuery<any[]>({
+    queryKey: ["/api/jobs", jobId, "quotes"],
+    enabled: !!jobId,
+  });
+
+  const hasExistingQuote = existingQuotes.length > 0;
 
   const configIds = useMemo(() => {
     if (!job) return [];
@@ -575,8 +583,9 @@ export default function ExecSummary() {
     mutationFn: () => buildSnapshotAndPost("revision"),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "quotes"] });
       if (data.isNewRevision) {
-        toast({ title: `New revision added to ${data.quote.number}` });
+        toast({ title: `Revision ${data.revision?.versionNumber || ""} added to ${data.quote.number}`.trim() });
       } else {
         toast({ title: `Quote ${data.quote.number} created` });
       }
@@ -590,7 +599,8 @@ export default function ExecSummary() {
     mutationFn: () => buildSnapshotAndPost("new_quote"),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
-      toast({ title: `New quote ${data.quote.number} created` });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "quotes"] });
+      toast({ title: `New quote ${data.quote.number} created under this estimate` });
     },
     onError: (err: Error) => {
       toast({ title: "Failed to create new quote", description: err.message, variant: "destructive" });
@@ -635,25 +645,49 @@ export default function ExecSummary() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => generateQuoteMutation.mutate()}
-            disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
-            data-testid="button-generate-quote"
-          >
-            <FileText className="h-4 w-4 mr-1" />
-            {generateQuoteMutation.isPending ? "Generating..." : "Generate Preliminary Estimate"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => generateNewQuoteMutation.mutate()}
-            disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
-            data-testid="button-generate-new-quote"
-          >
-            {generateNewQuoteMutation.isPending ? "Creating..." : "Create New Estimate"}
-          </Button>
+          {hasExistingQuote ? (
+            <>
+              <div className="flex flex-col items-start">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => generateQuoteMutation.mutate()}
+                  disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
+                  data-testid="button-generate-quote"
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  {generateQuoteMutation.isPending ? "Generating..." : "Update Existing Quote"}
+                </Button>
+                <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates a new revision on the selected quote</span>
+              </div>
+              <div className="flex flex-col items-start">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateNewQuoteMutation.mutate()}
+                  disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
+                  data-testid="button-generate-new-quote"
+                >
+                  {generateNewQuoteMutation.isPending ? "Creating..." : "Create New Quote"}
+                </Button>
+                <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates a separate quote under this estimate</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-start">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => generateQuoteMutation.mutate()}
+                disabled={generateQuoteMutation.isPending}
+                data-testid="button-generate-quote"
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                {generateQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
+              </Button>
+              <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates the first quote for this estimate</span>
+            </div>
+          )}
           <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
             <Printer className="h-4 w-4 mr-1" /> Print
           </Button>
@@ -1004,6 +1038,36 @@ export default function ExecSummary() {
         )}
       </div>
 
+      {existingQuotes.length > 0 && (
+        <div className="order-4 md:order-4 rounded-lg border bg-card p-4 space-y-3 print:hidden" data-testid="quote-history-section">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote History</h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Quote #</TableHead>
+                <TableHead>Revision</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Updated</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {existingQuotes.map((q: any) => (
+                <TableRow key={q.id} data-testid={`row-quote-history-${q.id}`}>
+                  <TableCell className="font-mono font-medium" data-testid={`text-quote-history-number-${q.id}`}>{q.number}</TableCell>
+                  <TableCell className="text-sm" data-testid={`text-quote-history-revision-${q.id}`}>v{q.currentRevisionNumber || 1}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" data-testid={`badge-quote-history-status-${q.id}`}>{q.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-NZ") : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
       <div className="order-2 md:order-5 rounded-lg border bg-card" data-testid="items-breakdown">
         <div className="p-4 border-b">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Per-Item Breakdown</h2>
@@ -1115,6 +1179,14 @@ export default function ExecSummary() {
                               <br />Sale price: ${fmt(ip.salePrice)} (at ${ip.item.pricePerSqm || 500}/m²)
                             </div>
                           )}
+                          {ip.photos.length > 0 && (
+                            <PhotoInclusionControls
+                              photos={ip.photos}
+                              jobId={jobId!}
+                              itemId={(job?.items[idx] as any)?.id}
+                              itemIndex={idx}
+                            />
+                          )}
                         </TableCell>
                       </TableRow>
                     </CollapsibleContent>
@@ -1137,6 +1209,70 @@ export default function ExecSummary() {
         {itemPricings.map((ip, idx) => (
           <div key={idx} data-testid={`drawing-svg-${idx}`} style={{ width: ip.item.width || 600, height: ip.item.height || 600 }}>
             <DrawingCanvas config={ip.item} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhotoInclusionControls({
+  photos,
+  jobId,
+  itemId,
+  itemIndex,
+}: {
+  photos: ItemPhotoRef[];
+  jobId: string;
+  itemId: string;
+  itemIndex: number;
+}) {
+  const includedCount = photos.filter((p) => p.includeInCustomerPdf).length;
+
+  const updatePhotoMutation = useMutation({
+    mutationFn: async (updatedPhotos: ItemPhotoRef[]) => {
+      await apiRequest("PATCH", `/api/jobs/${jobId}/items/${itemId}`, { photos: updatedPhotos });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+    },
+  });
+
+  const togglePhoto = (photoKey: string) => {
+    const updated = photos.map((p) =>
+      p.key === photoKey ? { ...p, includeInCustomerPdf: !p.includeInCustomerPdf } : p
+    );
+    updatePhotoMutation.mutate(updated);
+  };
+
+  return (
+    <div className="p-3 border-t space-y-2 print:hidden" data-testid={`photo-controls-${itemIndex}`}>
+      <div className="flex items-center gap-2">
+        <Image className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Media for Customer Quote</span>
+        <span className="text-xs text-muted-foreground ml-auto" data-testid={`text-photo-count-${itemIndex}`}>
+          {includedCount} photo{includedCount !== 1 ? "s" : ""} included
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {photos.map((photo, pIdx) => (
+          <div key={photo.key} className="flex flex-col items-center gap-1">
+            <img
+              src={`/api/item-photos/${photo.key}`}
+              alt={photo.caption || `Photo ${pIdx + 1}`}
+              className="h-16 w-16 object-cover rounded border"
+              data-testid={`img-photo-thumb-${itemIndex}-${pIdx}`}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+            <div className="flex items-center gap-1">
+              <Checkbox
+                id={`photo-include-${itemIndex}-${pIdx}`}
+                checked={!!photo.includeInCustomerPdf}
+                onCheckedChange={() => togglePhoto(photo.key)}
+                data-testid={`checkbox-photo-include-${itemIndex}-${pIdx}`}
+              />
+              <Label htmlFor={`photo-include-${itemIndex}-${pIdx}`} className="text-xs">Include</Label>
+            </div>
           </div>
         ))}
       </div>

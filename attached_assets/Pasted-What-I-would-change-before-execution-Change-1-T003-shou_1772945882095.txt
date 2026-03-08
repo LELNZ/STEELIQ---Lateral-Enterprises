@@ -1,0 +1,193 @@
+What I would change before execution
+Change 1 — T003 should not add includeDrawingInPdf yet
+
+This is the biggest issue.
+
+Right now your current product rule is:
+
+drawings included by default
+
+site photos opt-in
+
+That is a good rule.
+
+Adding includeDrawingInPdf right now does a few risky things:
+
+changes snapshot schema
+
+adds a new control path
+
+introduces new document behavior before QuoteRenderer
+
+expands scope beyond what you asked for
+
+And importantly, you did not actually say you want drawings optionally hidden. You said:
+
+drawings default on
+
+photos toggled on/off and selectable
+
+So for this pass, best practice is:
+
+Keep drawings always included
+
+Do not add a drawing toggle yet.
+
+Only add photo controls in Exec Summary
+
+So T003 should become:
+
+add Media for Customer Quote section per item
+
+show customer-visible photo controls there
+
+thumbnails + include toggles + included count
+
+keep photo controls outside Visible Specs
+
+drawings remain implicitly included by default
+
+That matches your stated preference and avoids unnecessary schema churn.
+
+Change 2 — T006 is too broad unless reduced
+
+The proposed performance work is sensible, but it’s too much for one pass unless tightly prioritized.
+
+Right now it includes:
+
+useMemo pricing
+
+useMemo filtering
+
+deferred inputs
+
+extracting heavy subcomponents
+
+lazy mounting offscreen drawings
+
+changing form watch strategy
+
+That is basically a mini refactor.
+
+For a safe pre-T018 pass, I would narrow it to:
+
+First-pass performance goals
+
+memoize expensive derived values
+
+reduce rerenders caused by broad watches
+
+ensure offscreen drawing helpers are not permanently mounted in builder
+
+extract only one or two heaviest subcomponents if clearly beneficial
+
+Do not let this turn into a structural rewrite of quote-builder.tsx.
+
+So T006 should explicitly say:
+
+prioritize low-risk profiling-driven fixes
+
+avoid broad component extraction unless profiling shows clear gain
+
+Change 3 — T007 should include one quote-family workflow test
+
+Since T001/T002 are core workflow clarity tasks, add one test that proves:
+
+create first quote from estimate
+
+create second quote from same estimate
+
+both appear tied to same source estimate
+
+update one quote as a revision
+
+revision count changes without creating a third quote record
+
+That is important because your new UX is about clarifying quote vs revision behavior.
+
+Recommended revised plan
+T001
+
+Keep as-is. Good.
+
+T002
+
+Keep as-is, but prefer a filtered quotes API over stuffing sibling quote data into too many endpoints unless already convenient.
+
+T003 — revise
+
+Change to:
+
+Add photo inclusion controls to Exec Summary
+
+do not add includeDrawingInPdf
+
+drawings remain included by default
+
+add per-item photo inclusion controls near quote composition
+
+show included photo count
+
+preserve existing includeInCustomerPdf behavior
+
+do not move controls into Visible Specs
+
+This is the correct scope.
+
+T004
+
+Keep as-is. Good.
+
+T005
+
+Keep as-is. Good.
+
+T006 — narrow
+
+Change to:
+
+Focused Builder Performance Pass
+
+profile first
+
+prioritize low-risk fixes:
+
+memoize derived pricing/filtering
+
+reduce over-broad watched state
+
+ensure hidden helper rendering is not mounted unnecessarily
+
+only extract heavy subcomponents if profiling shows clear rerender hotspots
+
+avoid broad rewrite of builder structure in this task
+
+T007 — strengthen
+
+Add:
+
+test quote family / revision behavior
+
+test new labels / workflow distinction
+
+test media viewer
+
+test print layout behavior as far as practical
+
+Best-practice answer to your workflow question
+
+This plan should preserve the model:
+
+Estimate
+→ many Quotes
+→ each Quote has many Revisions
+
+And in UI:
+
+Exec Summary = where you choose update existing quote vs create new quote
+
+Quote Detail = where you see related quotes
+
+Quotes List = where you see source estimate
+
+That is the correct way to keep quotes organized under the same project.

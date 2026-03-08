@@ -22,6 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 type EnrichedQuote = Quote & {
   isOrphaned: boolean;
   linkedEstimateExists: boolean;
+  sourceEstimateName?: string | null;
 };
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -433,6 +434,7 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
           <TableRow>
             <TableHead className="w-[120px]">Quote #</TableHead>
             <TableHead>Customer</TableHead>
+            <TableHead className="w-[140px]">Source Estimate</TableHead>
             <TableHead className="w-[100px]">Type</TableHead>
             <TableHead className="w-[100px]">Division</TableHead>
             <TableHead className="w-[120px] text-right">Value</TableHead>
@@ -448,6 +450,9 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
                 {q.number}
               </TableCell>
               <TableCell data-testid={`text-quote-customer-${q.id}`}>{q.customer}</TableCell>
+              <TableCell className="text-sm text-muted-foreground" data-testid={`text-quote-source-${q.id}`}>
+                {q.sourceEstimateName || "—"}
+              </TableCell>
               <TableCell className="text-sm text-muted-foreground" data-testid={`text-quote-type-${q.id}`}>
                 {formatQuoteType(q.quoteType)}
               </TableCell>

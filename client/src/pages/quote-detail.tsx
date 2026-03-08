@@ -239,6 +239,8 @@ export default function QuoteDetail() {
         )}
       </div>
 
+      {quote.sourceJobId && <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />}
+
       <Separator />
 
       <div className="space-y-4">
@@ -272,6 +274,66 @@ export default function QuoteDetail() {
         )}
       </div>
     </div>
+  );
+}
+
+function RelatedQuotes({ sourceJobId, currentQuoteId }: { sourceJobId: string; currentQuoteId: string }) {
+  const [, navigate] = useLocation();
+  const { data: jobQuotes = [] } = useQuery<any[]>({
+    queryKey: ["/api/jobs", sourceJobId, "quotes"],
+    enabled: !!sourceJobId,
+  });
+
+  const related = jobQuotes.filter((q: any) => q.id !== currentQuoteId);
+
+  if (related.length === 0) return null;
+
+  return (
+    <>
+      <Separator />
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Related Quotes</h2>
+        </div>
+        <div className="rounded-lg border bg-card overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Quote #</TableHead>
+                <TableHead>Revision</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className="w-[50px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {related.map((q: any) => (
+                <TableRow key={q.id} data-testid={`row-related-quote-${q.id}`}>
+                  <TableCell className="font-mono font-medium" data-testid={`text-related-quote-number-${q.id}`}>
+                    {q.number}
+                  </TableCell>
+                  <TableCell className="text-sm">v{q.currentRevisionNumber || 1}</TableCell>
+                  <TableCell>
+                    <Badge variant={STATUS_VARIANT[q.status] || "secondary"}>
+                      {STATUS_LABELS[q.status] || q.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="icon" onClick={() => navigate(`/quote/${q.id}`)} data-testid={`button-view-related-${q.id}`}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </>
   );
 }
 
