@@ -112,9 +112,6 @@ export default function QuotesList() {
     let filtered = quotes.filter(q => {
       switch (activeTab) {
         case "active": return isActive(q);
-        case "renovation": return isActive(q) && q.quoteType === "renovation";
-        case "new_build": return isActive(q) && q.quoteType === "new_build";
-        case "tender": return isActive(q) && q.quoteType === "tender";
         case "archived": return isArchived(q);
         default: return isActive(q);
       }
@@ -185,12 +182,9 @@ export default function QuotesList() {
   }, [quotes, activeTab, searchQuery, sortOption, filterDivision, filterStatus, filterCustomer, filterQuoteType, filterDateFrom, filterDateTo]);
 
   const tabCounts = useMemo(() => {
-    if (!quotes) return { active: 0, renovation: 0, new_build: 0, tender: 0, archived: 0 };
+    if (!quotes) return { active: 0, archived: 0 };
     return {
       active: quotes.filter(isActive).length,
-      renovation: quotes.filter(q => isActive(q) && q.quoteType === "renovation").length,
-      new_build: quotes.filter(q => isActive(q) && q.quoteType === "new_build").length,
-      tender: quotes.filter(q => isActive(q) && q.quoteType === "tender").length,
       archived: quotes.filter(isArchived).length,
     };
   }, [quotes]);
@@ -224,15 +218,6 @@ export default function QuotesList() {
             <TabsList data-testid="tabs-quote-categories">
               <TabsTrigger value="active" data-testid="tab-active">
                 Active {tabCounts.active > 0 && `(${tabCounts.active})`}
-              </TabsTrigger>
-              <TabsTrigger value="renovation" data-testid="tab-renovation">
-                Renovations {tabCounts.renovation > 0 && `(${tabCounts.renovation})`}
-              </TabsTrigger>
-              <TabsTrigger value="new_build" data-testid="tab-new-build">
-                New Builds {tabCounts.new_build > 0 && `(${tabCounts.new_build})`}
-              </TabsTrigger>
-              <TabsTrigger value="tender" data-testid="tab-tender">
-                Tenders {tabCounts.tender > 0 && `(${tabCounts.tender})`}
               </TabsTrigger>
               <TabsTrigger value="archived" data-testid="tab-archived">
                 Archived {tabCounts.archived > 0 && `(${tabCounts.archived})`}

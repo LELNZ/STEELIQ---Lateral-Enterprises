@@ -1,0 +1,237 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add new endpoints unless explicitly instructed.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any migration or backfill actions performed
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Clean up the quote list behavior and lifecycle usability without changing the underlying architecture.
+
+This implementation will:
+
+• Populate the quote Value column correctly  
+• Remove unused quote-type tabs  
+• Allow quoteType to be edited on the quote detail page  
+• Backfill value data for existing quotes  
+
+No lifecycle redesign or major architecture change is allowed.
+
+
+--------------------------------------------------
+T001 — Populate totalValue on quote creation and revision update
+--------------------------------------------------
+
+Problem:
+The quotes table contains a `totalValue` column but it is never populated.
+
+Solution:
+Populate `totalValue` from the quote snapshot totals.
+
+Implementation:
+
+1. In `server/routes.ts`
+   - When creating a quote (`POST /api/quotes`):
+     • Extract the sell value from the snapshot JSON.
+     • Use either:
+       snapshot.totals.sell
+       OR
+       snapshot.totalsBreakdown.totalInclGst (if that is the canonical total)
+
+2. Store that value into `quotes.totalValue`.
+
+3. When creating a new revision of an existing quote:
+   - Update the parent quote's `totalValue` to the new revision's sell value.
+
+Acceptance Criteria:
+
+• Quotes list Value column displays numbers instead of "—"
+• Sorting by Value works correctly
+• Existing behavior of revisions remains unchanged
+
+
+
+--------------------------------------------------
+T002 — Remove Renovation / New Build / Tender tabs
+--------------------------------------------------
+
+Problem:
+The quotes list currently has tabs:
+
+Active | Renovations | New Builds | Tenders | Archived
+
+However quoteType is never set during the normal workflow,
+so these tabs are empty and misleading.
+
+Solution:
+Keep only lifecycle tabs.
+
+Implementation:
+
+1. In `client/src/pages/quotes-list.tsx`
+
+Remove the following tabs entirely:
+
+• Renovations
+• New Builds
+• Tenders
+
+Keep only:
+
+• Active
+• Archived
+
+2. The existing **quoteType filter dropdown** should remain.
+
+3. Remove tab-count calculations for those removed tabs.
+
+Acceptance Criteria:
+
+• Tab bar shows only:
+  Active | Archived
+• QuoteType filter dropdown still works
+• No functional regressions
+
+
+
+--------------------------------------------------
+T003 — Add quoteType selector to quote detail page
+--------------------------------------------------
+
+Problem:
+Users cannot currently edit the quote type.
+
+Solution:
+Allow editing quoteType from the quote detail page.
+
+Implementation:
+
+1. In `client/src/pages/quote-detail.tsx`
+
+Add a small dropdown selector in the quote metadata section.
+
+Options:
+
+• General
+• Renovation
+• New Build
+• Tender
+
+2. Add or extend backend route:
+
+PATCH /api/quotes/:id
+
+to update `quoteType`.
+
+3. Persist changes to the database.
+
+4. Ensure the quotes list updates its filter results accordingly.
+
+Acceptance Criteria:
+
+• Users can edit quoteType from the quote detail page
+• Changes persist
+• Filters correctly reflect the updated type
+
+
+
+--------------------------------------------------
+T004 — Backfill totalValue for existing quotes
+--------------------------------------------------
+
+Problem:
+Existing quotes already in the database have `totalValue = NULL`.
+
+Solution:
+Backfill values from the latest revision snapshot.
+
+Implementation:
+
+For each quote where `totalValue IS NULL`:
+
+1. Find the current/latest revision.
+2. Extract totals.sell (or equivalent) from snapshotJson.
+3. Update the quote record's totalValue.
+
+Prefer a **temporary script or migration** rather than a permanent API endpoint.
+
+Acceptance Criteria:
+
+• Existing quotes show values in the Value column
+• Only quotes with genuinely missing totals show "—"
+• Sorting by Value works for all quotes
+
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+Quotes list page should have:
+
+Tabs:
+• Active
+• Archived
+
+Filters:
+• Status (draft / review / sent / accepted / declined)
+• Quote Type (General / Renovation / New Build / Tender)
+
+Columns:
+• Value column populated with monetary totals
+
+Quote detail page:
+• Allows editing quote type
+
+Architecture remains unchanged.
+
+No lifecycle redesign is introduced.
+
+
+END OF IMPLEMENTATION

@@ -1,7 +1,8 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-T018 (QuoteRenderer architecture) complete. Pre-T018 UX pass (T001–T006) also complete.
+Quote list & lifecycle audit complete. T018 (QuoteRenderer architecture) complete. Pre-T018 UX pass (T001–T006) also complete.
+- **Quote list audit**: `totalValue` populated from `snapshot.totals.sell` on create/revision. Renovation/New Build/Tender tabs removed (filter-only). Quote type editable on detail page via `PATCH /api/quotes/:id/type`. Backfill endpoint for existing quotes.
 - T018: Dedicated renderer layer at `client/src/lib/quote-renderer.ts`. Defines `QuoteRenderModel` (typed presentation model) and `buildQuoteRenderModel()` (pure mapper from `QuoteDocumentModel`). Preview page refactored to render from the render model via decomposed section components (`HeaderSection`, `CustomerProjectSection`, `TotalsSection`, `LegalSection`, `ScheduleItemCard`). `rebuildScheduleItems()` enables live spec display toggling. `PresentationMode` type prepared for future layout variants.
 
 ## Overview
@@ -36,10 +37,12 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 - **Deleted estimates are removed from DB**, so their linked quotes ARE orphaned and show "Estimate Removed" badge.
 
 ## Quotes Page Filters
-- **Tabs** (primary organizer): Active, Renovations, New Builds, Tenders, Archived.
+- **Tabs** (primary organizer): Active, Archived. (Renovation/New Build/Tender tabs removed — use quoteType filter instead.)
 - **Search**: By quote number or customer name.
 - **Sort**: By updated date, created date, customer, value, quote number.
 - **Filters**: Division, status, customer (dropdown from unique names), quote type, date range (from/to on createdAt).
+- **Value column**: Populated from `snapshot.totals.sell` on quote creation and revision update. Backfill endpoint at `POST /api/quotes/backfill-values`.
+- **Quote Type editing**: Editable on quote detail page via dropdown. `PATCH /api/quotes/:id/type` updates `quoteType` (null = General).
 - Estimator filter deferred until user/identity support is implemented.
 
 ## Estimates Page

@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ArrowLeftCircle, Clock, Eye, FileDown, FileText, History, Printer } from "lucide-react";
@@ -75,6 +78,22 @@ export default function QuoteDetail() {
     },
     onError: (err: Error) => {
       toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const typeMutation = useMutation({
+    mutationFn: async (newType: string) => {
+      const quoteType = newType === "general" ? null : newType;
+      const res = await apiRequest("PATCH", `/api/quotes/${quoteId}/type`, { quoteType });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Quote type updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update quote type", description: err.message, variant: "destructive" });
     },
   });
 
@@ -151,6 +170,24 @@ export default function QuoteDetail() {
         <div className="rounded-lg border bg-card p-3">
           <p className="text-xs text-muted-foreground">Revisions</p>
           <p className="text-sm font-medium" data-testid="text-revision-count">{quote.revisions?.length || 0}</p>
+        </div>
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground">Quote Type</p>
+          <Select
+            value={quote.quoteType || "general"}
+            onValueChange={(val) => typeMutation.mutate(val)}
+            disabled={typeMutation.isPending}
+          >
+            <SelectTrigger className="h-7 w-[140px] text-sm mt-0.5" data-testid="select-quote-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="general">General</SelectItem>
+              <SelectItem value="renovation">Renovation</SelectItem>
+              <SelectItem value="new_build">New Build</SelectItem>
+              <SelectItem value="tender">Tender</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         {quote.sourceJobId && (
           <div className="rounded-lg border bg-card p-3">

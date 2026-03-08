@@ -721,9 +721,10 @@ export async function registerRoutes(
               [existing.id, nextVersion, JSON.stringify(snapshot), templateKey]
             );
             const revision = revInsert.rows[0];
+            const snapshotSellValue = (snapshot as any).totals?.sell ?? null;
             await client.query(
-              `UPDATE quotes SET current_revision_id = $1, division_id = $2, updated_at = NOW() WHERE id = $3`,
-              [revision.id, divisionCode, existing.id]
+              `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, updated_at = NOW() WHERE id = $4`,
+              [revision.id, divisionCode, snapshotSellValue, existing.id]
             );
             await client.query(
               `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
@@ -761,10 +762,11 @@ export async function registerRoutes(
         );
         const number = formatQuoteNumber(seqResult.rows[0].current_value);
 
+        const newQuoteSellValue = (snapshot as any).totals?.sell ?? null;
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, NOW(), NOW()) RETURNING *`,
-          [number, sourceJobId || null, divisionCode, customer, quoteType || null]
+          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, total_value, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, $6, NOW(), NOW()) RETURNING *`,
+          [number, sourceJobId || null, divisionCode, customer, quoteType || null, newQuoteSellValue]
         );
         const quote = quoteInsert.rows[0];
 
@@ -880,6 +882,61 @@ export async function registerRoutes(
       res.json(updated);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/quotes/:id/type", async (req, res) => {
+    try {
+      const { quoteType } = z.object({
+        quoteType: z.enum(["renovation", "new_build", "tender"]).nullable(),
+      }).parse(req.body);
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      const result = await pool.query(
+        `UPDATE quotes SET quote_type = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [quoteType, req.params.id]
+      );
+      await storage.createAuditLog({
+        entityType: "quote",
+        entityId: req.params.id,
+        action: "type_changed",
+        metadataJson: { from: quote.quoteType || null, to: quoteType },
+      });
+      res.json(result.rows[0]);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/quotes/backfill-values", async (req, res) => {
+    try {
+      const quotesWithoutValue = await pool.query(
+        `SELECT q.id, q.current_revision_id FROM quotes q WHERE q.total_value IS NULL AND q.current_revision_id IS NOT NULL`
+      );
+      let updated = 0;
+      for (const row of quotesWithoutValue.rows) {
+        const revResult = await pool.query(
+          `SELECT snapshot_json FROM quote_revisions WHERE id = $1`,
+          [row.current_revision_id]
+        );
+        if (revResult.rows.length > 0) {
+          const snap = typeof revResult.rows[0].snapshot_json === "string"
+            ? JSON.parse(revResult.rows[0].snapshot_json)
+            : revResult.rows[0].snapshot_json;
+          const sellValue = snap?.totals?.sell ?? null;
+          if (sellValue != null) {
+            await pool.query(
+              `UPDATE quotes SET total_value = $1 WHERE id = $2`,
+              [sellValue, row.id]
+            );
+            updated++;
+          }
+        }
+      }
+      res.json({ message: `Backfilled ${updated} of ${quotesWithoutValue.rows.length} quotes` });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
