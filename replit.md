@@ -1,4 +1,4 @@
-# SteelIQ Pro-Quote CAD Generator
+# SteelIQ – Lateral Enterprises
 
 ## Current Milestone
 Phase A — Lifecycle Hardening: true estimate archive, quote lifecycle management, quote page filters, regression testing.
@@ -69,7 +69,8 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Lifecycle Service**: `server/quote-lifecycle.ts` centralizes archive, soft-delete, hard-delete, cascade handling, orphan detection, and dev cleanup.
 
 ## Testing
-- **Regression tests**: `tests/lifecycle-regression.ts` — 27 automated API integration tests covering archive/delete/unarchive semantics, orphan detection, cascade behavior, and defensive guards. Run with `npx tsx tests/lifecycle-regression.ts`.
+- **Regression tests**: `tests/lifecycle-regression.ts` — 33 automated API integration tests covering archive/delete/unarchive semantics, orphan detection, cascade behavior, defensive guards, and input validation. Run with `npx tsx tests/lifecycle-regression.ts`.
+- **Filter tests**: `tests/quote-filters-e2e.ts` — 16 automated tests verifying quote page filters (customer, quote type, date range, search, clear filters). Run with `npx tsx tests/quote-filters-e2e.ts`.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

@@ -146,11 +146,15 @@ export class DatabaseStorage implements IStorage {
   async archiveJob(id: string): Promise<Job | undefined> {
     const job = await this.getJob(id);
     if (!job) return undefined;
+    if (job.archivedAt) return undefined;
     const [updated] = await db.update(jobs).set({ archivedAt: new Date() } as any).where(eq(jobs.id, id)).returning();
     return updated;
   }
 
   async unarchiveJob(id: string): Promise<Job | undefined> {
+    const job = await this.getJob(id);
+    if (!job) return undefined;
+    if (!job.archivedAt) return undefined;
     const [updated] = await db.update(jobs).set({ archivedAt: null } as any).where(eq(jobs.id, id)).returning();
     return updated;
   }
