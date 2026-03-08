@@ -83,7 +83,7 @@ export default function QuoteDetail() {
 
   const typeMutation = useMutation({
     mutationFn: async (newType: string) => {
-      const quoteType = newType === "general" ? null : newType;
+      const quoteType = newType as "renovation" | "new_build";
       const res = await apiRequest("PATCH", `/api/quotes/${quoteId}/type`, { quoteType });
       return res.json();
     },
@@ -174,7 +174,7 @@ export default function QuoteDetail() {
         <div className="rounded-lg border bg-card p-3">
           <p className="text-xs text-muted-foreground">Quote Type</p>
           <Select
-            value={quote.quoteType || "general"}
+            value={quote.quoteType === "new_build" ? "new_build" : "renovation"}
             onValueChange={(val) => typeMutation.mutate(val)}
             disabled={typeMutation.isPending}
           >
@@ -182,10 +182,8 @@ export default function QuoteDetail() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="general">General</SelectItem>
               <SelectItem value="renovation">Renovation</SelectItem>
               <SelectItem value="new_build">New Build</SelectItem>
-              <SelectItem value="tender">Tender</SelectItem>
             </SelectContent>
           </Select>
         </div>

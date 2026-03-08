@@ -688,7 +688,7 @@ export async function registerRoutes(
     customer: z.string().min(1),
     divisionCode: z.string().optional().default("LJ"),
     mode: z.enum(["revision", "new_quote"]).optional().default("revision"),
-    quoteType: z.enum(["renovation", "new_build", "tender"]).optional(),
+    quoteType: z.enum(["renovation", "new_build"]).optional(),
   });
 
   app.post("/api/quotes", async (req, res) => {
@@ -888,7 +888,7 @@ export async function registerRoutes(
   app.patch("/api/quotes/:id/type", async (req, res) => {
     try {
       const { quoteType } = z.object({
-        quoteType: z.enum(["renovation", "new_build", "tender"]).nullable(),
+        quoteType: z.enum(["renovation", "new_build"]),
       }).parse(req.body);
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });

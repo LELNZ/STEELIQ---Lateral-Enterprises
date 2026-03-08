@@ -1,9 +1,10 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-siteType → quoteType propagation complete (T005–T008). Quote list & lifecycle audit complete. T018 (QuoteRenderer architecture) complete.
-- **siteType propagation**: `site_type` column added to `jobs` table. Quote builder persists siteType on save (POST/PATCH) and hydrates on load. Exec summary auto-derives `quoteType` from `job.siteType` when generating quotes. On revisions, existing `quote_type` is preserved (not overwritten). Server-side validation enforces `renovation | new_build | null` via `insertJobSchema`.
-- **Quote list audit**: `totalValue` populated from `snapshot.totals.sell` on create/revision. Renovation/New Build/Tender tabs removed (filter-only). Quote type editable on detail page via `PATCH /api/quotes/:id/type`. Backfill endpoint for existing quotes.
+Monday-readiness pass complete (T009–T011). siteType → quoteType propagation (T005–T008) complete.
+- **Monday-readiness (T009–T010)**: Quote type simplified to only Renovation / New Build across all UI (quote detail dropdown, quotes list filter, display labels). General and Tender removed. Legacy quotes with null/general/tender normalize to "Renovation" in UI. Server validation enforces `renovation | new_build` only. Persistence audit confirmed: Replit PostgreSQL is persistent; quote disappearances caused by test scripts calling `POST /api/dev/clear-quotes` (dev-only endpoint).
+- **siteType propagation**: `site_type` column on `jobs` table. Quote builder persists/hydrates siteType. Exec summary auto-derives `quoteType` from `job.siteType`. On revisions, existing `quote_type` preserved. Server-side validation: `renovation | new_build | null` via `insertJobSchema`.
+- **Quote list audit**: `totalValue` from `snapshot.totals.sell`. Quote type editable on detail page via `PATCH /api/quotes/:id/type`. Backfill endpoint for existing quotes.
 - T018: Dedicated renderer layer at `client/src/lib/quote-renderer.ts`. Defines `QuoteRenderModel` (typed presentation model) and `buildQuoteRenderModel()` (pure mapper from `QuoteDocumentModel`). Preview page refactored to render from the render model via decomposed section components (`HeaderSection`, `CustomerProjectSection`, `TotalsSection`, `LegalSection`, `ScheduleItemCard`). `rebuildScheduleItems()` enables live spec display toggling. `PresentationMode` type prepared for future layout variants.
 
 ## Overview

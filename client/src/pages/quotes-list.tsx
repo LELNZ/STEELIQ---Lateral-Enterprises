@@ -50,14 +50,12 @@ function fmt(n: number): string {
   return n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function normalizeQuoteType(qt: string | null | undefined): "renovation" | "new_build" {
+  return qt === "new_build" ? "new_build" : "renovation";
+}
+
 function formatQuoteType(qt: string | null | undefined): string {
-  if (!qt) return "General";
-  switch (qt) {
-    case "renovation": return "Renovation";
-    case "new_build": return "New Build";
-    case "tender": return "Tender";
-    default: return "General";
-  }
+  return normalizeQuoteType(qt) === "new_build" ? "New Build" : "Renovation";
 }
 
 function isActive(q: EnrichedQuote): boolean {
@@ -138,7 +136,7 @@ export default function QuotesList() {
     }
 
     if (filterQuoteType !== "all") {
-      filtered = filtered.filter(q => (q.quoteType || "general") === filterQuoteType);
+      filtered = filtered.filter(q => normalizeQuoteType(q.quoteType) === filterQuoteType);
     }
 
     if (filterDateFrom) {
@@ -300,10 +298,8 @@ export default function QuotesList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="general">General</SelectItem>
                   <SelectItem value="renovation">Renovation</SelectItem>
                   <SelectItem value="new_build">New Build</SelectItem>
-                  <SelectItem value="tender">Tender</SelectItem>
                 </SelectContent>
               </Select>
               <Popover>
@@ -403,9 +399,6 @@ function QuoteBadges({ quote }: { quote: EnrichedQuote }) {
       )}
       {quote.isOrphaned && (
         <Badge variant="destructive" data-testid={`badge-orphaned-${quote.id}`}>Estimate Removed</Badge>
-      )}
-      {quote.quoteType === "tender" && (
-        <Badge variant="outline" data-testid={`badge-tender-${quote.id}`}>Tender</Badge>
       )}
     </div>
   );

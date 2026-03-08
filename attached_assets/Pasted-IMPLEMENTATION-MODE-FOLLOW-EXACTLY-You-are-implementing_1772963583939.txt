@@ -1,0 +1,182 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add new endpoints unless explicitly instructed.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any migration/backfill/reset findings
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Make the Monday workflow simpler and safer by:
+1. confirming why quotes appear to disappear after Replit work, and
+2. aligning quote type options with the estimate source-of-truth.
+
+This is a focused Monday-readiness pass only.
+
+
+--------------------------------------------------
+T009 — Audit quote/data persistence in the current Replit environment
+--------------------------------------------------
+
+Problem:
+Quotes appear to disappear after some Replit work sessions. We need to know whether this is caused by:
+- test resets
+- ephemeral database/storage
+- migrations/bootstrap
+- or actual app deletion behavior
+
+Required implementation:
+
+1. Audit the current persistence setup and report clearly:
+   - what database the app is using in Replit
+   - whether it is persistent across rebuilds/restarts
+   - whether automated tests are running against the same DB as manual app usage
+   - whether any reset/seed/migration script is recreating or clearing quote data
+   - whether quotes are being intentionally deleted anywhere in application code during normal dev workflow
+
+2. Do not guess.
+   Inspect the actual code/config/scripts and state the exact cause.
+
+3. If the issue is test-related or environment-related, explain the safest Monday operating approach.
+   Example:
+   - use persistent dev DB
+   - avoid running destructive reset scripts
+   - separate test DB from manual-use DB
+   - etc.
+
+4. Do NOT redesign the data layer unless absolutely necessary.
+   This task is primarily an audit unless a very small safe fix is obvious.
+
+Acceptance criteria:
+- clear explanation of why quote data appears to disappear
+- confirmation whether this is an app bug or environment/test behavior
+- clear Monday-safe operating guidance
+
+
+--------------------------------------------------
+T010 — Align quote type options with estimate source-of-truth
+--------------------------------------------------
+
+Problem:
+Estimate Site Type currently supports only:
+- renovation
+- new_build
+
+But Quote Detail quoteType dropdown currently shows:
+- General
+- Renovation
+- New Build
+- Tender
+
+This is inconsistent for current Monday workflow.
+
+Business rule for now:
+- estimate/source-of-truth classification should stay simple
+- current operational model should align quote type to estimate type
+- remove unnecessary ambiguity
+
+Required implementation:
+
+1. Update the quote type UI/options for the current Monday-ready workflow.
+
+Preferred Monday-safe implementation:
+- Quote type options should be only:
+  • Renovation
+  • New Build
+
+2. Remove:
+- General
+- Tender
+
+from the quote type dropdown in Quote Detail for now.
+
+3. Keep automatic inheritance from estimate site type:
+- renovation -> renovation
+- new_build -> new_build
+
+4. If an older quote has null/general/tender stored, handle gracefully in UI:
+- do not crash
+- show a sensible fallback or map safely
+- but new edits should use only Renovation / New Build
+
+Acceptance criteria:
+- quote type dropdown matches estimate type choices
+- quote type still auto-inherits from estimate
+- no new quote defaults to General
+- no Tender option in the Monday-ready flow
+
+
+--------------------------------------------------
+T011 — Keep current workflow simple and stable
+--------------------------------------------------
+
+Do NOT:
+- redesign long-term lifecycle model
+- add project-type vs quote-mode architecture yet
+- add customer portal logic
+- add email sending logic
+- add presentation mode systems
+- add new classification dimensions
+- add speculative tender workflow
+
+This is only a Monday-readiness simplification pass.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. We have a clear, evidence-based explanation for why quotes appear to disappear in Replit.
+2. Monday users can rely on a simpler type model:
+   - Estimate Site Type: Renovation / New Build
+   - Quote Type: Renovation / New Build
+3. Quote type continues to inherit automatically from estimate source-of-truth.
+4. No unnecessary General/Tender ambiguity remains in the active workflow.
+
+
+END OF IMPLEMENTATION
