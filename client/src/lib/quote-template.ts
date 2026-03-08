@@ -21,12 +21,17 @@ export interface TemplateSpacing {
   innerPaddingMm: number;
 }
 
+export type ScheduleLayoutVariant = "image_left_specs_right_v1" | "specs_only_v1" | "image_top_specs_below_v1";
+export type TotalsLayoutVariant = "totals_block_v1" | "totals_inline_v1";
+
 export interface TemplateItemLayout {
   drawingPosition: "left";
   specsPosition: "right";
   drawingMaxWidthPercent: number;
   photosPosition: "below";
   photoMaxSizeMm: number;
+  scheduleLayoutVariant: ScheduleLayoutVariant;
+  totalsLayoutVariant: TotalsLayoutVariant;
 }
 
 export interface TemplateAcceptanceBlock {
@@ -87,6 +92,8 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
     drawingMaxWidthPercent: 50,
     photosPosition: "below",
     photoMaxSizeMm: 30,
+    scheduleLayoutVariant: "image_left_specs_right_v1",
+    totalsLayoutVariant: "totals_block_v1",
   },
   acceptance: {
     visible: true,
@@ -120,6 +127,16 @@ export function resolveQuoteTemplate(
     resolved.colors = {
       ...COMPANY_MASTER_TEMPLATE.colors,
       accent: overrides.accentColor,
+    };
+  }
+
+  const slv = overrides.scheduleLayoutVariant as ScheduleLayoutVariant | undefined;
+  const tlv = overrides.totalsLayoutVariant as TotalsLayoutVariant | undefined;
+  if (slv || tlv) {
+    resolved.itemLayout = {
+      ...COMPANY_MASTER_TEMPLATE.itemLayout,
+      ...(slv ? { scheduleLayoutVariant: slv } : {}),
+      ...(tlv ? { totalsLayoutVariant: tlv } : {}),
     };
   }
 

@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine, RenderSpecEntry } from "./quote-renderer";
 import { isSectionVisible, COMPANY_MASTER_TEMPLATE } from "./quote-template";
-import type { QuoteTemplate } from "./quote-template";
+import type { QuoteTemplate, ScheduleLayoutVariant, TotalsLayoutVariant } from "./quote-template";
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -18,6 +18,27 @@ let COLOR_ACCENT: string;
 let COLOR_BORDER: string;
 let COLOR_BG_MUTED: string;
 
+let SECTION_GAP: number;
+let ITEM_GAP: number;
+let INNER_PAD: number;
+let PHOTO_MAX_SIZE: number;
+let DRAWING_MAX_W_PCT: number;
+let SCHEDULE_LAYOUT: ScheduleLayoutVariant;
+let TOTALS_LAYOUT: TotalsLayoutVariant;
+
+const SIZE_MAP: Record<string, number> = {
+  xs: 7,
+  sm: 8.5,
+  base: 10,
+  lg: 12,
+  xl: 16,
+  "2xl": 18,
+};
+
+function mmSize(key: string): number {
+  return SIZE_MAP[key] ?? 10;
+}
+
 function applyTemplate(template: QuoteTemplate) {
   T = template;
   COLOR_BLACK = T.colors.bodyText;
@@ -25,6 +46,14 @@ function applyTemplate(template: QuoteTemplate) {
   COLOR_ACCENT = T.colors.accent;
   COLOR_BORDER = T.colors.border;
   COLOR_BG_MUTED = T.colors.bgMuted;
+
+  SECTION_GAP = T.spacing.sectionGapMm;
+  ITEM_GAP = T.spacing.itemGapMm;
+  INNER_PAD = T.spacing.innerPaddingMm;
+  PHOTO_MAX_SIZE = T.itemLayout.photoMaxSizeMm;
+  DRAWING_MAX_W_PCT = T.itemLayout.drawingMaxWidthPercent;
+  SCHEDULE_LAYOUT = T.itemLayout.scheduleLayoutVariant;
+  TOTALS_LAYOUT = T.itemLayout.totalsLayoutVariant;
 }
 
 type Pdf = jsPDF;
@@ -52,6 +81,7 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
+    if (blob.size < 100) return null;
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
@@ -70,6 +100,17 @@ function getImageDimensions(dataUrl: string): Promise<{ w: number; h: number }> 
     img.onerror = () => resolve({ w: 100, h: 100 });
     img.src = dataUrl;
   });
+}
+
+async function preloadPhotos(photos: { url: string; key: string }[]): Promise<Map<string, string>> {
+  const loaded = new Map<string, string>();
+  await Promise.all(
+    photos.map(async (p) => {
+      const data = await loadImageAsDataUrl(p.url);
+      if (data) loaded.set(p.key, data);
+    }),
+  );
+  return loaded;
 }
 
 export async function generateQuotePdf(
@@ -121,7 +162,7 @@ export async function generateQuotePdf(
 }
 
 async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promise<number> {
-  const { branding, orgContact, header } = model;
+  const { branding, orgContact } = model;
   const startY = y;
 
   if (branding.logoUrl) {
@@ -141,21 +182,21 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
   }
 
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(18);
+  pdf.setFontSize(mmSize(T.typography.tradingNameSize));
   pdf.setTextColor(COLOR_BLACK);
   pdf.text(branding.tradingName, MARGIN, y + 5);
   y += 7;
 
   pdf.setFont(FONT_NORMAL, "italic");
-  pdf.setFontSize(8);
+  pdf.setFontSize(mmSize(T.typography.legalLineSize));
   pdf.setTextColor(COLOR_MUTED);
   pdf.text(branding.legalLine, MARGIN, y + 3);
-  y += 6;
+  y += SECTION_GAP;
 
   let rightY = startY + 2;
   const rightX = MARGIN + CW;
   pdf.setFont(FONT_NORMAL, "normal");
-  pdf.setFontSize(8);
+  pdf.setFontSize(mmSize(T.typography.legalLineSize));
   pdf.setTextColor(COLOR_MUTED);
 
   const contactLines: string[] = [];
@@ -177,18 +218,18 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
 function renderSeparator(pdf: Pdf, y: number): number {
   y += 2;
   drawLine(pdf, y);
-  y += 4;
+  y += INNER_PAD;
   return y;
 }
 
 function renderDisclaimer(pdf: Pdf, y: number, text: string): number {
   y = ensureSpace(pdf, y, 8);
   pdf.setFont(FONT_NORMAL, "italic");
-  pdf.setFontSize(8);
+  pdf.setFontSize(mmSize(T.typography.legalLineSize));
   pdf.setTextColor(COLOR_MUTED);
   const lines = wrapText(pdf, text, CW);
   pdf.text(lines, MARGIN, y + 3);
-  y += lines.length * 3.5 + 4;
+  y += lines.length * 3.5 + INNER_PAD;
   return y;
 }
 
@@ -198,8 +239,8 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
 
   const colW = CW / 2;
 
-  pdf.setFont(FONT_NORMAL, "normal");
-  pdf.setFontSize(7);
+  pdf.setFont(FONT_NORMAL, "bold");
+  pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
   pdf.setTextColor(COLOR_MUTED);
   pdf.text("CUSTOMER", MARGIN, y + 3);
 
@@ -210,11 +251,12 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
 
   let custY = y + 12;
   if (customerProject.hasProjectAddress) {
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(7);
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
     pdf.text("PROJECT ADDRESS", MARGIN, custY + 3);
-    pdf.setFontSize(9);
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(mmSize(T.typography.bodyTextSize));
     pdf.setTextColor(COLOR_BLACK);
     const addrLines = wrapText(pdf, customerProject.projectAddress, colW - 5);
     pdf.text(addrLines, MARGIN, custY + 7);
@@ -224,10 +266,6 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
   const rightX = MARGIN + colW + 5;
   let rightY = y;
 
-  pdf.setFont(FONT_NORMAL, "normal");
-  pdf.setFontSize(7);
-  pdf.setTextColor(COLOR_MUTED);
-
   const quoteInfoItems = [
     { label: "Quote #", value: header.quoteNumber },
     { label: "Date", value: header.dateFormatted },
@@ -235,10 +273,11 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
   ];
 
   for (const info of quoteInfoItems) {
-    pdf.setFontSize(7);
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
     pdf.text(info.label + ":", rightX, rightY + 3, { align: "left" });
-    pdf.setFontSize(9);
+    pdf.setFontSize(mmSize(T.typography.bodyTextSize) + 0.5);
     pdf.setTextColor(COLOR_BLACK);
     pdf.setFont(FONT_NORMAL, info.label === "Quote #" ? "bold" : "normal");
     pdf.text(info.value, rightX + 25, rightY + 3);
@@ -246,7 +285,7 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
     rightY += 5;
   }
 
-  y = Math.max(custY, rightY) + 4;
+  y = Math.max(custY, rightY) + SECTION_GAP;
   return y;
 }
 
@@ -254,17 +293,24 @@ function renderTotals(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   const { totals } = model;
   if (totals.isEmpty) return y;
 
-  const blockH = totals.lines.length * 6 + 10;
+  if (TOTALS_LAYOUT === "totals_inline_v1") {
+    return renderTotalsInline(pdf, y, totals);
+  }
+  return renderTotalsBlock(pdf, y, totals);
+}
+
+function renderTotalsBlock(pdf: Pdf, y: number, totals: QuoteRenderModel["totals"]): number {
+  const lineH = 6;
+  const blockH = totals.lines.length * lineH + 10;
   y = ensureSpace(pdf, y, blockH);
 
   const boxX = MARGIN;
   const boxW = CW;
-  const boxH = blockH;
 
+  pdf.setFillColor(COLOR_BG_MUTED);
   pdf.setDrawColor(COLOR_BORDER);
   pdf.setLineWidth(0.3);
-  pdf.setFillColor(255, 255, 255);
-  pdf.roundedRect(boxX, y, boxW, boxH, 2, 2, "FD");
+  pdf.roundedRect(boxX, y, boxW, blockH, 2, 2, "FD");
 
   y += 5;
   const labelX = MARGIN + 8;
@@ -279,24 +325,63 @@ function renderTotals(pdf: Pdf, y: number, model: QuoteRenderModel): number {
 
     if (line.emphasis === "bold") {
       pdf.setFont(FONT_NORMAL, "bold");
-      pdf.setFontSize(11);
+      pdf.setFontSize(mmSize(T.typography.totalsBoldSize));
       pdf.setTextColor(COLOR_BLACK);
     } else if (line.emphasis === "muted") {
       pdf.setFont(FONT_NORMAL, "normal");
-      pdf.setFontSize(9);
+      pdf.setFontSize(mmSize(T.typography.totalsLabelSize));
       pdf.setTextColor(COLOR_MUTED);
     } else {
       pdf.setFont(FONT_NORMAL, "normal");
-      pdf.setFontSize(9);
+      pdf.setFontSize(mmSize(T.typography.totalsLabelSize));
       pdf.setTextColor(COLOR_BLACK);
     }
 
     pdf.text(line.label, labelX, y + 3);
     pdf.text(line.formatted, amountX, y + 3, { align: "right" });
-    y += 6;
+    y += lineH;
   }
 
-  y += 5;
+  y += SECTION_GAP;
+  pdf.setFont(FONT_NORMAL, "normal");
+  return y;
+}
+
+function renderTotalsInline(pdf: Pdf, y: number, totals: QuoteRenderModel["totals"]): number {
+  const lineH = 5.5;
+  const totalH = totals.lines.length * lineH + 4;
+  y = ensureSpace(pdf, y, totalH);
+
+  const labelX = MARGIN;
+  const amountX = MARGIN + CW;
+
+  for (const line of totals.lines) {
+    if (line.emphasis === "separator") {
+      drawLine(pdf, y);
+      y += 3;
+      continue;
+    }
+
+    if (line.emphasis === "bold") {
+      pdf.setFont(FONT_NORMAL, "bold");
+      pdf.setFontSize(mmSize(T.typography.totalsBoldSize));
+      pdf.setTextColor(COLOR_BLACK);
+    } else if (line.emphasis === "muted") {
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(mmSize(T.typography.totalsLabelSize));
+      pdf.setTextColor(COLOR_MUTED);
+    } else {
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(mmSize(T.typography.totalsLabelSize));
+      pdf.setTextColor(COLOR_BLACK);
+    }
+
+    pdf.text(line.label, labelX, y + 3);
+    pdf.text(line.formatted, amountX, y + 3, { align: "right" });
+    y += lineH;
+  }
+
+  y += SECTION_GAP;
   pdf.setFont(FONT_NORMAL, "normal");
   return y;
 }
@@ -309,7 +394,7 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   y = MARGIN;
 
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(10);
+  pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_ACCENT);
   pdf.text("TERMS & CONDITIONS", MARGIN, y + 4);
   y += 10;
@@ -318,13 +403,13 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
     y = ensureSpace(pdf, y, 15);
 
     pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(8);
+    pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
     pdf.text(section.heading.toUpperCase(), MARGIN, y + 3);
-    y += 6;
+    y += SECTION_GAP;
 
     pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(8.5);
+    pdf.setFontSize(mmSize(T.typography.bodyTextSize));
     pdf.setTextColor(COLOR_BLACK);
     const bodyLines = wrapText(pdf, section.body, CW);
 
@@ -334,20 +419,20 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
       y += 3.5;
     }
 
-    y += 4;
+    y += INNER_PAD;
   }
 
   if (legal.hasBankDetails && legal.bankDetails) {
     y = ensureSpace(pdf, y, 15);
 
     pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(8);
+    pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
     pdf.text("BANK DETAILS", MARGIN, y + 3);
-    y += 6;
+    y += SECTION_GAP;
 
     pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(8.5);
+    pdf.setFontSize(mmSize(T.typography.bodyTextSize));
     pdf.setTextColor(COLOR_BLACK);
     const bankLines = wrapText(pdf, legal.bankDetails, CW);
     for (const bl of bankLines) {
@@ -355,7 +440,7 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
       pdf.text(bl, MARGIN, y + 3);
       y += 3.5;
     }
-    y += 4;
+    y += INNER_PAD;
   }
 
   return y;
@@ -369,11 +454,20 @@ async function renderSchedule(
 ): Promise<number> {
   if (model.scheduleItems.length === 0) return y;
 
+  onProgress?.("Loading images...");
+  const allPhotos = model.scheduleItems.flatMap((item) =>
+    item.media.customerPhotos.map((p) => ({ url: p.url, key: p.key })),
+  );
+  const allDrawings = model.scheduleItems
+    .filter((item) => item.media.drawingUrl)
+    .map((item) => ({ url: item.media.drawingUrl!, key: `draw-${item.index}` }));
+  const imageCache = await preloadPhotos([...allPhotos, ...allDrawings]);
+
   pdf.addPage();
   y = MARGIN;
 
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(10);
+  pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_ACCENT);
   pdf.text("SCHEDULE OF ITEMS", MARGIN, y + 4);
   y += 10;
@@ -382,70 +476,108 @@ async function renderSchedule(
     const item = model.scheduleItems[si];
     onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
 
-    const estimatedH = 30 + item.visibleSpecs.length * 4 + (item.media.customerPhotos.length > 0 ? 35 : 0);
+    const loadablePhotoCount = item.media.customerPhotos.filter((p) => imageCache.has(p.key)).length;
+    const estimatedH = 30 + item.visibleSpecs.length * 4 + (loadablePhotoCount > 0 ? 35 : 0);
     y = ensureSpace(pdf, y, Math.min(estimatedH, MAX_Y - MARGIN - 10));
 
-    y = await renderScheduleItem(pdf, y, item);
-    y += 4;
+    y = await renderScheduleItem(pdf, y, item, imageCache);
+    y += ITEM_GAP;
   }
 
   return y;
 }
 
-async function renderScheduleItem(pdf: Pdf, y: number, item: RenderScheduleItem): Promise<number> {
+async function renderScheduleItem(
+  pdf: Pdf,
+  y: number,
+  item: RenderScheduleItem,
+  imageCache: Map<string, string>,
+): Promise<number> {
+  const loadablePhotos = item.media.customerPhotos.filter((p) => imageCache.has(p.key));
+  const hasDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
+  const hasPhotos = loadablePhotos.length > 0;
+
   const headerH = 16;
   const specH = item.visibleSpecs.length * 4.5;
-  const drawingH = item.media.drawingUrl ? 57 : 0;
-  const photosH = item.media.customerPhotos.length > 0 ? 35 : 0;
-  const minItemH = headerH + Math.max(drawingH, specH) + photosH + 6;
+  const drawingH = hasDrawing ? 57 : 0;
+  const photosH = hasPhotos ? 35 : 0;
+  const minItemH = headerH + Math.max(drawingH, specH) + photosH + SECTION_GAP;
 
   y = ensureSpace(pdf, y, Math.min(minItemH, MAX_Y - MARGIN - 5));
   const itemStartPage = pdf.getNumberOfPages();
   const startY = y;
 
+  const pad = INNER_PAD;
+
+  pdf.setFillColor(COLOR_BG_MUTED);
+  pdf.roundedRect(MARGIN, startY - 2, CW, headerH - 2, 1.5, 1.5, "F");
+
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(10);
+  pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_BLACK);
-  pdf.text(item.title, MARGIN + 3, y + 5);
+  pdf.text(item.title, MARGIN + pad, y + 5);
   y += 7;
 
   pdf.setFont(FONT_NORMAL, "normal");
-  pdf.setFontSize(8);
+  pdf.setFontSize(mmSize(T.typography.bodyTextSize));
   pdf.setTextColor(COLOR_MUTED);
-  pdf.text(`${item.quantityLabel}  |  ${item.dimensionLabel}`, MARGIN + 3, y + 3);
+  pdf.text(`${item.quantityLabel}  |  ${item.dimensionLabel}`, MARGIN + pad, y + 3);
   y += 7;
 
-  const leftColW = CW / 2 - 2;
-  const rightColX = MARGIN + CW / 2 + 2;
-  const rightColW = CW / 2 - 5;
-
-  let drawingBottomY = y;
-  if (item.media.drawingUrl) {
-    const drawingData = await loadImageAsDataUrl(item.media.drawingUrl);
-    if (drawingData) {
+  if (SCHEDULE_LAYOUT === "specs_only_v1") {
+    if (item.visibleSpecs.length > 0) {
+      y = renderSpecTableNoPageBreak(pdf, y, item.visibleSpecs, MARGIN + pad, CW - pad * 2);
+    }
+  } else if (SCHEDULE_LAYOUT === "image_top_specs_below_v1") {
+    if (hasDrawing) {
+      const drawingData = imageCache.get(`draw-${item.index}`)!;
       try {
         const dims = await getImageDimensions(drawingData);
-        const maxDrawW = leftColW - 6;
+        const maxDrawW = CW - pad * 2;
         const maxDrawH = 55;
         const scale = Math.min(maxDrawW / dims.w, maxDrawH / dims.h, 1);
         const dw = dims.w * scale;
         const dh = dims.h * scale;
+        const drawX = MARGIN + pad + (maxDrawW - dw) / 2;
+        pdf.addImage(drawingData, drawX, y, dw, dh);
+        y += dh + 3;
+      } catch { /* skip */ }
+    }
+    if (item.visibleSpecs.length > 0) {
+      y = renderSpecTableNoPageBreak(pdf, y, item.visibleSpecs, MARGIN + pad, CW - pad * 2);
+    }
+  } else {
+    const drawWPct = DRAWING_MAX_W_PCT / 100;
+    const leftColW = CW * drawWPct - 2;
+    const rightColX = MARGIN + CW * drawWPct + 2;
+    const rightColW = CW * (1 - drawWPct) - 5;
 
-        const drawX = MARGIN + 3 + (leftColW - 6 - dw) / 2;
+    let drawingBottomY = y;
+    if (hasDrawing) {
+      const drawingData = imageCache.get(`draw-${item.index}`)!;
+      try {
+        const dims = await getImageDimensions(drawingData);
+        const maxDrawW = leftColW - pad * 2;
+        const maxDrawH = 55;
+        const scale = Math.min(maxDrawW / dims.w, maxDrawH / dims.h, 1);
+        const dw = dims.w * scale;
+        const dh = dims.h * scale;
+        const drawX = MARGIN + pad + (leftColW - pad * 2 - dw) / 2;
         pdf.addImage(drawingData, drawX, y, dw, dh);
         drawingBottomY = y + dh + 2;
       } catch { /* skip */ }
     }
+
+    let specY = y;
+    if (item.visibleSpecs.length > 0) {
+      specY = renderSpecTableNoPageBreak(pdf, specY, item.visibleSpecs, rightColX, rightColW);
+    }
+    y = Math.max(drawingBottomY, specY);
   }
 
-  let specY = y;
-  if (item.visibleSpecs.length > 0) {
-    specY = renderSpecTableNoPageBreak(pdf, specY, item.visibleSpecs, rightColX, rightColW);
-  }
+  y += 2;
 
-  y = Math.max(drawingBottomY, specY) + 2;
-
-  if (item.media.customerPhotos.length > 0) {
+  if (hasPhotos) {
     if (y + 35 > MAX_Y) {
       drawItemBorder(pdf, startY, y, itemStartPage);
       pdf.addPage();
@@ -453,23 +585,23 @@ async function renderScheduleItem(pdf: Pdf, y: number, item: RenderScheduleItem)
       const photosStartY = y;
 
       pdf.setFont(FONT_NORMAL, "bold");
-      pdf.setFontSize(7);
+      pdf.setFontSize(mmSize(T.typography.specLabelSize));
       pdf.setTextColor(COLOR_MUTED);
-      pdf.text(`${item.title} — SITE PHOTOS (continued)`, MARGIN + 3, y + 3);
+      pdf.text(`${item.title} — SITE PHOTOS (continued)`, MARGIN + pad, y + 3);
       y += 5;
 
-      y = await renderPhotos(pdf, y, item.media.customerPhotos);
+      y = await renderPhotosFromCache(pdf, y, loadablePhotos, imageCache);
       drawItemBorder(pdf, photosStartY - 2, y, pdf.getNumberOfPages());
       return y + 2;
     }
 
     pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(7);
+    pdf.setFontSize(mmSize(T.typography.specLabelSize));
     pdf.setTextColor(COLOR_MUTED);
-    pdf.text("SITE PHOTOS", MARGIN + 3, y + 3);
+    pdf.text("SITE PHOTOS", MARGIN + pad, y + 3);
     y += 5;
 
-    y = await renderPhotos(pdf, y, item.media.customerPhotos);
+    y = await renderPhotosFromCache(pdf, y, loadablePhotos, imageCache);
   }
 
   drawItemBorder(pdf, startY, y, itemStartPage);
@@ -485,13 +617,19 @@ function drawItemBorder(pdf: Pdf, startY: number, endY: number, startPage: numbe
   pdf.roundedRect(MARGIN, startY - 2, CW, endY - startY + 4, 1.5, 1.5, "S");
 }
 
-async function renderPhotos(pdf: Pdf, y: number, photos: { url: string; caption: string; key: string }[]): Promise<number> {
-  let photoX = MARGIN + 3;
-  const photoMaxW = 30;
-  const photoMaxH = 25;
+async function renderPhotosFromCache(
+  pdf: Pdf,
+  y: number,
+  photos: { url: string; caption: string; key: string }[],
+  imageCache: Map<string, string>,
+): Promise<number> {
+  let photoX = MARGIN + INNER_PAD;
+  const photoMaxW = PHOTO_MAX_SIZE;
+  const photoMaxH = PHOTO_MAX_SIZE - 5;
+  let renderedAny = false;
 
   for (const photo of photos) {
-    const photoData = await loadImageAsDataUrl(photo.url);
+    const photoData = imageCache.get(photo.key);
     if (!photoData) continue;
 
     try {
@@ -500,8 +638,8 @@ async function renderPhotos(pdf: Pdf, y: number, photos: { url: string; caption:
       const pw = dims.w * scale;
       const ph = dims.h * scale;
 
-      if (photoX + pw > MARGIN + CW - 3) {
-        photoX = MARGIN + 3;
+      if (photoX + pw > MARGIN + CW - INNER_PAD) {
+        photoX = MARGIN + INNER_PAD;
         y += photoMaxH + 3;
         if (y + photoMaxH > MAX_Y) {
           pdf.addPage();
@@ -511,9 +649,13 @@ async function renderPhotos(pdf: Pdf, y: number, photos: { url: string; caption:
 
       pdf.addImage(photoData, photoX, y, pw, ph);
       photoX += pw + 3;
+      renderedAny = true;
     } catch { /* skip */ }
   }
-  y += photoMaxH + 2;
+
+  if (renderedAny) {
+    y += photoMaxH + 2;
+  }
   return y;
 }
 
@@ -530,12 +672,13 @@ function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[
     }
 
     pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(7);
+    pdf.setFontSize(mmSize(T.typography.specLabelSize));
     pdf.setTextColor(COLOR_MUTED);
 
     const labelLines = wrapText(pdf, specs[i].label, labelW - 2);
     pdf.text(labelLines[0] || specs[i].label, x + 2, y + 3.2);
 
+    pdf.setFontSize(mmSize(T.typography.specValueSize));
     pdf.setTextColor(COLOR_BLACK);
     const valLines = wrapText(pdf, specs[i].value, w - labelW - 4);
     pdf.text(valLines[0] || specs[i].value, x + labelW, y + 3.2);
@@ -549,24 +692,24 @@ function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[
 function renderAcceptance(pdf: Pdf, y: number): number {
   y = ensureSpace(pdf, y, 45);
 
-  y += 6;
+  y += SECTION_GAP;
   drawLine(pdf, y);
-  y += 6;
+  y += SECTION_GAP;
 
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(10);
+  pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_BLACK);
   pdf.text("Acceptance", MARGIN, y + 3);
   y += 10;
 
   const fields = T.acceptance.fields;
-  const fieldW = CW / 3;
+  const fieldW = CW / fields.length;
 
   for (let i = 0; i < fields.length; i++) {
     const fx = MARGIN + i * fieldW;
 
     pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(7);
+    pdf.setFontSize(mmSize(T.typography.specLabelSize));
     pdf.setTextColor(COLOR_MUTED);
     pdf.text(fields[i], fx + 2, y + 3);
 

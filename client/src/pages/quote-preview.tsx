@@ -191,23 +191,23 @@ export default function QuotePreview() {
       <div className="p-4 sm:p-8 print:p-4 space-y-6 print:space-y-4">
         {isSectionVisible(T, "header") && (
           <div className="space-y-4">
-            <HeaderSection branding={branding} orgContact={orgContact} />
+            <HeaderSection branding={branding} orgContact={orgContact} template={T} />
             <Separator />
           </div>
         )}
 
         {isSectionVisible(T, "disclaimer") && (
-          <p className="text-sm italic text-muted-foreground print:text-gray-500" data-testid="text-preliminary-disclaimer">
+          <p className="text-sm italic" style={{ color: T.colors.headingMuted }} data-testid="text-preliminary-disclaimer">
             {disclaimerText}
           </p>
         )}
 
         {isSectionVisible(T, "customerProject") && (
-          <CustomerProjectSection header={header} customerProject={customerProject} />
+          <CustomerProjectSection header={header} customerProject={customerProject} template={T} />
         )}
 
         {isSectionVisible(T, "totals") && (
-          <TotalsSection totals={totals} />
+          <TotalsSection totals={totals} template={T} />
         )}
 
         {isSectionVisible(T, "legal") && (
@@ -216,14 +216,15 @@ export default function QuotePreview() {
 
         {isSectionVisible(T, "schedule") && (
           <div className="print:break-before-page space-y-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Schedule of Items</h3>
+            <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
             {liveScheduleItems.length === 0 && (
-              <p className="text-sm text-muted-foreground">No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
+              <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
             )}
             {liveScheduleItems.map((item) => (
               <ScheduleItemCard
                 key={item.index}
                 item={item}
+                template={T}
               />
             ))}
           </div>
@@ -263,7 +264,7 @@ function SnapshotBanner({ revisionVersion, sourceJobId }: { revisionVersion: num
   );
 }
 
-function HeaderSection({ branding, orgContact }: { branding: QuoteRenderModel["branding"]; orgContact: QuoteRenderModel["orgContact"] }) {
+function HeaderSection({ branding, orgContact, template }: { branding: QuoteRenderModel["branding"]; orgContact: QuoteRenderModel["orgContact"]; template: QuoteTemplate }) {
   return (
     <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
       <div className="flex items-start gap-4">
@@ -276,15 +277,15 @@ function HeaderSection({ branding, orgContact }: { branding: QuoteRenderModel["b
           />
         )}
         <div>
-          <h2 className="text-2xl font-bold" data-testid="text-trading-name">
+          <h2 className="text-2xl font-bold" style={{ color: template.colors.bodyText }} data-testid="text-trading-name">
             {branding.tradingName}
           </h2>
-          <p className="text-sm text-muted-foreground italic" data-testid="text-legal-line">
+          <p className="text-sm italic" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
             {branding.legalLine}
           </p>
         </div>
       </div>
-      <div className="sm:text-right text-sm text-muted-foreground space-y-0.5">
+      <div className="sm:text-right text-sm space-y-0.5" style={{ color: template.colors.headingMuted }}>
         {orgContact.address && <p>{orgContact.address}</p>}
         {orgContact.phone && <p>{orgContact.phone}</p>}
         {orgContact.email && <p>{orgContact.email}</p>}
@@ -295,55 +296,76 @@ function HeaderSection({ branding, orgContact }: { branding: QuoteRenderModel["b
   );
 }
 
-function CustomerProjectSection({ header, customerProject }: { header: QuoteRenderModel["header"]; customerProject: QuoteRenderModel["customerProject"] }) {
+function CustomerProjectSection({ header, customerProject, template }: { header: QuoteRenderModel["header"]; customerProject: QuoteRenderModel["customerProject"]; template: QuoteTemplate }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
       <div>
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">Customer</p>
-        <p className="text-lg font-semibold" data-testid="text-customer">{customerProject.customerName}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Customer</p>
+        <p className="text-lg font-semibold" style={{ color: template.colors.bodyText }} data-testid="text-customer">{customerProject.customerName}</p>
         {customerProject.hasProjectAddress && (
-          <div className="mt-1">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">Project Address</p>
-            <p className="text-sm" data-testid="text-project-address">{customerProject.projectAddress}</p>
+          <div className="mt-2">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Project Address</p>
+            <p className="text-sm" style={{ color: template.colors.bodyText }} data-testid="text-project-address">{customerProject.projectAddress}</p>
           </div>
         )}
       </div>
       <div className="sm:text-right space-y-1">
-        <div><span className="text-xs text-muted-foreground">Quote #: </span><span className="font-mono font-semibold" data-testid="text-quote-number-preview">{header.quoteNumber}</span></div>
-        <div><span className="text-xs text-muted-foreground">Date: </span><span data-testid="text-quote-date">{header.dateFormatted}</span></div>
-        <div><span className="text-xs text-muted-foreground">Valid Until: </span><span data-testid="text-quote-expiry">{header.expiryFormatted}</span></div>
+        <div><span className="text-xs" style={{ color: template.colors.headingMuted }}>Quote #: </span><span className="font-mono font-semibold" data-testid="text-quote-number-preview">{header.quoteNumber}</span></div>
+        <div><span className="text-xs" style={{ color: template.colors.headingMuted }}>Date: </span><span data-testid="text-quote-date">{header.dateFormatted}</span></div>
+        <div><span className="text-xs" style={{ color: template.colors.headingMuted }}>Valid Until: </span><span data-testid="text-quote-expiry">{header.expiryFormatted}</span></div>
       </div>
     </div>
   );
 }
 
-function TotalsSection({ totals }: { totals: QuoteRenderModel["totals"] }) {
+function TotalsSection({ totals, template }: { totals: QuoteRenderModel["totals"]; template: QuoteTemplate }) {
   if (totals.isEmpty) {
     return (
-      <div className="rounded-lg border p-4 space-y-2" data-testid="totals-block">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote Summary</h3>
-        <p className="text-sm text-muted-foreground">No pricing data available.</p>
+      <div className="rounded-lg border p-5" style={{ backgroundColor: template.colors.bgMuted, borderColor: template.colors.border }} data-testid="totals-block">
+        <p className="text-sm" style={{ color: template.colors.headingMuted }}>No pricing data available.</p>
+      </div>
+    );
+  }
+
+  const isInline = template.itemLayout.totalsLayoutVariant === "totals_inline_v1";
+
+  if (isInline) {
+    return (
+      <div className="space-y-1.5 py-2" data-testid="totals-block">
+        {totals.lines.map((line, idx) => (
+          <TotalsLineRow key={idx} line={line} template={template} />
+        ))}
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border p-4 space-y-2" data-testid="totals-block">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote Summary</h3>
-      <div className="space-y-1 text-sm">
+    <div className="rounded-lg border p-5 space-y-2" style={{ backgroundColor: template.colors.bgMuted, borderColor: template.colors.border }} data-testid="totals-block">
+      <div className="space-y-1.5">
         {totals.lines.map((line, idx) => (
-          <TotalsLineRow key={idx} line={line} />
+          <TotalsLineRow key={idx} line={line} template={template} />
         ))}
       </div>
     </div>
   );
 }
 
-function TotalsLineRow({ line }: { line: RenderTotalsLine }) {
-  if (line.emphasis === "separator") return <Separator />;
+function TotalsLineRow({ line, template }: { line: RenderTotalsLine; template: QuoteTemplate }) {
+  if (line.emphasis === "separator") return <Separator style={{ borderColor: template.colors.border }} />;
   const testId = line.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+  const style: Record<string, string> = {};
+  let classes = "flex justify-between py-0.5";
+  if (line.emphasis === "bold") {
+    classes += " text-lg font-bold";
+    style.color = template.colors.bodyText;
+  } else if (line.emphasis === "muted") {
+    style.color = template.colors.headingMuted;
+  } else {
+    classes += " font-medium";
+    style.color = template.colors.bodyText;
+  }
   return (
-    <div className={`flex justify-between ${line.emphasis === "bold" ? "text-lg font-bold" : ""} ${line.emphasis === "muted" ? "text-muted-foreground" : ""} ${line.emphasis === "normal" ? "font-medium" : ""}`}>
+    <div className={classes} style={style}>
       <span>{line.label}</span>
       <span data-testid={`text-${testId}`}>{line.formatted}</span>
     </div>
@@ -352,18 +374,18 @@ function TotalsLineRow({ line }: { line: RenderTotalsLine }) {
 
 function LegalSection({ legal, template }: { legal: QuoteRenderModel["legal"]; template: QuoteTemplate }) {
   return (
-    <div className="print:break-before-page space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Terms & Conditions</h3>
+    <div className="print:break-before-page space-y-5">
+      <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: template.colors.accent }}>Terms & Conditions</h3>
       {legal.sections.map((section) => (
-        <div key={section.heading} className="space-y-1">
-          <p className="text-xs font-semibold uppercase" style={{ color: template.colors.headingMuted }}>{section.heading}</p>
-          <p className="text-sm whitespace-pre-wrap">{section.body}</p>
+        <div key={section.heading} className="space-y-1.5">
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>{section.heading}</p>
+          <p className="text-sm whitespace-pre-wrap" style={{ color: template.colors.bodyText }}>{section.body}</p>
         </div>
       ))}
       {legal.hasBankDetails && (
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase" style={{ color: template.colors.headingMuted }}>Bank Details</p>
-          <p className="text-sm whitespace-pre-wrap">{legal.bankDetails}</p>
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Bank Details</p>
+          <p className="text-sm whitespace-pre-wrap" style={{ color: template.colors.bodyText }}>{legal.bankDetails}</p>
         </div>
       )}
     </div>
@@ -372,12 +394,13 @@ function LegalSection({ legal, template }: { legal: QuoteRenderModel["legal"]; t
 
 function AcceptanceSection({ template }: { template: QuoteTemplate }) {
   return (
-    <div className="space-y-4 border-t pt-4" data-testid="acceptance-section">
-      <p className="text-sm font-semibold" data-testid="text-acceptance-heading">Acceptance</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="space-y-5 pt-5" data-testid="acceptance-section">
+      <div style={{ borderTopColor: template.colors.border, borderTopWidth: 1, borderTopStyle: "solid" }} />
+      <p className="text-base font-bold" style={{ color: template.colors.bodyText }} data-testid="text-acceptance-heading">Acceptance</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         {template.acceptance.fields.map((field) => (
-          <div key={field} className="border-b border-dashed pb-6" data-testid={`acceptance-field-${field.toLowerCase()}`}>
-            <p className="text-xs text-muted-foreground">{field}</p>
+          <div key={field} className="pb-6" style={{ borderBottomWidth: 1, borderBottomStyle: "dashed", borderBottomColor: template.colors.border }} data-testid={`acceptance-field-${field.toLowerCase()}`}>
+            <p className="text-xs" style={{ color: template.colors.headingMuted }}>{field}</p>
           </div>
         ))}
       </div>
@@ -434,10 +457,17 @@ function MediaImage({
   );
 }
 
-function SpecTable({ specs, itemIndex }: { specs: { key: string; label: string; value: string }[]; itemIndex: number }) {
+function SpecTable({ specs, itemIndex, template }: { specs: { key: string; label: string; value: string }[]; itemIndex: number; template: QuoteTemplate }) {
   if (specs.length === 0) {
-    return <p className="text-sm text-muted-foreground italic">No specification data available for this item.</p>;
+    return <p className="text-sm italic" style={{ color: template.colors.headingMuted }}>No specification data available for this item.</p>;
   }
+
+  const renderRow = ({ key, label, value }: { key: string; label: string; value: string }, idx: number) => (
+    <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? template.colors.bgMuted : "transparent" }}>
+      <td className="py-1.5 px-2 text-xs leading-snug align-top" style={{ color: template.colors.headingMuted, minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
+      <td className="py-1.5 px-2 font-medium text-sm leading-snug align-top" style={{ color: template.colors.bodyText, overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
+    </tr>
+  );
 
   const useTwoCol = specs.length > 6;
   const midpoint = Math.ceil(specs.length / 2);
@@ -445,48 +475,25 @@ function SpecTable({ specs, itemIndex }: { specs: { key: string; label: string; 
   if (useTwoCol) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4" data-testid={`spec-table-${itemIndex}`}>
-        <table className="w-full text-sm">
-          <tbody>
-            {specs.slice(0, midpoint).map(({ key, label, value }) => (
-              <tr key={key} className="border-b last:border-b-0">
-                <td className="py-1 pr-2 text-muted-foreground text-xs leading-snug align-top" style={{ minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
-                <td className="py-1 font-medium text-sm leading-snug align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <table className="w-full text-sm">
-          <tbody>
-            {specs.slice(midpoint).map(({ key, label, value }) => (
-              <tr key={key} className="border-b last:border-b-0">
-                <td className="py-1 pr-2 text-muted-foreground text-xs leading-snug align-top" style={{ minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
-                <td className="py-1 font-medium text-sm leading-snug align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <table className="w-full text-sm"><tbody>{specs.slice(0, midpoint).map((s, i) => renderRow(s, i))}</tbody></table>
+        <table className="w-full text-sm"><tbody>{specs.slice(midpoint).map((s, i) => renderRow(s, i))}</tbody></table>
       </div>
     );
   }
 
   return (
     <table className="w-full text-sm" data-testid={`spec-table-${itemIndex}`}>
-      <tbody>
-        {specs.map(({ key, label, value }) => (
-          <tr key={key} className="border-b last:border-b-0">
-            <td className="py-1 pr-3 text-muted-foreground text-xs leading-snug align-top" style={{ minWidth: "80px", maxWidth: "140px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
-            <td className="py-1 font-medium text-sm leading-snug align-top" style={{ overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
-          </tr>
-        ))}
-      </tbody>
+      <tbody>{specs.map((s, i) => renderRow(s, i))}</tbody>
     </table>
   );
 }
 
 function ScheduleItemCard({
   item,
+  template,
 }: {
   item: RenderScheduleItem;
+  template: QuoteTemplate;
 }) {
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("");
@@ -494,87 +501,120 @@ function ScheduleItemCard({
   const [drawingFailed, setDrawingFailed] = useState(false);
 
   const { visibleSpecs, media } = item;
+  const loadedPhotos = media.customerPhotos.filter((p) => !failedPhotos.has(p.key));
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-3 print:break-inside-avoid" data-testid={`schedule-item-${item.index}`}>
-      <div>
-        <h4 className="font-semibold" data-testid={`text-item-title-${item.index}`}>
+    <div className="rounded-lg overflow-hidden print:break-inside-avoid" style={{ border: `1px solid ${template.colors.border}` }} data-testid={`schedule-item-${item.index}`}>
+      <div className="px-4 py-3" style={{ backgroundColor: template.colors.bgMuted }}>
+        <h4 className="font-bold text-base" style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
           {item.title}
         </h4>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm" style={{ color: template.colors.headingMuted }}>
           {item.quantityLabel} | {item.dimensionLabel}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {media.drawingUrl && (
-          <div className="flex items-center justify-center">
-            <div
-              className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
-              onClick={() => {
-                if (!drawingFailed) {
-                  setViewerSrc(media.drawingUrl);
-                  setViewerTitle(media.drawingLabel);
-                }
-              }}
-            >
-              <MediaImage
-                src={media.drawingUrl}
-                alt={`Drawing for item ${item.index + 1}`}
-                className="max-h-64 object-contain rounded border"
-                testId={`img-drawing-${item.index}`}
-                fallbackTestId={`fallback-drawing-${item.index}`}
-                fallbackText="Drawing unavailable"
-                onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
-              />
+      <div className="p-4 space-y-3">
+        {template.itemLayout.scheduleLayoutVariant === "specs_only_v1" ? (
+          <div>
+            <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
+          </div>
+        ) : template.itemLayout.scheduleLayoutVariant === "image_top_specs_below_v1" ? (
+          <div className="space-y-3">
+            {media.drawingUrl && (
+              <div className="flex items-center justify-center">
+                <div
+                  className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
+                  onClick={() => {
+                    if (!drawingFailed) {
+                      setViewerSrc(media.drawingUrl);
+                      setViewerTitle(media.drawingLabel);
+                    }
+                  }}
+                >
+                  <MediaImage
+                    src={media.drawingUrl}
+                    alt={`Drawing for item ${item.index + 1}`}
+                    className="max-h-64 w-full object-contain rounded"
+                    testId={`img-drawing-${item.index}`}
+                    fallbackTestId={`fallback-drawing-${item.index}`}
+                    fallbackText="Drawing unavailable"
+                    onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
+                  />
+                </div>
+              </div>
+            )}
+            <div>
+              <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {media.drawingUrl && (
+              <div className="flex items-center justify-center">
+                <div
+                  className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
+                  onClick={() => {
+                    if (!drawingFailed) {
+                      setViewerSrc(media.drawingUrl);
+                      setViewerTitle(media.drawingLabel);
+                    }
+                  }}
+                >
+                  <MediaImage
+                    src={media.drawingUrl}
+                    alt={`Drawing for item ${item.index + 1}`}
+                    className="max-h-64 object-contain rounded"
+                    testId={`img-drawing-${item.index}`}
+                    fallbackTestId={`fallback-drawing-${item.index}`}
+                    fallbackText="Drawing unavailable"
+                    onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
+                  />
+                </div>
+              </div>
+            )}
+            <div>
+              <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
             </div>
           </div>
         )}
-        <div>
-          <SpecTable specs={visibleSpecs} itemIndex={item.index} />
-        </div>
-      </div>
 
-      {media.customerPhotos.length > 0 && (
-        <div className="space-y-2" data-testid={`photos-section-${item.index}`}>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Site Photos</p>
-          <div className="flex flex-wrap gap-3">
-            {media.customerPhotos.map((photo, pIdx) => {
-              const isFailed = failedPhotos.has(photo.key);
-              return (
-                <div key={photo.key} className="space-y-1">
-                  <div
-                    className={isFailed ? "" : "cursor-pointer print:cursor-default"}
-                    onClick={() => {
-                      if (!isFailed) {
+        {loadedPhotos.length > 0 && (
+          <div className="space-y-2" data-testid={`photos-section-${item.index}`}>
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Site Photos</p>
+            <div className="flex flex-wrap gap-3">
+              {loadedPhotos.map((photo, pIdx) => (
+                  <div key={photo.key} className="space-y-1">
+                    <div
+                      className="cursor-pointer print:cursor-default"
+                      onClick={() => {
                         setViewerSrc(photo.url);
                         setViewerTitle(photo.caption);
-                      }
-                    }}
-                  >
-                    <MediaImage
-                      src={photo.url}
-                      alt={photo.caption}
-                      className="max-h-48 max-w-[200px] object-contain rounded border"
-                      testId={`img-photo-${item.index}-${pIdx}`}
-                      fallbackTestId={`fallback-photo-${item.index}-${pIdx}`}
-                      fallbackText="Photo unavailable"
-                      onLoadStatusChange={(loaded) => {
-                        if (!loaded) {
-                          setFailedPhotos(prev => new Set(prev).add(photo.key));
-                        }
                       }}
-                    />
+                    >
+                      <MediaImage
+                        src={photo.url}
+                        alt={photo.caption}
+                        className="max-h-48 max-w-[200px] object-contain rounded"
+                        testId={`img-photo-${item.index}-${pIdx}`}
+                        fallbackTestId={`fallback-photo-${item.index}-${pIdx}`}
+                        fallbackText="Photo unavailable"
+                        onLoadStatusChange={(loaded) => {
+                          if (!loaded) {
+                            setFailedPhotos(prev => new Set(prev).add(photo.key));
+                          }
+                        }}
+                      />
+                    </div>
+                    {photo.caption && (
+                      <p className="text-xs text-center max-w-[200px]" style={{ color: template.colors.headingMuted }}>{photo.caption}</p>
+                    )}
                   </div>
-                  {photo.caption && !isFailed && (
-                    <p className="text-xs text-muted-foreground text-center max-w-[200px]">{photo.caption}</p>
-                  )}
-                </div>
-              );
-            })}
+                ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <MediaViewer
         open={!!viewerSrc}
