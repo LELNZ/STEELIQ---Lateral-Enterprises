@@ -933,6 +933,7 @@ export default function QuoteBuilder() {
   }
 
   const immediateAutoSaveRef = useRef(false);
+  const saveInProgressRef = useRef(false);
 
   async function onSubmit(data: InsertQuoteItem) {
     const wasNewJob = !savedJobId;
@@ -1184,6 +1185,9 @@ export default function QuoteBuilder() {
   }
 
   async function saveJob(): Promise<boolean> {
+    if (saveInProgressRef.current) {
+      return false;
+    }
     if (!jobName.trim()) {
       toast({ title: "Job name is required", variant: "destructive" });
       return false;
@@ -1192,6 +1196,7 @@ export default function QuoteBuilder() {
       toast({ title: "Add at least one item before saving", variant: "destructive" });
       return false;
     }
+    saveInProgressRef.current = true;
     setIsSaving(true);
     try {
       let currentJobId = savedJobId;
@@ -1236,6 +1241,7 @@ export default function QuoteBuilder() {
       toast({ title: "Failed to save job", description: e.message, variant: "destructive" });
       return false;
     } finally {
+      saveInProgressRef.current = false;
       setIsSaving(false);
     }
   }
