@@ -50,12 +50,12 @@ function fmt(n: number): string {
   return n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function normalizeQuoteType(qt: string | null | undefined): "renovation" | "new_build" {
-  return qt === "new_build" ? "new_build" : "renovation";
-}
-
 function formatQuoteType(qt: string | null | undefined): string {
-  return normalizeQuoteType(qt) === "new_build" ? "New Build" : "Renovation";
+  switch (qt) {
+    case "renovation": return "Renovation";
+    case "new_build": return "New Build";
+    default: return "Unclassified";
+  }
 }
 
 function isActive(q: EnrichedQuote): boolean {
@@ -136,7 +136,7 @@ export default function QuotesList() {
     }
 
     if (filterQuoteType !== "all") {
-      filtered = filtered.filter(q => normalizeQuoteType(q.quoteType) === filterQuoteType);
+      filtered = filtered.filter(q => q.quoteType === filterQuoteType);
     }
 
     if (filterDateFrom) {

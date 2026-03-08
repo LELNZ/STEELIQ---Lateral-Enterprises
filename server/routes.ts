@@ -986,6 +986,9 @@ export async function registerRoutes(
       if (process.env.NODE_ENV === "production") {
         return res.status(403).json({ error: "This endpoint is not available in production" });
       }
+      if (process.env.ENABLE_DESTRUCTIVE_DEV_TOOLS !== "true") {
+        return res.status(403).json({ error: "Destructive dev tools are disabled. Set ENABLE_DESTRUCTIVE_DEV_TOOLS=true to enable." });
+      }
       const count = await clearAllQuotes();
       console.log(`[DEV] Cleared all quotes: ${count} deleted`);
       res.json({ ok: true, deleted: count });

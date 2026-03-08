@@ -1,3 +1,6 @@
+// WARNING: This test calls POST /api/dev/clear-quotes which deletes ALL quotes.
+// Requires: ENABLE_DESTRUCTIVE_DEV_TOOLS=true environment variable.
+// Run with: ENABLE_DESTRUCTIVE_DEV_TOOLS=true npx tsx tests/lifecycle-regression.ts
 import { pool } from "../server/storage";
 
 const BASE = "http://localhost:5000";

@@ -1,0 +1,187 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add new endpoints unless explicitly instructed.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any migration/backfill/reset protection changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Do a final Monday-safety pass focused on:
+1. preventing destructive test/reset behavior from wiping working quote data, and
+2. fixing legacy quote type fallback so old records are not mislabeled as Renovation.
+
+This is a targeted operational safety pass only.
+
+
+--------------------------------------------------
+T012 — Protect working quote data from destructive test/reset behavior
+--------------------------------------------------
+
+Problem:
+The current Replit environment uses the same PostgreSQL database for:
+- manual working app usage
+- destructive automated test setup
+
+Test scripts call:
+- POST /api/dev/clear-quotes
+
+This wipes all quotes/revisions from the same database used for real work.
+
+Required implementation:
+
+1. Audit the current use of:
+   - POST /api/dev/clear-quotes
+   - clearAllQuotes()
+   - any related destructive dev/test reset path
+
+2. Implement the smallest safe protection so working/manual environments cannot accidentally wipe real quote data.
+
+Preferred order of solutions:
+OPTION A (best):
+- prevent destructive reset endpoints from being available unless a dedicated explicit environment flag is enabled
+  Example:
+  - ENABLE_DESTRUCTIVE_DEV_TOOLS=true
+- if the flag is absent, the endpoint must not operate
+
+OPTION B (acceptable if A is not feasible quickly):
+- hard-block the endpoint outside a dedicated test environment
+- ensure normal dev/manual app usage cannot hit it
+
+3. Update test scripts/config if needed so they clearly require the explicit destructive mode.
+
+4. Do NOT remove needed test capability entirely unless unavoidable.
+   Keep tests usable, but make destructive resets opt-in and isolated.
+
+5. Clearly document the Monday-safe operating rule in the output.
+
+Acceptance criteria:
+- working/manual environment cannot accidentally clear all quotes
+- destructive reset requires explicit opt-in
+- normal app usage does not delete quotes
+- tests still have a clear path to run intentionally
+
+
+--------------------------------------------------
+T013 — Fix legacy quote type fallback so old values are not mislabeled
+--------------------------------------------------
+
+Problem:
+Legacy quote_type values such as:
+- null
+- general
+- tender
+
+are currently displayed as "Renovation" in the UI.
+
+This is unsafe because it changes business meaning.
+
+Required implementation:
+
+1. Replace the current fallback behavior.
+
+2. Safe display rules:
+   - renovation -> Renovation
+   - new_build -> New Build
+   - null/general/tender/unknown legacy values -> display as:
+     • Legacy
+     OR
+     • Unknown
+     OR
+     • Unclassified
+   Choose one label and use it consistently.
+
+3. Safe filter behavior:
+   - active type filter should remain focused on Renovation / New Build for Monday workflow
+   - legacy values should not be mislabeled into one of those buckets
+   - if needed, they can be excluded from type-filter matching unless explicitly unfiltered
+
+4. Quote Detail behavior:
+   - when editing a legacy quote, user can choose only:
+     • Renovation
+     • New Build
+   - do not crash if stored value is legacy/null
+   - show the current state clearly before user updates it
+
+5. Do NOT reintroduce General or Tender into the active Monday workflow UI.
+
+Acceptance criteria:
+- no legacy quote is silently shown as Renovation unless it is actually renovation
+- legacy values are handled safely and clearly
+- Monday workflow still only exposes Renovation / New Build as editable choices
+
+
+--------------------------------------------------
+T014 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- redesign quote lifecycle
+- redesign estimate/quote classification architecture
+- add customer portal logic
+- add email logic
+- add more quote type options back into active workflow
+- add schema changes unless strictly required
+- add speculative admin tooling
+
+This is only a safety and correctness pass.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Working/manual quote data is protected from accidental destructive test resets.
+2. Legacy quote records are no longer mislabeled as Renovation.
+3. The active Monday workflow remains simple:
+   - Estimate Site Type: Renovation / New Build
+   - Quote Type: Renovation / New Build
+4. Legacy records are handled safely without confusing current operational use.
+
+
+END OF IMPLEMENTATION

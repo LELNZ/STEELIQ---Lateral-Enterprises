@@ -174,7 +174,7 @@ export default function QuoteDetail() {
         <div className="rounded-lg border bg-card p-3">
           <p className="text-xs text-muted-foreground">Quote Type</p>
           <Select
-            value={quote.quoteType === "new_build" ? "new_build" : "renovation"}
+            value={quote.quoteType === "renovation" || quote.quoteType === "new_build" ? quote.quoteType : "__legacy__"}
             onValueChange={(val) => typeMutation.mutate(val)}
             disabled={typeMutation.isPending}
           >
@@ -182,6 +182,9 @@ export default function QuoteDetail() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              {quote.quoteType !== "renovation" && quote.quoteType !== "new_build" && (
+                <SelectItem value="__legacy__" disabled className="text-muted-foreground italic">Unclassified</SelectItem>
+              )}
               <SelectItem value="renovation">Renovation</SelectItem>
               <SelectItem value="new_build">New Build</SelectItem>
             </SelectContent>

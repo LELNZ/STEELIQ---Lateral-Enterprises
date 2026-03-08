@@ -1,3 +1,5 @@
+// WARNING: This test plan calls POST /api/dev/clear-quotes which deletes ALL quotes.
+// Requires: ENABLE_DESTRUCTIVE_DEV_TOOLS=true environment variable on the server.
 export const QUOTE_FILTERS_TEST_PLAN = `
   Browser-driven test for quote page filters.
   Verifies all filter controls render, work correctly, and reset properly.
