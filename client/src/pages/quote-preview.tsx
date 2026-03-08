@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -24,7 +24,9 @@ function formatDate(iso: string | null): string {
 }
 
 export default function QuotePreview() {
-  const [, params] = useRoute("/quote/:id/preview");
+  const [, paramsSingular] = useRoute("/quote/:id/preview");
+  const [, paramsPlural] = useRoute("/quotes/:id/preview");
+  const params = paramsSingular || paramsPlural;
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const quoteId = params?.id;
@@ -306,6 +308,47 @@ export default function QuotePreview() {
   );
 }
 
+function MediaImage({
+  src,
+  alt,
+  className,
+  testId,
+  fallbackTestId,
+  fallbackText,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  testId: string;
+  fallbackTestId: string;
+  fallbackText: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => { setFailed(false); }, [src]);
+
+  if (failed) {
+    return (
+      <div
+        className="flex items-center justify-center rounded border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground"
+        data-testid={fallbackTestId}
+      >
+        {fallbackText}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      data-testid={testId}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function ScheduleItem({
   item,
   index,
@@ -329,6 +372,8 @@ function ScheduleItem({
   const defaultShow = Math.min(visibleSpecs.length, 14);
   const hasMore = visibleSpecs.length > defaultShow;
 
+  const customerPhotos = (item.photos || []).filter(p => p.includeInCustomerPdf);
+
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3 print:break-inside-avoid" data-testid={`schedule-item-${index}`}>
       <div className="flex items-center justify-between">
@@ -351,11 +396,13 @@ function ScheduleItem({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {item.drawingImageKey && (
           <div className="flex items-center justify-center">
-            <img
+            <MediaImage
               src={`/api/drawing-images/${item.drawingImageKey}`}
               alt={`Drawing for item ${index + 1}`}
               className="max-h-64 object-contain rounded border"
-              data-testid={`img-drawing-${index}`}
+              testId={`img-drawing-${index}`}
+              fallbackTestId={`fallback-drawing-${index}`}
+              fallbackText="Drawing unavailable"
             />
           </div>
         )}
@@ -375,6 +422,29 @@ function ScheduleItem({
           )}
         </div>
       </div>
+
+      {customerPhotos.length > 0 && (
+        <div className="space-y-2" data-testid={`photos-section-${index}`}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Site Photos</p>
+          <div className="flex flex-wrap gap-3">
+            {customerPhotos.map((photo, pIdx) => (
+              <div key={photo.key} className="space-y-1">
+                <MediaImage
+                  src={`/api/item-photos/${photo.key}`}
+                  alt={photo.caption || `Photo ${pIdx + 1} for item ${index + 1}`}
+                  className="max-h-48 max-w-[200px] object-contain rounded border"
+                  testId={`img-photo-${index}-${pIdx}`}
+                  fallbackTestId={`fallback-photo-${index}-${pIdx}`}
+                  fallbackText="Photo unavailable"
+                />
+                {photo.caption && (
+                  <p className="text-xs text-muted-foreground text-center max-w-[200px]">{photo.caption}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

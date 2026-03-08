@@ -26,6 +26,7 @@ import {
 import { ArrowLeftCircle, ChevronDown, ChevronRight, Printer, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
+import DrawingCanvas from "@/components/drawing-canvas";
 
 function calcSqm(width: number, height: number, quantity: number): number {
   return (width * height * quantity) / 1_000_000;
@@ -418,7 +419,8 @@ export default function ExecSummary() {
       const item = ip.item;
       let drawingImageKey: string | undefined;
       try {
-        const svgEl = document.querySelector(`[data-testid="drawing-svg-${idx}"]`) as SVGSVGElement | null;
+        const wrapper = document.querySelector(`[data-testid="drawing-svg-${idx}"]`);
+        const svgEl = wrapper?.querySelector("svg") as SVGSVGElement | null;
         if (svgEl) {
           const { svgToPngBlob } = await import("@/lib/export-png");
           const blob = await svgToPngBlob(svgEl, 2);
@@ -428,9 +430,15 @@ export default function ExecSummary() {
           if (uploadRes.ok) {
             const { key } = await uploadRes.json();
             drawingImageKey = key;
+          } else {
+            console.warn(`[Snapshot] Drawing upload failed for item ${idx}: HTTP ${uploadRes.status}`);
           }
+        } else if (item.width > 0 && item.height > 0) {
+          console.warn(`[Snapshot] Drawing SVG not found in DOM for item ${idx} (data-testid="drawing-svg-${idx}")`);
         }
-      } catch (_e) {}
+      } catch (e) {
+        console.warn(`[Snapshot] Drawing capture error for item ${idx}:`, e);
+      }
 
       const frameTypeEntry = libFrameTypes.find(ft => (ft.data as any).value === item.frameType);
       const frameTypeLabel = frameTypeEntry ? (frameTypeEntry.data as any).label : item.frameType || "";
@@ -1123,6 +1131,14 @@ export default function ExecSummary() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div style={{ position: "absolute", left: "-9999px", top: 0, overflow: "hidden", pointerEvents: "none" }} aria-hidden="true">
+        {itemPricings.map((ip, idx) => (
+          <div key={idx} data-testid={`drawing-svg-${idx}`} style={{ width: ip.item.width || 600, height: ip.item.height || 600 }}>
+            <DrawingCanvas config={ip.item} />
+          </div>
+        ))}
       </div>
     </div>
   );

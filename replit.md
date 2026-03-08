@@ -1,7 +1,7 @@
 # SteelIQ – Lateral Enterprises
 
 ## Current Milestone
-T017 complete — QuoteDocument integration into preview. Quote preview renders entirely from QuoteDocumentModel. Next: T018 (QuoteRenderer architecture).
+T017b complete — Quote media integrity and preview rendering fix. Drawing images are now captured into snapshots via offscreen DrawingCanvas rendering in ExecSummary. Customer photos with `includeInCustomerPdf` render in quote preview. Graceful fallback component for broken/missing media. Next: T018 (QuoteRenderer architecture).
 
 ## Overview
 SteelIQ is a professional quotation and estimating platform built for Lateral Enterprises, serving the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within estimates and quotes. The system streamlines the quotation process from configuration and visualization to pricing and export, providing a robust, user-friendly platform for accurate and visually rich quotes. Key capabilities include real-time drawing previews, comprehensive estimate and quote lifecycle management, item photo capture, and detailed pricing breakdowns.
@@ -71,6 +71,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 ## Testing
 - **Lifecycle regression tests**: `tests/lifecycle-regression.ts` — 6 scenario groups / 33 assertions covering archive/delete/unarchive semantics, orphan detection, cascade behavior, defensive guards, and input validation. Run with `npx tsx tests/lifecycle-regression.ts`.
 - **Filter UI tests**: `tests/quote-filters-e2e.ts` — browser-driven Playwright test plan for quote page filters (customer, quote type, date range, clear filters, control visibility). Exports `QUOTE_FILTERS_TEST_PLAN` and `QUOTE_FILTERS_TECHNICAL_DOCS` constants for use with the Playwright testing framework.
+- **Media rendering tests**: `tests/quote-media-e2e.ts` — browser-driven Playwright test plan for quote media rendering (drawing images, customer photos, fallbacks). Uploads test media, creates quote with snapshot, verifies rendering and exclusion logic.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

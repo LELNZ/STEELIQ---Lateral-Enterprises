@@ -27,6 +27,7 @@ function Router() {
       <Route path="/job/:id/exec-summary" component={ExecSummary} />
       <Route path="/job/:id" component={QuoteBuilder} />
       <Route path="/quotes" component={QuotesList} />
+      <Route path="/quotes/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id" component={QuoteDetail} />
       <Route path="/library" component={Library} />
