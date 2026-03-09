@@ -61,6 +61,8 @@ export interface TemplateDensity {
   specRowH: number;
   itemHeaderH: number;
   photoRowH: number;
+  itemCardPadMm: number;
+  itemGapMm: number;
 }
 
 export type DocumentMode = "standard" | "tender";
@@ -136,6 +138,8 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
     specRowH: 4.5,
     itemHeaderH: 16,
     photoRowH: 35,
+    itemCardPadMm: 4,
+    itemGapMm: 4,
   },
   documentMode: "standard",
 };
@@ -179,16 +183,16 @@ const PHOTO_SIZE_PRESETS: Record<PhotoSizePreset, number> = {
 };
 
 const LOGO_SCALE_PRESETS: Record<LogoScale, { maxH: number; maxW: number }> = {
-  small: { maxH: 8, maxW: 25 },
+  small: { maxH: 6, maxW: 20 },
   standard: { maxH: 12, maxW: 40 },
-  large: { maxH: 18, maxW: 60 },
+  large: { maxH: 22, maxW: 70 },
 };
 export { LOGO_SCALE_PRESETS };
 
 const DENSITY_PRESETS: Record<DensityPreset, TemplateDensity> = {
-  comfortable: { drawingMaxH: 55, specRowH: 4.5, itemHeaderH: 16, photoRowH: 35 },
-  standard: { drawingMaxH: 45, specRowH: 4, itemHeaderH: 14, photoRowH: 28 },
-  compact: { drawingMaxH: 35, specRowH: 3.5, itemHeaderH: 12, photoRowH: 22 },
+  comfortable: { drawingMaxH: 60, specRowH: 5, itemHeaderH: 18, photoRowH: 38, itemCardPadMm: 5, itemGapMm: 6 },
+  standard: { drawingMaxH: 45, specRowH: 4, itemHeaderH: 14, photoRowH: 28, itemCardPadMm: 4, itemGapMm: 4 },
+  compact: { drawingMaxH: 30, specRowH: 3.2, itemHeaderH: 10, photoRowH: 18, itemCardPadMm: 2.5, itemGapMm: 2 },
 };
 
 export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate {

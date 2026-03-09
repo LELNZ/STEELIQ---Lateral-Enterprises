@@ -64,6 +64,8 @@ function applyTemplate(template: QuoteTemplate) {
   DENSITY_SPEC_ROW_H = T.density.specRowH;
   DENSITY_ITEM_HEADER_H = T.density.itemHeaderH;
   DENSITY_PHOTO_ROW_H = T.density.photoRowH;
+  INNER_PAD = T.density.itemCardPadMm;
+  ITEM_GAP = T.density.itemGapMm;
 }
 
 type Pdf = jsPDF;
@@ -195,17 +197,18 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
   }
 
   if (T.header.showTradingName) {
+    const nameScale = T.header.logoScale === "large" ? 1.3 : T.header.logoScale === "small" ? 0.75 : 1;
     pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(mmSize(T.typography.tradingNameSize));
+    pdf.setFontSize(Math.round(mmSize(T.typography.tradingNameSize) * nameScale));
     pdf.setTextColor(COLOR_BLACK);
     pdf.text(branding.tradingName, MARGIN, y + 5);
-    y += 7;
+    y += Math.round(7 * nameScale);
   }
 
   pdf.setFont(FONT_NORMAL, "italic");
-  pdf.setFontSize(mmSize(T.typography.legalLineSize));
+  pdf.setFontSize(7);
   pdf.setTextColor(COLOR_MUTED);
-  pdf.text(branding.legalLine, MARGIN, y + 3);
+  pdf.text(branding.legalLine, MARGIN, y + 2.5);
   y += SECTION_GAP;
 
   let rightY = startY + 2;

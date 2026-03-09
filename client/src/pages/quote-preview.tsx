@@ -188,7 +188,7 @@ export default function QuotePreview() {
 
       <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
 
-      <div className="p-4 sm:p-8 print:p-4 space-y-6 print:space-y-4">
+      <div className="p-4 sm:p-8 print:p-4" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.spacing.sectionGapMm * 3.78)}px` }}>
         {isSectionVisible(T, "header") && (
           <div className="space-y-3">
             <HeaderSection branding={branding} orgContact={orgContact} template={T} />
@@ -218,7 +218,7 @@ export default function QuotePreview() {
         )}
 
         {isSectionVisible(T, "schedule") && (
-          <div className="print:break-before-page space-y-4 pt-2">
+          <div className="print:break-before-page pt-2" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
             <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
             {liveScheduleItems.length === 0 && (
               <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
@@ -281,7 +281,7 @@ function HeaderSection({ branding, orgContact, template }: { branding: QuoteRend
 
   return (
     <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-      <div className="flex items-start gap-4">
+      <div>
         {branding.logoUrl && (
           <img
             src={branding.logoUrl}
@@ -291,18 +291,24 @@ function HeaderSection({ branding, orgContact, template }: { branding: QuoteRend
             data-testid="img-branding-logo"
           />
         )}
-        <div>
-          {template.header.showTradingName && (
-            <h2 className="text-2xl font-bold" style={{ color: template.colors.bodyText }} data-testid="text-trading-name">
-              {branding.tradingName}
-            </h2>
-          )}
-          <p className="text-sm italic" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
-            {branding.legalLine}
-          </p>
-        </div>
+        {template.header.showTradingName && (
+          <h2
+            className="font-bold mt-1"
+            style={{
+              color: template.colors.bodyText,
+              fontSize: template.header.logoScale === "large" ? "1.75rem" : template.header.logoScale === "small" ? "1rem" : "1.25rem",
+              lineHeight: 1.2,
+            }}
+            data-testid="text-trading-name"
+          >
+            {branding.tradingName}
+          </h2>
+        )}
+        <p className="text-xs italic mt-0.5" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
+          {branding.legalLine}
+        </p>
       </div>
-      <div className="sm:text-right text-sm space-y-0.5" style={{ color: template.colors.headingMuted }}>
+      <div className="sm:text-right text-xs space-y-0.5" style={{ color: template.colors.headingMuted }}>
         {orgContact.address && <p>{orgContact.address}</p>}
         {orgContact.phone && <p>{orgContact.phone}</p>}
         {orgContact.email && <p>{orgContact.email}</p>}
@@ -485,10 +491,12 @@ function SpecTable({ specs, itemIndex, template }: { specs: { key: string; label
     return <p className="text-sm italic" style={{ color: template.colors.headingMuted }}>No specification data available for this item.</p>;
   }
 
+  const rowPadY = template.density.specRowH >= 5 ? "py-2" : template.density.specRowH <= 3.5 ? "py-0.5" : "py-1.5";
+
   const renderRow = ({ key, label, value }: { key: string; label: string; value: string }, idx: number) => (
     <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? template.colors.bgMuted : "transparent" }}>
-      <td className="py-1.5 px-2 text-xs leading-snug align-top" style={{ color: template.colors.headingMuted, minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
-      <td className="py-1.5 px-2 font-medium text-sm leading-snug align-top" style={{ color: template.colors.bodyText, overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
+      <td className={`${rowPadY} px-2 text-xs leading-snug align-top`} style={{ color: template.colors.headingMuted, minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
+      <td className={`${rowPadY} px-2 font-medium text-sm leading-snug align-top`} style={{ color: template.colors.bodyText, overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
     </tr>
   );
 
@@ -526,11 +534,18 @@ function ScheduleItemCard({
   const { visibleSpecs, media } = item;
   const loadedPhotos = media.customerPhotos.filter((p) => !failedPhotos.has(p.key));
 
+  const densityPadClass = template.density.itemCardPadMm >= 5 ? "p-5" : template.density.itemCardPadMm <= 3 ? "p-2" : "p-4";
+  const densityHeaderPadClass = template.density.itemCardPadMm >= 5 ? "px-5 py-3.5" : template.density.itemCardPadMm <= 3 ? "px-2 py-1.5" : "px-4 py-3";
+  const densityGapClass = template.density.itemGapMm >= 5 ? "space-y-4" : template.density.itemGapMm <= 2.5 ? "space-y-1.5" : "space-y-3";
+  const titleSize = template.density.itemCardPadMm >= 5 ? "text-base" : template.density.itemCardPadMm <= 3 ? "text-sm" : "text-base";
+  const photoSizePx = Math.round(template.itemLayout.photoMaxSizeMm * 3.78);
+  const photoMaxHPx = Math.round(template.density.photoRowH * 3.78);
+
   return (
     <div className="rounded-lg overflow-hidden print:break-inside-avoid" style={{ border: `1px solid ${template.colors.border}` }} data-testid={`schedule-item-${item.index}`}>
-      <div className="px-4 py-3 flex items-start justify-between gap-3" style={{ backgroundColor: template.colors.bgMuted, borderBottom: `1px solid ${template.colors.border}` }}>
+      <div className={`${densityHeaderPadClass} flex items-start justify-between gap-3`} style={{ backgroundColor: template.colors.bgMuted, borderBottom: `1px solid ${template.colors.border}` }}>
         <div>
-          <h4 className="font-bold text-base" style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
+          <h4 className={`font-bold ${titleSize}`} style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
             {item.title}
           </h4>
           <p className="text-sm mt-0.5" style={{ color: template.colors.headingMuted }}>
@@ -539,7 +554,7 @@ function ScheduleItemCard({
         </div>
       </div>
 
-      <div className="p-4 space-y-3">
+      <div className={`${densityPadClass} ${densityGapClass}`}>
         {template.itemLayout.scheduleLayoutVariant === "specs_only_v1" ? (
           <div>
             <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
@@ -609,7 +624,7 @@ function ScheduleItemCard({
         {loadedPhotos.length > 0 && (
           <div className="space-y-2" data-testid={`photos-section-${item.index}`}>
             <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Site Photos</p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap" style={{ gap: `${Math.round(template.density.itemCardPadMm * 2)}px`, maxHeight: `${photoMaxHPx + 20}px`, overflow: "hidden" }}>
               {loadedPhotos.map((photo, pIdx) => (
                   <div key={photo.key} className="space-y-1">
                     <div
@@ -622,7 +637,8 @@ function ScheduleItemCard({
                       <MediaImage
                         src={photo.url}
                         alt={photo.caption}
-                        className="max-h-48 max-w-[200px] object-contain rounded"
+                        style={{ maxHeight: `${photoSizePx}px`, maxWidth: `${photoSizePx}px` }}
+                        className="object-contain rounded"
                         testId={`img-photo-${item.index}-${pIdx}`}
                         fallbackTestId={`fallback-photo-${item.index}-${pIdx}`}
                         fallbackText="Photo unavailable"
@@ -634,7 +650,7 @@ function ScheduleItemCard({
                       />
                     </div>
                     {photo.caption && (
-                      <p className="text-xs text-center max-w-[200px]" style={{ color: template.colors.headingMuted }}>{photo.caption}</p>
+                      <p className="text-xs text-center" style={{ color: template.colors.headingMuted, maxWidth: `${photoSizePx}px` }}>{photo.caption}</p>
                     )}
                   </div>
                 ))}

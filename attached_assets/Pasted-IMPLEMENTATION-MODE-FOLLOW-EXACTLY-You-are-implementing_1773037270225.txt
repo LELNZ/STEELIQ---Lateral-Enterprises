@@ -1,0 +1,251 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Renderer
+→ Quote Preview
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create separate unrelated content models for preview and PDF.
+Do NOT introduce a freeform page-builder or raw HTML/CSS template editor.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required for making existing builder controls visibly effective.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any template-builder rendering changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Do a focused Template Builder v1.2 visual effectiveness pass.
+
+Current problem:
+The builder architecture is in place and some controls are wired, but the visible effect is still too subtle or unclear in Preview and PDF.
+
+This pass is NOT about adding more architecture.
+It is about making the current builder controls materially obvious, reliable, and testable in both:
+- Customer Quote Preview
+- PDF export
+
+The key goal is that when an admin changes a template setting, the quote should visibly and clearly change.
+
+
+--------------------------------------------------
+T071 — Make header controls visibly strong and reliable
+--------------------------------------------------
+
+Problem:
+The current header controls are not producing a strong enough visible result.
+The large "Lateral Joinery" wordmark is still dominating the header, and logo/header tuning is not obvious enough.
+
+Required implementation:
+
+1. Make the existing header builder controls produce strong visible effect in both Preview and PDF:
+   - logoScale
+   - showTradingName
+   - contact block layout (if already wired)
+   - any existing legal line placement / header subtitle logic if currently available
+
+2. Specifically:
+   - showTradingName = false must actually remove the large dominant trading-name wordmark from both Preview and PDF
+   - logoScale must produce an obvious visible difference between small / standard / large
+   - the legal line / "a trading division of ..." text should remain present if intended, but sit more subtly and lower in the header composition
+   - header should read as a professional company quotation header, not a duplicated wordmark block
+
+3. If the current header composition needs a small controlled redesign to make the controls meaningful, do that — but keep it within the existing master-template architecture.
+
+Acceptance criteria:
+- toggling showTradingName has an obvious effect in Preview and PDF
+- changing logoScale has an obvious effect in Preview and PDF
+- header looks cleaner and more professional
+- no hidden dead header controls remain
+
+
+--------------------------------------------------
+T072 — Make density controls materially affect schedule layout
+--------------------------------------------------
+
+Problem:
+Density controls exist, but their effect is too subtle or not obvious enough.
+
+Required implementation:
+
+1. Ensure density presets:
+   - comfortable
+   - standard
+   - compact
+
+have a clear visible impact in both Preview and PDF.
+
+2. Density must materially affect, where applicable:
+   - item card padding
+   - drawing/image max height
+   - site photo max height
+   - spec row height
+   - item metadata spacing
+   - gaps between item cards
+   - overall number of items that can reasonably fit per PDF page
+
+3. Keep readability. Do NOT compress so hard that the quote becomes ugly or unreadable.
+
+4. The difference between comfortable vs compact should be obvious on a quote with several schedule items.
+
+Acceptance criteria:
+- density changes are visually obvious
+- compact mode materially increases information density
+- preview and PDF both reflect the same density intent
+
+
+--------------------------------------------------
+T073 — Verify each currently exposed builder control is either real or removed
+--------------------------------------------------
+
+Problem:
+A builder loses trust if controls exist but do not visibly do anything.
+
+Required implementation:
+
+1. Audit the currently exposed builder controls in Settings.
+2. For each control, determine whether it:
+   - has a real visible effect in Preview and PDF
+   - has a real visible effect in one output only
+   - is not actually doing anything meaningful
+
+3. For controls that are not actually meaningful yet:
+   - either wire them properly now, OR
+   - hide/remove/label them so the UI reflects reality
+
+Priority controls to verify:
+- logo size
+- show trading name
+- document type
+- content density
+- totals layout
+- schedule layout
+- photo size
+- accent color
+- typography preset
+- spacing preset
+
+Acceptance criteria:
+- no obviously dead controls remain exposed
+- builder feels trustworthy
+- settings reflect actual rendering behavior
+
+
+--------------------------------------------------
+T074 — Make visual changes easy to verify against a known quote
+--------------------------------------------------
+
+Problem:
+Changes can be hard to validate if the test quote is inconsistent or missing data.
+
+Required implementation:
+
+1. Use or create a known representative quote with:
+   - multiple schedule items
+   - drawings
+   - site photos
+   - enough content for multiple PDF pages
+
+2. Validate and confirm visible differences for:
+   - showTradingName on/off
+   - logoScale small/large
+   - density comfortable/compact
+   - documentType standard/tender
+
+3. Ensure the rendered quote and exported PDF clearly demonstrate that the builder is functioning.
+
+Acceptance criteria:
+- a representative quote proves the controls work
+- settings changes are testable and obvious
+
+
+--------------------------------------------------
+T075 — Keep Preview and PDF in the same template family
+--------------------------------------------------
+
+Problem:
+As builder controls become more powerful, Preview and PDF can drift again.
+
+Required implementation:
+
+1. Ensure the visibly effective controls affect both Preview and PDF unless there is a strong technical reason not to.
+2. If any control still differs between Preview and PDF, document that honestly and minimize the mismatch.
+3. Keep the same:
+   - section structure
+   - hierarchy
+   - template intent
+   - brand treatment
+   - density intent
+
+Acceptance criteria:
+- Preview and PDF remain materially aligned
+- changes made in the builder feel consistent across both outputs
+
+
+--------------------------------------------------
+T076 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- add drag/drop layout editing
+- add raw CSS/HTML editing
+- redesign quote lifecycle
+- add customer portal/email logic
+- introduce many new builder controls
+- rebuild the renderer stack from scratch
+
+This is a visual effectiveness and trustworthiness pass for the existing Template Builder only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Header controls are clearly visible and useful.
+2. Density controls are clearly visible and useful.
+3. Builder controls feel trustworthy because they visibly affect output or are hidden.
+4. Preview and PDF remain aligned in the same template family.
+5. Admin users can now make real, obvious quote-template changes through the builder.
+
+
+END OF IMPLEMENTATION

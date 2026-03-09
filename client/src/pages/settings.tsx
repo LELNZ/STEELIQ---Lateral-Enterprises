@@ -1017,7 +1017,7 @@ function TemplateBuilderTab() {
               </div>
               <div>
                 <Label className="text-sm font-medium mb-1 block">Photo Size</Label>
-                <p className="text-xs text-muted-foreground mb-2">Maximum size for site photos in the PDF document</p>
+                <p className="text-xs text-muted-foreground mb-2">Maximum size for site photos — affects both preview and PDF</p>
                 <Select
                   value={config.photoSizePreset || "medium"}
                   onValueChange={(v) => setConfig({ ...config, photoSizePreset: v as PhotoSizePreset })}
@@ -1076,7 +1076,7 @@ function TemplateBuilderTab() {
               <Separator />
               <div>
                 <Label className="text-sm font-medium mb-1 block">Typography Scale</Label>
-                <p className="text-xs text-muted-foreground mb-2">Controls relative text sizes across the document</p>
+                <p className="text-xs text-muted-foreground mb-2">Controls text sizes in the PDF export — affects headings, body text, and totals</p>
                 <Select
                   value={config.typographyPreset || "standard"}
                   onValueChange={(v) => setConfig({ ...config, typographyPreset: v as TypographyPreset })}
@@ -1092,8 +1092,8 @@ function TemplateBuilderTab() {
                 </Select>
               </div>
               <div>
-                <Label className="text-sm font-medium mb-1 block">Spacing</Label>
-                <p className="text-xs text-muted-foreground mb-2">Controls whitespace between sections and items</p>
+                <Label className="text-sm font-medium mb-1 block">Section Spacing</Label>
+                <p className="text-xs text-muted-foreground mb-2">Controls whitespace between document sections — affects both preview and PDF</p>
                 <Select
                   value={config.spacingPreset || "standard"}
                   onValueChange={(v) => setConfig({ ...config, spacingPreset: v as SpacingPreset })}
