@@ -4,7 +4,7 @@ import type {
   QuoteDocumentItemPhoto,
 } from "./quote-document";
 import type { QuoteTemplate } from "./quote-template";
-import { resolveQuoteTemplate } from "./quote-template";
+import { resolveQuoteTemplate, type CompanyTemplateConfig } from "./quote-template";
 
 export type PresentationMode =
   | "standard"
@@ -219,11 +219,14 @@ export function buildQuoteRenderModel(
   const mode = options?.presentationMode ?? "standard";
   const specKeyToLabel = buildSpecKeyToLabel(doc);
 
-  const resolved = resolveQuoteTemplate({
-    accentColor: doc.branding.accentColor,
-    scheduleLayoutVariant: doc.branding.scheduleLayoutVariant,
-    totalsLayoutVariant: doc.branding.totalsLayoutVariant,
-  });
+  const resolved = resolveQuoteTemplate(
+    {
+      accentColor: doc.branding.accentColor,
+      scheduleLayoutVariant: doc.branding.scheduleLayoutVariant,
+      totalsLayoutVariant: doc.branding.totalsLayoutVariant,
+    },
+    doc.companyTemplateConfig as CompanyTemplateConfig | null,
+  );
 
   return {
     presentationMode: mode,

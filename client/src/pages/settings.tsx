@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, ClipboardList } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, ClipboardList, Palette, Eye, EyeOff, RotateCcw } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { getPresetsForDivision, PRESET_FIELD_LABELS, type SiteVisitPreset } from "@/lib/site-visit-presets";
+import {
+  COMPANY_MASTER_TEMPLATE,
+  applyCompanyConfig,
+  type CompanyTemplateConfig,
+  type TemplateSectionDef,
+  type SpacingPreset,
+  type TypographyPreset,
+  type PhotoSizePreset,
+  type ScheduleLayoutVariant,
+  type TotalsLayoutVariant,
+} from "@/lib/quote-template";
 
 interface OrgSettings {
   id: string;
@@ -521,8 +533,8 @@ function DivisionSettingsTab() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Quote Presentation</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Company master template controls document structure, section ordering, and acceptance block. Division overrides control branding and layout options below.</p>
+              <CardTitle className="text-base">Quote Presentation — Division Override</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Override the company master template defaults for this division. Base template structure is managed in the Template tab.</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -723,6 +735,332 @@ function DivisionSettingsTab() {
   );
 }
 
+const SECTION_LABELS: Record<string, string> = {
+  header: "Header",
+  disclaimer: "Disclaimer",
+  customerProject: "Customer & Project",
+  totals: "Quote Summary",
+  schedule: "Schedule of Items",
+  legal: "Terms & Conditions",
+  acceptance: "Acceptance",
+};
+
+const SECTION_DESCRIPTIONS: Record<string, string> = {
+  header: "Company branding, trading name, legal line, contact details",
+  disclaimer: "Preliminary estimate notice shown below the header",
+  customerProject: "Customer name and project address block",
+  totals: "Quote summary with cost breakdown",
+  schedule: "Individual item cards with specs and drawings",
+  legal: "Terms, exclusions, payment terms, and bank details",
+  acceptance: "Signature block for customer acceptance",
+};
+
+function TemplateSchematicPreview({ config }: { config: CompanyTemplateConfig }) {
+  const resolved = useMemo(() => applyCompanyConfig(config), [config]);
+
+  const visibleSections = resolved.sections.filter(s => s.visible);
+
+  return (
+    <div className="border rounded-lg p-3 bg-white" data-testid="template-schematic-preview">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 font-medium">Live Layout Preview</p>
+      <div className="space-y-1">
+        {visibleSections.map((section) => {
+          const isAccent = section.key === "header" || section.key === "acceptance";
+          return (
+            <div
+              key={section.key}
+              className="rounded px-2 py-1.5 text-[11px] font-medium flex items-center justify-between"
+              style={{
+                backgroundColor: isAccent ? resolved.colors.accent + "18" : resolved.colors.bgMuted,
+                borderLeft: `3px solid ${isAccent ? resolved.colors.accent : resolved.colors.border}`,
+                color: resolved.colors.bodyText,
+              }}
+            >
+              <span>{SECTION_LABELS[section.key] || section.key}</span>
+              {section.key === "schedule" && (
+                <span className="text-[9px] opacity-60">
+                  {resolved.itemLayout.scheduleLayoutVariant === "image_left_specs_right_v1" ? "Image + Specs" :
+                   resolved.itemLayout.scheduleLayoutVariant === "specs_only_v1" ? "Specs Only" : "Image Top"}
+                </span>
+              )}
+              {section.key === "totals" && (
+                <span className="text-[9px] opacity-60">
+                  {resolved.itemLayout.totalsLayoutVariant === "totals_block_v1" ? "Block" : "Inline"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 pt-2 border-t flex gap-3 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: resolved.colors.accent }} />
+          <span>Accent</span>
+        </div>
+        <span>Spacing: {config.spacingPreset || "standard"}</span>
+        <span>Type: {config.typographyPreset || "standard"}</span>
+      </div>
+    </div>
+  );
+}
+
+function TemplateBuilderTab() {
+  const { toast } = useToast();
+  const { data: savedConfig, isLoading } = useQuery<CompanyTemplateConfig>({
+    queryKey: ["/api/settings/template"],
+  });
+
+  const [config, setConfig] = useState<CompanyTemplateConfig>({});
+
+  useEffect(() => {
+    if (savedConfig && Object.keys(savedConfig).length > 0) {
+      setConfig(savedConfig);
+    }
+  }, [savedConfig]);
+
+  const sections: TemplateSectionDef[] = config.sections || COMPANY_MASTER_TEMPLATE.sections;
+
+  const toggleSection = (key: string) => {
+    const updated = sections.map(s => s.key === key ? { ...s, visible: !s.visible } : s);
+    setConfig({ ...config, sections: updated });
+  };
+
+  const mutation = useMutation({
+    mutationFn: async (data: CompanyTemplateConfig) => {
+      const res = await apiRequest("PATCH", "/api/settings/template", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/template"] });
+      toast({ title: "Template configuration saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save template", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSave = () => mutation.mutate(config);
+
+  const handleReset = () => {
+    setConfig({});
+    toast({ title: "Reset to defaults — save to apply" });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4" data-testid="template-builder-tab">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Company master template controls the structure and presentation of all quotes. Divisions can override branding and layout options in Division settings.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Sections</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Show or hide document sections. Order is fixed by template design.</p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {sections.map((section) => (
+                <div key={section.key} className="flex items-center justify-between py-1.5 border-b last:border-0">
+                  <div>
+                    <p className="text-sm font-medium">{SECTION_LABELS[section.key] || section.key}</p>
+                    <p className="text-xs text-muted-foreground">{SECTION_DESCRIPTIONS[section.key]}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {section.visible ? (
+                      <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                    ) : (
+                      <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={section.visible}
+                      onCheckedChange={() => toggleSection(section.key)}
+                      data-testid={`switch-section-${section.key}`}
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Totals Layout</Label>
+                <p className="text-xs text-muted-foreground mb-2">Default totals block layout for the quote summary section</p>
+                <Select
+                  value={config.totalsLayoutVariant || "totals_block_v1"}
+                  onValueChange={(v) => setConfig({ ...config, totalsLayoutVariant: v as TotalsLayoutVariant })}
+                >
+                  <SelectTrigger data-testid="select-template-totalsLayout">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="totals_block_v1">Totals Block — bordered summary box</SelectItem>
+                    <SelectItem value="totals_inline_v1">Totals Inline — flat line items</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Schedule</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Schedule Layout</Label>
+                <p className="text-xs text-muted-foreground mb-2">Default layout for item cards in the schedule section</p>
+                <Select
+                  value={config.scheduleLayoutVariant || "image_left_specs_right_v1"}
+                  onValueChange={(v) => setConfig({ ...config, scheduleLayoutVariant: v as ScheduleLayoutVariant })}
+                >
+                  <SelectTrigger data-testid="select-template-scheduleLayout">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="image_left_specs_right_v1">Image Left, Specs Right — side by side</SelectItem>
+                    <SelectItem value="specs_only_v1">Specs Only — no drawing image</SelectItem>
+                    <SelectItem value="image_top_specs_below_v1">Image Top, Specs Below — stacked</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Photo Size</Label>
+                <p className="text-xs text-muted-foreground mb-2">Maximum size for site photos in the PDF document</p>
+                <Select
+                  value={config.photoSizePreset || "medium"}
+                  onValueChange={(v) => setConfig({ ...config, photoSizePreset: v as PhotoSizePreset })}
+                >
+                  <SelectTrigger data-testid="select-template-photoSize">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small — 20mm</SelectItem>
+                    <SelectItem value="medium">Medium — 30mm</SelectItem>
+                    <SelectItem value="large">Large — 45mm</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Palette className="w-4 h-4" />
+                Theme & Spacing
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Default Accent Colour</Label>
+                <p className="text-xs text-muted-foreground mb-2">Company default — divisions can override this in their settings</p>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="color"
+                    value={config.accentColor || COMPANY_MASTER_TEMPLATE.colors.accent}
+                    onChange={(e) => setConfig({ ...config, accentColor: e.target.value })}
+                    className="w-10 h-8 rounded border cursor-pointer"
+                    data-testid="input-template-accentColor"
+                  />
+                  <Input
+                    value={config.accentColor || COMPANY_MASTER_TEMPLATE.colors.accent}
+                    onChange={(e) => setConfig({ ...config, accentColor: e.target.value })}
+                    placeholder="#374151"
+                    className="w-32 font-mono text-sm"
+                    data-testid="input-template-accentColorText"
+                  />
+                  {config.accentColor && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { const { accentColor, ...rest } = config; setConfig(rest); }}
+                      data-testid="button-reset-accent"
+                    >
+                      Reset
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <Separator />
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Typography Scale</Label>
+                <p className="text-xs text-muted-foreground mb-2">Controls relative text sizes across the document</p>
+                <Select
+                  value={config.typographyPreset || "standard"}
+                  onValueChange={(v) => setConfig({ ...config, typographyPreset: v as TypographyPreset })}
+                >
+                  <SelectTrigger data-testid="select-template-typography">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small — compact text, more content per page</SelectItem>
+                    <SelectItem value="standard">Standard — balanced readability</SelectItem>
+                    <SelectItem value="large">Large — emphasis on readability</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Spacing</Label>
+                <p className="text-xs text-muted-foreground mb-2">Controls whitespace between sections and items</p>
+                <Select
+                  value={config.spacingPreset || "standard"}
+                  onValueChange={(v) => setConfig({ ...config, spacingPreset: v as SpacingPreset })}
+                >
+                  <SelectTrigger data-testid="select-template-spacing">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="compact">Compact — tighter spacing, more content per page</SelectItem>
+                    <SelectItem value="standard">Standard — balanced layout</SelectItem>
+                    <SelectItem value="spacious">Spacious — more breathing room</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="hidden lg:block">
+          <div className="sticky top-4">
+            <TemplateSchematicPreview config={config} />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-between">
+        <Button variant="outline" onClick={handleReset} data-testid="button-reset-template">
+          <RotateCcw className="w-4 h-4 mr-2" /> Reset to Defaults
+        </Button>
+        <Button onClick={handleSave} disabled={mutation.isPending} data-testid="button-save-template">
+          {mutation.isPending ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+          ) : (
+            <><Save className="w-4 h-4 mr-2" /> Save Template</>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { quoteListPosition, usdToNzdRate, gstRate, updateSetting } = useSettings();
 
@@ -745,6 +1083,10 @@ export default function Settings() {
               <TabsTrigger value="application" data-testid="tab-application">Application</TabsTrigger>
               <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation</TabsTrigger>
               <TabsTrigger value="divisions" data-testid="tab-divisions">Divisions</TabsTrigger>
+              <TabsTrigger value="template" data-testid="tab-template">
+                <Palette className="w-3.5 h-3.5 mr-1.5" />
+                Template
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="application">
@@ -828,6 +1170,10 @@ export default function Settings() {
 
             <TabsContent value="divisions">
               <DivisionSettingsTab />
+            </TabsContent>
+
+            <TabsContent value="template">
+              <TemplateBuilderTab />
             </TabsContent>
           </Tabs>
         </div>

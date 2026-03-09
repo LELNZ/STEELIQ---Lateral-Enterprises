@@ -308,6 +308,7 @@ export const orgSettings = pgTable("org_settings", {
   defaultExclusionsBlock: text("default_exclusions_block"),
   paymentTermsBlock: text("payment_terms_block"),
   quoteValidityDays: integer("quote_validity_days").default(30),
+  templateConfigJson: jsonb("template_config_json"),
 });
 
 export const insertOrgSettingsSchema = createInsertSchema(orgSettings).omit({});

@@ -110,6 +110,72 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
 
 export const SYSTEM_TEMPLATE = COMPANY_MASTER_TEMPLATE;
 
+export type SpacingPreset = "compact" | "standard" | "spacious";
+export type TypographyPreset = "small" | "standard" | "large";
+export type PhotoSizePreset = "small" | "medium" | "large";
+
+export interface CompanyTemplateConfig {
+  sections?: TemplateSectionDef[];
+  spacingPreset?: SpacingPreset;
+  typographyPreset?: TypographyPreset;
+  photoSizePreset?: PhotoSizePreset;
+  accentColor?: string;
+  scheduleLayoutVariant?: ScheduleLayoutVariant;
+  totalsLayoutVariant?: TotalsLayoutVariant;
+}
+
+const SPACING_PRESETS: Record<SpacingPreset, TemplateSpacing> = {
+  compact: { sectionGapMm: 4, itemGapMm: 2, innerPaddingMm: 3 },
+  standard: { sectionGapMm: 6, itemGapMm: 4, innerPaddingMm: 4 },
+  spacious: { sectionGapMm: 10, itemGapMm: 6, innerPaddingMm: 6 },
+};
+
+const TYPOGRAPHY_PRESETS: Record<TypographyPreset, Partial<TemplateTypography>> = {
+  small: { tradingNameSize: "lg", bodyTextSize: "sm", itemTitleSize: "sm", totalsBoldSize: "base" },
+  standard: {},
+  large: { tradingNameSize: "2xl", bodyTextSize: "base", itemTitleSize: "base", totalsBoldSize: "lg" },
+};
+
+const PHOTO_SIZE_PRESETS: Record<PhotoSizePreset, number> = {
+  small: 20,
+  medium: 30,
+  large: 45,
+};
+
+export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate {
+  const base = { ...COMPANY_MASTER_TEMPLATE };
+
+  if (config.sections && config.sections.length > 0) {
+    base.sections = config.sections;
+  }
+
+  if (config.spacingPreset && SPACING_PRESETS[config.spacingPreset]) {
+    base.spacing = SPACING_PRESETS[config.spacingPreset];
+  }
+
+  if (config.typographyPreset && TYPOGRAPHY_PRESETS[config.typographyPreset]) {
+    base.typography = { ...COMPANY_MASTER_TEMPLATE.typography, ...TYPOGRAPHY_PRESETS[config.typographyPreset] };
+  }
+
+  if (config.photoSizePreset && PHOTO_SIZE_PRESETS[config.photoSizePreset]) {
+    base.itemLayout = { ...base.itemLayout, photoMaxSizeMm: PHOTO_SIZE_PRESETS[config.photoSizePreset] };
+  }
+
+  if (config.accentColor) {
+    base.colors = { ...COMPANY_MASTER_TEMPLATE.colors, accent: config.accentColor };
+  }
+
+  if (config.scheduleLayoutVariant) {
+    base.itemLayout = { ...base.itemLayout, scheduleLayoutVariant: config.scheduleLayoutVariant };
+  }
+
+  if (config.totalsLayoutVariant) {
+    base.itemLayout = { ...base.itemLayout, totalsLayoutVariant: config.totalsLayoutVariant };
+  }
+
+  return base;
+}
+
 export interface DivisionOverrides {
   accentColor?: string | null;
   scheduleLayoutVariant?: string;
@@ -118,29 +184,41 @@ export interface DivisionOverrides {
 
 export function resolveQuoteTemplate(
   overrides?: DivisionOverrides | null,
+  companyConfig?: CompanyTemplateConfig | null,
 ): QuoteTemplate {
-  if (!overrides) return COMPANY_MASTER_TEMPLATE;
+  const base = companyConfig ? applyCompanyConfig(companyConfig) : { ...COMPANY_MASTER_TEMPLATE };
 
-  const resolved = { ...COMPANY_MASTER_TEMPLATE };
+  if (!overrides) return base;
+
+  const resolved = { ...base };
 
   if (overrides.accentColor) {
-    resolved.colors = {
-      ...COMPANY_MASTER_TEMPLATE.colors,
-      accent: overrides.accentColor,
-    };
+    resolved.colors = { ...resolved.colors, accent: overrides.accentColor };
   }
 
   const slv = overrides.scheduleLayoutVariant as ScheduleLayoutVariant | undefined;
   const tlv = overrides.totalsLayoutVariant as TotalsLayoutVariant | undefined;
   if (slv || tlv) {
     resolved.itemLayout = {
-      ...COMPANY_MASTER_TEMPLATE.itemLayout,
+      ...resolved.itemLayout,
       ...(slv ? { scheduleLayoutVariant: slv } : {}),
       ...(tlv ? { totalsLayoutVariant: tlv } : {}),
     };
   }
 
   return resolved;
+}
+
+export function getSpacingPresetFromConfig(config?: CompanyTemplateConfig | null): SpacingPreset {
+  return config?.spacingPreset || "standard";
+}
+
+export function getTypographyPresetFromConfig(config?: CompanyTemplateConfig | null): TypographyPreset {
+  return config?.typographyPreset || "standard";
+}
+
+export function getPhotoSizePresetFromConfig(config?: CompanyTemplateConfig | null): PhotoSizePreset {
+  return config?.photoSizePreset || "medium";
 }
 
 export function isSectionVisible(template: QuoteTemplate, key: string): boolean {

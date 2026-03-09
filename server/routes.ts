@@ -1030,6 +1030,41 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/settings/template", async (_req, res) => {
+    try {
+      const org = await storage.getOrgSettings();
+      res.json(org?.templateConfigJson || {});
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  const templateConfigSchema = z.object({
+    sections: z.array(z.object({
+      key: z.string(),
+      visible: z.boolean(),
+    })).optional(),
+    spacingPreset: z.enum(["compact", "standard", "spacious"]).optional(),
+    typographyPreset: z.enum(["small", "standard", "large"]).optional(),
+    photoSizePreset: z.enum(["small", "medium", "large"]).optional(),
+    accentColor: z.string().optional(),
+    scheduleLayoutVariant: z.enum(["image_left_specs_right_v1", "specs_only_v1", "image_top_specs_below_v1"]).optional(),
+    totalsLayoutVariant: z.enum(["totals_block_v1", "totals_inline_v1"]).optional(),
+  }).strict();
+
+  app.patch("/api/settings/template", async (req, res) => {
+    try {
+      const config = templateConfigSchema.parse(req.body);
+      const org = await storage.upsertOrgSettings({ templateConfigJson: config });
+      res.json(org.templateConfigJson || {});
+    } catch (e: any) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid template config", details: e.errors });
+      }
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   app.get("/api/settings/divisions", async (_req, res) => {
     try {
       const all = await storage.getAllDivisionSettings();
@@ -1210,6 +1245,7 @@ export async function registerRoutes(
         specDictionaryGrouped: grouped,
         effectiveSpecDisplayKeys,
         projectAddress,
+        companyTemplateConfig: orgSettings?.templateConfigJson || null,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });

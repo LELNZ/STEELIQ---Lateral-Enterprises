@@ -11,6 +11,7 @@ export interface PreviewData {
   specDictionaryGrouped: Record<string, SpecDictionaryEntry[]>;
   effectiveSpecDisplayKeys: string[];
   projectAddress: string | null;
+  companyTemplateConfig?: Record<string, unknown> | null;
 }
 
 export interface QuoteDocumentMetadata {
@@ -112,6 +113,7 @@ export interface QuoteDocumentModel {
   totals: QuoteDocumentTotals;
   content: QuoteDocumentContent;
   specDisplay: QuoteDocumentSpecDisplay;
+  companyTemplateConfig?: Record<string, unknown> | null;
 }
 
 function computeExpiryDate(createdAt: Date | string | null, validityDays: number): string | null {
@@ -212,5 +214,6 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       effectiveKeys: preview.effectiveSpecDisplayKeys,
       specDictionaryGrouped: preview.specDictionaryGrouped,
     },
+    companyTemplateConfig: preview.companyTemplateConfig || null,
   };
 }
