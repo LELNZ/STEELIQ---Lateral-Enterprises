@@ -1,0 +1,297 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped improvement pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, or snapshot flow.
+3. Do NOT add drag-and-drop editing, freeform template editing, or raw HTML/CSS editing.
+4. Do NOT add unrelated schema fields, endpoints, or systems.
+5. Do NOT bypass QuoteDocument, QuoteRenderModel, Preview, or PDF engine.
+6. Do NOT create separate unrelated template models for preview and PDF.
+7. Preserve Preview / PDF parity as the default expectation.
+8. Focus only on:
+   - strict A4 layout control
+   - granular template controls
+   - header refinement
+   - drawing/spec/photo balance
+   - tighter professional quote presentation
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderModel
+→ Preview
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum config support strictly required for granular template control.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any template-builder changes made
+5. Any A4/layout changes made
+6. Any risks or limitations remaining
+7. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Implement Template Builder v1.3:
+- enforce strict A4 layout
+- add granular master-template controls
+- improve header design
+- rebalance drawing/spec/photo sizing
+- keep Preview and PDF aligned
+
+This is NOT a new architecture pass.
+This is a refinement pass on top of the existing master-template + builder system.
+
+
+--------------------------------------------------
+T083 — Enforce strict A4 layout in PDF and Preview
+--------------------------------------------------
+
+Problem:
+The quote must behave like a true A4 customer document.
+Preview and PDF must be based on the same page geometry.
+
+Required implementation:
+
+1. In the PDF engine, explicitly enforce:
+   - portrait orientation
+   - unit = mm
+   - format = a4
+
+2. Define fixed page constants and use them consistently:
+   - PAGE_WIDTH = 210
+   - PAGE_HEIGHT = 297
+   - LEFT_MARGIN = 15
+   - RIGHT_MARGIN = 15
+   - TOP_MARGIN = 18
+   - BOTTOM_MARGIN = 18
+   - CONTENT_WIDTH = PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+
+3. Remove/replace any arbitrary widths so rendering uses the A4 content width.
+
+4. In Preview, constrain the document container to A4-equivalent width.
+   The preview should behave like a document page, not a full-width responsive web page.
+
+Acceptance criteria:
+- PDF is explicitly A4 portrait
+- Preview width is clearly aligned to A4
+- layout tuning becomes predictable between Preview and PDF
+
+
+--------------------------------------------------
+T084 — Add granular header controls to the company master template
+--------------------------------------------------
+
+Problem:
+The current header still needs finer control:
+- logo needs better control
+- legal/trading line needs better placement
+- company-name treatment needs cleaner control
+
+Required implementation:
+
+Add or wire granular structured controls for the master template:
+
+HEADER CONTROLS
+- logoWidthMm (or equivalent precise width control)
+- logoMaxHeightMm if needed
+- showCompanyNameText (boolean)
+- legalLinePlacement:
+  - under_logo
+  - beside_logo
+  - hidden
+- contactBlockAlignment:
+  - right
+  - stacked_right
+  - compact_right
+- headerBottomSpacing
+
+Rules:
+1. These controls must affect BOTH Preview and PDF.
+2. Default recommended company design:
+   - logo-led header
+   - company name text hidden or de-emphasized
+   - legal line under logo
+   - contact block right aligned and compact
+
+Acceptance criteria:
+- admin can position the legal line under the logo
+- logo size can be tuned more precisely
+- large dominant company-name text can be removed cleanly
+- Preview and PDF both reflect header changes
+
+
+--------------------------------------------------
+T085 — Add granular schedule card controls
+--------------------------------------------------
+
+Problem:
+We need finer control over how much space item cards use.
+
+Required implementation:
+
+Add or wire granular structured controls for schedule cards:
+
+SCHEDULE CONTROLS
+- itemCardPadding
+- itemCardGap
+- drawingMaxHeightMm
+- photoMaxHeightMm
+- specLabelFontSize
+- specValueFontSize
+- specRowHeightMm
+- itemTitleFontSize
+- itemSubtitleFontSize
+- itemHeaderHeightMm
+
+Rules:
+1. These controls must affect BOTH Preview and PDF.
+2. These controls must sit on top of the existing density system, not replace it entirely.
+3. Density presets may still exist, but granular values should allow more precise tuning.
+
+Acceptance criteria:
+- drawing size can be increased independently
+- spec/config text can be reduced slightly
+- item card density can be tuned more precisely
+- Preview and PDF remain aligned
+
+
+--------------------------------------------------
+T086 — Rebalance drawings, photos, and spec text for professional density
+--------------------------------------------------
+
+Problem:
+Currently:
+- generated drawing became too small
+- spec/config text could be slightly smaller
+- quote needs a better professional density balance
+
+Required implementation:
+
+Using the new granular controls, implement a better company default balance:
+
+Recommended direction:
+- drawings slightly larger than current output
+- site photos secondary and slightly smaller than drawings
+- config/spec text slightly smaller than current output
+- maintain strong readability
+
+Best-practice target:
+- drawings + specs → approx 4 items per page
+- drawings + specs + site photos → approx 3 items per page
+- compact mode may be denser, but do not damage readability
+
+Acceptance criteria:
+- drawings are visibly more useful
+- spec/config text is slightly reduced and cleaner
+- the document fits more information while remaining professional
+
+
+--------------------------------------------------
+T087 — Extend the Template Builder UI to expose the granular controls safely
+--------------------------------------------------
+
+Problem:
+The current builder is useful but not yet granular enough to make the quote “right”.
+
+Required implementation:
+
+1. Add safe structured controls to the Template Builder UI for the new granular settings.
+2. Organize them clearly under:
+   - Header
+   - Schedule
+   - Theme / Spacing
+
+3. Use safe control types:
+   - sliders
+   - selects
+   - numeric inputs with bounds
+   - toggles
+
+4. Keep labels understandable for admin users.
+
+5. Do NOT expose raw CSS-like controls or overwhelming complexity.
+
+Acceptance criteria:
+- builder exposes granular controls safely
+- UI remains understandable
+- settings edits feel purposeful and professional
+
+
+--------------------------------------------------
+T088 — Keep Preview and PDF in the same document family
+--------------------------------------------------
+
+Problem:
+As control granularity increases, Preview and PDF could drift again.
+
+Required implementation:
+
+1. Every new granular control must affect both Preview and PDF unless there is a strong technical reason not to.
+2. If a control is output-specific, document that honestly and avoid misleading UI.
+3. Keep:
+   - same section order
+   - same hierarchy
+   - same density intent
+   - same header design logic
+   - same schedule card design logic
+
+Acceptance criteria:
+- Preview and PDF remain materially aligned
+- builder edits produce consistent document behavior
+
+
+--------------------------------------------------
+T089 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- build drag-and-drop editing
+- build section reordering in this pass
+- build raw HTML/CSS editing
+- redesign quote lifecycle
+- add customer portal/email logic
+- add new unrelated template systems
+
+This is Template Builder v1.3 only:
+granular controls + A4 lock + header/schedule refinement.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The quote is explicitly locked to A4 in PDF and mirrored in Preview.
+2. The header can be tuned properly, including legal line placement under the logo.
+3. The logo can be sized more precisely.
+4. Drawings, photos, and spec text can be rebalanced precisely.
+5. Granular controls exist in the Template Builder without becoming a chaotic freeform editor.
+6. Preview and PDF remain aligned as the same document family.
+
+
+END OF IMPLEMENTATION

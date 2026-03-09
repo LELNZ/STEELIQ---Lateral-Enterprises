@@ -48,10 +48,17 @@ export interface TemplateColors {
 }
 
 export type LogoScale = "small" | "standard" | "large";
+export type LegalLinePlacement = "under_logo" | "beside_logo" | "hidden";
+export type ContactBlockAlignment = "right" | "stacked_right" | "compact_right";
 
 export interface TemplateHeader {
   logoScale: LogoScale;
   showTradingName: boolean;
+  logoWidthMm: number;
+  logoMaxHeightMm: number;
+  legalLinePlacement: LegalLinePlacement;
+  contactBlockAlignment: ContactBlockAlignment;
+  headerBottomSpacingMm: number;
 }
 
 export type DensityPreset = "comfortable" | "standard" | "compact";
@@ -132,12 +139,17 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
   header: {
     logoScale: "large",
     showTradingName: false,
+    logoWidthMm: 80,
+    logoMaxHeightMm: 24,
+    legalLinePlacement: "under_logo",
+    contactBlockAlignment: "right",
+    headerBottomSpacingMm: 4,
   },
   density: {
-    drawingMaxH: 32,
-    specRowH: 3.8,
+    drawingMaxH: 38,
+    specRowH: 3.5,
     itemHeaderH: 10,
-    photoRowH: 22,
+    photoRowH: 20,
     itemCardPadMm: 3,
     itemGapMm: 3,
   },
@@ -162,6 +174,17 @@ export interface CompanyTemplateConfig {
   showTradingName?: boolean;
   densityPreset?: DensityPreset;
   documentMode?: DocumentMode;
+  logoWidthMm?: number;
+  logoMaxHeightMm?: number;
+  legalLinePlacement?: LegalLinePlacement;
+  contactBlockAlignment?: ContactBlockAlignment;
+  headerBottomSpacingMm?: number;
+  drawingMaxHeightMm?: number;
+  photoMaxHeightMm?: number;
+  specRowHeightMm?: number;
+  itemHeaderHeightMm?: number;
+  itemCardPaddingMm?: number;
+  itemCardGapMm?: number;
 }
 
 const SPACING_PRESETS: Record<SpacingPreset, TemplateSpacing> = {
@@ -190,9 +213,9 @@ const LOGO_SCALE_PRESETS: Record<LogoScale, { maxH: number; maxW: number }> = {
 export { LOGO_SCALE_PRESETS };
 
 const DENSITY_PRESETS: Record<DensityPreset, TemplateDensity> = {
-  comfortable: { drawingMaxH: 45, specRowH: 4.5, itemHeaderH: 14, photoRowH: 30, itemCardPadMm: 4, itemGapMm: 4 },
-  standard: { drawingMaxH: 32, specRowH: 3.8, itemHeaderH: 10, photoRowH: 22, itemCardPadMm: 3, itemGapMm: 3 },
-  compact: { drawingMaxH: 24, specRowH: 3, itemHeaderH: 8, photoRowH: 16, itemCardPadMm: 2, itemGapMm: 2 },
+  comfortable: { drawingMaxH: 50, specRowH: 4.2, itemHeaderH: 12, photoRowH: 28, itemCardPadMm: 4, itemGapMm: 4 },
+  standard: { drawingMaxH: 38, specRowH: 3.5, itemHeaderH: 10, photoRowH: 20, itemCardPadMm: 3, itemGapMm: 3 },
+  compact: { drawingMaxH: 28, specRowH: 3, itemHeaderH: 8, photoRowH: 16, itemCardPadMm: 2, itemGapMm: 2 },
 };
 
 export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate {
@@ -228,14 +251,54 @@ export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate
 
   if (config.logoScale) {
     base.header = { ...base.header, logoScale: config.logoScale };
+    const scalePreset = LOGO_SCALE_PRESETS[config.logoScale];
+    if (scalePreset && !config.logoWidthMm) {
+      base.header.logoWidthMm = scalePreset.maxW;
+      base.header.logoMaxHeightMm = scalePreset.maxH;
+    }
   }
 
   if (config.showTradingName !== undefined) {
     base.header = { ...base.header, showTradingName: config.showTradingName };
   }
 
+  if (config.logoWidthMm !== undefined) {
+    base.header = { ...base.header, logoWidthMm: config.logoWidthMm };
+  }
+  if (config.logoMaxHeightMm !== undefined) {
+    base.header = { ...base.header, logoMaxHeightMm: config.logoMaxHeightMm };
+  }
+  if (config.legalLinePlacement) {
+    base.header = { ...base.header, legalLinePlacement: config.legalLinePlacement };
+  }
+  if (config.contactBlockAlignment) {
+    base.header = { ...base.header, contactBlockAlignment: config.contactBlockAlignment };
+  }
+  if (config.headerBottomSpacingMm !== undefined) {
+    base.header = { ...base.header, headerBottomSpacingMm: config.headerBottomSpacingMm };
+  }
+
   if (config.densityPreset && DENSITY_PRESETS[config.densityPreset]) {
-    base.density = DENSITY_PRESETS[config.densityPreset];
+    base.density = { ...DENSITY_PRESETS[config.densityPreset] };
+  }
+
+  if (config.drawingMaxHeightMm !== undefined) {
+    base.density = { ...base.density, drawingMaxH: config.drawingMaxHeightMm };
+  }
+  if (config.photoMaxHeightMm !== undefined) {
+    base.density = { ...base.density, photoRowH: config.photoMaxHeightMm };
+  }
+  if (config.specRowHeightMm !== undefined) {
+    base.density = { ...base.density, specRowH: config.specRowHeightMm };
+  }
+  if (config.itemHeaderHeightMm !== undefined) {
+    base.density = { ...base.density, itemHeaderH: config.itemHeaderHeightMm };
+  }
+  if (config.itemCardPaddingMm !== undefined) {
+    base.density = { ...base.density, itemCardPadMm: config.itemCardPaddingMm };
+  }
+  if (config.itemCardGapMm !== undefined) {
+    base.density = { ...base.density, itemGapMm: config.itemCardGapMm };
   }
 
   if (config.documentMode) {

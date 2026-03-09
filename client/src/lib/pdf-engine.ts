@@ -183,21 +183,24 @@ export async function generateQuotePdf(
 async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promise<number> {
   const { branding, orgContact } = model;
   const startY = y;
-  const logoPreset = LOGO_SCALE_PRESETS[T.header.logoScale] || LOGO_SCALE_PRESETS.standard;
+  const logoMaxW = T.header.logoWidthMm;
+  const logoMaxH = T.header.logoMaxHeightMm;
 
   let logoBottomY = y;
   let brandTextX = LEFT_MARGIN;
+  let actualLogoW = 0;
 
   if (branding.logoUrl) {
     const logoData = await loadImageAsDataUrl(branding.logoUrl);
     if (logoData) {
       try {
         const dims = await getImageDimensions(logoData);
-        const scale = Math.min(logoPreset.maxW / dims.w, logoPreset.maxH / dims.h, 1);
+        const scale = Math.min(logoMaxW / dims.w, logoMaxH / dims.h, 1);
         const lw = dims.w * scale;
         const lh = dims.h * scale;
         pdf.addImage(logoData, LEFT_MARGIN, y, lw, lh);
         logoBottomY = y + lh;
+        actualLogoW = lw;
         brandTextX = LEFT_MARGIN + lw + 3;
       } catch { /* skip logo */ }
     }
@@ -210,22 +213,37 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
     pdf.setFont(FONT_NORMAL, "bold");
     pdf.setFontSize(nameSize);
     pdf.setTextColor(COLOR_BLACK);
-    pdf.text(branding.tradingName, brandTextX, textY + 4);
+    if (T.header.legalLinePlacement === "beside_logo") {
+      pdf.text(branding.tradingName, brandTextX, textY + 4);
+    } else {
+      pdf.text(branding.tradingName, brandTextX, textY + 4);
+    }
     textY += 5;
   }
 
-  pdf.setFont(FONT_NORMAL, "italic");
-  pdf.setFontSize(6.5);
-  pdf.setTextColor(COLOR_MUTED);
-  pdf.text(branding.legalLine, brandTextX, textY + 3.5);
-  textY += 5;
+  if (T.header.legalLinePlacement === "beside_logo") {
+    pdf.setFont(FONT_NORMAL, "italic");
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(COLOR_MUTED);
+    pdf.text(branding.legalLine, brandTextX, textY + 3.5);
+    textY += 5;
+  } else if (T.header.legalLinePlacement === "under_logo") {
+    const legalY = Math.max(logoBottomY + 1, textY);
+    pdf.setFont(FONT_NORMAL, "italic");
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(COLOR_MUTED);
+    pdf.text(branding.legalLine, LEFT_MARGIN, legalY + 3);
+    textY = legalY + 5;
+  }
 
   y = Math.max(logoBottomY + 2, textY);
 
   let rightY = startY + 2;
   const rightX = LEFT_MARGIN + CONTENT_WIDTH;
   pdf.setFont(FONT_NORMAL, "normal");
-  pdf.setFontSize(7);
+  const contactFontSize = T.header.contactBlockAlignment === "compact_right" ? 6.5 : T.header.contactBlockAlignment === "stacked_right" ? 7.5 : 7;
+  const contactLineH = T.header.contactBlockAlignment === "compact_right" ? 2.5 : T.header.contactBlockAlignment === "stacked_right" ? 3.5 : 3;
+  pdf.setFontSize(contactFontSize);
   pdf.setTextColor(COLOR_MUTED);
 
   const contactLines: string[] = [];
@@ -236,11 +254,11 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
   if (orgContact.nzbn) contactLines.push(`NZBN: ${orgContact.nzbn}`);
 
   for (const line of contactLines) {
-    rightY += 3;
+    rightY += contactLineH;
     pdf.text(line, rightX, rightY, { align: "right" });
   }
 
-  y = Math.max(y, rightY + 2);
+  y = Math.max(y, rightY + 2) + T.header.headerBottomSpacingMm;
   return y;
 }
 

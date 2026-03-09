@@ -1054,6 +1054,17 @@ export async function registerRoutes(
     showTradingName: z.boolean().optional(),
     densityPreset: z.enum(["comfortable", "standard", "compact"]).optional(),
     documentMode: z.enum(["standard", "tender"]).optional(),
+    logoWidthMm: z.number().min(10).max(120).optional(),
+    logoMaxHeightMm: z.number().min(5).max(60).optional(),
+    legalLinePlacement: z.enum(["under_logo", "beside_logo", "hidden"]).optional(),
+    contactBlockAlignment: z.enum(["right", "stacked_right", "compact_right"]).optional(),
+    headerBottomSpacingMm: z.number().min(0).max(20).optional(),
+    drawingMaxHeightMm: z.number().min(15).max(80).optional(),
+    photoMaxHeightMm: z.number().min(10).max(60).optional(),
+    specRowHeightMm: z.number().min(2).max(8).optional(),
+    itemHeaderHeightMm: z.number().min(6).max(20).optional(),
+    itemCardPaddingMm: z.number().min(1).max(10).optional(),
+    itemCardGapMm: z.number().min(1).max(10).optional(),
   }).strict();
 
   app.patch("/api/settings/template", async (req, res) => {

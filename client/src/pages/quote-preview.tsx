@@ -15,7 +15,7 @@ import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/l
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
 import { generateQuotePdf } from "@/lib/pdf-engine";
-import { isSectionVisible, LOGO_SCALE_PRESETS } from "@/lib/quote-template";
+import { isSectionVisible } from "@/lib/quote-template";
 import type { QuoteTemplate } from "@/lib/quote-template";
 
 export default function QuotePreview() {
@@ -275,46 +275,68 @@ function SnapshotBanner({ revisionVersion, sourceJobId }: { revisionVersion: num
 }
 
 function HeaderSection({ branding, orgContact, template }: { branding: QuoteRenderModel["branding"]; orgContact: QuoteRenderModel["orgContact"]; template: QuoteTemplate }) {
-  const logoPreset = LOGO_SCALE_PRESETS[template.header.logoScale] || LOGO_SCALE_PRESETS.standard;
-  const logoMaxHPx = Math.round(logoPreset.maxH * 3.78);
-  const logoMaxWPx = Math.round(logoPreset.maxW * 3.78);
+  const logoMaxHPx = Math.round(template.header.logoMaxHeightMm * 3.78);
+  const logoMaxWPx = Math.round(template.header.logoWidthMm * 3.78);
+  const bottomSpacingPx = Math.round(template.header.headerBottomSpacingMm * 3.78);
+  const contactAlign = template.header.contactBlockAlignment;
+  const legalPlacement = template.header.legalLinePlacement;
+
+  const legalLine = legalPlacement !== "hidden" ? (
+    <p className="text-[10px] italic leading-snug" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
+      {branding.legalLine}
+    </p>
+  ) : null;
 
   return (
-    <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
-      <div className="flex items-center gap-3">
-        {branding.logoUrl && (
-          <img
-            src={branding.logoUrl}
-            alt={`${branding.tradingName} logo`}
-            style={{ maxHeight: `${logoMaxHPx}px`, maxWidth: `${logoMaxWPx}px` }}
-            className="object-contain"
-            data-testid="img-branding-logo"
-          />
-        )}
+    <div style={{ paddingBottom: `${bottomSpacingPx}px` }}>
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
         <div>
-          {template.header.showTradingName && (
-            <p
-              className="font-semibold leading-tight"
-              style={{
-                color: template.colors.bodyText,
-                fontSize: template.header.logoScale === "large" ? "1rem" : template.header.logoScale === "small" ? "0.75rem" : "0.875rem",
-              }}
-              data-testid="text-trading-name"
-            >
-              {branding.tradingName}
-            </p>
+          <div className="flex items-center gap-3">
+            {branding.logoUrl && (
+              <img
+                src={branding.logoUrl}
+                alt={`${branding.tradingName} logo`}
+                style={{ maxHeight: `${logoMaxHPx}px`, maxWidth: `${logoMaxWPx}px` }}
+                className="object-contain"
+                data-testid="img-branding-logo"
+              />
+            )}
+            <div>
+              {template.header.showTradingName && (
+                <p
+                  className="font-semibold leading-tight"
+                  style={{
+                    color: template.colors.bodyText,
+                    fontSize: template.header.logoScale === "large" ? "1rem" : template.header.logoScale === "small" ? "0.75rem" : "0.875rem",
+                  }}
+                  data-testid="text-trading-name"
+                >
+                  {branding.tradingName}
+                </p>
+              )}
+              {legalPlacement === "beside_logo" && legalLine}
+            </div>
+          </div>
+          {legalPlacement === "under_logo" && (
+            <div className="mt-1">
+              {legalLine}
+            </div>
           )}
-          <p className="text-[10px] italic leading-snug" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
-            {branding.legalLine}
-          </p>
         </div>
-      </div>
-      <div className="sm:text-right text-[11px] space-y-0" style={{ color: template.colors.headingMuted, lineHeight: "1.4" }}>
-        {orgContact.address && <p>{orgContact.address}</p>}
-        {orgContact.phone && <p>{orgContact.phone}</p>}
-        {orgContact.email && <p>{orgContact.email}</p>}
-        {orgContact.gstNumber && <p>GST: {orgContact.gstNumber}</p>}
-        {orgContact.nzbn && <p>NZBN: {orgContact.nzbn}</p>}
+        <div
+          className="sm:text-right space-y-0"
+          style={{
+            color: template.colors.headingMuted,
+            lineHeight: contactAlign === "compact_right" ? "1.25" : contactAlign === "stacked_right" ? "1.6" : "1.4",
+            fontSize: contactAlign === "compact_right" ? "10px" : contactAlign === "stacked_right" ? "12px" : "11px",
+          }}
+        >
+          {orgContact.address && <p>{orgContact.address}</p>}
+          {orgContact.phone && <p>{orgContact.phone}</p>}
+          {orgContact.email && <p>{orgContact.email}</p>}
+          {orgContact.gstNumber && <p>GST: {orgContact.gstNumber}</p>}
+          {orgContact.nzbn && <p>NZBN: {orgContact.nzbn}</p>}
+        </div>
       </div>
     </div>
   );
@@ -492,12 +514,12 @@ function SpecTable({ specs, itemIndex, template }: { specs: { key: string; label
     return <p className="text-sm italic" style={{ color: template.colors.headingMuted }}>No specification data available for this item.</p>;
   }
 
-  const rowPadY = template.density.specRowH >= 5 ? "py-2" : template.density.specRowH <= 3.5 ? "py-0.5" : "py-1.5";
+  const rowPadPx = Math.max(1, Math.round((template.density.specRowH - 2) * 1.5));
 
   const renderRow = ({ key, label, value }: { key: string; label: string; value: string }, idx: number) => (
     <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? template.colors.bgMuted : "transparent" }}>
-      <td className={`${rowPadY} px-2 text-xs leading-snug align-top`} style={{ color: template.colors.headingMuted, minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word" }}>{label}</td>
-      <td className={`${rowPadY} px-2 font-medium text-sm leading-snug align-top`} style={{ color: template.colors.bodyText, overflowWrap: "break-word", wordBreak: "break-word" }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
+      <td className="px-2 text-xs leading-snug align-top" style={{ color: template.colors.headingMuted, minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word", paddingTop: `${rowPadPx}px`, paddingBottom: `${rowPadPx}px` }}>{label}</td>
+      <td className="px-2 font-medium text-sm leading-snug align-top" style={{ color: template.colors.bodyText, overflowWrap: "break-word", wordBreak: "break-word", paddingTop: `${rowPadPx}px`, paddingBottom: `${rowPadPx}px` }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
     </tr>
   );
 

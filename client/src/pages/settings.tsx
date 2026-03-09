@@ -28,7 +28,10 @@ import {
   type LogoScale,
   type DensityPreset,
   type DocumentMode,
+  type LegalLinePlacement,
+  type ContactBlockAlignment,
 } from "@/lib/quote-template";
+import { Slider } from "@/components/ui/slider";
 
 interface OrgSettings {
   id: string;
@@ -822,6 +825,7 @@ function TemplateBuilderTab() {
   }, [savedConfig]);
 
   const sections: TemplateSectionDef[] = config.sections || COMPANY_MASTER_TEMPLATE.sections;
+  const resolvedForSliders = useMemo(() => applyCompanyConfig(config), [config]);
 
   const toggleSection = (key: string) => {
     const updated = sections.map(s => s.key === key ? { ...s, visible: !s.visible } : s);
@@ -892,6 +896,35 @@ function TemplateBuilderTab() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Logo Width (mm)</Label>
+                <p className="text-xs text-muted-foreground mb-2">Fine-tune logo width independently — overrides scale preset</p>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={10} max={120} step={2}
+                    value={[config.logoWidthMm ?? COMPANY_MASTER_TEMPLATE.header.logoWidthMm]}
+                    onValueChange={([v]) => setConfig({ ...config, logoWidthMm: v })}
+                    className="flex-1"
+                    data-testid="slider-logoWidthMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.logoWidthMm ?? COMPANY_MASTER_TEMPLATE.header.logoWidthMm}mm</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Logo Max Height (mm)</Label>
+                <p className="text-xs text-muted-foreground mb-2">Limits logo height to prevent oversized headers</p>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={5} max={60} step={1}
+                    value={[config.logoMaxHeightMm ?? COMPANY_MASTER_TEMPLATE.header.logoMaxHeightMm]}
+                    onValueChange={([v]) => setConfig({ ...config, logoMaxHeightMm: v })}
+                    className="flex-1"
+                    data-testid="slider-logoMaxHeightMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.logoMaxHeightMm ?? COMPANY_MASTER_TEMPLATE.header.logoMaxHeightMm}mm</span>
+                </div>
+              </div>
+              <Separator />
               <div className="flex items-center justify-between py-1.5">
                 <div>
                   <p className="text-sm font-medium">Show Company Name</p>
@@ -903,6 +936,55 @@ function TemplateBuilderTab() {
                   data-testid="switch-showTradingName"
                 />
               </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Legal Line Placement</Label>
+                <p className="text-xs text-muted-foreground mb-2">Where the legal/registration line appears relative to the logo</p>
+                <Select
+                  value={config.legalLinePlacement || "under_logo"}
+                  onValueChange={(v) => setConfig({ ...config, legalLinePlacement: v as LegalLinePlacement })}
+                >
+                  <SelectTrigger data-testid="select-template-legalLinePlacement">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="under_logo">Under Logo — legal line below the logo (recommended)</SelectItem>
+                    <SelectItem value="beside_logo">Beside Logo — next to logo/company name</SelectItem>
+                    <SelectItem value="hidden">Hidden — do not show legal line</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Contact Block</Label>
+                <p className="text-xs text-muted-foreground mb-2">Controls how compact the address/phone/email block appears</p>
+                <Select
+                  value={config.contactBlockAlignment || "right"}
+                  onValueChange={(v) => setConfig({ ...config, contactBlockAlignment: v as ContactBlockAlignment })}
+                >
+                  <SelectTrigger data-testid="select-template-contactBlockAlignment">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="right">Standard — right-aligned contact details</SelectItem>
+                    <SelectItem value="stacked_right">Stacked — right-aligned, slightly larger text</SelectItem>
+                    <SelectItem value="compact_right">Compact — smaller text, tighter spacing</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Header Bottom Spacing (mm)</Label>
+                <p className="text-xs text-muted-foreground mb-2">Space between the header and the next section</p>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={0} max={20} step={1}
+                    value={[config.headerBottomSpacingMm ?? COMPANY_MASTER_TEMPLATE.header.headerBottomSpacingMm]}
+                    onValueChange={([v]) => setConfig({ ...config, headerBottomSpacingMm: v })}
+                    className="flex-1"
+                    data-testid="slider-headerBottomSpacingMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.headerBottomSpacingMm ?? COMPANY_MASTER_TEMPLATE.header.headerBottomSpacingMm}mm</span>
+                </div>
+              </div>
+              <Separator />
               <div>
                 <Label className="text-sm font-medium mb-1 block">Document Type</Label>
                 <p className="text-xs text-muted-foreground mb-2">Sets the document title and terminology used throughout</p>
@@ -982,10 +1064,13 @@ function TemplateBuilderTab() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-sm font-medium mb-1 block">Content Density</Label>
-                <p className="text-xs text-muted-foreground mb-2">Controls items per page — affects drawing size, spec rows, padding, and gaps in both preview and PDF</p>
+                <p className="text-xs text-muted-foreground mb-2">Base preset for items per page — granular controls below can fine-tune further</p>
                 <Select
                   value={config.densityPreset || "standard"}
-                  onValueChange={(v) => setConfig({ ...config, densityPreset: v as DensityPreset })}
+                  onValueChange={(v) => {
+                    const { drawingMaxHeightMm, photoMaxHeightMm, specRowHeightMm, itemHeaderHeightMm, itemCardPaddingMm, itemCardGapMm, ...rest } = config;
+                    setConfig({ ...rest, densityPreset: v as DensityPreset });
+                  }}
                 >
                   <SelectTrigger data-testid="select-template-densityPreset">
                     <SelectValue />
@@ -1031,6 +1116,74 @@ function TemplateBuilderTab() {
                     <SelectItem value="large">Large — 40mm max</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <Separator />
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Granular Size Controls</p>
+              <p className="text-xs text-muted-foreground -mt-2">Fine-tune individual element sizes. These override the density preset values.</p>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Drawing Max Height (mm)</Label>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={15} max={80} step={1}
+                    value={[config.drawingMaxHeightMm ?? resolvedForSliders.density.drawingMaxH]}
+                    onValueChange={([v]) => setConfig({ ...config, drawingMaxHeightMm: v })}
+                    className="flex-1"
+                    data-testid="slider-drawingMaxHeightMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.drawingMaxHeightMm ?? resolvedForSliders.density.drawingMaxH}mm</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Photo Row Height (mm)</Label>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={10} max={60} step={1}
+                    value={[config.photoMaxHeightMm ?? resolvedForSliders.density.photoRowH]}
+                    onValueChange={([v]) => setConfig({ ...config, photoMaxHeightMm: v })}
+                    className="flex-1"
+                    data-testid="slider-photoMaxHeightMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.photoMaxHeightMm ?? resolvedForSliders.density.photoRowH}mm</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Spec Row Height (mm)</Label>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={2} max={8} step={0.5}
+                    value={[config.specRowHeightMm ?? resolvedForSliders.density.specRowH]}
+                    onValueChange={([v]) => setConfig({ ...config, specRowHeightMm: v })}
+                    className="flex-1"
+                    data-testid="slider-specRowHeightMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.specRowHeightMm ?? resolvedForSliders.density.specRowH}mm</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Item Card Padding (mm)</Label>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={1} max={10} step={0.5}
+                    value={[config.itemCardPaddingMm ?? resolvedForSliders.density.itemCardPadMm]}
+                    onValueChange={([v]) => setConfig({ ...config, itemCardPaddingMm: v })}
+                    className="flex-1"
+                    data-testid="slider-itemCardPaddingMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.itemCardPaddingMm ?? resolvedForSliders.density.itemCardPadMm}mm</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Item Card Gap (mm)</Label>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={1} max={10} step={0.5}
+                    value={[config.itemCardGapMm ?? resolvedForSliders.density.itemGapMm]}
+                    onValueChange={([v]) => setConfig({ ...config, itemCardGapMm: v })}
+                    className="flex-1"
+                    data-testid="slider-itemCardGapMm"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right font-mono">{config.itemCardGapMm ?? resolvedForSliders.density.itemGapMm}mm</span>
+                </div>
               </div>
             </CardContent>
           </Card>
