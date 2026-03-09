@@ -1,0 +1,230 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped stabilisation pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+
+1. Do NOT redesign the architecture.
+2. Do NOT introduce drag-and-drop templates.
+3. Do NOT add new database tables or schema fields.
+4. Do NOT add new API endpoints unless explicitly required.
+5. Do NOT change the Quote lifecycle.
+6. Do NOT bypass QuoteDocument or QuoteRenderModel.
+7. Do NOT introduce a second rendering pipeline.
+8. Preserve Preview/PDF rendering parity.
+9. Focus only on layout stability and photo reliability.
+
+
+ARCHITECTURE GUARDS
+
+Pipeline must remain:
+
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderer
+→ Preview
+→ PDF Engine
+
+
+--------------------------------------------------
+
+OBJECTIVE
+
+Perform a **layout stabilisation pass** to make the quote renderer production-safe.
+
+Focus on:
+
+1. Strict A4 layout enforcement
+2. Preview and PDF rendering parity
+3. Reliable photo rendering
+4. Prevent schedule items splitting across pages
+5. Ensure schedule density behaves predictably
+
+
+--------------------------------------------------
+T083 — Enforce strict A4 page geometry
+--------------------------------------------------
+
+The quote document must be designed for **A4 portrait only**.
+
+PDF engine requirements:
+
+Use explicit jsPDF configuration:
+
+new jsPDF({
+  orientation: "portrait",
+  unit: "mm",
+  format: "a4"
+})
+
+Define page constants at the top of the PDF engine:
+
+PAGE_WIDTH = 210
+PAGE_HEIGHT = 297
+
+LEFT_MARGIN = 15
+RIGHT_MARGIN = 15
+TOP_MARGIN = 18
+BOTTOM_MARGIN = 18
+
+CONTENT_WIDTH = PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+
+All rendering logic must use CONTENT_WIDTH instead of arbitrary widths.
+
+No layout element may exceed this width.
+
+Acceptance criteria:
+
+PDF layout is stable and always fits inside A4 margins.
+
+
+
+--------------------------------------------------
+T084 — Make Preview simulate an A4 document
+--------------------------------------------------
+
+Preview must visually simulate the same page size used by the PDF.
+
+Implement a fixed preview container width equivalent to A4.
+
+Example target:
+
+~794px (A4 width at 96dpi)
+
+Center the preview container and prevent full-width stretching.
+
+Preview should behave like a document page, not a responsive web page.
+
+Acceptance criteria:
+
+Preview width matches PDF page layout.
+
+Design tuning becomes predictable.
+
+
+
+--------------------------------------------------
+T085 — Prevent schedule items splitting across PDF pages
+--------------------------------------------------
+
+Each schedule item card must render as a **single block**.
+
+Before rendering a schedule item:
+
+1. Estimate the vertical height required
+2. If the item will overflow the remaining page space
+3. Start a new page before rendering the item
+
+Ensure:
+
+• drawings
+• specs
+• photos
+
+all remain within the same item block.
+
+Acceptance criteria:
+
+Schedule items never split across pages.
+
+
+
+--------------------------------------------------
+T086 — Fix photo rendering reliability
+--------------------------------------------------
+
+Photos previously failed to render consistently in the PDF.
+
+Implement a reliable pipeline.
+
+Current pipeline must remain:
+
+Photo Upload
+→ Database (bytea)
+→ PreviewData
+→ QuoteDocumentModel
+→ QuoteRenderModel
+→ Preview / PDF
+
+Required changes:
+
+1. Ensure PDF engine preloads photos before rendering items.
+2. Use the same imageCache logic used in preview if available.
+3. Skip rendering only if a photo fails to load.
+4. Never render a "SITE PHOTOS" heading if no images were successfully loaded.
+5. Ensure all available photos render for each item.
+
+Acceptance criteria:
+
+If preview shows photos, PDF must show the same photos.
+
+
+
+--------------------------------------------------
+T087 — Validate schedule density behaviour
+--------------------------------------------------
+
+Verify the density presets produce the expected result:
+
+comfortable
+standard
+compact
+
+Target layout behaviour:
+
+comfortable → approx 3 items/page  
+standard → approx 4 items/page  
+compact → approx 5 items/page
+
+Adjust spacing constants only if required.
+
+Do NOT redesign the schedule layout again.
+
+Acceptance criteria:
+
+Density presets produce visibly different schedule density.
+
+
+
+--------------------------------------------------
+T088 — Maintain Preview / PDF rendering parity
+--------------------------------------------------
+
+Preview and PDF must remain visually aligned.
+
+Ensure:
+
+• header composition identical
+• section ordering identical
+• schedule item structure identical
+• density behaviour identical
+• photo placement identical
+
+PDF may differ slightly due to pagination, but visual hierarchy must match.
+
+Acceptance criteria:
+
+Preview looks like the same document family as the exported PDF.
+
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+
+After this pass:
+
+1. Quote layout is fully locked to A4.
+2. Preview visually matches the exported PDF.
+3. Schedule items never split across pages.
+4. Photos reliably render in both preview and PDF.
+5. Density presets produce predictable schedule layouts.
+6. The quote system is stable enough for real production use.
+
+
+
+END OF IMPLEMENTATION

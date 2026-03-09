@@ -110,7 +110,7 @@ export default function QuotePreview() {
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = renderModel;
 
   return (
-    <div className="max-w-4xl mx-auto print:max-w-none" data-testid="quote-preview-page">
+    <div className="mx-auto print:max-w-none" style={{ maxWidth: "794px" }} data-testid="quote-preview-page">
       <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden border-b">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(`/quote/${quoteId}`)} data-testid="button-back-to-quote">
@@ -188,7 +188,7 @@ export default function QuotePreview() {
 
       <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
 
-      <div className="p-4 sm:p-8 print:p-4" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.spacing.sectionGapMm * 3.78)}px` }}>
+      <div className="bg-white p-6 sm:p-10 print:p-4" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.spacing.sectionGapMm * 3.78)}px` }}>
         {isSectionVisible(T, "header") && (
           <div className="space-y-3">
             <HeaderSection branding={branding} orgContact={orgContact} template={T} />
