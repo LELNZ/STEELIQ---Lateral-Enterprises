@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine, RenderSpecEntry } from "./quote-renderer";
-import { isSectionVisible, COMPANY_MASTER_TEMPLATE } from "./quote-template";
+import { isSectionVisible, LOGO_SCALE_PRESETS, COMPANY_MASTER_TEMPLATE } from "./quote-template";
 import type { QuoteTemplate, ScheduleLayoutVariant, TotalsLayoutVariant } from "./quote-template";
 
 const PAGE_W = 210;
@@ -25,6 +25,11 @@ let PHOTO_MAX_SIZE: number;
 let DRAWING_MAX_W_PCT: number;
 let SCHEDULE_LAYOUT: ScheduleLayoutVariant;
 let TOTALS_LAYOUT: TotalsLayoutVariant;
+
+let DENSITY_DRAWING_MAX_H: number;
+let DENSITY_SPEC_ROW_H: number;
+let DENSITY_ITEM_HEADER_H: number;
+let DENSITY_PHOTO_ROW_H: number;
 
 const SIZE_MAP: Record<string, number> = {
   xs: 7,
@@ -54,6 +59,11 @@ function applyTemplate(template: QuoteTemplate) {
   DRAWING_MAX_W_PCT = T.itemLayout.drawingMaxWidthPercent;
   SCHEDULE_LAYOUT = T.itemLayout.scheduleLayoutVariant;
   TOTALS_LAYOUT = T.itemLayout.totalsLayoutVariant;
+
+  DENSITY_DRAWING_MAX_H = T.density.drawingMaxH;
+  DENSITY_SPEC_ROW_H = T.density.specRowH;
+  DENSITY_ITEM_HEADER_H = T.density.itemHeaderH;
+  DENSITY_PHOTO_ROW_H = T.density.photoRowH;
 }
 
 type Pdf = jsPDF;
@@ -168,15 +178,14 @@ export async function generateQuotePdf(
 async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promise<number> {
   const { branding, orgContact } = model;
   const startY = y;
+  const logoPreset = LOGO_SCALE_PRESETS[T.header.logoScale] || LOGO_SCALE_PRESETS.standard;
 
   if (branding.logoUrl) {
     const logoData = await loadImageAsDataUrl(branding.logoUrl);
     if (logoData) {
       try {
         const dims = await getImageDimensions(logoData);
-        const maxLogoH = 12;
-        const maxLogoW = 40;
-        const scale = Math.min(maxLogoW / dims.w, maxLogoH / dims.h, 1);
+        const scale = Math.min(logoPreset.maxW / dims.w, logoPreset.maxH / dims.h, 1);
         const lw = dims.w * scale;
         const lh = dims.h * scale;
         pdf.addImage(logoData, MARGIN, y, lw, lh);
@@ -185,11 +194,13 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
     }
   }
 
-  pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(mmSize(T.typography.tradingNameSize));
-  pdf.setTextColor(COLOR_BLACK);
-  pdf.text(branding.tradingName, MARGIN, y + 5);
-  y += 7;
+  if (T.header.showTradingName) {
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(mmSize(T.typography.tradingNameSize));
+    pdf.setTextColor(COLOR_BLACK);
+    pdf.text(branding.tradingName, MARGIN, y + 5);
+    y += 7;
+  }
 
   pdf.setFont(FONT_NORMAL, "italic");
   pdf.setFontSize(mmSize(T.typography.legalLineSize));
@@ -227,10 +238,11 @@ function renderSeparator(pdf: Pdf, y: number): number {
 }
 
 function renderQuotationTitle(pdf: Pdf, y: number): number {
+  const title = T.documentMode === "tender" ? "TENDER" : "QUOTATION";
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(14);
   pdf.setTextColor(COLOR_ACCENT);
-  pdf.text("QUOTATION", MARGIN, y + 4);
+  pdf.text(title, MARGIN, y + 4);
   y += 10;
   return y;
 }
@@ -531,10 +543,10 @@ async function renderScheduleItem(
   const hasDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
   const hasPhotos = loadablePhotos.length > 0;
 
-  const headerH = 16;
-  const specH = item.visibleSpecs.length * 4.5;
-  const drawingH = hasDrawing ? 57 : 0;
-  const photosH = hasPhotos ? 35 : 0;
+  const headerH = DENSITY_ITEM_HEADER_H;
+  const specH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
+  const drawingH = hasDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
+  const photosH = hasPhotos ? DENSITY_PHOTO_ROW_H : 0;
   const minItemH = headerH + Math.max(drawingH, specH) + photosH + SECTION_GAP;
 
   y = ensureSpace(pdf, y, Math.min(minItemH, MAX_Y - MARGIN - 5));
@@ -568,7 +580,7 @@ async function renderScheduleItem(
       try {
         const dims = await getImageDimensions(drawingData);
         const maxDrawW = CW - pad * 2;
-        const maxDrawH = 55;
+        const maxDrawH = DENSITY_DRAWING_MAX_H;
         const scale = Math.min(maxDrawW / dims.w, maxDrawH / dims.h, 1);
         const dw = dims.w * scale;
         const dh = dims.h * scale;
@@ -592,7 +604,7 @@ async function renderScheduleItem(
       try {
         const dims = await getImageDimensions(drawingData);
         const maxDrawW = leftColW - pad * 2;
-        const maxDrawH = 55;
+        const maxDrawH = DENSITY_DRAWING_MAX_H;
         const scale = Math.min(maxDrawW / dims.w, maxDrawH / dims.h, 1);
         const dw = dims.w * scale;
         const dh = dims.h * scale;
@@ -612,7 +624,7 @@ async function renderScheduleItem(
   y += 2;
 
   if (hasPhotos) {
-    if (y + 35 > MAX_Y) {
+    if (y + DENSITY_PHOTO_ROW_H > MAX_Y) {
       drawItemBorder(pdf, startY, y, itemStartPage);
       pdf.addPage();
       y = MARGIN;
@@ -694,7 +706,7 @@ async function renderPhotosFromCache(
 }
 
 function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[], x: number, w: number): number {
-  const rowH = 4.5;
+  const rowH = DENSITY_SPEC_ROW_H;
   const labelW = w * 0.45;
 
   for (let i = 0; i < specs.length; i++) {

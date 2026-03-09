@@ -1,0 +1,329 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Renderer
+→ Quote Preview
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create separate unrelated content models for preview and PDF.
+Do NOT introduce a freeform page-builder or raw HTML/CSS template editor.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required for:
+- Template Builder v1.1 visible controls
+- document mode support if needed
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any template-builder architecture changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Implement the next practical stage of the quote presentation system using the correct industry-style architecture:
+
+- one company master template
+- division overrides
+- shared resolved template used by both Preview and PDF
+- structured builder controls only
+- no drag/drop freeform editor
+
+This pass should make the Template Builder feel real by wiring visible controls into both Preview and PDF.
+
+If safely achievable in the same pass, also introduce controlled document modes as a future-safe layer:
+- standard
+- tender
+
+But do NOT overbuild. Prefer the smallest safe implementation.
+
+
+--------------------------------------------------
+T063 — Strengthen the template architecture around resolved template configuration
+--------------------------------------------------
+
+Problem:
+We now have template plumbing and a Template Builder v1, but the system must clearly follow this architecture:
+
+system defaults
+→ company template config
+→ division overrides
+→ document mode override (optional/future-safe)
+→ resolved template
+→ QuoteRenderModel
+→ Preview + PDF
+
+Required implementation:
+
+1. Audit the current template resolution path and ensure it matches the architecture above as closely as practical.
+2. Keep one company-wide master template as the base.
+3. Keep division overrides as a separate override layer.
+4. If document modes are introduced in this pass, keep them as a small override layer rather than a separate template system.
+
+Acceptance criteria:
+- the resolved template architecture is explicit and coherent
+- preview and PDF continue to consume the same resolved template
+- no separate disconnected configuration paths are introduced
+
+
+--------------------------------------------------
+T064 — Make Template Builder v1.1 controls visibly affect Preview and PDF
+--------------------------------------------------
+
+Problem:
+The builder now exists, but it needs to feel real by driving clearly visible quote output changes.
+
+Required implementation:
+
+Wire the existing or minimally-expanded builder controls so they produce visible effect in BOTH:
+- Customer Quote Preview
+- PDF export
+
+Priority controls to make real and visible:
+
+HEADER
+- logo size
+- show/hide large trading name text
+- legal line position
+- contact block variant if already practical
+
+SUMMARY
+- totals layout variant
+- summary heading style if already practical
+
+SCHEDULE
+- schedule layout variant
+- density preset / compactness
+- photo size / photo placement mode
+- drawing size where tied to density/layout
+
+LEGAL / ACCEPTANCE
+- legal heading style if already practical
+- acceptance layout variant
+- show/hide remittance block if already supported
+
+THEME
+- accent colour
+- typography preset
+- spacing preset
+
+If any currently exposed control is still non-functional, either:
+- wire it properly now, or
+- hide/remove it so the UI reflects reality
+
+Acceptance criteria:
+- builder controls produce clearly visible changes
+- preview and PDF both reflect those changes
+- dead controls are avoided
+
+
+--------------------------------------------------
+T065 — Add company-standard density controls for schedule item output
+--------------------------------------------------
+
+Problem:
+The current quote item cards are often too large and do not allow enough density per page.
+
+Required implementation:
+
+1. Add and apply a structured density control for schedule items.
+2. Recommended presets:
+   - comfortable
+   - standard
+   - compact
+
+3. Density should affect as appropriate:
+   - item card padding
+   - drawing size
+   - photo size
+   - spec table spacing
+   - vertical gaps between cards
+   - subtitle / metadata spacing
+
+4. Keep readability. Do NOT compress to the point of becoming hard to use.
+
+Recommended best-practice targets:
+- drawings + specs + photo: ~2–3 items/page
+- drawings + specs: ~4 items/page
+- specs only / compact: ~6+ items/page where practical
+
+Acceptance criteria:
+- density controls have real visible impact
+- compact mode makes the document materially denser
+- preview and PDF stay aligned in intent
+
+
+--------------------------------------------------
+T066 — Implement header controls properly for company master template
+--------------------------------------------------
+
+Problem:
+The current header still needs better control, especially:
+- logo prominence
+- oversized trading name text
+- legal line placement
+
+Required implementation:
+
+1. Add or wire structured header controls so the company master template can control:
+   - logo scale
+   - show/hide dominant trading name text
+   - legal line placement
+   - contact block arrangement if practical
+
+2. Ensure both Preview and PDF reflect these controls.
+
+3. Recommended design direction:
+   - logo can carry more brand weight
+   - oversized duplicate trading name text can be reduced or hidden
+   - legal line should sit more subtly and lower in the header composition
+
+Acceptance criteria:
+- header can be tuned through the builder
+- preview and PDF header move closer to a professional company quotation style
+
+
+--------------------------------------------------
+T067 — Introduce document modes as a controlled extension point if safely achievable
+--------------------------------------------------
+
+Problem:
+The template system should be future-safe for different business output modes, but we do not want many unrelated templates.
+
+Required implementation:
+
+If safely achievable in this pass, introduce a small controlled document mode layer:
+- standard
+- tender
+
+Rules:
+1. Document mode is NOT a separate template system.
+2. Document mode applies small override rules on top of:
+   - company template
+   - division overrides
+3. Keep it tightly scoped and safe.
+
+Examples of acceptable tender-mode differences:
+- title wording
+- legal/terms emphasis
+- summary presentation emphasis
+- schedule density/layout choice if already supported
+
+If adding document modes now would create architecture risk, explicitly defer implementation and leave only the architectural seam in place.
+
+Acceptance criteria:
+- either document modes are implemented safely, or clearly deferred without misleading UI
+- no separate template explosion is introduced
+
+
+--------------------------------------------------
+T068 — Improve the builder UI language to reflect the architecture clearly
+--------------------------------------------------
+
+Problem:
+The builder/settings UI should clearly communicate the correct mental model.
+
+Required implementation:
+
+1. Make the UI language reflect:
+   - Company Template
+   - Division Overrides
+   - Document Mode (if implemented)
+2. Do not imply that divisions own fully separate templates unless that is actually true.
+3. Keep the UI understandable for admin users.
+
+Acceptance criteria:
+- settings language matches the actual architecture
+- builder feels intentional and professional
+
+
+--------------------------------------------------
+T069 — Keep preview and PDF in the same template family
+--------------------------------------------------
+
+Problem:
+As more controls become real, preview and PDF could drift again.
+
+Required implementation:
+
+1. Ensure every builder-managed control affects both Preview and PDF unless there is a strong technical reason not to.
+2. If a control is PDF-only or preview-only, document it clearly and avoid misleading users.
+3. Keep shared template semantics intact:
+   - same section structure
+   - same hierarchy
+   - same layout intent
+   - same colours / spacing / density intent
+
+Acceptance criteria:
+- preview and PDF stay materially aligned
+- the builder truly controls both outputs
+
+
+--------------------------------------------------
+T070 — Keep this pass tightly scoped and industry-correct
+--------------------------------------------------
+
+Do NOT:
+- build a drag/drop template designer
+- build a freeform canvas editor
+- allow arbitrary section creation
+- allow raw HTML/CSS editing
+- add per-customer custom templates
+- redesign quote lifecycle
+- add customer portal/email logic
+- rebuild the full renderer stack from scratch
+
+This is Template Builder v1.1:
+structured, visible, company-template-first, industry-style.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The quote template architecture clearly follows:
+   defaults → company template → division overrides → optional document mode → resolved template
+2. Template Builder controls produce real visible changes in both Preview and PDF.
+3. Header controls, density controls, and layout controls are materially useful.
+4. The system is ready for future standard vs tender presentation without template chaos.
+5. Preview and PDF remain in the same document family.
+6. The builder is structured and professional, not a freeform editor.
+
+
+END OF IMPLEMENTATION

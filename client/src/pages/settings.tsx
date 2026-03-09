@@ -25,6 +25,9 @@ import {
   type PhotoSizePreset,
   type ScheduleLayoutVariant,
   type TotalsLayoutVariant,
+  type LogoScale,
+  type DensityPreset,
+  type DocumentMode,
 } from "@/lib/quote-template";
 
 interface OrgSettings {
@@ -868,6 +871,59 @@ function TemplateBuilderTab() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
+              <CardTitle className="text-base">Header & Branding</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Controls how the company header appears on quotes and PDFs.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Logo Size</Label>
+                <p className="text-xs text-muted-foreground mb-2">Controls the maximum dimensions of your company logo</p>
+                <Select
+                  value={config.logoScale || "standard"}
+                  onValueChange={(v) => setConfig({ ...config, logoScale: v as LogoScale })}
+                >
+                  <SelectTrigger data-testid="select-template-logoScale">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small — compact logo</SelectItem>
+                    <SelectItem value="standard">Standard — balanced size</SelectItem>
+                    <SelectItem value="large">Large — prominent logo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <div>
+                  <p className="text-sm font-medium">Show Trading Name</p>
+                  <p className="text-xs text-muted-foreground">Display the company trading name alongside the logo</p>
+                </div>
+                <Switch
+                  checked={config.showTradingName !== false}
+                  onCheckedChange={(v) => setConfig({ ...config, showTradingName: v })}
+                  data-testid="switch-showTradingName"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Document Type</Label>
+                <p className="text-xs text-muted-foreground mb-2">Sets the document title and terminology used throughout</p>
+                <Select
+                  value={config.documentMode || "standard"}
+                  onValueChange={(v) => setConfig({ ...config, documentMode: v as DocumentMode })}
+                >
+                  <SelectTrigger data-testid="select-template-documentMode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Quotation — standard quote document</SelectItem>
+                    <SelectItem value="tender">Tender — formal tender document</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base">Sections</CardTitle>
               <p className="text-xs text-muted-foreground mt-1">Show or hide document sections. Order is fixed by template design.</p>
             </CardHeader>
@@ -924,6 +980,24 @@ function TemplateBuilderTab() {
               <CardTitle className="text-base">Schedule</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Content Density</Label>
+                <p className="text-xs text-muted-foreground mb-2">Controls how tightly schedule items are packed — affects drawing sizes, spec row heights, and photo areas</p>
+                <Select
+                  value={config.densityPreset || "standard"}
+                  onValueChange={(v) => setConfig({ ...config, densityPreset: v as DensityPreset })}
+                >
+                  <SelectTrigger data-testid="select-template-densityPreset">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="comfortable">Comfortable — larger drawings & photos, more whitespace</SelectItem>
+                    <SelectItem value="standard">Standard — balanced content density</SelectItem>
+                    <SelectItem value="compact">Compact — smaller drawings, tighter rows, more items per page</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Separator />
               <div>
                 <Label className="text-sm font-medium mb-1 block">Schedule Layout</Label>
                 <p className="text-xs text-muted-foreground mb-2">Default layout for item cards in the schedule section</p>

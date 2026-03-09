@@ -1050,6 +1050,10 @@ export async function registerRoutes(
     accentColor: z.string().optional(),
     scheduleLayoutVariant: z.enum(["image_left_specs_right_v1", "specs_only_v1", "image_top_specs_below_v1"]).optional(),
     totalsLayoutVariant: z.enum(["totals_block_v1", "totals_inline_v1"]).optional(),
+    logoScale: z.enum(["small", "standard", "large"]).optional(),
+    showTradingName: z.boolean().optional(),
+    densityPreset: z.enum(["comfortable", "standard", "compact"]).optional(),
+    documentMode: z.enum(["standard", "tender"]).optional(),
   }).strict();
 
   app.patch("/api/settings/template", async (req, res) => {

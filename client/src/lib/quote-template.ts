@@ -47,6 +47,24 @@ export interface TemplateColors {
   accent: string;
 }
 
+export type LogoScale = "small" | "standard" | "large";
+
+export interface TemplateHeader {
+  logoScale: LogoScale;
+  showTradingName: boolean;
+}
+
+export type DensityPreset = "comfortable" | "standard" | "compact";
+
+export interface TemplateDensity {
+  drawingMaxH: number;
+  specRowH: number;
+  itemHeaderH: number;
+  photoRowH: number;
+}
+
+export type DocumentMode = "standard" | "tender";
+
 export interface QuoteTemplate {
   id: string;
   name: string;
@@ -56,6 +74,9 @@ export interface QuoteTemplate {
   itemLayout: TemplateItemLayout;
   acceptance: TemplateAcceptanceBlock;
   colors: TemplateColors;
+  header: TemplateHeader;
+  density: TemplateDensity;
+  documentMode: DocumentMode;
 }
 
 export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
@@ -106,6 +127,17 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
     bgMuted: "#f3f4f6",
     accent: "#374151",
   },
+  header: {
+    logoScale: "standard",
+    showTradingName: true,
+  },
+  density: {
+    drawingMaxH: 55,
+    specRowH: 4.5,
+    itemHeaderH: 16,
+    photoRowH: 35,
+  },
+  documentMode: "standard",
 };
 
 export const SYSTEM_TEMPLATE = COMPANY_MASTER_TEMPLATE;
@@ -122,6 +154,10 @@ export interface CompanyTemplateConfig {
   accentColor?: string;
   scheduleLayoutVariant?: ScheduleLayoutVariant;
   totalsLayoutVariant?: TotalsLayoutVariant;
+  logoScale?: LogoScale;
+  showTradingName?: boolean;
+  densityPreset?: DensityPreset;
+  documentMode?: DocumentMode;
 }
 
 const SPACING_PRESETS: Record<SpacingPreset, TemplateSpacing> = {
@@ -140,6 +176,19 @@ const PHOTO_SIZE_PRESETS: Record<PhotoSizePreset, number> = {
   small: 20,
   medium: 30,
   large: 45,
+};
+
+const LOGO_SCALE_PRESETS: Record<LogoScale, { maxH: number; maxW: number }> = {
+  small: { maxH: 8, maxW: 25 },
+  standard: { maxH: 12, maxW: 40 },
+  large: { maxH: 18, maxW: 60 },
+};
+export { LOGO_SCALE_PRESETS };
+
+const DENSITY_PRESETS: Record<DensityPreset, TemplateDensity> = {
+  comfortable: { drawingMaxH: 55, specRowH: 4.5, itemHeaderH: 16, photoRowH: 35 },
+  standard: { drawingMaxH: 45, specRowH: 4, itemHeaderH: 14, photoRowH: 28 },
+  compact: { drawingMaxH: 35, specRowH: 3.5, itemHeaderH: 12, photoRowH: 22 },
 };
 
 export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate {
@@ -171,6 +220,22 @@ export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate
 
   if (config.totalsLayoutVariant) {
     base.itemLayout = { ...base.itemLayout, totalsLayoutVariant: config.totalsLayoutVariant };
+  }
+
+  if (config.logoScale) {
+    base.header = { ...base.header, logoScale: config.logoScale };
+  }
+
+  if (config.showTradingName !== undefined) {
+    base.header = { ...base.header, showTradingName: config.showTradingName };
+  }
+
+  if (config.densityPreset && DENSITY_PRESETS[config.densityPreset]) {
+    base.density = DENSITY_PRESETS[config.densityPreset];
+  }
+
+  if (config.documentMode) {
+    base.documentMode = config.documentMode;
   }
 
   return base;
@@ -207,18 +272,6 @@ export function resolveQuoteTemplate(
   }
 
   return resolved;
-}
-
-export function getSpacingPresetFromConfig(config?: CompanyTemplateConfig | null): SpacingPreset {
-  return config?.spacingPreset || "standard";
-}
-
-export function getTypographyPresetFromConfig(config?: CompanyTemplateConfig | null): TypographyPreset {
-  return config?.typographyPreset || "standard";
-}
-
-export function getPhotoSizePresetFromConfig(config?: CompanyTemplateConfig | null): PhotoSizePreset {
-  return config?.photoSizePreset || "medium";
 }
 
 export function isSectionVisible(template: QuoteTemplate, key: string): boolean {

@@ -15,7 +15,7 @@ import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/l
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
 import { generateQuotePdf } from "@/lib/pdf-engine";
-import { isSectionVisible } from "@/lib/quote-template";
+import { isSectionVisible, LOGO_SCALE_PRESETS } from "@/lib/quote-template";
 import type { QuoteTemplate } from "@/lib/quote-template";
 
 export default function QuotePreview() {
@@ -196,7 +196,9 @@ export default function QuotePreview() {
           </div>
         )}
 
-        <h2 className="text-xl font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">Quotation</h2>
+        <h2 className="text-xl font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
+          {T.documentMode === "tender" ? "Tender" : "Quotation"}
+        </h2>
 
         {isSectionVisible(T, "disclaimer") && (
           <p className="text-sm italic" style={{ color: T.colors.headingMuted }} data-testid="text-preliminary-disclaimer">
@@ -273,6 +275,10 @@ function SnapshotBanner({ revisionVersion, sourceJobId }: { revisionVersion: num
 }
 
 function HeaderSection({ branding, orgContact, template }: { branding: QuoteRenderModel["branding"]; orgContact: QuoteRenderModel["orgContact"]; template: QuoteTemplate }) {
+  const logoPreset = LOGO_SCALE_PRESETS[template.header.logoScale] || LOGO_SCALE_PRESETS.standard;
+  const logoMaxHPx = Math.round(logoPreset.maxH * 3.78);
+  const logoMaxWPx = Math.round(logoPreset.maxW * 3.78);
+
   return (
     <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
       <div className="flex items-start gap-4">
@@ -280,14 +286,17 @@ function HeaderSection({ branding, orgContact, template }: { branding: QuoteRend
           <img
             src={branding.logoUrl}
             alt={`${branding.tradingName} logo`}
-            className="max-h-14 max-w-[160px] object-contain print:max-h-12"
+            style={{ maxHeight: `${logoMaxHPx}px`, maxWidth: `${logoMaxWPx}px` }}
+            className="object-contain"
             data-testid="img-branding-logo"
           />
         )}
         <div>
-          <h2 className="text-2xl font-bold" style={{ color: template.colors.bodyText }} data-testid="text-trading-name">
-            {branding.tradingName}
-          </h2>
+          {template.header.showTradingName && (
+            <h2 className="text-2xl font-bold" style={{ color: template.colors.bodyText }} data-testid="text-trading-name">
+              {branding.tradingName}
+            </h2>
+          )}
           <p className="text-sm italic" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
             {branding.legalLine}
           </p>
@@ -423,6 +432,7 @@ function MediaImage({
   src,
   alt,
   className,
+  style,
   testId,
   fallbackTestId,
   fallbackText,
@@ -431,6 +441,7 @@ function MediaImage({
   src: string;
   alt: string;
   className?: string;
+  style?: React.CSSProperties;
   testId: string;
   fallbackTestId: string;
   fallbackText: string;
@@ -459,6 +470,7 @@ function MediaImage({
       src={src}
       alt={alt}
       className={className}
+      style={style}
       data-testid={testId}
       onError={() => {
         setFailed(true);
@@ -548,7 +560,8 @@ function ScheduleItemCard({
                   <MediaImage
                     src={media.drawingUrl}
                     alt={`Drawing for item ${item.index + 1}`}
-                    className="max-h-64 w-full object-contain rounded"
+                    style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
+                    className="w-full object-contain rounded"
                     testId={`img-drawing-${item.index}`}
                     fallbackTestId={`fallback-drawing-${item.index}`}
                     fallbackText="Drawing unavailable"
@@ -569,7 +582,7 @@ function ScheduleItemCard({
                   className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
                   onClick={() => {
                     if (!drawingFailed) {
-                      setViewerSrc(media.drawingUrl);
+                      setViewerSrc(media.drawingUrl!);
                       setViewerTitle(media.drawingLabel);
                     }
                   }}
@@ -577,7 +590,8 @@ function ScheduleItemCard({
                   <MediaImage
                     src={media.drawingUrl}
                     alt={`Drawing for item ${item.index + 1}`}
-                    className="max-h-64 object-contain rounded"
+                    style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
+                    className="object-contain rounded"
                     testId={`img-drawing-${item.index}`}
                     fallbackTestId={`fallback-drawing-${item.index}`}
                     fallbackText="Drawing unavailable"
