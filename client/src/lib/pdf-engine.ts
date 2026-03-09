@@ -182,6 +182,9 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
   const startY = y;
   const logoPreset = LOGO_SCALE_PRESETS[T.header.logoScale] || LOGO_SCALE_PRESETS.standard;
 
+  let logoBottomY = y;
+  let brandTextX = MARGIN;
+
   if (branding.logoUrl) {
     const logoData = await loadImageAsDataUrl(branding.logoUrl);
     if (logoData) {
@@ -191,30 +194,35 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
         const lw = dims.w * scale;
         const lh = dims.h * scale;
         pdf.addImage(logoData, MARGIN, y, lw, lh);
-        y += lh + 2;
+        logoBottomY = y + lh;
+        brandTextX = MARGIN + lw + 3;
       } catch { /* skip logo */ }
     }
   }
 
+  let textY = startY;
+
   if (T.header.showTradingName) {
-    const nameScale = T.header.logoScale === "large" ? 1.3 : T.header.logoScale === "small" ? 0.75 : 1;
+    const nameSize = T.header.logoScale === "large" ? 9 : T.header.logoScale === "small" ? 7 : 8;
     pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(Math.round(mmSize(T.typography.tradingNameSize) * nameScale));
+    pdf.setFontSize(nameSize);
     pdf.setTextColor(COLOR_BLACK);
-    pdf.text(branding.tradingName, MARGIN, y + 5);
-    y += Math.round(7 * nameScale);
+    pdf.text(branding.tradingName, brandTextX, textY + 4);
+    textY += 5;
   }
 
   pdf.setFont(FONT_NORMAL, "italic");
-  pdf.setFontSize(7);
+  pdf.setFontSize(6.5);
   pdf.setTextColor(COLOR_MUTED);
-  pdf.text(branding.legalLine, MARGIN, y + 2.5);
-  y += SECTION_GAP;
+  pdf.text(branding.legalLine, brandTextX, textY + 3.5);
+  textY += 5;
+
+  y = Math.max(logoBottomY + 2, textY);
 
   let rightY = startY + 2;
   const rightX = MARGIN + CW;
   pdf.setFont(FONT_NORMAL, "normal");
-  pdf.setFontSize(mmSize(T.typography.legalLineSize));
+  pdf.setFontSize(7);
   pdf.setTextColor(COLOR_MUTED);
 
   const contactLines: string[] = [];
@@ -225,7 +233,7 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
   if (orgContact.nzbn) contactLines.push(`NZBN: ${orgContact.nzbn}`);
 
   for (const line of contactLines) {
-    rightY += 3.5;
+    rightY += 3;
     pdf.text(line, rightX, rightY, { align: "right" });
   }
 
@@ -243,10 +251,10 @@ function renderSeparator(pdf: Pdf, y: number): number {
 function renderQuotationTitle(pdf: Pdf, y: number): number {
   const title = T.documentMode === "tender" ? "TENDER" : "QUOTATION";
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(14);
+  pdf.setFontSize(12);
   pdf.setTextColor(COLOR_ACCENT);
   pdf.text(title, MARGIN, y + 4);
-  y += 10;
+  y += 8;
   return y;
 }
 
@@ -516,10 +524,10 @@ async function renderSchedule(
   y = MARGIN;
 
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(mmSize(T.typography.itemTitleSize));
+  pdf.setFontSize(10);
   pdf.setTextColor(COLOR_ACCENT);
   pdf.text("SCHEDULE OF ITEMS", MARGIN, y + 4);
-  y += 10;
+  y += 8;
 
   for (let si = 0; si < model.scheduleItems.length; si++) {
     const item = model.scheduleItems[si];
@@ -559,19 +567,21 @@ async function renderScheduleItem(
   const pad = INNER_PAD;
 
   pdf.setFillColor(COLOR_BG_MUTED);
-  pdf.roundedRect(MARGIN, startY - 2, CW, headerH - 2, 1.5, 1.5, "F");
+  pdf.roundedRect(MARGIN, startY - 2, CW, headerH, 1, 1, "F");
 
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_BLACK);
-  pdf.text(item.title, MARGIN + pad, y + 5);
-  y += 7;
+  pdf.text(item.title, MARGIN + pad, y + 3.5);
 
+  const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}`;
   pdf.setFont(FONT_NORMAL, "normal");
-  pdf.setFontSize(mmSize(T.typography.bodyTextSize));
+  pdf.setFontSize(7);
   pdf.setTextColor(COLOR_MUTED);
-  pdf.text(`${item.quantityLabel}  \u00B7  ${item.dimensionLabel}`, MARGIN + pad, y + 3);
-  y += 7;
+  const subtitleW = pdf.getTextWidth(subtitleText);
+  pdf.text(subtitleText, MARGIN + CW - pad - subtitleW, y + 3.5);
+
+  y += headerH;
 
   if (SCHEDULE_LAYOUT === "specs_only_v1") {
     if (item.visibleSpecs.length > 0) {
@@ -663,7 +673,7 @@ function drawItemBorder(pdf: Pdf, startY: number, endY: number, startPage: numbe
 
   pdf.setDrawColor(COLOR_BORDER);
   pdf.setLineWidth(0.3);
-  pdf.roundedRect(MARGIN, startY - 2, CW, endY - startY + 4, 1.5, 1.5, "S");
+  pdf.roundedRect(MARGIN, startY - 2, CW, endY - startY + 3, 1, 1, "S");
 }
 
 async function renderPhotosFromCache(

@@ -872,33 +872,33 @@ function TemplateBuilderTab() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Header & Branding</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Controls how the company header appears on quotes and PDFs.</p>
+              <p className="text-xs text-muted-foreground mt-1">Controls the company header layout on quotes and PDFs</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-sm font-medium mb-1 block">Logo Size</Label>
-                <p className="text-xs text-muted-foreground mb-2">Controls the maximum dimensions of your company logo</p>
+                <Label className="text-sm font-medium mb-1 block">Logo Scale</Label>
+                <p className="text-xs text-muted-foreground mb-2">Sets the prominence of your company logo — the logo is the primary brand element</p>
                 <Select
-                  value={config.logoScale || "standard"}
+                  value={config.logoScale || "large"}
                   onValueChange={(v) => setConfig({ ...config, logoScale: v as LogoScale })}
                 >
                   <SelectTrigger data-testid="select-template-logoScale">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="small">Small — compact logo</SelectItem>
-                    <SelectItem value="standard">Standard — balanced size</SelectItem>
-                    <SelectItem value="large">Large — prominent logo</SelectItem>
+                    <SelectItem value="small">Small — minimal logo footprint</SelectItem>
+                    <SelectItem value="standard">Standard — balanced logo presence</SelectItem>
+                    <SelectItem value="large">Large — strong brand presence (recommended)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex items-center justify-between py-1.5">
                 <div>
-                  <p className="text-sm font-medium">Show Trading Name</p>
-                  <p className="text-xs text-muted-foreground">Display the company trading name alongside the logo</p>
+                  <p className="text-sm font-medium">Show Company Name</p>
+                  <p className="text-xs text-muted-foreground">Display the trading name as text next to the logo — off if logo contains company name</p>
                 </div>
                 <Switch
-                  checked={config.showTradingName !== false}
+                  checked={config.showTradingName === true}
                   onCheckedChange={(v) => setConfig({ ...config, showTradingName: v })}
                   data-testid="switch-showTradingName"
                 />
@@ -982,7 +982,7 @@ function TemplateBuilderTab() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-sm font-medium mb-1 block">Content Density</Label>
-                <p className="text-xs text-muted-foreground mb-2">Controls how tightly schedule items are packed — affects drawing sizes, spec row heights, and photo areas</p>
+                <p className="text-xs text-muted-foreground mb-2">Controls items per page — affects drawing size, spec rows, padding, and gaps in both preview and PDF</p>
                 <Select
                   value={config.densityPreset || "standard"}
                   onValueChange={(v) => setConfig({ ...config, densityPreset: v as DensityPreset })}
@@ -991,9 +991,9 @@ function TemplateBuilderTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="comfortable">Comfortable — larger drawings & photos, more whitespace</SelectItem>
-                    <SelectItem value="standard">Standard — balanced content density</SelectItem>
-                    <SelectItem value="compact">Compact — smaller drawings, tighter rows, more items per page</SelectItem>
+                    <SelectItem value="comfortable">Comfortable — ~3 items/page, generous spacing</SelectItem>
+                    <SelectItem value="standard">Standard — ~4 items/page, professional density (recommended)</SelectItem>
+                    <SelectItem value="compact">Compact — ~5 items/page, maximum information density</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1026,9 +1026,9 @@ function TemplateBuilderTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="small">Small — 20mm</SelectItem>
-                    <SelectItem value="medium">Medium — 30mm</SelectItem>
-                    <SelectItem value="large">Large — 45mm</SelectItem>
+                    <SelectItem value="small">Small — 18mm max</SelectItem>
+                    <SelectItem value="medium">Medium — 25mm max</SelectItem>
+                    <SelectItem value="large">Large — 40mm max</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

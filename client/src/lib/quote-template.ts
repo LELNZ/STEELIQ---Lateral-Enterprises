@@ -82,7 +82,7 @@ export interface QuoteTemplate {
 }
 
 export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
-  id: "company_master_v1",
+  id: "company_master_v2",
   name: "Lateral Enterprises — Master Quote Template",
   sections: [
     { key: "header", visible: true },
@@ -94,27 +94,27 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
     { key: "acceptance", visible: true },
   ],
   typography: {
-    tradingNameSize: "2xl",
-    legalLineSize: "sm",
+    tradingNameSize: "lg",
+    legalLineSize: "xs",
     sectionHeadingSize: "xs",
     bodyTextSize: "sm",
     specLabelSize: "xs",
     specValueSize: "sm",
-    itemTitleSize: "base",
+    itemTitleSize: "sm",
     totalsLabelSize: "sm",
-    totalsBoldSize: "lg",
+    totalsBoldSize: "base",
   },
   spacing: {
-    sectionGapMm: 6,
-    itemGapMm: 4,
-    innerPaddingMm: 4,
+    sectionGapMm: 5,
+    itemGapMm: 3,
+    innerPaddingMm: 3,
   },
   itemLayout: {
     drawingPosition: "left",
     specsPosition: "right",
     drawingMaxWidthPercent: 50,
     photosPosition: "below",
-    photoMaxSizeMm: 30,
+    photoMaxSizeMm: 25,
     scheduleLayoutVariant: "image_left_specs_right_v1",
     totalsLayoutVariant: "totals_block_v1",
   },
@@ -130,16 +130,16 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
     accent: "#374151",
   },
   header: {
-    logoScale: "standard",
-    showTradingName: true,
+    logoScale: "large",
+    showTradingName: false,
   },
   density: {
-    drawingMaxH: 55,
-    specRowH: 4.5,
-    itemHeaderH: 16,
-    photoRowH: 35,
-    itemCardPadMm: 4,
-    itemGapMm: 4,
+    drawingMaxH: 32,
+    specRowH: 3.8,
+    itemHeaderH: 10,
+    photoRowH: 22,
+    itemCardPadMm: 3,
+    itemGapMm: 3,
   },
   documentMode: "standard",
 };
@@ -165,9 +165,9 @@ export interface CompanyTemplateConfig {
 }
 
 const SPACING_PRESETS: Record<SpacingPreset, TemplateSpacing> = {
-  compact: { sectionGapMm: 4, itemGapMm: 2, innerPaddingMm: 3 },
-  standard: { sectionGapMm: 6, itemGapMm: 4, innerPaddingMm: 4 },
-  spacious: { sectionGapMm: 10, itemGapMm: 6, innerPaddingMm: 6 },
+  compact: { sectionGapMm: 3, itemGapMm: 2, innerPaddingMm: 2 },
+  standard: { sectionGapMm: 5, itemGapMm: 3, innerPaddingMm: 3 },
+  spacious: { sectionGapMm: 8, itemGapMm: 5, innerPaddingMm: 5 },
 };
 
 const TYPOGRAPHY_PRESETS: Record<TypographyPreset, Partial<TemplateTypography>> = {
@@ -177,22 +177,22 @@ const TYPOGRAPHY_PRESETS: Record<TypographyPreset, Partial<TemplateTypography>> 
 };
 
 const PHOTO_SIZE_PRESETS: Record<PhotoSizePreset, number> = {
-  small: 20,
-  medium: 30,
-  large: 45,
+  small: 18,
+  medium: 25,
+  large: 40,
 };
 
 const LOGO_SCALE_PRESETS: Record<LogoScale, { maxH: number; maxW: number }> = {
-  small: { maxH: 6, maxW: 20 },
-  standard: { maxH: 12, maxW: 40 },
-  large: { maxH: 22, maxW: 70 },
+  small: { maxH: 8, maxW: 28 },
+  standard: { maxH: 14, maxW: 48 },
+  large: { maxH: 24, maxW: 80 },
 };
 export { LOGO_SCALE_PRESETS };
 
 const DENSITY_PRESETS: Record<DensityPreset, TemplateDensity> = {
-  comfortable: { drawingMaxH: 60, specRowH: 5, itemHeaderH: 18, photoRowH: 38, itemCardPadMm: 5, itemGapMm: 6 },
-  standard: { drawingMaxH: 45, specRowH: 4, itemHeaderH: 14, photoRowH: 28, itemCardPadMm: 4, itemGapMm: 4 },
-  compact: { drawingMaxH: 30, specRowH: 3.2, itemHeaderH: 10, photoRowH: 18, itemCardPadMm: 2.5, itemGapMm: 2 },
+  comfortable: { drawingMaxH: 45, specRowH: 4.5, itemHeaderH: 14, photoRowH: 30, itemCardPadMm: 4, itemGapMm: 4 },
+  standard: { drawingMaxH: 32, specRowH: 3.8, itemHeaderH: 10, photoRowH: 22, itemCardPadMm: 3, itemGapMm: 3 },
+  compact: { drawingMaxH: 24, specRowH: 3, itemHeaderH: 8, photoRowH: 16, itemCardPadMm: 2, itemGapMm: 2 },
 };
 
 export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate {

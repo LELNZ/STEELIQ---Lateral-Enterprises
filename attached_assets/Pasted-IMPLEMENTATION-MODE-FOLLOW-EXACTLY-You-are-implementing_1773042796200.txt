@@ -1,0 +1,252 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Renderer
+→ Quote Preview
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create separate unrelated content models for preview and PDF.
+Do NOT introduce a freeform drag-and-drop builder or raw HTML/CSS editor in this pass.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum config support strictly required for improving the company master template.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any template/layout changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Implement Company Master Template v2.
+
+This is a focused visual redesign pass for the locked company-wide template using the existing template-builder architecture.
+
+DO NOT build a full drag-and-drop builder.
+DO NOT add more architecture plumbing than necessary.
+
+The goal is to make the default quote output look intentional, professional, and commercially readable in both:
+- Customer Quote Preview
+- PDF Export
+
+
+--------------------------------------------------
+T077 — Redesign the company master header properly
+--------------------------------------------------
+
+Problem:
+The current header is still weak:
+- logo is too small
+- the large "Lateral Joinery" text dominates too much
+- the legal line is not sitting subtly enough
+- overall hierarchy still feels like a generated report rather than a polished quotation
+
+Required implementation:
+
+1. Redesign the company master header composition using the existing template system.
+2. Preferred visual direction:
+   - larger logo with stronger brand presence
+   - remove or greatly reduce the oversized trading-name text as the dominant header element
+   - legal line sits lower and more subtly
+   - company contact block remains compact and right-aligned
+   - overall header feels cleaner and more premium
+
+3. Make sure this applies to BOTH Preview and PDF.
+
+4. If the current showTradingName control conflicts with this direction, update the control behavior or naming so it reflects the new intended header design.
+
+Acceptance criteria:
+- header is visibly stronger and cleaner
+- logo has more prominence
+- dominant oversized wordmark behavior is removed or substantially reduced
+- preview and PDF header feel like the same professional document family
+
+
+--------------------------------------------------
+T078 — Increase schedule density to a professional default
+--------------------------------------------------
+
+Problem:
+The current schedule item layout is too spacious.
+Too few items fit per page, especially in PDF.
+
+Required implementation:
+
+1. Redesign the default schedule item card density using the existing template and density system.
+2. Target best-practice defaults:
+   - drawings + specs: approximately 4 items per page where practical
+   - drawings + specs + site photos: approximately 3 items per page where practical
+   - compact mode may go denser, but readability must remain strong
+
+3. Reduce unnecessary vertical space by refining:
+   - card padding
+   - drawing size
+   - spec row height
+   - photo size
+   - gaps between cards
+   - subtitle/meta spacing
+
+4. Do NOT make the cards cramped or ugly.
+   Aim for professional density, not maximum compression.
+
+Acceptance criteria:
+- the document fits materially more information per page
+- schedule section feels tighter and more intentional
+- preview and PDF remain aligned in layout intent
+
+
+--------------------------------------------------
+T079 — Refine item card composition for readability and professionalism
+--------------------------------------------------
+
+Problem:
+Even with better density, the item cards need more deliberate composition.
+
+Required implementation:
+
+1. Refine item card structure so each card has:
+   - a clear header
+   - clear drawing/spec relationship
+   - clearly associated site photo placement
+   - less visual clutter
+   - stronger hierarchy
+
+2. Improve the visual treatment of:
+   - item title
+   - qty/dimensions subtitle
+   - spec table layout
+   - photo label and placement
+   - drawing/spec/photo grouping
+
+3. Keep the current company-standard schedule layout approach unless a small safe variant change clearly improves the document.
+
+Acceptance criteria:
+- item cards feel like the professional core of the quote
+- drawings/specs/photos read as one coherent item block
+- schedule section is more polished in both preview and PDF
+
+
+--------------------------------------------------
+T080 — Make the builder controls support the master template v2 design
+--------------------------------------------------
+
+Problem:
+The builder exists, but it must now support the redesigned master template in a meaningful way.
+
+Required implementation:
+
+1. Ensure the current builder controls meaningfully support the new master template design.
+2. Keep only controls that make sense for this v2 design.
+3. If some controls are now misleading, rename/hide/adjust them so the UI reflects reality.
+
+Priority controls to support clearly:
+- logo scale
+- trading name display behavior
+- density
+- schedule layout variant
+- photo size
+- totals layout
+- accent colour
+
+4. Do NOT add a large number of new controls unless clearly necessary.
+
+Acceptance criteria:
+- builder still feels coherent after the v2 redesign
+- controls remain understandable and useful
+- no obviously misleading controls remain
+
+
+--------------------------------------------------
+T081 — Keep Preview and PDF tightly aligned while improving design
+--------------------------------------------------
+
+Problem:
+We want a stronger design without causing preview/PDF drift.
+
+Required implementation:
+
+1. Apply the company_master_v2 redesign to BOTH Preview and PDF.
+2. Keep the same:
+   - section order
+   - template family
+   - hierarchy
+   - density intent
+   - header composition logic
+   - schedule card logic
+
+3. PDF can remain slightly more controlled because of pagination, but it must clearly look like the same document design as preview.
+
+Acceptance criteria:
+- preview and PDF are materially closer
+- the improved design is visible in both outputs
+- no major visual drift is introduced
+
+
+--------------------------------------------------
+T082 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- build a full drag-and-drop builder
+- add freeform block movement
+- add raw HTML/CSS editing
+- redesign quote lifecycle
+- add customer portal/email logic
+- introduce many new template systems
+- rebuild the renderer stack from scratch
+
+This is Company Master Template v2 only:
+a deliberate redesign of the default company quote template using the existing builder/template architecture.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The company default quote has a stronger, more professional header.
+2. The logo is materially more prominent.
+3. The oversized dominant wordmark issue is removed or substantially reduced.
+4. Schedule item density is improved to a more commercially useful level.
+5. Item cards feel cleaner, tighter, and more intentional.
+6. Preview and PDF remain aligned in the same company template family.
+7. The system is better prepared for later controlled template-builder expansion without needing drag-and-drop now.
+
+
+END OF IMPLEMENTATION

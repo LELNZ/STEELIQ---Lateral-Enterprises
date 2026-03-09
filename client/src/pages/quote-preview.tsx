@@ -196,7 +196,7 @@ export default function QuotePreview() {
           </div>
         )}
 
-        <h2 className="text-xl font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
+        <h2 className="text-lg font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
           {T.documentMode === "tender" ? "Tender" : "Quotation"}
         </h2>
 
@@ -218,8 +218,8 @@ export default function QuotePreview() {
         )}
 
         {isSectionVisible(T, "schedule") && (
-          <div className="print:break-before-page pt-2" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
-            <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
+          <div className="print:break-before-page" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+            <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
             {liveScheduleItems.length === 0 && (
               <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
             )}
@@ -280,8 +280,8 @@ function HeaderSection({ branding, orgContact, template }: { branding: QuoteRend
   const logoMaxWPx = Math.round(logoPreset.maxW * 3.78);
 
   return (
-    <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-      <div>
+    <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+      <div className="flex items-center gap-3">
         {branding.logoUrl && (
           <img
             src={branding.logoUrl}
@@ -291,24 +291,25 @@ function HeaderSection({ branding, orgContact, template }: { branding: QuoteRend
             data-testid="img-branding-logo"
           />
         )}
-        {template.header.showTradingName && (
-          <h2
-            className="font-bold mt-1"
-            style={{
-              color: template.colors.bodyText,
-              fontSize: template.header.logoScale === "large" ? "1.75rem" : template.header.logoScale === "small" ? "1rem" : "1.25rem",
-              lineHeight: 1.2,
-            }}
-            data-testid="text-trading-name"
-          >
-            {branding.tradingName}
-          </h2>
-        )}
-        <p className="text-xs italic mt-0.5" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
-          {branding.legalLine}
-        </p>
+        <div>
+          {template.header.showTradingName && (
+            <p
+              className="font-semibold leading-tight"
+              style={{
+                color: template.colors.bodyText,
+                fontSize: template.header.logoScale === "large" ? "1rem" : template.header.logoScale === "small" ? "0.75rem" : "0.875rem",
+              }}
+              data-testid="text-trading-name"
+            >
+              {branding.tradingName}
+            </p>
+          )}
+          <p className="text-[10px] italic leading-snug" style={{ color: template.colors.headingMuted }} data-testid="text-legal-line">
+            {branding.legalLine}
+          </p>
+        </div>
       </div>
-      <div className="sm:text-right text-xs space-y-0.5" style={{ color: template.colors.headingMuted }}>
+      <div className="sm:text-right text-[11px] space-y-0" style={{ color: template.colors.headingMuted, lineHeight: "1.4" }}>
         {orgContact.address && <p>{orgContact.address}</p>}
         {orgContact.phone && <p>{orgContact.phone}</p>}
         {orgContact.email && <p>{orgContact.email}</p>}
@@ -321,10 +322,10 @@ function HeaderSection({ branding, orgContact, template }: { branding: QuoteRend
 
 function CustomerProjectSection({ header, customerProject, template }: { header: QuoteRenderModel["header"]; customerProject: QuoteRenderModel["customerProject"]; template: QuoteTemplate }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Customer</p>
-        <p className="text-lg font-semibold" style={{ color: template.colors.bodyText }} data-testid="text-customer">{customerProject.customerName}</p>
+        <p className="text-base font-semibold" style={{ color: template.colors.bodyText }} data-testid="text-customer">{customerProject.customerName}</p>
         {customerProject.hasProjectAddress && (
           <div className="mt-2">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Project Address</p>
@@ -534,27 +535,23 @@ function ScheduleItemCard({
   const { visibleSpecs, media } = item;
   const loadedPhotos = media.customerPhotos.filter((p) => !failedPhotos.has(p.key));
 
-  const densityPadClass = template.density.itemCardPadMm >= 5 ? "p-5" : template.density.itemCardPadMm <= 3 ? "p-2" : "p-4";
-  const densityHeaderPadClass = template.density.itemCardPadMm >= 5 ? "px-5 py-3.5" : template.density.itemCardPadMm <= 3 ? "px-2 py-1.5" : "px-4 py-3";
-  const densityGapClass = template.density.itemGapMm >= 5 ? "space-y-4" : template.density.itemGapMm <= 2.5 ? "space-y-1.5" : "space-y-3";
-  const titleSize = template.density.itemCardPadMm >= 5 ? "text-base" : template.density.itemCardPadMm <= 3 ? "text-sm" : "text-base";
+  const padPx = Math.round(template.density.itemCardPadMm * 3.78);
   const photoSizePx = Math.round(template.itemLayout.photoMaxSizeMm * 3.78);
   const photoMaxHPx = Math.round(template.density.photoRowH * 3.78);
+  const gapPx = Math.max(4, Math.round(template.density.itemGapMm * 2));
 
   return (
-    <div className="rounded-lg overflow-hidden print:break-inside-avoid" style={{ border: `1px solid ${template.colors.border}` }} data-testid={`schedule-item-${item.index}`}>
-      <div className={`${densityHeaderPadClass} flex items-start justify-between gap-3`} style={{ backgroundColor: template.colors.bgMuted, borderBottom: `1px solid ${template.colors.border}` }}>
-        <div>
-          <h4 className={`font-bold ${titleSize}`} style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
-            {item.title}
-          </h4>
-          <p className="text-sm mt-0.5" style={{ color: template.colors.headingMuted }}>
-            {item.quantityLabel} &middot; {item.dimensionLabel}
-          </p>
-        </div>
+    <div className="rounded overflow-hidden print:break-inside-avoid" style={{ border: `1px solid ${template.colors.border}` }} data-testid={`schedule-item-${item.index}`}>
+      <div className="flex items-baseline justify-between" style={{ backgroundColor: template.colors.bgMuted, borderBottom: `1px solid ${template.colors.border}`, padding: `${Math.max(4, padPx - 4)}px ${padPx}px` }}>
+        <h4 className="font-bold text-sm leading-tight" style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
+          {item.title}
+        </h4>
+        <p className="text-xs whitespace-nowrap ml-3" style={{ color: template.colors.headingMuted }}>
+          {item.quantityLabel} &middot; {item.dimensionLabel}
+        </p>
       </div>
 
-      <div className={`${densityPadClass} ${densityGapClass}`}>
+      <div style={{ padding: `${padPx}px`, display: "flex", flexDirection: "column", gap: `${gapPx}px` }}>
         {template.itemLayout.scheduleLayoutVariant === "specs_only_v1" ? (
           <div>
             <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
@@ -622,9 +619,9 @@ function ScheduleItemCard({
         )}
 
         {loadedPhotos.length > 0 && (
-          <div className="space-y-2" data-testid={`photos-section-${item.index}`}>
-            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Site Photos</p>
-            <div className="flex flex-wrap" style={{ gap: `${Math.round(template.density.itemCardPadMm * 2)}px`, maxHeight: `${photoMaxHPx + 20}px`, overflow: "hidden" }}>
+          <div data-testid={`photos-section-${item.index}`}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Site Photos</p>
+            <div className="flex flex-wrap" style={{ gap: `${Math.max(4, Math.round(template.density.itemCardPadMm * 1.5))}px`, maxHeight: `${photoMaxHPx + 16}px`, overflow: "hidden" }}>
               {loadedPhotos.map((photo, pIdx) => (
                   <div key={photo.key} className="space-y-1">
                     <div
