@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, ClipboardList, Palette, Eye, EyeOff, RotateCcw } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, ClipboardList, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { getPresetsForDivision, PRESET_FIELD_LABELS, type SiteVisitPreset } from "@/lib/site-visit-presets";
@@ -278,7 +278,7 @@ function SiteVisitPresetsCard({ divisionCode }: { divisionCode: string }) {
       <Card>
         <CardContent className="py-6 text-center text-muted-foreground" data-testid="text-presets-placeholder">
           <ClipboardList className="w-5 h-5 mx-auto mb-2 opacity-50" />
-          No site visit presets configured for {divisionCode} yet
+          No job type presets configured for {divisionCode} yet
         </CardContent>
       </Card>
     );
@@ -287,12 +287,10 @@ function SiteVisitPresetsCard({ divisionCode }: { divisionCode: string }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Site Visit Presets</CardTitle>
+        <CardTitle className="text-base">Job Type Presets</CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">Default values prefilled when an estimator selects Renovation or New Build in Quote Builder. Read-only for now.</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-xs text-muted-foreground">
-          Default values applied when an estimator selects a site type in the quote builder. These are read-only for now — full editing coming soon.
-        </p>
         {presets.map((preset) => (
           <div key={preset.presetKey} className="border rounded-lg p-3" data-testid={`preset-card-${preset.presetKey}`}>
             <div className="flex items-center gap-2 mb-1">
@@ -509,9 +507,39 @@ function DivisionSettingsTab() {
         </div>
       ) : (
         <>
+          {/* ── SECTION 1: Quote Presentation — Division Overrides ── */}
+          <div className="space-y-1 mt-2" data-testid="section-quote-presentation">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Quote Presentation</h3>
+            </div>
+            <p className="text-xs text-muted-foreground pl-6">
+              These settings override the company quote template for this division. The base template is managed in the Template tab.
+            </p>
+          </div>
+
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Branding</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                Inherited Company Template
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/50 border border-border rounded-md" data-testid="info-base-template">
+                <span className="text-sm font-medium text-foreground">Company Master Template</span>
+                <span className="text-xs text-muted-foreground bg-background border px-1.5 py-0.5 rounded font-mono">{form.templateKey || "company_master_v2"}</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 pl-0.5">
+                Managed at company level. Divisions inherit this template and can override approved presentation settings below.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Division Branding</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Division-specific logo, name, and legal line used on customer quotes.</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -539,18 +567,13 @@ function DivisionSettingsTab() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Quote Presentation — Division Override</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Override the company master template defaults for this division. Base template structure is managed in the Template tab.</p>
+              <CardTitle className="text-base">Layout Overrides</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Override how schedule items and totals are arranged on this division's quotes.</p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Company Template</Label>
-                <Input value="company_master_v1" disabled data-testid="input-div-templateKey" />
-                <p className="text-xs text-muted-foreground mt-1">System-controlled — shared across all divisions</p>
-              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium mb-1 block">Schedule Layout (Division Override)</Label>
+                  <Label className="text-sm font-medium mb-1 block">Schedule Layout</Label>
                   <Select
                     value={form.scheduleLayoutVariant || ""}
                     onValueChange={(v) => setForm({ ...form, scheduleLayoutVariant: v })}
@@ -566,7 +589,7 @@ function DivisionSettingsTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium mb-1 block">Totals Layout (Division Override)</Label>
+                  <Label className="text-sm font-medium mb-1 block">Totals Layout</Label>
                   <Select
                     value={form.totalsLayoutVariant || ""}
                     onValueChange={(v) => setForm({ ...form, totalsLayoutVariant: v })}
@@ -586,7 +609,8 @@ function DivisionSettingsTab() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Theme</CardTitle>
+              <CardTitle className="text-base">Theme Overrides</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Override fonts, colours, and header style for this division. Leave blank to inherit from company template.</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -617,7 +641,7 @@ function DivisionSettingsTab() {
                     onValueChange={(v) => setForm({ ...form, logoPosition: v })}
                   >
                     <SelectTrigger data-testid="select-div-logoPosition">
-                      <SelectValue placeholder="Select position" />
+                      <SelectValue placeholder="Inherit from company" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="left">Left</SelectItem>
@@ -633,7 +657,7 @@ function DivisionSettingsTab() {
                     onValueChange={(v) => setForm({ ...form, headerVariant: v })}
                   >
                     <SelectTrigger data-testid="select-div-headerVariant">
-                      <SelectValue placeholder="Select variant" />
+                      <SelectValue placeholder="Inherit from company" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="standard">Standard</SelectItem>
@@ -649,11 +673,9 @@ function DivisionSettingsTab() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Content Overrides</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">Override the organisation-level text blocks for this division. Leave blank to use the company default.</p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-xs text-muted-foreground">
-                Override the organisation-level defaults for this division. Leave blank to use the org default.
-              </p>
               <div>
                 <Label className="text-sm font-medium mb-1 block">Terms Override</Label>
                 <Textarea
@@ -688,11 +710,9 @@ function DivisionSettingsTab() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Spec Display Defaults</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">Select which specs appear by default on customer quotes for {selectedCode}.</p>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Select which specs appear by default on customer quotes for {selectedCode}
-                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {visibleSpecs.map((entry) => {
                     const checked = currentDefaults.includes(entry.key);
@@ -724,9 +744,22 @@ function DivisionSettingsTab() {
             </Card>
           )}
 
+          <Separator className="my-6" />
+
+          {/* ── SECTION 2: On-Site Estimate Defaults ── */}
+          <div className="space-y-1" data-testid="section-estimate-defaults">
+            <div className="flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">On-Site Estimate Defaults</h3>
+            </div>
+            <p className="text-xs text-muted-foreground pl-6">
+              These defaults are used in Quote Builder to prefill item specifics when Renovation or New Build is selected. They speed up on-site quote creation. Items can still be reviewed and edited later.
+            </p>
+          </div>
+
           <SiteVisitPresetsCard divisionCode={selectedCode} />
 
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-2">
             <Button onClick={handleSave} disabled={isLoading || mutation.isPending} data-testid="button-save-division">
               {mutation.isPending ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>

@@ -1,0 +1,241 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused settings UX cleanup pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, snapshot flow, or template rendering architecture.
+3. Do NOT move division estimate defaults into the quote template system.
+4. Do NOT add drag-and-drop editing, freeform template editing, or raw HTML/CSS editing.
+5. Do NOT add unrelated schema fields, endpoints, or systems.
+6. Do NOT bypass QuoteDocument, QuoteRenderModel, Preview, or PDF engine.
+7. Preserve the existing architecture split:
+   - Division estimate defaults for on-site quote building
+   - Company template + division overrides for customer quote presentation
+8. Focus only on:
+   - settings UX clarity
+   - clearer separation of estimate defaults vs quote presentation overrides
+   - better labeling of the locked company master template
+   - making the division page easier to understand and use
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderModel
+→ Preview
+→ PDF Export
+
+Division Estimate Defaults
+→ prefill item specifics in Quote Builder
+
+Company Master Template
+→ Division Presentation Overrides
+→ resolved customer quote presentation
+
+Do NOT collapse these two systems together.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless absolutely necessary.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any settings UX / labeling changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Clean up the Division Settings UX so it is obvious that:
+
+1. the division page contains TWO different systems:
+   - On-Site Estimate Defaults / Presets
+   - Quote Presentation — Division Overrides
+
+2. the locked company master template is the inherited base template for quote presentation
+
+3. the on-site presets are editable division-level defaults used by Quote Builder when Renovation or New Build is selected
+
+
+--------------------------------------------------
+T101 — Make the locked base template field clearly informational, not a dead input
+--------------------------------------------------
+
+Problem:
+The current `company_master_v1` field on the Division page is architecturally correct, but it looks like a disabled/blank input rather than a clear inherited system value.
+
+Required implementation:
+
+1. Replace or restyle the current locked base-template field so it reads clearly as an inherited system value.
+
+Preferred wording:
+- Base Template
+- Company Template
+- Inherited Company Template
+
+Example helper text:
+- "Managed at company level. Divisions inherit this template and can override approved presentation settings below."
+
+2. It should look like an informational system field, not a broken or dead editable field.
+
+3. Keep it read-only / locked at the division level.
+
+Acceptance criteria:
+- `company_master_v1` is still locked
+- the UI clearly explains what it is
+- it no longer feels like a broken disabled input
+
+
+--------------------------------------------------
+T102 — Clearly separate Quote Presentation overrides from On-Site Estimate Defaults
+--------------------------------------------------
+
+Problem:
+The Division page currently risks mixing together:
+- customer quote presentation settings
+- on-site estimating presets
+
+These are different systems and should be visually and conceptually separated.
+
+Required implementation:
+
+1. Create a clear UI separation between:
+   A. Quote Presentation — Division Overrides
+   B. On-Site Estimate Defaults / Presets
+
+2. Use headings, descriptions, spacing, and/or cards so the distinction is obvious.
+
+Recommended language:
+A. Quote Presentation — Division Overrides
+   "These settings override the company quote template for this division."
+
+B. On-Site Estimate Defaults
+   "These defaults are used in Quote Builder to prefill item specifics when Renovation or New Build is selected."
+
+3. Do NOT merge them into the same settings block.
+
+Acceptance criteria:
+- users can immediately see that there are two separate purposes on the page
+- quote presentation and estimate defaults are no longer conceptually blended
+
+
+--------------------------------------------------
+T103 — Improve the On-Site Estimate Defaults / Presets section
+--------------------------------------------------
+
+Problem:
+These presets are important operationally, but the page should make their purpose clearer.
+
+Required implementation:
+
+1. Rename or relabel the current presets section more clearly.
+Preferred options:
+- On-Site Estimate Defaults
+- Division Estimate Defaults
+- Job Type Presets
+
+Choose the clearest wording that matches the actual behavior.
+
+2. Add helper text explaining the workflow:
+- used in Quote Builder when Renovation or New Build is selected
+- intended to speed up on-site quote creation
+- item specifics can still be reviewed and edited later in the office
+
+3. Make the job-type grouping clear:
+- Renovation defaults
+- New Build defaults
+
+4. If the current UI is cluttered, improve layout/spacing so it is easier to scan and edit.
+
+Acceptance criteria:
+- presets section is easier to understand
+- users can see how Renovation and New Build defaults are used
+- the field-workflow intent is obvious
+
+
+--------------------------------------------------
+T104 — Preserve the current architecture and behavior
+--------------------------------------------------
+
+Problem:
+This pass is for UX clarity only, not architecture change.
+
+Required implementation:
+
+1. Keep the actual behavior unchanged:
+- Division estimate defaults still prefill Quote Builder item specifics
+- Company template still drives quote presentation
+- Division presentation settings still override approved template values only
+
+2. Do NOT move data between systems.
+3. Do NOT redesign how defaults are applied.
+
+Acceptance criteria:
+- architecture stays the same
+- behavior stays the same
+- only the clarity/usability of the settings page improves
+
+
+--------------------------------------------------
+T105 — Make the page feel intentional and professional
+--------------------------------------------------
+
+Problem:
+The settings page should feel like a professional admin interface, not a collection of unrelated forms.
+
+Required implementation:
+
+1. Improve card titles, descriptions, spacing, and visual hierarchy.
+2. Make the page easier to scan.
+3. Ensure labels match the true system behavior.
+
+Acceptance criteria:
+- settings page feels more deliberate and professional
+- admins can understand what belongs to quote presentation vs on-site estimating
+
+
+--------------------------------------------------
+T106 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- add new template systems
+- add new estimating systems
+- redesign lifecycle
+- add drag-and-drop editing
+- add unrelated builder controls
+- move division estimate defaults into template builder
+- rebuild the settings page from scratch unless necessary
+
+This is a settings UX clarity pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The locked `company_master_v1` field is clearly understood as an inherited company template.
+2. The Division page clearly separates:
+   - Quote Presentation — Division Overrides
+   - On-Site Estimate Defaults / Presets
+3. The on-site presets are clearly explained as the defaults used by Quote Builder for Renovation / New Build.
+4. The page is easier to understand and feels more professional.
+5. The underlying behavior and architecture remain unchanged.
+
+
+END OF IMPLEMENTATION
