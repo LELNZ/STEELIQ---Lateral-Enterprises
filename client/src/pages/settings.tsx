@@ -819,7 +819,7 @@ function TemplateBuilderTab() {
   const [config, setConfig] = useState<CompanyTemplateConfig>({});
 
   useEffect(() => {
-    if (savedConfig && Object.keys(savedConfig).length > 0) {
+    if (savedConfig) {
       setConfig(savedConfig);
     }
   }, [savedConfig]);
