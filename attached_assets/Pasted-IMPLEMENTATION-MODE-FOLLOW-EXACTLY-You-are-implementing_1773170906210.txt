@@ -1,0 +1,254 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused correction pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, snapshot flow, or template rendering architecture.
+3. Do NOT move division estimate defaults into the quote template system.
+4. Do NOT allow free-text preset entry for constrained item-specific fields.
+5. Do NOT add unrelated schema fields, endpoints, or systems.
+6. Preserve the architecture split:
+   - Division Estimate Defaults / Job Type Presets
+   - Company Template + Division Presentation Overrides
+7. Focus only on:
+   - converting preset fields to library-backed controlled dropdowns
+   - ensuring Quote Builder and presets use the same option sources
+   - handling invalid/outdated preset values safely
+   - applying presets correctly when site type is selected
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderModel
+→ Preview
+→ PDF Export
+
+Division Estimate Defaults / Job Type Presets
+→ prefill item specifics in Quote Builder when Renovation or New Build is selected
+
+Library / Item Specification Option Sources
+→ must be the source of truth for constrained preset values
+
+Company Master Template
+→ Division Presentation Overrides
+→ resolved customer quote presentation
+
+Do NOT collapse these systems together.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required for library-backed preset values and invalid-value handling.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints unless needed for existing settings/data load paths.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Exact preset fields now driven by library-backed dropdowns
+5. How invalid/outdated preset values are handled
+6. How Quote Builder applies presets on site type selection
+7. Any risks or limitations remaining
+8. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Correct the Division Job Type Presets implementation so it matches the real business rule:
+
+- preset values must come from the same Library-backed option sources as Quote Builder
+- no free text for constrained item-specific fields
+- selecting Renovation / New Build in Quote Builder should apply those preset values over the top of existing values at the time of selection
+- after application, the user can still manually edit values
+- outdated preset values must be flagged for admin update, not silently accepted as valid current options
+
+
+--------------------------------------------------
+T113 — Replace text inputs with library-backed dropdown/select inputs
+--------------------------------------------------
+
+Problem:
+The current preset editing UI uses text/number inputs, which is incorrect because these values are tied to library/pricing models and must only come from valid selectable options.
+
+Required implementation:
+
+1. Replace all constrained preset fields with dropdown/select inputs populated from the same source of truth used by Quote Builder item specifics.
+
+2. NO FREE TEXT for these preset-controlled fields.
+
+3. At minimum, the current editable preset fields must become controlled selects from library-backed options:
+- frameType
+- glassIguType
+- glassType
+- glassThickness
+- linerType
+- handleType
+- wallThickness
+- windZone
+
+4. If any field truly has no library-backed option source, do NOT leave it as free text without explicitly documenting that gap.
+   Prefer to locate and reuse the real option source used by Quote Builder.
+
+Acceptance criteria:
+- preset fields are no longer free text
+- admins choose only valid library-backed options
+- presets stay aligned with pricing/model logic
+
+
+--------------------------------------------------
+T114 — Ensure preset dropdown options come from the same source as Quote Builder
+--------------------------------------------------
+
+Problem:
+The presets must stay aligned with Quote Builder and the Library, including future library updates.
+
+Required implementation:
+
+1. Trace the actual option sources used by Quote Builder item specifics.
+2. Reuse those same option sources for the Division Job Type Presets UI.
+3. Do NOT create a separate static options list for presets if Quote Builder already has the correct source.
+
+4. Confirm whether Quote Builder is currently using proper library-backed division context or any remaining LJ-specific hardcoding.
+5. If a hardcoded LJ-specific path is blocking correct preset sourcing, fix the smallest safe part required so preset options and Quote Builder draw from the same real source of truth.
+
+Acceptance criteria:
+- presets and Quote Builder use the same underlying option source
+- library updates naturally flow through to preset dropdown options
+- no duplicate static option list is introduced
+
+
+--------------------------------------------------
+T115 — Handle invalid/outdated preset values safely and visibly
+--------------------------------------------------
+
+Problem:
+Library options may change over time, making old saved preset values invalid.
+
+Required implementation:
+
+1. When a saved preset value no longer exists in the current library-backed option set:
+   - show a visible warning / update required state in Settings
+   - show the available current dropdown options
+   - do NOT silently pretend the old value is still valid current data
+
+2. The admin must be able to reselect a valid current option and save.
+
+3. Preserve historical quote integrity:
+   - old quotes/revisions must continue to show the snapped historical values they were generated with
+   - changing library options or presets must NOT rewrite old quotes
+
+Acceptance criteria:
+- invalid preset values are clearly flagged
+- admins are prompted to update them
+- old quotes remain historically correct
+
+
+--------------------------------------------------
+T116 — Apply presets correctly in Quote Builder when site type is selected
+--------------------------------------------------
+
+Problem:
+When the user selects Renovation or New Build, the preset should actively apply over the current item-specific values at that moment.
+
+Required implementation:
+
+1. When site type is selected in Quote Builder:
+   - Renovation applies the saved Renovation preset values
+   - New Build applies the saved New Build preset values
+
+2. This application should overwrite the preset-controlled fields at the time of selection, even if they already contain values.
+
+3. After the preset is applied, the user must still be able to manually adjust fields as normal.
+
+4. Do NOT create a continuously reapplying lock.
+   The overwrite should happen at selection time only.
+
+Acceptance criteria:
+- selecting site type replaces preset-controlled values at selection time
+- users can still edit values afterward
+- behavior matches on-site workflow expectations
+
+
+--------------------------------------------------
+T117 — Keep support limited to Renovation and New Build only
+--------------------------------------------------
+
+Problem:
+We only want the two current job/site types for now.
+
+Required implementation:
+
+1. Keep preset editing grouped only into:
+   - Renovation
+   - New Build
+
+2. Do NOT introduce additional job/site types in this pass.
+
+Acceptance criteria:
+- only the two required preset groups are supported
+- no speculative extra types are added
+
+
+--------------------------------------------------
+T118 — Keep estimate defaults separate from quote presentation
+--------------------------------------------------
+
+Problem:
+This correction pass must not blur the distinction between estimate defaults and quote presentation.
+
+Required implementation:
+
+1. Keep these editable job type presets fully separate from:
+   - company quote template
+   - division presentation overrides
+   - Preview/PDF styling controls
+
+2. Ensure the settings page still clearly communicates the distinction.
+
+Acceptance criteria:
+- estimate defaults remain their own system
+- quote presentation remains its own system
+- architecture stays clean
+
+
+--------------------------------------------------
+T119 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- redesign the template builder
+- add drag-and-drop editing
+- redesign quote lifecycle
+- add customer portal/email logic
+- add unrelated preset systems
+- allow arbitrary custom values outside the library option model
+- rebuild the renderer stack
+
+This is a library-backed preset input correction pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Division Job Type Presets use only library-backed dropdown/select inputs.
+2. Preset values come from the same real source of truth as Quote Builder item specifics.
+3. Invalid/outdated saved preset values are clearly flagged and require update.
+4. Selecting Renovation / New Build in Quote Builder applies preset-controlled values over current values at selection time only.
+5. Users can still manually adjust values after preset application.
+6. Historical quotes remain unchanged because quote revisions continue to rely on snapshots.
+
+
+END OF IMPLEMENTATION

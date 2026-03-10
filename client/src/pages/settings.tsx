@@ -11,10 +11,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
-import { resolvePresetsForDivision, PRESET_FIELD_LABELS, PRESET_FIELD_KEYS, type SiteVisitPresetDefaults, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
+import { resolvePresetsForDivision, PRESET_FIELD_LABELS, type SiteVisitPresetDefaults, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
+import { useLibraryOptions } from "@/hooks/use-library-options";
 import {
   COMPANY_MASTER_TEMPLATE,
   applyCompanyConfig,
@@ -271,6 +272,54 @@ function OrgSettingsTab() {
   );
 }
 
+function InvalidPresetWarning({ field, value }: { field: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5 mt-1 text-amber-600 dark:text-amber-400" data-testid={`warning-invalid-${field}`}>
+      <AlertTriangle className="w-3 h-3 shrink-0" />
+      <span className="text-[10px] leading-tight">
+        Saved value "{value}" is no longer available. Please select a current option.
+      </span>
+    </div>
+  );
+}
+
+function PresetSelectField({
+  presetKey,
+  field,
+  value,
+  options,
+  onChange,
+}: {
+  presetKey: string;
+  field: string;
+  value: string | undefined;
+  options: { value: string; label: string }[];
+  onChange: (val: string | undefined) => void;
+}) {
+  const isInvalid = value !== undefined && value !== "" && !options.some(o => o.value === value);
+
+  return (
+    <div>
+      <Label className="text-xs font-medium mb-1 block text-muted-foreground">{PRESET_FIELD_LABELS[field as keyof typeof PRESET_FIELD_LABELS]}</Label>
+      <Select
+        value={value || "__none__"}
+        onValueChange={(v) => onChange(v === "__none__" ? undefined : v)}
+      >
+        <SelectTrigger className="h-8 text-sm" data-testid={`select-preset-${presetKey}-${field}`}>
+          <SelectValue placeholder="Not set" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">Not set</SelectItem>
+          {options.map(o => (
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {isInvalid && <InvalidPresetWarning field={`${presetKey}-${field}`} value={value!} />}
+    </div>
+  );
+}
+
 function PresetFieldEditor({ 
   presetKey,
   defaults, 
@@ -280,42 +329,51 @@ function PresetFieldEditor({
   defaults: SiteVisitPresetDefaults; 
   onChange: (updated: SiteVisitPresetDefaults) => void;
 }) {
+  const lib = useLibraryOptions();
+
   const updateField = (field: keyof SiteVisitPresetDefaults, value: string | number | undefined) => {
     const next = { ...defaults };
-    if (value === "" || value === undefined) {
+    if (value === undefined) {
       delete next[field];
     } else {
       (next as any)[field] = value;
     }
+    if (field === "glassIguType") {
+      delete next.glassType;
+      delete next.glassThickness;
+    }
+    if (field === "glassType") {
+      delete next.glassThickness;
+    }
     onChange(next);
   };
 
+  const allFrameTypes = lib.frameTypeOptions("windows-standard");
+  const glassComboStrings = defaults.glassIguType ? lib.glassComboOptions(defaults.glassIguType) : [];
+  const glassComboOpts = glassComboStrings.map(c => ({ value: c, label: c }));
+  const thicknessStrings = defaults.glassIguType && defaults.glassType ? lib.glassThicknessOptions(defaults.glassIguType, defaults.glassType) : [];
+  const thicknessOpts = thicknessStrings.map(t => ({ value: t, label: t }));
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {PRESET_FIELD_KEYS.map((field) => {
-        const isNumeric = field === "wallThickness";
-        const value = defaults[field];
-        return (
-          <div key={field}>
-            <Label className="text-xs font-medium mb-1 block text-muted-foreground">{PRESET_FIELD_LABELS[field]}</Label>
-            <Input
-              value={value !== undefined ? String(value) : ""}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (isNumeric) {
-                  updateField(field, raw === "" ? undefined : Number(raw));
-                } else {
-                  updateField(field, raw || undefined);
-                }
-              }}
-              type={isNumeric ? "number" : "text"}
-              placeholder="Not set"
-              className="h-8 text-sm"
-              data-testid={`input-preset-${presetKey}-${field}`}
-            />
-          </div>
-        );
-      })}
+      <PresetSelectField presetKey={presetKey} field="frameType" value={defaults.frameType} options={allFrameTypes} onChange={(v) => updateField("frameType", v)} />
+      <PresetSelectField presetKey={presetKey} field="glassIguType" value={defaults.glassIguType} options={lib.iguTypeOptions} onChange={(v) => updateField("glassIguType", v)} />
+      <PresetSelectField presetKey={presetKey} field="glassType" value={defaults.glassType} options={glassComboOpts} onChange={(v) => updateField("glassType", v)} />
+      <PresetSelectField presetKey={presetKey} field="glassThickness" value={defaults.glassThickness} options={thicknessOpts} onChange={(v) => updateField("glassThickness", v)} />
+      <PresetSelectField presetKey={presetKey} field="linerType" value={defaults.linerType} options={lib.linerOptions} onChange={(v) => updateField("linerType", v)} />
+      <PresetSelectField presetKey={presetKey} field="handleType" value={defaults.handleType} options={lib.handleOptions("windows-standard")} onChange={(v) => updateField("handleType", v)} />
+      <div>
+        <Label className="text-xs font-medium mb-1 block text-muted-foreground">{PRESET_FIELD_LABELS.wallThickness}</Label>
+        <Input
+          value={defaults.wallThickness !== undefined ? String(defaults.wallThickness) : ""}
+          onChange={(e) => updateField("wallThickness", e.target.value === "" ? undefined : Number(e.target.value))}
+          type="number"
+          placeholder="Not set"
+          className="h-8 text-sm"
+          data-testid={`input-preset-${presetKey}-wallThickness`}
+        />
+      </div>
+      <PresetSelectField presetKey={presetKey} field="windZone" value={defaults.windZone} options={lib.windZoneOptions} onChange={(v) => updateField("windZone", v)} />
     </div>
   );
 }

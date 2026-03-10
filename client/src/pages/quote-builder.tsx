@@ -1047,10 +1047,11 @@ export default function QuoteBuilder() {
   function handleSiteTypeChange(newType: "renovation" | "new_build" | null) {
     setSiteType(newType);
     setHasUnsavedChanges(true);
-    if (!editingId && !formIsDirty) {
-      form.reset(getNewItemDefaults(newType));
-      lastAutoWindZone.current = getPresetDefaults(newType).windZone || "";
-    }
+    const presetOverrides = getPresetDefaults(newType);
+    const currentValues = form.getValues();
+    const merged = { ...currentValues, ...presetOverrides };
+    form.reset(merged);
+    lastAutoWindZone.current = presetOverrides.windZone || "";
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
