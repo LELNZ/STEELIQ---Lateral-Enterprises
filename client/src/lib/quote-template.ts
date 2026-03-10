@@ -121,7 +121,7 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
     specsPosition: "right",
     drawingMaxWidthPercent: 50,
     photosPosition: "below",
-    photoMaxSizeMm: 25,
+    photoMaxSizeMm: 20,
     scheduleLayoutVariant: "image_left_specs_right_v1",
     totalsLayoutVariant: "totals_block_v1",
   },
@@ -139,19 +139,19 @@ export const COMPANY_MASTER_TEMPLATE: QuoteTemplate = {
   header: {
     logoScale: "large",
     showTradingName: false,
-    logoWidthMm: 80,
-    logoMaxHeightMm: 24,
+    logoWidthMm: 70,
+    logoMaxHeightMm: 26,
     legalLinePlacement: "under_logo",
-    contactBlockAlignment: "right",
-    headerBottomSpacingMm: 4,
+    contactBlockAlignment: "compact_right",
+    headerBottomSpacingMm: 5,
   },
   density: {
-    drawingMaxH: 38,
-    specRowH: 3.5,
-    itemHeaderH: 10,
-    photoRowH: 20,
-    itemCardPadMm: 3,
-    itemGapMm: 3,
+    drawingMaxH: 40,
+    specRowH: 3.3,
+    itemHeaderH: 9,
+    photoRowH: 18,
+    itemCardPadMm: 2.8,
+    itemGapMm: 2.8,
   },
   documentMode: "standard",
 };
@@ -200,22 +200,22 @@ const TYPOGRAPHY_PRESETS: Record<TypographyPreset, Partial<TemplateTypography>> 
 };
 
 const PHOTO_SIZE_PRESETS: Record<PhotoSizePreset, number> = {
-  small: 18,
-  medium: 25,
-  large: 40,
+  small: 15,
+  medium: 20,
+  large: 35,
 };
 
 const LOGO_SCALE_PRESETS: Record<LogoScale, { maxH: number; maxW: number }> = {
   small: { maxH: 8, maxW: 28 },
   standard: { maxH: 14, maxW: 48 },
-  large: { maxH: 24, maxW: 80 },
+  large: { maxH: 26, maxW: 70 },
 };
 export { LOGO_SCALE_PRESETS };
 
 const DENSITY_PRESETS: Record<DensityPreset, TemplateDensity> = {
   comfortable: { drawingMaxH: 50, specRowH: 4.2, itemHeaderH: 12, photoRowH: 28, itemCardPadMm: 4, itemGapMm: 4 },
-  standard: { drawingMaxH: 38, specRowH: 3.5, itemHeaderH: 10, photoRowH: 20, itemCardPadMm: 3, itemGapMm: 3 },
-  compact: { drawingMaxH: 28, specRowH: 3, itemHeaderH: 8, photoRowH: 16, itemCardPadMm: 2, itemGapMm: 2 },
+  standard: { drawingMaxH: 40, specRowH: 3.3, itemHeaderH: 9, photoRowH: 18, itemCardPadMm: 2.8, itemGapMm: 2.8 },
+  compact: { drawingMaxH: 28, specRowH: 2.8, itemHeaderH: 8, photoRowH: 14, itemCardPadMm: 2, itemGapMm: 2 },
 };
 
 export function applyCompanyConfig(config: CompanyTemplateConfig): QuoteTemplate {

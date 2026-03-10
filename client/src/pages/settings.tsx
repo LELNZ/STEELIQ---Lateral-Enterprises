@@ -957,7 +957,7 @@ function TemplateBuilderTab() {
                 <Label className="text-sm font-medium mb-1 block">Contact Block</Label>
                 <p className="text-xs text-muted-foreground mb-2">Controls how compact the address/phone/email block appears</p>
                 <Select
-                  value={config.contactBlockAlignment || "right"}
+                  value={config.contactBlockAlignment || COMPANY_MASTER_TEMPLATE.header.contactBlockAlignment}
                   onValueChange={(v) => setConfig({ ...config, contactBlockAlignment: v as ContactBlockAlignment })}
                 >
                   <SelectTrigger data-testid="select-template-contactBlockAlignment">
@@ -1111,9 +1111,9 @@ function TemplateBuilderTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="small">Small — 18mm max</SelectItem>
-                    <SelectItem value="medium">Medium — 25mm max</SelectItem>
-                    <SelectItem value="large">Large — 40mm max</SelectItem>
+                    <SelectItem value="small">Small — 15mm max</SelectItem>
+                    <SelectItem value="medium">Medium — 20mm max (recommended)</SelectItem>
+                    <SelectItem value="large">Large — 35mm max</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
