@@ -1,0 +1,242 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused feature pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, snapshot flow, or template rendering architecture.
+3. Do NOT move division estimate defaults into the quote template system.
+4. Do NOT add drag-and-drop editing, freeform editing, or unrelated admin systems.
+5. Do NOT add unrelated schema fields or endpoints.
+6. Preserve the architecture split:
+   - Division Estimate Defaults / Job Type Presets
+   - Company Template + Division Presentation Overrides
+7. Focus only on making the division Job Type Presets editable, persisted, and actually used by Quote Builder.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderModel
+→ Preview
+→ PDF Export
+
+Division Estimate Defaults / Job Type Presets
+→ prefill item specifics in Quote Builder when Renovation or New Build is selected
+
+Company Master Template
+→ Division Presentation Overrides
+→ resolved customer quote presentation
+
+Do NOT collapse these two systems together.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required for editable division job type presets.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints unless needed for the existing settings save/load path.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Exact fields now editable in Renovation / New Build presets
+5. Any migration/backfill actions performed
+6. Any risks or limitations remaining
+7. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Make the Division "Job Type Presets" editable and persisted.
+
+Current problem:
+- the Division page now clearly shows Job Type Presets
+- but they are still read-only and sourced from static seed data
+- this prevents real admin control over on-site estimating defaults
+
+The goal is:
+- allow LJ (and later LE/LL) to edit Renovation and New Build defaults
+- persist those defaults at the division level
+- use them in Quote Builder when site type is selected
+- keep this separate from the quote presentation/template system
+
+
+--------------------------------------------------
+T107 — Add persistent division job type preset storage
+--------------------------------------------------
+
+Problem:
+Job Type Presets are currently read-only and sourced from static seed data.
+
+Required implementation:
+
+1. Add the minimum required persistent storage for division-level job type presets.
+
+Recommended model:
+- store under division/org settings config rather than inventing a separate unrelated system, if that fits the existing architecture cleanly
+
+The stored structure should support at minimum:
+- renovation preset object
+- new_build preset object
+
+2. Keep the shape explicit and safe.
+3. Do NOT create a generic freeform blob with no structure or validation if a structured JSON shape can be validated.
+
+Acceptance criteria:
+- division-level Renovation and New Build presets have persistent storage
+- they are no longer read-only static seed values
+
+
+--------------------------------------------------
+T108 — Make the Division Job Type Presets editable in Settings
+--------------------------------------------------
+
+Problem:
+Admins need to edit the Renovation and New Build defaults used for on-site quote creation.
+
+Required implementation:
+
+1. Replace the read-only Job Type Presets display with an editable form.
+
+2. Provide clearly separated editable sections for:
+   - Renovation defaults
+   - New Build defaults
+
+3. Include the fields currently used by Quote Builder prefill logic.
+Use the real existing relevant fields, such as the division/job-type defaults already being shown, for example:
+- frame type / frame series
+- glass type / IGU type
+- wall thickness
+- liner type
+- wind zone
+- flashing defaults
+- standard colour / finish defaults
+- and any other actual current prefill fields
+
+4. Use safe control types:
+   - text inputs
+   - numeric inputs
+   - selects
+   - toggles
+   Do NOT build anything overcomplicated.
+
+5. Add helper text explaining:
+   - these values prefill item specifics in Quote Builder
+   - they are applied when Renovation or New Build is selected
+   - items can still be reviewed and edited later in the office
+
+Acceptance criteria:
+- Job Type Presets are editable in the Division settings page
+- Renovation and New Build presets are clearly separated
+- the UI is understandable and professional
+
+
+--------------------------------------------------
+T109 — Persist and load the editable presets correctly
+--------------------------------------------------
+
+Problem:
+The settings UI must reflect real persisted values, not local-only or seed-only values.
+
+Required implementation:
+
+1. Load the persisted Renovation / New Build preset values into the Division settings page.
+2. Save edits through the existing settings save path if practical.
+3. Ensure the saved values reload correctly after refresh.
+4. If legacy divisions have no saved presets yet, fall back safely to the current static defaults and allow them to be saved going forward.
+
+Acceptance criteria:
+- edit → save → refresh works
+- persisted division presets are correctly reloaded
+- fallback to legacy defaults is safe where needed
+
+
+--------------------------------------------------
+T110 — Make Quote Builder use the persisted division presets
+--------------------------------------------------
+
+Problem:
+Editable presets are only useful if Quote Builder actually uses them.
+
+Required implementation:
+
+1. Ensure Quote Builder uses the persisted division-level presets when site type is selected:
+   - Renovation → applies division renovation preset
+   - New Build → applies division new_build preset
+
+2. Preserve the existing user workflow:
+   - on-site user selects site type
+   - relevant defaults are prefilled
+   - user focuses on configuration and dimensions
+   - office staff can later review/edit specifics
+
+3. Do NOT redesign the quote builder flow.
+4. Do NOT break existing manual edits.
+
+Acceptance criteria:
+- Quote Builder uses the saved division presets
+- Renovation and New Build prefill behavior works as intended
+- manual editing after prefill still works
+
+
+--------------------------------------------------
+T111 — Keep estimate defaults separate from quote presentation
+--------------------------------------------------
+
+Problem:
+This pass must not blur the line between estimating defaults and quote presentation.
+
+Required implementation:
+
+1. Keep Job Type Presets / Division Estimate Defaults fully separate from:
+   - company quote template
+   - division presentation overrides
+   - Preview/PDF styling controls
+
+2. Ensure the settings page still clearly communicates the distinction.
+
+Acceptance criteria:
+- estimate defaults remain their own system
+- quote presentation remains its own system
+- architecture stays clean
+
+
+--------------------------------------------------
+T112 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- redesign the template builder
+- add drag-and-drop editing
+- redesign quote lifecycle
+- add new quote statuses
+- add customer portal/email logic
+- build a generic preset engine for everything
+- move these presets into the company template system
+
+This is editable division job type presets only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Division Job Type Presets are editable in Settings.
+2. Renovation and New Build defaults are persisted at the division level.
+3. Quote Builder uses the saved division presets when site type is selected.
+4. The page clearly separates estimate defaults from quote presentation.
+5. The workflow supports real on-site quote creation followed by office review/editing.
+
+
+END OF IMPLEMENTATION

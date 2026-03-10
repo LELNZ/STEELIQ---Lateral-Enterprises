@@ -5,6 +5,7 @@ import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type Custo
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
 import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory } from "@shared/item-options";
 import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
+import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
 import {
@@ -392,39 +393,57 @@ export default function QuoteBuilder() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  const divisionPresets = useMemo(() => {
+    return resolvePresetsForDivision("LJ", divisionSettings?.jobTypePresetsJson as JobTypePresetsConfig | null);
+  }, [divisionSettings?.jobTypePresetsJson]);
+
   const getPresetDefaults = useCallback((preset: "renovation" | "new_build" | null, cat?: string): Partial<InsertQuoteItem> => {
-    if (preset === "renovation") {
-      const effectiveCat = cat || "windows-standard";
+    if (!preset) return {};
+    const presetConfig = preset === "renovation" ? divisionPresets.renovation : divisionPresets.new_build;
+    if (!presetConfig) return {};
+
+    const result: Partial<InsertQuoteItem> = {};
+    const effectiveCat = cat || "windows-standard";
+
+    if (presetConfig.frameType) {
       const frameTypes = libFrameTypesForCategory(effectiveCat);
-      const es52Frame = frameTypes.find(ft => ft.value.startsWith("ES52"))?.value || frameTypes[0]?.value || "";
-      const iguType = "EnergySaver";
-      const combos = libGlassCombos(iguType);
-      const firstCombo = combos.find(c => c.toLowerCase().includes("clear")) || combos[0] || "";
-      const thicknesses = firstCombo ? libGlassThicknesses(iguType, firstCombo) : [];
-      const firstThickness = thicknesses[0] || "";
-      const linerValue = libLinerOptions.find(lt => lt.value.includes("MiterCut"))?.value || libLinerOptions[0]?.value || LINER_TYPES[0]?.value || "";
+      const match = frameTypes.find(ft => ft.value.startsWith(presetConfig.frameType!))?.value || frameTypes[0]?.value || "";
+      result.frameType = match;
+    }
+
+    if (presetConfig.glassIguType) {
+      result.glassIguType = presetConfig.glassIguType;
+      const combos = libGlassCombos(presetConfig.glassIguType);
+      if (presetConfig.glassType) {
+        const match = combos.find(c => c.toLowerCase().includes(presetConfig.glassType!.toLowerCase())) || combos[0] || "";
+        result.glassType = match;
+      } else {
+        result.glassType = combos[0] || "";
+      }
+      const thicknesses = result.glassType ? libGlassThicknesses(presetConfig.glassIguType, result.glassType) : [];
+      result.glassThickness = presetConfig.glassThickness || thicknesses[0] || "";
+    }
+
+    if (presetConfig.linerType) {
+      result.linerType = libLinerOptions.find(lt => lt.value.includes(presetConfig.linerType!))?.value || libLinerOptions[0]?.value || LINER_TYPES[0]?.value || "";
+    }
+
+    if (presetConfig.handleType) {
       const handles = DOOR_CATEGORIES.includes(effectiveCat) ? libDoorHandles : libWindowHandles;
-      const handleValue = handles.length > 0
-        ? ((handles[0].data as any).value || "")
-        : (getHandlesForCategory(effectiveCat)[0]?.value || "");
-      return {
-        frameType: es52Frame,
-        glassIguType: iguType,
-        glassType: firstCombo,
-        glassThickness: firstThickness,
-        linerType: linerValue,
-        handleType: handleValue,
-        wallThickness: 90,
-        windZone: "Extra High",
-      };
+      const match = handles.find(h => ((h.data as any).value || "").includes(presetConfig.handleType!));
+      result.handleType = match ? (match.data as any).value : (handles.length > 0 ? (handles[0].data as any).value : getHandlesForCategory(effectiveCat)[0]?.value || "");
     }
-    if (preset === "new_build") {
-      return {
-        wallThickness: 140,
-      };
+
+    if (presetConfig.wallThickness !== undefined) {
+      result.wallThickness = presetConfig.wallThickness;
     }
-    return {};
-  }, [libFrameTypes, libGlass, libLiners, libWindowHandles, libDoorHandles]);
+
+    if (presetConfig.windZone) {
+      result.windZone = presetConfig.windZone;
+    }
+
+    return result;
+  }, [divisionPresets, libFrameTypes, libGlass, libLiners, libWindowHandles, libDoorHandles]);
 
   const getNewItemDefaults = useCallback((preset: "renovation" | "new_build" | null): InsertQuoteItem => {
     const presetOverrides = getPresetDefaults(preset);

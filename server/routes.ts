@@ -1099,11 +1099,49 @@ export async function registerRoutes(
     }
   });
 
+  const presetDefaultsSchema = z.object({
+    frameType: z.string().optional(),
+    glassIguType: z.string().optional(),
+    glassType: z.string().optional(),
+    glassThickness: z.string().optional(),
+    linerType: z.string().optional(),
+    handleType: z.string().optional(),
+    wallThickness: z.number().min(0).max(500).optional(),
+    windZone: z.string().optional(),
+  }).strict();
+
+  const jobTypePresetsSchema = z.object({
+    renovation: presetDefaultsSchema.optional(),
+    new_build: presetDefaultsSchema.optional(),
+  }).strict();
+
+  const divisionPatchSchema = z.object({
+    tradingName: z.string().optional().nullable(),
+    logoUrl: z.string().optional().nullable(),
+    templateKey: z.string().optional(),
+    requiredLegalLine: z.string().optional(),
+    termsOverrideBlock: z.string().optional().nullable(),
+    headerNotesOverrideBlock: z.string().optional().nullable(),
+    exclusionsOverrideBlock: z.string().optional().nullable(),
+    fontFamily: z.string().optional().nullable(),
+    accentColor: z.string().optional().nullable(),
+    logoPosition: z.string().optional().nullable(),
+    headerVariant: z.string().optional().nullable(),
+    scheduleLayoutVariant: z.string().optional(),
+    totalsLayoutVariant: z.string().optional(),
+    specDisplayDefaultsJson: z.any().optional(),
+    jobTypePresetsJson: jobTypePresetsSchema.optional().nullable(),
+  });
+
   app.patch("/api/settings/divisions/:code", async (req, res) => {
     try {
-      const div = await storage.upsertDivisionSettings(req.params.code, req.body);
+      const data = divisionPatchSchema.parse(req.body);
+      const div = await storage.upsertDivisionSettings(req.params.code, data);
       res.json(div);
     } catch (e: any) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid division settings", details: e.errors });
+      }
       res.status(400).json({ error: e.message });
     }
   });

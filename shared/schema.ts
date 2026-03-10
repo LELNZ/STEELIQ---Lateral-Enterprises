@@ -331,6 +331,7 @@ export const divisionSettings = pgTable("division_settings", {
   scheduleLayoutVariant: text("schedule_layout_variant").notNull().default("image_left_specs_right_v1"),
   totalsLayoutVariant: text("totals_layout_variant").notNull().default("totals_block_v1"),
   specDisplayDefaultsJson: jsonb("spec_display_defaults_json"),
+  jobTypePresetsJson: jsonb("job_type_presets_json"),
 });
 
 export const insertDivisionSettingsSchema = createInsertSchema(divisionSettings);

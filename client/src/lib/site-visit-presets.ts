@@ -17,13 +17,14 @@ export interface SiteVisitPreset {
   defaults: SiteVisitPresetDefaults;
 }
 
-export const SEED_PRESETS: SiteVisitPreset[] = [
-  {
-    divisionCode: "LJ",
-    presetKey: "renovation",
-    label: "Renovation",
-    description: "Typical retrofit into existing timber frame — ES52, EnergySaver IGU, 90mm wall",
-    defaults: {
+export interface JobTypePresetsConfig {
+  renovation?: SiteVisitPresetDefaults;
+  new_build?: SiteVisitPresetDefaults;
+}
+
+export const SEED_PRESETS: Record<string, JobTypePresetsConfig> = {
+  LJ: {
+    renovation: {
       frameType: "ES52",
       glassIguType: "EnergySaver",
       glassType: "Clear/Clear",
@@ -31,20 +32,48 @@ export const SEED_PRESETS: SiteVisitPreset[] = [
       windZone: "Extra High",
       linerType: "MiterCut",
     },
-  },
-  {
-    divisionCode: "LJ",
-    presetKey: "new_build",
-    label: "New Build",
-    description: "New construction — 140mm wall thickness, other specs per selection",
-    defaults: {
+    new_build: {
       wallThickness: 140,
     },
   },
-];
+};
 
-export function getPresetsForDivision(divisionCode: string): SiteVisitPreset[] {
-  return SEED_PRESETS.filter((p) => p.divisionCode === divisionCode);
+export function resolvePresetsForDivision(
+  divisionCode: string,
+  persisted?: JobTypePresetsConfig | null,
+): JobTypePresetsConfig {
+  const seed = SEED_PRESETS[divisionCode] || {};
+  if (!persisted || Object.keys(persisted).length === 0) {
+    return seed;
+  }
+  return {
+    renovation: { ...seed.renovation, ...persisted.renovation },
+    new_build: { ...seed.new_build, ...persisted.new_build },
+  };
+}
+
+export function getPresetsForDivision(divisionCode: string, persisted?: JobTypePresetsConfig | null): SiteVisitPreset[] {
+  const resolved = resolvePresetsForDivision(divisionCode, persisted);
+  const result: SiteVisitPreset[] = [];
+  if (resolved.renovation) {
+    result.push({
+      divisionCode,
+      presetKey: "renovation",
+      label: "Renovation",
+      description: "Typical retrofit into existing frame — defaults applied when Renovation is selected in Quote Builder",
+      defaults: resolved.renovation,
+    });
+  }
+  if (resolved.new_build) {
+    result.push({
+      divisionCode,
+      presetKey: "new_build",
+      label: "New Build",
+      description: "New construction defaults — applied when New Build is selected in Quote Builder",
+      defaults: resolved.new_build,
+    });
+  }
+  return result;
 }
 
 export const PRESET_FIELD_LABELS: Record<keyof SiteVisitPresetDefaults, string> = {
@@ -57,3 +86,14 @@ export const PRESET_FIELD_LABELS: Record<keyof SiteVisitPresetDefaults, string> 
   wallThickness: "Wall Thickness (mm)",
   windZone: "Wind Zone",
 };
+
+export const PRESET_FIELD_KEYS: (keyof SiteVisitPresetDefaults)[] = [
+  "frameType",
+  "glassIguType",
+  "glassType",
+  "glassThickness",
+  "linerType",
+  "handleType",
+  "wallThickness",
+  "windZone",
+];

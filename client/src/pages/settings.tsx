@@ -11,10 +11,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, ClipboardList, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock } from "lucide-react";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
-import { getPresetsForDivision, PRESET_FIELD_LABELS, type SiteVisitPreset } from "@/lib/site-visit-presets";
+import { resolvePresetsForDivision, PRESET_FIELD_LABELS, PRESET_FIELD_KEYS, type SiteVisitPresetDefaults, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
 import {
   COMPANY_MASTER_TEMPLATE,
   applyCompanyConfig,
@@ -65,6 +65,7 @@ interface DivisionSettings {
   scheduleLayoutVariant: string;
   totalsLayoutVariant: string;
   specDisplayDefaultsJson: string[] | null;
+  jobTypePresetsJson: JobTypePresetsConfig | null;
 }
 
 interface SpecEntry {
@@ -270,46 +271,98 @@ function OrgSettingsTab() {
   );
 }
 
-function SiteVisitPresetsCard({ divisionCode }: { divisionCode: string }) {
-  const presets = getPresetsForDivision(divisionCode);
+function PresetFieldEditor({ 
+  presetKey,
+  defaults, 
+  onChange 
+}: { 
+  presetKey: string;
+  defaults: SiteVisitPresetDefaults; 
+  onChange: (updated: SiteVisitPresetDefaults) => void;
+}) {
+  const updateField = (field: keyof SiteVisitPresetDefaults, value: string | number | undefined) => {
+    const next = { ...defaults };
+    if (value === "" || value === undefined) {
+      delete next[field];
+    } else {
+      (next as any)[field] = value;
+    }
+    onChange(next);
+  };
 
-  if (presets.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-6 text-center text-muted-foreground" data-testid="text-presets-placeholder">
-          <ClipboardList className="w-5 h-5 mx-auto mb-2 opacity-50" />
-          No job type presets configured for {divisionCode} yet
-        </CardContent>
-      </Card>
-    );
-  }
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {PRESET_FIELD_KEYS.map((field) => {
+        const isNumeric = field === "wallThickness";
+        const value = defaults[field];
+        return (
+          <div key={field}>
+            <Label className="text-xs font-medium mb-1 block text-muted-foreground">{PRESET_FIELD_LABELS[field]}</Label>
+            <Input
+              value={value !== undefined ? String(value) : ""}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (isNumeric) {
+                  updateField(field, raw === "" ? undefined : Number(raw));
+                } else {
+                  updateField(field, raw || undefined);
+                }
+              }}
+              type={isNumeric ? "number" : "text"}
+              placeholder="Not set"
+              className="h-8 text-sm"
+              data-testid={`input-preset-${presetKey}-${field}`}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
+function JobTypePresetsCard({ 
+  divisionCode, 
+  presetsConfig, 
+  onPresetsChange 
+}: { 
+  divisionCode: string;
+  presetsConfig: JobTypePresetsConfig;
+  onPresetsChange: (updated: JobTypePresetsConfig) => void;
+}) {
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Job Type Presets</CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">Default values prefilled when an estimator selects Renovation or New Build in Quote Builder. Read-only for now.</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          These values prefill item specifics in Quote Builder when Renovation or New Build is selected. Items can still be reviewed and edited later.
+        </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {presets.map((preset) => (
-          <div key={preset.presetKey} className="border rounded-lg p-3" data-testid={`preset-card-${preset.presetKey}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-medium text-sm">{preset.label}</span>
-              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{preset.presetKey}</span>
-            </div>
-            <p className="text-xs text-muted-foreground mb-2">{preset.description}</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {(Object.entries(preset.defaults) as [keyof typeof PRESET_FIELD_LABELS, string | number | undefined][])
-                .filter(([, v]) => v !== undefined)
-                .map(([key, value]) => (
-                  <div key={key} className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{PRESET_FIELD_LABELS[key]}</span>
-                    <span className="font-mono">{String(value)}</span>
-                  </div>
-                ))}
-            </div>
+      <CardContent className="space-y-5">
+        <div className="border rounded-lg p-4 space-y-3" data-testid="preset-card-renovation">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">Renovation</span>
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">renovation</span>
           </div>
-        ))}
+          <p className="text-xs text-muted-foreground">Defaults applied for retrofit into existing frames.</p>
+          <PresetFieldEditor
+            presetKey="renovation"
+            defaults={presetsConfig.renovation || {}}
+            onChange={(updated) => onPresetsChange({ ...presetsConfig, renovation: updated })}
+          />
+        </div>
+
+        <div className="border rounded-lg p-4 space-y-3" data-testid="preset-card-new_build">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">New Build</span>
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">new_build</span>
+          </div>
+          <p className="text-xs text-muted-foreground">Defaults applied for new construction projects.</p>
+          <PresetFieldEditor
+            presetKey="new_build"
+            defaults={presetsConfig.new_build || {}}
+            onChange={(updated) => onPresetsChange({ ...presetsConfig, new_build: updated })}
+          />
+        </div>
       </CardContent>
     </Card>
   );
@@ -481,6 +534,10 @@ function DivisionSettingsTab() {
   const handleSave = () => {
     mutation.mutate(form);
   };
+
+  const resolvedPresets = useMemo(() => {
+    return resolvePresetsForDivision(selectedCode, form.jobTypePresetsJson as JobTypePresetsConfig | null);
+  }, [selectedCode, form.jobTypePresetsJson]);
 
   const visibleSpecs = specEntries?.filter(e => e.customerVisibleAllowed) || [];
   const currentDefaults: string[] = (form.specDisplayDefaultsJson as string[]) || [];
@@ -757,7 +814,11 @@ function DivisionSettingsTab() {
             </p>
           </div>
 
-          <SiteVisitPresetsCard divisionCode={selectedCode} />
+          <JobTypePresetsCard
+            divisionCode={selectedCode}
+            presetsConfig={resolvedPresets}
+            onPresetsChange={(updated) => setForm({ ...form, jobTypePresetsJson: updated })}
+          />
 
           <div className="flex justify-end pt-2">
             <Button onClick={handleSave} disabled={isLoading || mutation.isPending} data-testid="button-save-division">
