@@ -6,7 +6,7 @@ import { type QuoteItem, type JobItem, type ConfigurationProfile, type Configura
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
 import { getGlassPrice, getGlassRValue } from "@shared/glass-library";
-import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
+import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, getLocksForCategory, getLockTypeForCategory, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES, isDoorCategory } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -185,6 +185,12 @@ export default function ExecSummary() {
   const { data: libSlidingDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "sliding_door_handle"], queryFn: fetchLib("sliding_door_handle") });
   const { data: libBifoldDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "bifold_door_handle"], queryFn: fetchLib("bifold_door_handle") });
   const { data: libStackerDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "stacker_door_handle"], queryFn: fetchLib("stacker_door_handle") });
+  const { data: libEntranceDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "entrance_door_lock"], queryFn: fetchLib("entrance_door_lock") });
+  const { data: libHingeDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "hinge_door_lock"], queryFn: fetchLib("hinge_door_lock") });
+  const { data: libSlidingDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "sliding_door_lock"], queryFn: fetchLib("sliding_door_lock") });
+  const { data: libBifoldDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "bifold_door_lock"], queryFn: fetchLib("bifold_door_lock") });
+  const { data: libStackerDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "stacker_door_lock"], queryFn: fetchLib("stacker_door_lock") });
+  const { data: libFrenchDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "french_door_lock"], queryFn: fetchLib("french_door_lock") });
   const { data: libWanzBars = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "wanz_bar"], queryFn: fetchLib("wanz_bar") });
   const { data: masterProfiles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_profile"], queryFn: fetchLib("direct_profile") });
   const { data: masterAccessories = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_accessory"], queryFn: fetchLib("direct_accessory") });
@@ -233,6 +239,15 @@ export default function ExecSummary() {
     stacker_door_handle: libStackerDoorHandles,
   };
 
+  const locksByType: Record<string, LibraryEntry[]> = {
+    entrance_door_lock: libEntranceDoorLocks,
+    hinge_door_lock: libHingeDoorLocks,
+    sliding_door_lock: libSlidingDoorLocks,
+    bifold_door_lock: libBifoldDoorLocks,
+    stacker_door_lock: libStackerDoorLocks,
+    french_door_lock: libFrenchDoorLocks,
+  };
+
   const lookupGlassPrice = (iguType: string, combo: string, thickness: string): number | null => {
     const entry = libGlass.find((e) => (e.data as any).iguType === iguType && (e.data as any).combo === combo);
     if (entry) return (entry.data as any).prices?.[thickness] ?? null;
@@ -259,6 +274,18 @@ export default function ExecSummary() {
     const dbPrice = entry ? (entry.data as any).priceProvision : null;
     if (dbPrice != null) return dbPrice;
     return getHandlesForCategory(cat).find((h) => h.value === handleType)?.priceProvision ?? null;
+  };
+  const lookupLockPrice = (lockType: string, cat: string): number | null => {
+    if (!lockType) return null;
+    if (lockType === "Customer-Supplied" || lockType === "TBC") return 0;
+    const catLockType = getLockTypeForCategory(cat);
+    const catLocks = locksByType[catLockType] || [];
+    if (catLocks.length > 0) {
+      const entry = catLocks.find((e) => (e.data as any).value === lockType);
+      const dbPrice = entry ? (entry.data as any).priceProvision : null;
+      if (dbPrice != null) return dbPrice;
+    }
+    return getLocksForCategory(cat).find((l) => l.value === lockType)?.priceProvision ?? null;
   };
 
   const itemPricings: ItemPricingData[] = useMemo(() => {
@@ -293,6 +320,7 @@ export default function ExecSummary() {
               glassPricePerSqm: lookupGlassPrice(item.glassIguType || "", item.glassType || "", item.glassThickness || ""),
               linerPricePerM: lookupLinerPrice(item.linerType || ""),
               handlePriceEach: lookupHandlePrice(item.handleType || "", item.category),
+              lockPriceEach: lookupLockPrice(item.lockType || "", item.category),
               openingPanelCount: openingPanels,
               wanzBar: wanzBarInput,
             },
@@ -303,7 +331,7 @@ export default function ExecSummary() {
 
       return { item, sqm, salePrice, pricing, configName, photos };
     });
-  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
+  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libEntranceDoorLocks, libHingeDoorLocks, libSlidingDoorLocks, libBifoldDoorLocks, libStackerDoorLocks, libFrenchDoorLocks, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
 
   const getInstallationTier = useCallback((category: string, sqm: number): { name: string; cost: number; sell: number } | null => {
     const isDoor = DOOR_CATEGORIES.includes(category);
@@ -466,6 +494,7 @@ export default function ExecSummary() {
         glassType: item.glassType || "",
         glassThickness: item.glassThickness || "",
         handleSet: item.handleType || "",
+        lockSet: item.lockType || "",
         linerType: item.linerType || "",
         flashingSize: item.flashingSize || 0,
         wallThickness: item.wallThickness || 0,
@@ -508,6 +537,7 @@ export default function ExecSummary() {
         glassType: item.glassType || "",
         glassThickness: item.glassThickness || "",
         handleSet: item.handleType || "",
+        lockSet: item.lockType || "",
         linerType: item.linerType || "",
         flashingSize: item.flashingSize ? `${item.flashingSize}mm` : "",
         wallThickness: item.wallThickness ? `${item.wallThickness}mm` : "",
@@ -535,11 +565,23 @@ export default function ExecSummary() {
     const gstAmount = totals.gstAmount;
     const totalInclGst = totals.totalSaleIncGst;
 
+    const lockExclusions: string[] = [];
+    for (const ip of itemPricings) {
+      if (!isDoorCategory(ip.item.category)) continue;
+      const lt = ip.item.lockType || "";
+      if (!lt || lt === "Customer-Supplied") {
+        lockExclusions.push(`${ip.item.name}: Lock not included in supply — Customer Supplied`);
+      } else if (lt === "TBC") {
+        lockExclusions.push(`${ip.item.name}: Lock selection TBC — not included in current pricing`);
+      }
+    }
+
     const snapshot: EstimateSnapshot = {
       divisionCode: "LJ",
       customer: job?.name || "Unknown",
       specDictionaryVersion: 1,
       items: snapshotItems,
+      ...(lockExclusions.length > 0 ? { exclusions: lockExclusions } : {}),
       totalsBreakdown: {
         itemsSubtotal,
         installationTotal: installSell,

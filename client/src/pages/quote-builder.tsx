@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
-import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory } from "@shared/item-options";
+import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory, getLockTypeForCategory, getLocksForCategory, isDoorCategory } from "@shared/item-options";
 import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
 import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
@@ -172,6 +172,7 @@ const defaultValues: InsertQuoteItem = {
   wallThickness: 0,
   heightFromFloor: 0,
   handleType: "",
+  lockType: "",
   configurationId: "",
   cachedWeightKg: 0,
 };
@@ -296,7 +297,7 @@ export default function QuoteBuilder() {
   const [showAllSpecs, setShowAllSpecs] = useState(false);
   const defaultSpecKeys = (divisionSettings?.specDisplayDefaultsJson as string[] | null) || [
     "configuration","overallSize","frameSeries","frameColor","windZone","rValue",
-    "iguType","glassType","glassThickness","handleSet","linerType","flashingSize",
+    "iguType","glassType","glassThickness","handleSet","lockSet","linerType","flashingSize",
     "wallThickness","heightFromFloor"
   ];
 
@@ -434,6 +435,10 @@ export default function QuoteBuilder() {
       result.handleType = match ? (match.data as any).value : (handles.length > 0 ? (handles[0].data as any).value : getHandlesForCategory(effectiveCat)[0]?.value || "");
     }
 
+    if (presetConfig.lockType && isDoorCategory(effectiveCat)) {
+      result.lockType = presetConfig.lockType;
+    }
+
     if (presetConfig.wallThickness !== undefined) {
       result.wallThickness = presetConfig.wallThickness;
     }
@@ -462,6 +467,8 @@ export default function QuoteBuilder() {
   const formIsDirty = form.formState.isDirty;
   const currentHandleType = getHandleTypeForCategory(category || "windows-standard");
   const { data: libCategoryHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", currentHandleType], queryFn: fetchLib(currentHandleType) });
+  const currentLockType = getLockTypeForCategory(category || "windows-standard");
+  const { data: libCategoryLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", currentLockType || "__none__"], queryFn: fetchLib(currentLockType || "__none__"), enabled: !!currentLockType });
 
   const currentFrameTypeLibId = findFrameTypeLibId(w.frameType || "");
   const { data: configurations = [] } = useQuery<FrameConfiguration[]>({
@@ -536,6 +543,20 @@ export default function QuoteBuilder() {
     return fallback?.priceProvision ?? null;
   })();
 
+  const lockPriceEach = (() => {
+    if (!w.lockType) return null;
+    const specialNoPriceValues = ["Customer-Supplied", "TBC"];
+    if (specialNoPriceValues.includes(w.lockType)) return 0;
+    if (libCategoryLocks.length > 0) {
+      const catEntry = libCategoryLocks.find((e) => (e.data as any).value === w.lockType);
+      const catPrice = catEntry ? (catEntry.data as any).priceProvision : null;
+      if (catPrice != null) return catPrice;
+    }
+    const fallbackLocks = getLocksForCategory(w.category || "");
+    const fallback = fallbackLocks.find((l) => l.value === w.lockType);
+    return fallback?.priceProvision ?? null;
+  })();
+
   const openingPanelCount = configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount;
 
   const wanzBarPricingInput = (() => {
@@ -557,10 +578,10 @@ export default function QuoteBuilder() {
       w.width || 0, w.height || 0, w.quantity || 1,
       configProfiles, configAccessories, configLabor,
       usdToNzdRate, w.pricePerSqm || 500,
-      { glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput },
+      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput },
       { masterProfiles, masterAccessories, masterLabour }
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour]);
+  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -650,6 +671,7 @@ export default function QuoteBuilder() {
     const frameTypes = libFrameTypesForCategory(category);
     if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
     form.setValue("handleType", "");
+    form.setValue("lockType", "");
     form.setValue("configurationId", "");
   }, [category]);
 
@@ -694,7 +716,7 @@ export default function QuoteBuilder() {
   const noCustomCategories = isEntrance || isHingeDoor || isFrench || isBifold || isStacker;
   const isCustom = layout === "custom" && !noCustomCategories;
   const isSlidingCategory = ["sliding-window", "sliding-door"].includes(category);
-  const isDoorCategory = ["french-door"].includes(category);
+  const isFrenchDoorCategory = ["french-door"].includes(category);
 
   const showWindowType = !isCustom && category === "windows-standard";
   const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
@@ -754,7 +776,7 @@ export default function QuoteBuilder() {
         ...rows[rowIdx],
         type: cycle[current] || "fixed",
       };
-    } else if (isDoorCategory) {
+    } else if (isFrenchDoorCategory) {
       const cycle: Record<string, "fixed" | "awning" | "hinge"> = { fixed: "awning", awning: "hinge", hinge: "fixed" };
       rows[rowIdx] = {
         ...rows[rowIdx],
@@ -2282,7 +2304,7 @@ export default function QuoteBuilder() {
                                           />
                                           <span className="text-xs text-muted-foreground shrink-0">mm</span>
                                         </div>
-                                        {isDoorCategory && row.type === "hinge" && (
+                                        {isFrenchDoorCategory && row.type === "hinge" && (
                                           <div className="flex items-center gap-1.5 pl-1">
                                             <button
                                               type="button"
@@ -2333,13 +2355,13 @@ export default function QuoteBuilder() {
                     <p className="text-xs text-muted-foreground">
                       {isSlidingCategory
                         ? "FIX / SLD / AWN cycle. Arrow buttons set slide direction. 0 = even split."
-                        : isDoorCategory
+                        : isFrenchDoorCategory
                         ? "FIX / AWN / HNG cycle. HNG shows open direction & hinge side. 0 = even split."
                         : "FIX = Fixed, AWN = Awning. Leave widths/heights at 0 for even split."
                       }
                     </p>
 
-                    {!isSlidingCategory && !isDoorCategory && (
+                    {!isSlidingCategory && !isFrenchDoorCategory && (
                       <div>
                         <Label className="text-xs">Opening Direction</Label>
                         <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>
@@ -2603,7 +2625,7 @@ export default function QuoteBuilder() {
 
                 {isSpecVisible("linerType") && <Separator />}
 
-                {(isSpecVisible("handleSet") || isSpecVisible("wanzBarEnabled") || isSpecVisible("wanzBarSize")) && (
+                {(isSpecVisible("handleSet") || isSpecVisible("lockSet") || isSpecVisible("wanzBarEnabled") || isSpecVisible("wanzBarSize")) && (
                 <div>
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Hardware">
                     Hardware & Components
@@ -2623,6 +2645,34 @@ export default function QuoteBuilder() {
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                    )}
+
+                    {isSpecVisible("lockSet") && isDoorCategory(w.category || "") && (
+                    <div>
+                      <Label className="text-xs">Lock Type</Label>
+                      <Select value={w.lockType || "__none__"} onValueChange={(v) => form.setValue("lockType", v === "__none__" ? "" : v)}>
+                        <SelectTrigger data-testid="select-lock-type"><SelectValue placeholder="Select lock" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {(libCategoryLocks.length > 0
+                            ? libCategoryLocks.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
+                            : getLocksForCategory(w.category || "").map((l) => ({ value: l.value, label: l.label }))
+                          ).map((l) => (
+                            <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {w.lockType === "Custom-Local-Supply" && (
+                        <p className="text-[10px] text-muted-foreground mt-1" data-testid="text-lock-custom-note">
+                          Manual pricing — price override available in Cost Breakdown
+                        </p>
+                      )}
+                      {(w.lockType === "Customer-Supplied" || w.lockType === "TBC") && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1" data-testid="text-lock-exclusion-note">
+                          <AlertTriangle className="w-3 h-3 inline mr-1" />Lock not included in supply scope
+                        </p>
+                      )}
                     </div>
                     )}
 

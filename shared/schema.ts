@@ -97,6 +97,7 @@ export const quoteItemSchema = z.object({
   wallThickness: z.number().default(0),
   heightFromFloor: z.number().default(0),
   handleType: z.string().default(""),
+  lockType: z.string().default(""),
   configurationId: z.string().default(""),
   cachedWeightKg: z.number().default(0),
 });

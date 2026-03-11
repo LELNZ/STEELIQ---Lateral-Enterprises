@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { LibraryEntry } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses } from "@shared/glass-library";
-import { WIND_ZONES, LINER_TYPES, getFrameTypesForCategory, getHandlesForCategory } from "@shared/item-options";
+import { WIND_ZONES, LINER_TYPES, getFrameTypesForCategory, getHandlesForCategory, getLocksForCategory, LOCK_CATEGORIES } from "@shared/item-options";
 
 export interface SelectOption {
   value: string;
@@ -20,6 +20,7 @@ export function useLibraryOptions() {
   const { data: libLiners = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "liner_type"], queryFn: fetchLib("liner_type") });
   const { data: libWindowHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "window_handle"], queryFn: fetchLib("window_handle") });
   const { data: libDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "door_handle"], queryFn: fetchLib("door_handle") });
+  const { data: libEntranceDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "entrance_door_lock"], queryFn: fetchLib("entrance_door_lock") });
 
   const frameTypeOptions = (cat = "windows-standard"): SelectOption[] => {
     const fromDb = libFrameTypes.filter(e => {
@@ -56,6 +57,17 @@ export function useLibraryOptions() {
     return getHandlesForCategory(cat).map(h => ({ value: h.value, label: h.label }));
   };
 
+  const lockOptions: SelectOption[] = (() => {
+    if (libEntranceDoorLocks.length > 0) {
+      const seen = new Set<string>();
+      return libEntranceDoorLocks
+        .map(e => ({ value: (e.data as any).value as string, label: (e.data as any).label as string }))
+        .filter(o => { if (seen.has(o.value)) return false; seen.add(o.value); return true; });
+    }
+    const fallback = LOCK_CATEGORIES[0]?.defaults || [];
+    return fallback.map(l => ({ value: l.value, label: l.label }));
+  })();
+
   const windZoneOptions: SelectOption[] = WIND_ZONES.map(wz => ({ value: wz, label: wz }));
 
   return {
@@ -65,6 +77,7 @@ export function useLibraryOptions() {
     glassThicknessOptions,
     linerOptions,
     handleOptions,
+    lockOptions,
     windZoneOptions,
   };
 }

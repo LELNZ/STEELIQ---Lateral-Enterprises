@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
@@ -28,7 +29,7 @@ import type {
   ConfigurationAccessory, ConfigurationLabor,
 } from "@shared/schema";
 import { IGU_INFO } from "@shared/glass-library";
-import { HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
+import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Standard Window" },
@@ -42,7 +43,7 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "handles" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery";
 
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
@@ -216,7 +217,7 @@ export default function Library() {
             <TabsTrigger value="glass" data-testid="tab-glass">Glass</TabsTrigger>
             <TabsTrigger value="frame_type" data-testid="tab-frame-types">Frame Types</TabsTrigger>
             <TabsTrigger value="frame_color" data-testid="tab-frame-colors">Frame Colors</TabsTrigger>
-            <TabsTrigger value="handles" data-testid="tab-handles">Handles</TabsTrigger>
+            <TabsTrigger value="hardware" data-testid="tab-hardware">Hardware</TabsTrigger>
             <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
             <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
             <TabsTrigger value="installation" data-testid="tab-installation">Installation</TabsTrigger>
@@ -232,8 +233,8 @@ export default function Library() {
           <TabsContent value="frame_color">
             <SimpleSection type="frame_color" title="Frame Colors" fields={["value", "label", "supplierCode", "priceProvision"]} divisionCode={selectedDivision} />
           </TabsContent>
-          <TabsContent value="handles">
-            <HandlesSection divisionCode={selectedDivision} />
+          <TabsContent value="hardware">
+            <HardwareSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="liner_type">
             <LinerTypeSection divisionCode={selectedDivision} />
@@ -1533,17 +1534,56 @@ function WanzBarDialog({ entry, allFrameTypeLabels, divisionCode, onClose }: { e
   );
 }
 
-function HandlesSection({ divisionCode }: { divisionCode?: string | null }) {
+function HardwareSection({ divisionCode }: { divisionCode?: string | null }) {
   return (
-    <div className="space-y-4" data-testid="section-handles">
-      <div>
-        <h2 className="text-base font-semibold">Handles by Category</h2>
-        <p className="text-sm text-muted-foreground">{HANDLE_CATEGORIES.length} handle categories</p>
+    <div className="space-y-6" data-testid="section-hardware">
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Handles by Category</h2>
+          <p className="text-sm text-muted-foreground">{HANDLE_CATEGORIES.length} handle categories</p>
+        </div>
+        {HANDLE_CATEGORIES.map((hc) => (
+          <HandleCategoryCollapsible key={hc.type} handleCat={hc} divisionCode={divisionCode} />
+        ))}
       </div>
-      {HANDLE_CATEGORIES.map((hc) => (
-        <HandleCategoryCollapsible key={hc.type} handleCat={hc} divisionCode={divisionCode} />
-      ))}
+
+      <Separator />
+
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Locks by Category</h2>
+          <p className="text-sm text-muted-foreground">{LOCK_CATEGORIES.length} lock categories (door products)</p>
+        </div>
+        {LOCK_CATEGORIES.map((lc) => (
+          <LockCategoryCollapsible key={lc.type} lockCat={lc} divisionCode={divisionCode} />
+        ))}
+      </div>
     </div>
+  );
+}
+
+function LockCategoryCollapsible({ lockCat, divisionCode }: { lockCat: typeof LOCK_CATEGORIES[number]; divisionCode?: string | null }) {
+  const [open, setOpen] = useState(false);
+  const { data: entries = [] } = useLibraryEntries(lockCat.type, divisionCode);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="py-3 cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              {lockCat.label}
+              <Badge variant="secondary" className="text-[10px]">{entries.length} locks</Badge>
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0">
+            <SimpleSection type={lockCat.type} title={lockCat.label} fields={["value", "label", "priceProvision"]} divisionCode={divisionCode} />
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 

@@ -5,6 +5,7 @@ export interface SiteVisitPresetDefaults {
   glassThickness?: string;
   linerType?: string;
   handleType?: string;
+  lockType?: string;
   wallThickness?: number;
   windZone?: string;
 }
@@ -83,6 +84,7 @@ export const PRESET_FIELD_LABELS: Record<keyof SiteVisitPresetDefaults, string> 
   glassThickness: "Glass Thickness",
   linerType: "Liner Type",
   handleType: "Handle Type",
+  lockType: "Lock Type",
   wallThickness: "Wall Thickness (mm)",
   windZone: "Wind Zone",
 };
@@ -94,6 +96,7 @@ export const PRESET_FIELD_KEYS: (keyof SiteVisitPresetDefaults)[] = [
   "glassThickness",
   "linerType",
   "handleType",
+  "lockType",
   "wallThickness",
   "windZone",
 ];

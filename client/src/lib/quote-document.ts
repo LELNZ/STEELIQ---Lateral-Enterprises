@@ -206,7 +206,13 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
     },
     content: {
       headerNotes: div.headerNotesOverrideBlock || org.defaultHeaderNotesBlock || null,
-      exclusions: div.exclusionsOverrideBlock || org.defaultExclusionsBlock || null,
+      exclusions: (() => {
+        const base = div.exclusionsOverrideBlock || org.defaultExclusionsBlock || "";
+        const snapshotExclusions = (snapshot as any).exclusions as string[] | undefined;
+        if (!snapshotExclusions || snapshotExclusions.length === 0) return base || null;
+        const lockNotes = snapshotExclusions.map(e => `• ${e}`).join("\n");
+        return base ? `${base}\n\n${lockNotes}` : lockNotes;
+      })(),
       terms: div.termsOverrideBlock || org.defaultTermsBlock || null,
       paymentTerms: org.paymentTermsBlock || null,
     },

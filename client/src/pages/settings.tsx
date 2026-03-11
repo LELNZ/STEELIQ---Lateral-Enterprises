@@ -362,6 +362,7 @@ function PresetFieldEditor({
       <PresetSelectField presetKey={presetKey} field="glassThickness" value={defaults.glassThickness} options={thicknessOpts} onChange={(v) => updateField("glassThickness", v)} />
       <PresetSelectField presetKey={presetKey} field="linerType" value={defaults.linerType} options={lib.linerOptions} onChange={(v) => updateField("linerType", v)} />
       <PresetSelectField presetKey={presetKey} field="handleType" value={defaults.handleType} options={lib.handleOptions("windows-standard")} onChange={(v) => updateField("handleType", v)} />
+      <PresetSelectField presetKey={presetKey} field="lockType" value={defaults.lockType} options={lib.lockOptions} onChange={(v) => updateField("lockType", v)} />
       <div>
         <Label className="text-xs font-medium mb-1 block text-muted-foreground">{PRESET_FIELD_LABELS.wallThickness}</Label>
         <Input

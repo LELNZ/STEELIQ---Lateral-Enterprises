@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
 import { GLASS_LIBRARY } from "@shared/glass-library";
-import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS } from "@shared/item-options";
+import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS } from "@shared/item-options";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -66,6 +66,9 @@ async function seedLibraryDefaults() {
   await seedType("liner_type", LINER_TYPES.map((lt) => ({ data: { value: lt.value, label: lt.label, priceProvision: lt.priceProvision } })));
   for (const hc of HANDLE_CATEGORIES) {
     await seedType(hc.type, hc.defaults.map((h) => ({ data: { value: h.value, label: h.label, priceProvision: h.priceProvision } })));
+  }
+  for (const lc of LOCK_CATEGORIES) {
+    await seedType(lc.type, lc.defaults.map((l) => ({ data: { value: l.value, label: l.label, priceProvision: l.priceProvision } })));
   }
   await seedType("wanz_bar", WANZ_BAR_DEFAULTS.map((wb) => ({
     data: { value: wb.value, label: wb.label, sectionNumber: wb.sectionNumber, kgPerMetre: wb.kgPerMetre, pricePerKgUsd: wb.pricePerKgUsd, priceNzdPerLinM: wb.priceNzdPerLinM }
@@ -1105,6 +1108,7 @@ export async function registerRoutes(
     glassType: z.string().optional(),
     glassThickness: z.string().optional(),
     linerType: z.string().optional(),
+    lockType: z.string().optional(),
     handleType: z.string().optional(),
     wallThickness: z.number().min(0).max(500).optional(),
     windZone: z.string().optional(),
@@ -1828,7 +1832,7 @@ async function seedDeliveryRates() {
 
 const LJ_DEFAULT_SPEC_DISPLAY_KEYS = [
   "configuration", "overallSize", "frameSeries", "frameColor", "windZone",
-  "rValue", "iguType", "glassType", "glassThickness", "handleSet",
+  "rValue", "iguType", "glassType", "glassThickness", "handleSet", "lockSet",
   "linerType", "flashingSize", "wallThickness", "heightFromFloor",
 ];
 
@@ -1877,7 +1881,8 @@ const LJ_SPEC_ENTRIES = [
   { key: "glassType", divisionScope: "LJ", group: "Glazing", label: "Glass Type", sortOrder: 41, inputKind: "cascading_glass", customerVisibleAllowed: true },
   { key: "glassThickness", divisionScope: "LJ", group: "Glazing", label: "Glass Thickness", sortOrder: 42, inputKind: "cascading_glass", customerVisibleAllowed: true },
   { key: "handleSet", divisionScope: "LJ", group: "Hardware", label: "Handle Set", sortOrder: 50, inputKind: "select_library_dynamic", customerVisibleAllowed: true },
-  { key: "wanzBarEnabled", divisionScope: "LJ", group: "Hardware", label: "Wanz Bar", sortOrder: 51, inputKind: "boolean", customerVisibleAllowed: false },
+  { key: "lockSet", divisionScope: "LJ", group: "Hardware", label: "Lock Type", sortOrder: 51, inputKind: "select_library_dynamic", customerVisibleAllowed: true },
+  { key: "wanzBarEnabled", divisionScope: "LJ", group: "Hardware", label: "Wanz Bar", sortOrder: 52, inputKind: "boolean", customerVisibleAllowed: false },
   { key: "wanzBarSource", divisionScope: "LJ", group: "Hardware", label: "Wanz Bar Source", sortOrder: 52, inputKind: "select_enum", optionsJson: ["nz-local","direct",""], customerVisibleAllowed: false },
   { key: "wanzBarSize", divisionScope: "LJ", group: "Hardware", label: "Wanz Bar Size", sortOrder: 53, inputKind: "select_library", librarySourceKey: "wanz_bar", customerVisibleAllowed: false },
   { key: "linerType", divisionScope: "LJ", group: "LinersFlashings", label: "Liner Type", sortOrder: 60, inputKind: "select_library", librarySourceKey: "liner_type", customerVisibleAllowed: true },
