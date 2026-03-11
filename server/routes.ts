@@ -93,6 +93,17 @@ export async function registerRoutes(
         await storage.createLibraryEntry({ type: "wanz_bar", data: { value: wb.value, label: wb.label, sectionNumber: wb.sectionNumber, kgPerMetre: wb.kgPerMetre, pricePerKgUsd: wb.pricePerKgUsd, priceNzdPerLinM: wb.priceNzdPerLinM }, sortOrder: i });
       }
     }
+
+    const hasLocks = existingEntries.some((e) => e.type.endsWith("_door_lock"));
+    if (!hasLocks) {
+      console.log("Seeding lock defaults...");
+      for (const lc of LOCK_CATEGORIES) {
+        for (let i = 0; i < lc.defaults.length; i++) {
+          const l = lc.defaults[i];
+          await storage.createLibraryEntry({ type: lc.type, data: { value: l.value, label: l.label, priceProvision: l.priceProvision }, sortOrder: i });
+        }
+      }
+    }
   }
 
   const hasDirectProfiles = existingEntries.some((e) => e.type === "direct_profile");
@@ -118,6 +129,21 @@ export async function registerRoutes(
   await seedDeliveryRates();
   await seedOrgAndDivisions();
   await seedSpecDictionary();
+
+  const ljDiv = await storage.getDivisionSettings("LJ");
+  if (ljDiv) {
+    const specKeys = (ljDiv as any).specDisplayDefaultsJson as string[] | null;
+    if (specKeys && Array.isArray(specKeys) && !specKeys.includes("lockSet")) {
+      const handleIdx = specKeys.indexOf("handleSet");
+      const updated = [...specKeys];
+      if (handleIdx >= 0) {
+        updated.splice(handleIdx + 1, 0, "lockSet");
+      } else {
+        updated.push("lockSet");
+      }
+      await storage.upsertDivisionSettings("LJ", { specDisplayDefaultsJson: updated });
+    }
+  }
 
   app.post("/api/jobs", async (req, res) => {
     try {
