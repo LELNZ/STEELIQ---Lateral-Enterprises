@@ -218,7 +218,7 @@ export default function QuotePreview() {
         )}
 
         {isSectionVisible(T, "schedule") && (
-          <div className="print:break-before-page" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
             <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
             {liveScheduleItems.length === 0 && (
               <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>

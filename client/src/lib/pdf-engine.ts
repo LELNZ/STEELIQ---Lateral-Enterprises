@@ -541,8 +541,28 @@ async function renderSchedule(
     .map((item) => ({ url: item.media.drawingUrl!, key: `draw-${item.index}` }));
   const imageCache = await preloadPhotos([...allPhotos, ...allDrawings]);
 
-  pdf.addPage();
-  y = TOP_MARGIN;
+  // Estimate height needed for heading + first item to decide if we can share page 1
+  const SCHEDULE_HEADING_H = 10;
+  let firstItemEstH = 0;
+  if (model.scheduleItems.length > 0) {
+    const fi = model.scheduleItems[0];
+    const fiDrawH = fi.media.drawingUrl && imageCache.has(`draw-${fi.index}`) ? DENSITY_DRAWING_MAX_H + 2 : 0;
+    const fiSpecH = fi.visibleSpecs.length * DENSITY_SPEC_ROW_H;
+    const fiPhotoH = fi.media.customerPhotos.filter((p) => imageCache.has(p.key)).length > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
+    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiSpecH) + fiPhotoH + 4;
+  }
+
+  const neededOnCurrentPage = SECTION_GAP + SCHEDULE_HEADING_H + firstItemEstH;
+  const remainingSpace = MAX_Y - y;
+
+  if (remainingSpace < neededOnCurrentPage) {
+    // Not enough room for heading + first item — start schedule on a fresh page
+    pdf.addPage();
+    y = TOP_MARGIN;
+  } else {
+    // Enough room — continue on same page after a section gap
+    y += SECTION_GAP;
+  }
 
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(10);

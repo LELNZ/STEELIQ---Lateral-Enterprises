@@ -1,0 +1,218 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused quote layout and pagination correction pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, snapshot flow, or quote template architecture.
+3. Do NOT move the totals / quote summary block off page 1.
+4. Do NOT rebuild the renderer stack from scratch.
+5. Do NOT add unrelated schema fields, endpoints, or systems.
+6. Do NOT bypass QuoteDocument, QuoteRenderModel, Preview, or PDF engine.
+7. Preserve Preview / PDF parity as much as practical, while recognizing PDF has pagination constraints.
+8. Focus only on:
+   - page 1 composition
+   - schedule placement
+   - legal section sequencing
+   - item-card pagination behavior
+   - professional customer quote flow
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderModel
+→ Preview
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless absolutely necessary.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any pagination / layout-rule changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Fix the customer quote flow so page 1 is used more professionally:
+
+- keep the quote summary / totals on page 1
+- start the item schedule on page 1 if the first item fits
+- do NOT force the schedule to begin on page 2 unnecessarily
+- do NOT let legal content interrupt the schedule too early
+- render legal/payment/remittance/acceptance only after the schedule is complete
+
+This pass is about document composition and pagination only.
+
+
+--------------------------------------------------
+T146 — Remove any unnecessary forced page break between summary and schedule
+--------------------------------------------------
+
+Problem:
+The current quote output leaves page 1 ending after the quote summary block, even when there appears to be enough space to begin the schedule.
+
+Required implementation:
+
+1. Audit the PDF generation path and preview composition for any forced break or sequencing rule that causes:
+   - summary on page 1
+   - schedule always starting on page 2
+
+2. Remove that behavior unless it is strictly needed.
+
+3. The schedule should be allowed to begin immediately after the summary block if the first item can fit safely.
+
+Acceptance criteria:
+- no unnecessary forced page break exists between summary and schedule
+- page 1 can include the first schedule item where space allows
+
+
+--------------------------------------------------
+T147 — Add a first-item-fit rule for page 1
+--------------------------------------------------
+
+Problem:
+We want a professional mixed first page:
+- intro/summary
+- then first item if it fits
+
+Required implementation:
+
+1. After rendering:
+   - header
+   - quotation/tender title
+   - customer/project details
+   - totals/summary block
+
+2. Measure the remaining page space.
+3. Estimate the height of the first schedule item card.
+4. If the first item fits without splitting awkwardly, render it on page 1.
+5. If it does not fit, start the schedule on page 2.
+
+6. Do NOT partially split the first item across pages.
+
+Acceptance criteria:
+- first schedule item starts on page 1 when it fits
+- otherwise schedule starts cleanly on page 2
+- no awkward half-item behavior occurs
+
+
+--------------------------------------------------
+T148 — Ensure schedule completes before legal/payment/remittance/acceptance
+--------------------------------------------------
+
+Problem:
+Legal content currently begins too early and can interrupt the schedule flow.
+
+Required implementation:
+
+1. Change section sequencing so:
+   - all schedule items render first
+   - exclusions / terms / payment / remittance / acceptance only begin after the schedule is finished
+
+2. Do NOT inject legal content on the same page immediately after one or two schedule items if more schedule items remain.
+
+3. Keep the quote summary on page 1 near the top.
+4. Keep legal content later in the document.
+
+Acceptance criteria:
+- schedule is the uninterrupted main body of the quote
+- legal/payment/remittance/acceptance appear after the schedule completes
+- document flow feels more commercially professional
+
+
+--------------------------------------------------
+T149 — Preserve whole-item pagination rules
+--------------------------------------------------
+
+Problem:
+Improving page 1 composition must not break the existing rule that item cards should stay whole.
+
+Required implementation:
+
+1. Keep schedule item cards as whole render blocks.
+2. Do not split:
+   - item header
+   - drawing
+   - specs
+   - photos
+across page boundaries unless the item is extraordinarily large and no other safe option exists.
+
+3. Reuse the existing item-height estimation logic where possible.
+
+Acceptance criteria:
+- item cards remain whole and readable
+- pagination improves without introducing broken item layouts
+
+
+--------------------------------------------------
+T150 — Keep Preview and PDF aligned in section flow
+--------------------------------------------------
+
+Problem:
+Even if Preview is scroll-based and PDF is paginated, the document flow should remain aligned.
+
+Required implementation:
+
+1. Ensure Preview follows the same section order intent:
+   - intro / summary first
+   - schedule immediately after
+   - legal later
+   - acceptance/remittance at the end
+
+2. Preview does not need literal page breaks, but it should visually reflect the same document logic as the PDF.
+
+Acceptance criteria:
+- Preview and PDF remain in the same document family
+- schedule-first flow is visible in both outputs
+
+
+--------------------------------------------------
+T151 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- redesign the template builder
+- redesign quote lifecycle
+- move totals to the end of the document
+- add customer portal/email logic
+- introduce new template systems
+- rebuild the renderer stack
+
+This is a page-1 composition and schedule-flow correction pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The quote summary remains on page 1.
+2. The item schedule begins on page 1 when the first item fits.
+3. The schedule is no longer unnecessarily pushed to page 2.
+4. Legal/payment/remittance/acceptance appear only after the schedule completes.
+5. Item cards remain whole and readable.
+6. The quote feels more like a professional customer quotation and less like a generated report.
+
+
+END OF IMPLEMENTATION
