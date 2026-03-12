@@ -1,0 +1,363 @@
+STEELIQ PROJECT CONTROL HEADER — MUST FOLLOW
+
+Implement exactly what is requested.
+Do not redesign architecture.
+
+Do NOT:
+- change the quote lifecycle
+- bypass QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- introduce schema creep outside this request
+- add unapproved endpoints
+- perform hidden refactors
+- change snapshot behaviour unless explicitly requested
+- create alternative rendering systems
+- make speculative architectural changes
+- redesign auth architecture beyond this phase
+- build unrelated modules “while here”
+
+Current-state facts that MUST remain true:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- Job type presets already exist and are persisted in division settings
+- Schedule first-item-fit pagination is already implemented
+- Hardware consolidation is partial because Wanz Bar still sits outside the Hardware tab
+- Quote creation is stable
+- PDF output is stable
+- Pricing inputs are acceptable
+- Revisions are clear
+- Auth/login exists
+- Users admin UI exists
+- Forced password change on first login exists
+- Role descriptions/help text exist
+- Onboarding/manual invite flow exists
+- Accepted quote flow exists
+- Deposit invoice foundation exists
+- Basic division-scoped invoice filtering exists
+
+All work must be incremental, architecture-safe, and backward-compatible.
+If a structural change seems necessary, stop and explain before changing it.
+
+AGENT EXECUTION RULES
+
+You may internally plan tasks and run multiple subtasks in parallel.
+
+However:
+- Do NOT expand scope beyond what is explicitly requested
+- Do NOT redesign architecture
+- Do NOT introduce schema changes outside this prompt
+- Do NOT perform speculative refactors
+- If useful additional improvements are identified, report them in the handover instead of implementing them
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark this phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+STEELIQ PLATFORM PROFILE
+
+Purpose
+SteelIQ is the shared business operating system for Lateral Enterprises, starting with estimating and quoting, then extending into jobs, invoicing, customer management, production, and division-specific manufacturing modules.
+
+Vision
+Build a modular, enterprise-grade, multi-division platform for:
+- Lateral Engineering
+- Lateral Joinery
+- Lateral Laser Cutting
+
+System positioning
+- GoHighLevel remains the CRM front office for leads, pipeline, marketing automation, and follow-up workflows
+- SteelIQ is the commercial ERP and operational core for customers, projects, estimating, quoting, acceptance, jobs, invoicing, cost tracking, and division-specific operational modules
+- Xero remains the accounting source of truth for invoices, payments, and financial ledger data
+
+Direction
+Build in controlled layers:
+1. Quote engine
+2. Identity and access
+3. Customers and projects
+4. Acceptance and job conversion
+5. Invoicing and Xero
+6. Customer portal
+7. Division-specific production modules
+
+Architecture principles
+- Preserve QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- Shared core, division-specific operations
+- Freeze issued and accepted commercial history
+- Convert accepted quotes into jobs without mutating historical quote data
+- Integrate with Xero rather than replacing accounting
+- Replace spreadsheet logic module by module, not all at once
+- Keep modules logical, staged, and reusable
+
+CURRENT PHASE OBJECTIVE
+
+Implement the next core commercial-to-operational bridge:
+
+- Customers + Projects integration into the quote workflow
+- Quote -> Job conversion foundation
+
+This phase should create a clean business chain:
+Customer -> Project -> Quote -> Accepted Quote -> Job
+
+IMPORTANT CONTEXT
+
+- Keep GoHighLevel as CRM front office
+- Do NOT build CRM replacement features in this phase
+- Do NOT build the full job management system in this phase
+- Do NOT build customer portal in this phase
+- The goal is to make accepted quotes convertible into structured job shells
+- Shared records should stay shared where appropriate
+- Jobs should be division-owned
+
+REQUIRED DELIVERABLES
+
+This phase is only complete when all of the following exist:
+
+1. Customers + Projects integrated into quote workflow
+- quotes can be linked cleanly to customer and project
+- customer/project selection is visible and usable in current quote creation/detail flows where appropriate
+- current commercial UI surfaces reflect this relationship clearly
+- avoid duplicate record creation where shared customer/project records already make sense
+
+2. Practical Customers UI / Projects UI readiness
+- minimum operational UI/admin surface exists for customers and projects
+- staff can view and manage customers/projects needed for quote workflow
+- do not leave customers/projects as backend-only entities
+
+3. Accepted Quote -> Job conversion action
+- accepted quotes show a clear “Convert to Job” or equivalent action
+- conversion creates a structured job shell
+- job shell links back to:
+  - accepted quote
+  - accepted revision
+  - customer
+  - project
+  - division
+
+4. Job shell foundation
+- create the minimum job record required for future ERP growth
+- include basic job metadata such as:
+  - job number
+  - title/name
+  - division
+  - customer
+  - project
+  - source quote
+  - source accepted revision
+  - created date
+  - status
+
+5. Historical safety
+- conversion must not mutate accepted quote history
+- job creation must derive from the accepted revision state, not live editable quote data
+
+IMPLEMENT ONLY THE FOLLOWING
+
+1. Customers + Projects workflow integration
+Implement the missing shared-record connection in current commercial flows.
+
+Requirements:
+- customer and project relationships are explicit in quotes
+- quote UI shows and uses the linked customer/project information clearly
+- add the minimum customer/project CRUD/admin UI needed for internal staff use
+- preserve shared ownership model where customers/projects are organisation-level, not duplicated unnecessarily per division
+
+2. Quote -> Job conversion foundation
+Implement a controlled conversion path from accepted quote to job shell.
+
+Requirements:
+- only accepted quotes can be converted
+- conversion action is visible in the accepted quote UI
+- creating a job shell captures:
+  - job number
+  - title/name
+  - division
+  - linked customer
+  - linked project
+  - source quote
+  - source accepted revision
+  - initial status
+- job shell is created from accepted commercial state, not mutable live state
+
+3. Job shell UI
+Implement the minimum practical UI/admin surface for this phase.
+
+Requirements:
+- a job detail view or shell view exists
+- the created job can be opened and reviewed
+- staff can see the linked quote/customer/project source relationships
+- do NOT build full scheduling, costing, procurement, or production modules yet
+
+4. Numbering / identity
+If job numbering does not yet exist, add the minimum safe numbering support for jobs.
+Keep it simple and aligned with current architecture.
+Do not overbuild a giant numbering framework in this phase unless already present and required.
+
+5. Division ownership rules
+Ensure created jobs are division-owned.
+Shared customer/project records may link across divisions, but the job itself must belong to a division.
+
+DATA OWNERSHIP RULES
+
+Keep these shared at organisation level:
+- customers
+- contacts
+- projects
+- users
+- activity log
+- integration framework
+
+Keep these division-scoped:
+- quotes
+- jobs
+- invoice defaults
+- division settings
+- manufacturing modules
+- operational workflows
+
+Freeze these at accepted/issued commercial state:
+- accepted quote revision
+- commercial text used
+- totals used
+- pricing snapshot used
+
+SCHEMA/API EXPECTATIONS
+
+Implement only what is required for this phase.
+
+Allowed:
+- customer/project schema additions if needed
+- quote linkage improvements
+- job shell schema
+- job shell routes
+- quote conversion route(s)
+- minimum job UI
+
+Do NOT overbuild:
+- no full job management suite
+- no scheduling engine
+- no procurement module
+- no full costing module
+- no customer portal
+- no CRM automation features
+- no broad workflow engine
+- no advanced permissions matrix
+
+LIFECYCLE RULES
+
+- quote must be accepted before conversion to job
+- job conversion must preserve traceability back to accepted quote revision
+- conversion must not alter accepted quote history
+- customer/project linkage must be explicit and visible
+- jobs are the operational successor to accepted quote scope, not a rewrite of quote history
+
+UI EXPECTATIONS
+
+Add only the minimum UI required for this phase:
+- customer/project management surface(s)
+- quote UI integration for linked customer/project
+- accepted quote convert-to-job action
+- job shell detail/view page
+- clear linkage display between:
+  - customer
+  - project
+  - quote
+  - accepted revision
+  - job
+
+Keep the UI clean and functional.
+Do NOT do a broad visual redesign in this phase.
+
+NON-GOALS FOR THIS PHASE
+
+Do NOT implement yet:
+- full job management module
+- procurement
+- production scheduling
+- back-costing
+- variation workflow
+- retention workflow
+- customer portal
+- full Xero lifecycle
+- GoHighLevel sync implementation
+- division-specific manufacturing modules
+
+DEFINITION OF DONE
+
+Done means:
+- customers/projects are operationally usable in quote workflow
+- accepted quotes can be converted into job shells
+- jobs are traceably linked to accepted revision state
+- internal staff can use the new flow through the app UI
+- no mutation of accepted quote history
+- regression-safe with current quote/invoice flows intact
+
+MANDATORY HANDOVER UPDATE
+
+After implementation produce a structured handover update.
+
+Include:
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Regression checks must explicitly confirm:
+- login still works
+- logout still works
+- user management still works
+- quote creation still works
+- preview still works
+- PDF still works
+- revisions still work
+- accepted quote flow still works
+- deposit invoice flow still works
+- customers/projects can be used in quote workflow
+- accepted quote converts to job shell correctly
+- auth does not break tests
+
+FINAL INSTRUCTION
+
+Implement only this phase.
+Keep it controlled, modular, and logically staged.
+If anything remains partially implemented, say so explicitly in the handover rather than reporting it complete.

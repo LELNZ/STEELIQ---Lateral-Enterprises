@@ -19,12 +19,13 @@ import {
   type CustomerContact, type InsertCustomerContact,
   type Project, type InsertProject,
   type Invoice, type InsertInvoice,
+  type OpJob, type InsertOpJob,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
   orgSettings, divisionSettings, specDictionary,
   itemPhotos,
-  userSessions, customers, customerContacts, projects, invoices,
+  userSessions, customers, customerContacts, projects, invoices, opJobs,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, sql, isNull, isNotNull, inArray } from "drizzle-orm";
@@ -152,6 +153,13 @@ export interface IStorage {
   getInvoicesByQuote(quoteId: string): Promise<Invoice[]>;
   getAllInvoices(): Promise<Invoice[]>;
   updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+
+  getNextJobNumber(): Promise<string>;
+  createOpJob(data: InsertOpJob): Promise<OpJob>;
+  getOpJob(id: string): Promise<OpJob | undefined>;
+  getAllOpJobs(): Promise<OpJob[]>;
+  updateOpJob(id: string, data: Partial<InsertOpJob>): Promise<OpJob | undefined>;
+  getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -687,6 +695,42 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoices.id, id))
       .returning();
     return updated;
+  }
+
+  async getNextJobNumber(): Promise<string> {
+    await db.insert(numberSequences).values({ id: "op_job", currentValue: 0 }).onConflictDoNothing();
+    const [row] = await db.update(numberSequences)
+      .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
+      .where(eq(numberSequences.id, "op_job"))
+      .returning();
+    return `J-${String(row.currentValue).padStart(4, "0")}`;
+  }
+
+  async createOpJob(data: InsertOpJob): Promise<OpJob> {
+    const [created] = await db.insert(opJobs).values(data as any).returning();
+    return created;
+  }
+
+  async getOpJob(id: string): Promise<OpJob | undefined> {
+    const [row] = await db.select().from(opJobs).where(eq(opJobs.id, id));
+    return row;
+  }
+
+  async getAllOpJobs(): Promise<OpJob[]> {
+    return db.select().from(opJobs).orderBy(desc(opJobs.createdAt));
+  }
+
+  async updateOpJob(id: string, data: Partial<InsertOpJob>): Promise<OpJob | undefined> {
+    const [updated] = await db.update(opJobs)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(opJobs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined> {
+    const [row] = await db.select().from(opJobs).where(eq(opJobs.sourceQuoteId, quoteId));
+    return row;
   }
 }
 

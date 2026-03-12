@@ -481,3 +481,27 @@ export const invoices = pgTable("invoices", {
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoices.$inferSelect;
+
+export const OP_JOB_STATUSES = ["active", "on_hold", "completed", "cancelled"] as const;
+export type OpJobStatus = typeof OP_JOB_STATUSES[number];
+
+export const opJobs = pgTable("op_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobNumber: text("job_number").notNull().unique(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("active"),
+  divisionId: varchar("division_id"),
+  customerId: varchar("customer_id"),
+  projectId: varchar("project_id"),
+  sourceQuoteId: varchar("source_quote_id"),
+  acceptedRevisionId: varchar("accepted_revision_id"),
+  notes: text("notes"),
+  createdByUserId: varchar("created_by_user_id"),
+  convertedAt: timestamp("converted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOpJobSchema = createInsertSchema(opJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOpJob = z.infer<typeof insertOpJobSchema>;
+export type OpJob = typeof opJobs.$inferSelect;

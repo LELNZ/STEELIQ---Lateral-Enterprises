@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { type Quote, type QuoteRevision, type AuditLog, type Invoice, VALID_STATUS_TRANSITIONS, type QuoteStatus } from "@shared/schema";
+import { type Quote, type QuoteRevision, type AuditLog, type Invoice, type Customer, type Project, type OpJob, VALID_STATUS_TRANSITIONS, type QuoteStatus } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -17,7 +17,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus } from "lucide-react";
+import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
@@ -308,6 +308,8 @@ export default function QuoteDetail() {
         </div>
       )}
 
+      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} />
+
       <Separator />
 
       <div className="space-y-4">
@@ -369,6 +371,8 @@ export default function QuoteDetail() {
         <>
           <Separator />
           <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} />
+          <Separator />
+          <ConvertToJobSection quoteId={quote.id} />
         </>
       )}
 
@@ -424,6 +428,251 @@ const INVOICE_TYPE_LABELS: Record<string, string> = {
   retention_release: "Retention Release",
   credit_note: "Credit Note",
 };
+
+function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: string; customerId?: string | null; projectId?: string | null }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [selCustomer, setSelCustomer] = useState(customerId ?? "__none__");
+  const [selProject, setSelProject] = useState(projectId ?? "__none__");
+
+  const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
+  const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+
+  const customer = customers.find((c) => c.id === customerId);
+  const project = projects.find((p) => p.id === projectId);
+  const filteredProjects = selCustomer && selCustomer !== "__none__"
+    ? projects.filter((p) => p.customerId === selCustomer)
+    : projects;
+
+  const linkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/quotes/${quoteId}/link`, {
+        customerId: selCustomer === "__none__" ? null : selCustomer,
+        projectId: selProject === "__none__" ? null : selProject,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to save");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Quote linkage saved" });
+      setEditing(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Link2 className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Customer & Project</h3>
+        </div>
+        {!editing && (
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+            setSelCustomer(customerId ?? "__none__");
+            setSelProject(projectId ?? "__none__");
+            setEditing(true);
+          }} data-testid="button-edit-linkage">
+            <Link2 className="h-3 w-3 mr-1" />
+            {customer ? "Change" : "Link"}
+          </Button>
+        )}
+      </div>
+
+      {!editing ? (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Building2 className="h-3 w-3" /> Customer</p>
+            {customer ? (
+              <p className="text-sm font-medium" data-testid="text-linked-customer">{customer.name}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Not linked</p>
+            )}
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Project</p>
+            {project ? (
+              <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Not linked</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Customer</Label>
+              <Select value={selCustomer} onValueChange={(v) => { setSelCustomer(v); setSelProject("__none__"); }}>
+                <SelectTrigger className="h-8 text-sm" data-testid="select-link-customer"><SelectValue placeholder="Select customer" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Project</Label>
+              <Select value={selProject} onValueChange={setSelProject}>
+                <SelectTrigger className="h-8 text-sm" data-testid="select-link-project"><SelectValue placeholder="Select project" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {filteredProjects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => linkMutation.mutate()} disabled={linkMutation.isPending} data-testid="button-save-linkage">
+              {linkMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConvertToJobSection({ quoteId }: { quoteId: string }) {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [showDialog, setShowDialog] = useState(false);
+  const [jobTitle, setJobTitle] = useState("");
+  const [jobNotes, setJobNotes] = useState("");
+
+  const { data: existingJob, isLoading: checkingJob } = useQuery<OpJob | null>({
+    queryKey: ["/api/op-jobs", "by-quote", quoteId],
+    queryFn: async () => {
+      const res = await fetch(`/api/op-jobs?quoteId=${quoteId}`);
+      if (!res.ok) return null;
+      const jobs: OpJob[] = await res.json();
+      return jobs.find((j) => j.sourceQuoteId === quoteId) ?? null;
+    },
+  });
+
+  const convertMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/quotes/${quoteId}/convert-to-job`, {
+        title: jobTitle || undefined,
+        notes: jobNotes || undefined,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.jobId) {
+          queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", "by-quote", quoteId] });
+          throw new Error("A job already exists for this quote.");
+        }
+        throw new Error(body.error || "Conversion failed");
+      }
+      return res.json();
+    },
+    onSuccess: (newJob: OpJob) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", "by-quote", quoteId] });
+      toast({ title: "Job created", description: `${newJob.jobNumber} — ${newJob.title}` });
+      setShowDialog(false);
+      navigate(`/op-jobs/${newJob.id}`);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  if (checkingJob) return null;
+
+  if (existingJob) {
+    return (
+      <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-green-600" />
+            <h3 className="text-sm font-semibold">Converted to Job</h3>
+          </div>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => navigate(`/op-jobs/${existingJob.id}`)} data-testid="button-view-job">
+            <ExternalLink className="h-3 w-3 mr-1" /> View Job
+          </Button>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-muted-foreground">Job Number</p>
+            <p className="font-mono font-medium" data-testid="text-job-number">{existingJob.jobNumber}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Title</p>
+            <p className="font-medium" data-testid="text-job-title">{existingJob.title}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Status</p>
+            <Badge variant="outline" className="text-xs capitalize" data-testid="badge-job-status">{existingJob.status.replace("_", " ")}</Badge>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="rounded-lg border border-dashed p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Briefcase className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Convert to Job</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision.
+        </p>
+        <Button size="sm" onClick={() => setShowDialog(true)} data-testid="button-convert-to-job">
+          <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
+        </Button>
+      </div>
+
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4" />
+              Convert Quote to Job
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <Alert>
+              <AlertDescription>
+                This will create an operational job shell derived from the accepted revision. The accepted quote history is not modified.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label>Job Title <span className="text-muted-foreground">(optional — defaults to customer name)</span></Label>
+              <Input
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+                placeholder="e.g. 23 Main St — Window & Door Package"
+                data-testid="input-job-title"
+              />
+            </div>
+            <div>
+              <Label>Initial Notes <span className="text-muted-foreground">(optional)</span></Label>
+              <Input
+                value={jobNotes}
+                onChange={(e) => setJobNotes(e.target.value)}
+                placeholder="Any initial notes for the job team"
+                data-testid="input-job-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
+            <Button onClick={() => convertMutation.mutate()} disabled={convertMutation.isPending} data-testid="button-confirm-convert">
+              {convertMutation.isPending ? "Creating…" : "Create Job"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: string; acceptedValue: number; divisionCode?: string }) {
   const { toast } = useToast();

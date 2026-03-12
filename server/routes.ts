@@ -1868,6 +1868,109 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Quote Linkage (customer/project) ─────────────────────────────────────
+  app.patch("/api/quotes/:id/link", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const schema = z.object({
+        customerId: z.string().nullable().optional(),
+        projectId: z.string().nullable().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const updated = await storage.updateQuote(req.params.id, parsed.data);
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Quote -> Job Conversion ───────────────────────────────────────────────
+  app.post("/api/quotes/:id/convert-to-job", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (quote.status !== "accepted") {
+        return res.status(422).json({ error: "Only accepted quotes can be converted to a job." });
+      }
+      const existing = await storage.getOpJobByQuoteId(quote.id);
+      if (existing) {
+        return res.status(409).json({ error: "A job already exists for this quote.", jobId: existing.id });
+      }
+      const schema = z.object({
+        title: z.string().min(1).optional(),
+        notes: z.string().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const userId = req.user?.id ?? null;
+      const jobNumber = await storage.getNextJobNumber();
+      const title = parsed.data.title || quote.customer || `Job from ${quote.number}`;
+
+      const opJob = await storage.createOpJob({
+        jobNumber,
+        title,
+        status: "active",
+        divisionId: quote.divisionId ?? null,
+        customerId: quote.customerId ?? null,
+        projectId: quote.projectId ?? null,
+        sourceQuoteId: quote.id,
+        acceptedRevisionId: quote.acceptedRevisionId ?? null,
+        notes: parsed.data.notes ?? null,
+        createdByUserId: userId,
+        convertedAt: new Date(),
+      } as any);
+
+      logActivity("quote_converted_to_job", "op_job", opJob.id, userId, {
+        quoteId: quote.id,
+        quoteNumber: quote.number,
+        jobNumber,
+      });
+
+      return res.status(201).json(opJob);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Op Jobs Routes ────────────────────────────────────────────────────────
+  app.get("/api/op-jobs", async (req, res) => {
+    try {
+      return res.json(await storage.getAllOpJobs());
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/op-jobs/:id", async (req, res) => {
+    try {
+      const job = await storage.getOpJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      return res.json(job);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/op-jobs/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).optional(),
+        status: z.enum(["active", "on_hold", "completed", "cancelled"]).optional(),
+        notes: z.string().nullable().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const updated = await storage.updateOpJob(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "Job not found" });
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   return httpServer;
 }
 

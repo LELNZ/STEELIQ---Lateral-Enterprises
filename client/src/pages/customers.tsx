@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
-  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2,
+  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -49,11 +49,18 @@ function ContactRow({ contact, onDelete }: { contact: CustomerContact; onDelete:
 function CustomerRow({ customer }: { customer: Customer }) {
   const [expanded, setExpanded] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
+  const [showAddProject, setShowAddProject] = useState(false);
   const { toast } = useToast();
 
   const { data: contacts = [] } = useQuery<CustomerContact[]>({
     queryKey: ["/api/customers", customer.id, "contacts"],
     queryFn: () => fetch(`/api/customers/${customer.id}/contacts`).then((r) => r.json()),
+    enabled: expanded,
+  });
+
+  const { data: projects = [] } = useQuery<Project[]>({
+    queryKey: ["/api/customers", customer.id, "projects"],
+    queryFn: () => fetch(`/api/customers/${customer.id}/projects`).then((r) => r.json()),
     enabled: expanded,
   });
 
@@ -79,6 +86,26 @@ function CustomerRow({ customer }: { customer: Customer }) {
   });
 
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", role: "", isPrimary: false });
+  const [projectForm, setProjectForm] = useState({ name: "", address: "", description: "", notes: "" });
+
+  const addProjectMutation = useMutation({
+    mutationFn: async (data: typeof projectForm) => {
+      const res = await apiRequest("POST", "/api/projects", { ...data, customerId: customer.id });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to create project");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers", customer.id, "projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      setShowAddProject(false);
+      setProjectForm({ name: "", address: "", description: "", notes: "" });
+      toast({ title: "Project created" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   return (
     <>
@@ -98,32 +125,70 @@ function CustomerRow({ customer }: { customer: Customer }) {
       {expanded && (
         <TableRow>
           <TableCell colSpan={5} className="bg-muted/20 py-3 px-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contacts</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={(e) => { e.stopPropagation(); setShowAddContact(true); }}
-                  data-testid={`button-add-contact-${customer.id}`}
-                >
-                  <Plus className="h-3 w-3 mr-1" /> Add Contact
-                </Button>
-              </div>
-              {contacts.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-1">No contacts yet.</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {contacts.map((c) => (
-                    <ContactRow
-                      key={c.id}
-                      contact={c}
-                      onDelete={(id) => deleteContactMutation.mutate(id)}
-                    />
-                  ))}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contacts</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); setShowAddContact(true); }}
+                    data-testid={`button-add-contact-${customer.id}`}
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add Contact
+                  </Button>
                 </div>
-              )}
+                {contacts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-1">No contacts yet.</p>
+                ) : (
+                  <div className="space-y-0.5">
+                    {contacts.map((c) => (
+                      <ContactRow
+                        key={c.id}
+                        contact={c}
+                        onDelete={(id) => deleteContactMutation.mutate(id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Projects</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); setShowAddProject(true); }}
+                    data-testid={`button-add-project-${customer.id}`}
+                  >
+                    <Plus className="h-3 w-3 mr-1" /> Add Project
+                  </Button>
+                </div>
+                {projects.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-1">No projects yet.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {projects.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-muted/50" data-testid={`row-project-${p.id}`}>
+                        <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate" data-testid={`text-project-name-${p.id}`}>{p.name}</p>
+                          {p.address && <p className="text-xs text-muted-foreground truncate">{p.address}</p>}
+                          {p.description && <p className="text-xs text-muted-foreground truncate">{p.description}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </TableCell>
         </TableRow>
@@ -160,6 +225,62 @@ function CustomerRow({ customer }: { customer: Customer }) {
               data-testid="button-save-contact"
             >
               Add Contact
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showAddProject} onOpenChange={setShowAddProject}>
+        <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Add Project — {customer.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Project Name *</Label>
+              <Input
+                value={projectForm.name}
+                onChange={(e) => setProjectForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. 23 Main St — Renovation"
+                data-testid="input-project-name"
+              />
+            </div>
+            <div>
+              <Label>Site Address</Label>
+              <Input
+                value={projectForm.address}
+                onChange={(e) => setProjectForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Street address of the site"
+                data-testid="input-project-address"
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Input
+                value={projectForm.description}
+                onChange={(e) => setProjectForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Brief description"
+                data-testid="input-project-description"
+              />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea
+                value={projectForm.notes}
+                onChange={(e) => setProjectForm((f) => ({ ...f, notes: e.target.value }))}
+                rows={2}
+                data-testid="input-project-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddProject(false)}>Cancel</Button>
+            <Button
+              onClick={() => addProjectMutation.mutate(projectForm)}
+              disabled={!projectForm.name || addProjectMutation.isPending}
+              data-testid="button-save-project"
+            >
+              {addProjectMutation.isPending ? "Creating…" : "Create Project"}
             </Button>
           </DialogFooter>
         </DialogContent>
