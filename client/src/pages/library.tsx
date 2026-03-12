@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -22,7 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
@@ -222,6 +222,7 @@ export default function Library() {
             <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
             <TabsTrigger value="installation" data-testid="tab-installation">Installation</TabsTrigger>
             <TabsTrigger value="delivery" data-testid="tab-delivery">Delivery</TabsTrigger>
+            <TabsTrigger value="profile_roles" data-testid="tab-profile-roles">Profile Roles</TabsTrigger>
           </TabsList>
 
           <TabsContent value="glass">
@@ -253,6 +254,9 @@ export default function Library() {
           </TabsContent>
           <TabsContent value="delivery">
             <DeliverySection divisionCode={selectedDivision} />
+          </TabsContent>
+          <TabsContent value="profile_roles">
+            <ProfileRoleDictionarySection />
           </TabsContent>
         </Tabs>
       </div>
@@ -832,6 +836,9 @@ function ProfilesPanel({ configurationId }: { configurationId: string }) {
 
 function ProfileDialog({ configurationId, profile, onClose }: { configurationId: string; profile: ConfigurationProfile | null; onClose: () => void }) {
   const { toast } = useToast();
+  const { data: roleEntries = [] } = useLibraryEntries("profile_role");
+  const managedRoles = roleEntries.map((e) => (e.data as any).name as string).filter(Boolean);
+  const roleOptions = managedRoles.length > 0 ? managedRoles : PROFILE_ROLES;
   const [mouldNumber, setMouldNumber] = useState(profile?.mouldNumber || "");
   const [role, setRole] = useState(profile?.role || "outer-frame");
   const [kgPerMetre, setKgPerMetre] = useState(profile?.kgPerMetre || "");
@@ -871,7 +878,7 @@ function ProfileDialog({ configurationId, profile, onClose }: { configurationId:
             <Select value={role} onValueChange={setRole}>
               <SelectTrigger data-testid="select-profile-role"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {PROFILE_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                {roleOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -1885,6 +1892,185 @@ function DeleteConfirmDialog({ open, onClose, onConfirm, isPending }: {
   );
 }
 
+function ProfileRoleDictionarySection() {
+  const { toast } = useToast();
+  const { data: entries = [], isLoading } = useLibraryEntries("profile_role");
+  const [newRoleName, setNewRoleName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+
+  const addMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/library", { type: "profile_role", data: { name: name.trim() }, sortOrder: entries.length });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "profile_role"] });
+      setNewRoleName("");
+      toast({ title: "Role added" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await apiRequest("PATCH", `/api/library/${id}`, { data: { name: name.trim() } });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "profile_role"] });
+      setEditingId(null);
+      setEditingName("");
+      toast({ title: "Role updated" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/library/profile-roles/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "profile_role"] });
+      toast({ title: "Role removed" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Cannot delete role", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const startEdit = (entry: LibraryEntry) => {
+    setEditingId(entry.id);
+    setEditingName((entry.data as any).name || "");
+  };
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="profile-role-dictionary-section">
+      <div className="flex items-center gap-2">
+        <List className="w-4 h-4 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Profile Role Dictionary</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Manage the controlled list of role values available when assigning aluminium profiles. Roles in use by existing profiles cannot be deleted.
+      </p>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Role Name</TableHead>
+                <TableHead className="w-28"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry) => {
+                const roleName = (entry.data as any).name as string;
+                const isEditing = editingId === entry.id;
+                return (
+                  <TableRow key={entry.id} data-testid={`row-role-${entry.id}`}>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          className="h-7 text-sm"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          autoFocus
+                          data-testid={`input-edit-role-${entry.id}`}
+                        />
+                      ) : (
+                        <span className="font-mono text-sm">{roleName}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 justify-end">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={!editingName.trim() || updateMutation.isPending}
+                              onClick={() => updateMutation.mutate({ id: entry.id, name: editingName })}
+                              data-testid={`button-save-role-${entry.id}`}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => { setEditingId(null); setEditingName(""); }}
+                              data-testid={`button-cancel-role-${entry.id}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => startEdit(entry)}
+                              data-testid={`button-edit-role-${entry.id}`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive"
+                              disabled={deleteMutation.isPending}
+                              onClick={() => deleteMutation.mutate(entry.id)}
+                              data-testid={`button-delete-role-${entry.id}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {entries.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-muted-foreground py-6">
+                    No roles defined yet. Add one below.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <div className="flex gap-2 items-center">
+        <Input
+          placeholder="New role name (e.g. transom-cap)"
+          className="max-w-xs"
+          value={newRoleName}
+          onChange={(e) => setNewRoleName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && newRoleName.trim()) addMutation.mutate(newRoleName); }}
+          data-testid="input-new-role-name"
+        />
+        <Button
+          size="sm"
+          disabled={!newRoleName.trim() || addMutation.isPending}
+          onClick={() => addMutation.mutate(newRoleName)}
+          data-testid="button-add-role"
+        >
+          <Plus className="w-4 h-4 mr-1" /> Add Role
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const FAMILY_GROUPS = ["ES52 Window", "ES52 Hinge Door", "ES127 Sliding Door"];
 
 function DirectMaterialsSection({ divisionCode }: { divisionCode?: string | null }) {
@@ -2024,6 +2210,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10"></TableHead>
                       <TableHead>Mould #</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>kg/m</TableHead>
@@ -2038,6 +2225,17 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       const d = p.data as any;
                       return (
                         <TableRow key={p.id} data-testid={`row-profile-${p.id}`}>
+                          <TableCell className="p-1">
+                            {d.imageKey ? (
+                              <div className="w-8 h-8 rounded overflow-hidden border bg-muted flex-shrink-0 cursor-pointer" title="View reference image" onClick={() => window.open(`/api/item-photos/${d.imageKey}`, "_blank")} data-testid={`img-profile-thumb-${p.id}`}>
+                                <img src={`/api/item-photos/${d.imageKey}`} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded border border-dashed bg-muted/30 flex items-center justify-center" title="No reference image">
+                                <ImageIcon className="w-3 h-3 text-muted-foreground/40" />
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell className="font-mono text-xs">{d.mouldNumber}</TableCell>
                           <TableCell><Badge variant="outline">{d.role}</Badge></TableCell>
                           <TableCell>{d.kgPerMetre}</TableCell>
@@ -2058,7 +2256,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       );
                     })}
                     {profiles.length === 0 && (
-                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No profiles</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-4">No profiles</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -2137,7 +2335,31 @@ function DirectProfileDialog({ entry, divisionCode, onClose }: { entry: LibraryE
     lengthFormula: d.lengthFormula || "perimeter",
     familyGroup: d.familyGroup || ["ES52 Window"],
     description: d.description || "",
+    imageKey: d.imageKey || "",
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const { data: roleEntries = [] } = useLibraryEntries("profile_role");
+  const managedRoles = roleEntries.map((e) => (e.data as any).name as string).filter(Boolean);
+  const roleOptions = managedRoles.length > 0 ? managedRoles : PROFILE_ROLES;
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/item-photos", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { key } = await res.json();
+      setValues((v) => ({ ...v, imageKey: key }));
+      toast({ title: "Image uploaded" });
+    } catch {
+      toast({ title: "Image upload failed", variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -2157,7 +2379,7 @@ function DirectProfileDialog({ entry, divisionCode, onClose }: { entry: LibraryE
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent data-testid="dialog-direct-profile">
+      <DialogContent className="max-w-lg" data-testid="dialog-direct-profile">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Profile" : "Add Profile"}</DialogTitle>
           <DialogDescription>{isEdit ? "Changes will sync to all configurations using this mould number." : "Add a new master profile."}</DialogDescription>
@@ -2172,7 +2394,7 @@ function DirectProfileDialog({ entry, divisionCode, onClose }: { entry: LibraryE
             <Select value={values.role} onValueChange={(v) => setValues({ ...values, role: v })}>
               <SelectTrigger data-testid="select-role"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {PROFILE_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                {roleOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -2210,6 +2432,50 @@ function DirectProfileDialog({ entry, divisionCode, onClose }: { entry: LibraryE
                   {fg}
                 </label>
               ))}
+            </div>
+          </div>
+          <div className="col-span-2">
+            <Label>Reference Image</Label>
+            <div className="mt-1 flex items-start gap-3">
+              {values.imageKey ? (
+                <div className="relative w-20 h-20 rounded border overflow-hidden bg-muted flex-shrink-0">
+                  <img src={`/api/item-photos/${values.imageKey}`} alt="Profile reference" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white hover:bg-black/80"
+                    onClick={() => setValues((v) => ({ ...v, imageKey: "" }))}
+                    data-testid="button-remove-profile-image"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded border border-dashed bg-muted flex items-center justify-center flex-shrink-0">
+                  <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingImage}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-upload-profile-image"
+                >
+                  <Camera className="w-4 h-4 mr-1.5" />
+                  {uploadingImage ? "Uploading..." : values.imageKey ? "Replace Image" : "Upload Image"}
+                </Button>
+                <p className="text-xs text-muted-foreground">JPEG, up to 10MB. Used in library view and manufacturing reports.</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
+                  data-testid="input-profile-image-file"
+                />
+              </div>
             </div>
           </div>
           <div className="col-span-2">

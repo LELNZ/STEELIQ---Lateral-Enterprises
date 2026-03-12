@@ -113,6 +113,16 @@ export async function registerRoutes(
     console.log("Direct materials seeded");
   }
 
+  const hasProfileRoles = existingEntries.some((e) => e.type === "profile_role");
+  if (!hasProfileRoles) {
+    console.log("Seeding profile role dictionary...");
+    const PROFILE_ROLES_SEED = ["outer-frame", "sash-frame", "mullion", "bead", "spacer", "door-frame", "transom", "sidelight-mullion"];
+    for (let i = 0; i < PROFILE_ROLES_SEED.length; i++) {
+      await storage.createLibraryEntry({ type: "profile_role", data: { name: PROFILE_ROLES_SEED[i] }, sortOrder: i });
+    }
+    console.log("Profile role dictionary seeded");
+  }
+
   const existingColors = await storage.getLibraryEntries("frame_color");
   for (const entry of existingColors) {
     const d = entry.data as any;
@@ -467,6 +477,24 @@ export async function registerRoutes(
       res.json(entry);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/library/profile-roles/:id", async (req, res) => {
+    try {
+      const allRoles = await storage.getLibraryEntries("profile_role");
+      const roleEntry = allRoles.find((e) => e.id === req.params.id);
+      if (!roleEntry) return res.status(404).json({ error: "Role not found" });
+      const roleName = (roleEntry.data as any).name as string;
+      const profiles = await storage.getLibraryEntries("direct_profile");
+      const inUse = profiles.some((p) => (p.data as any).role === roleName);
+      if (inUse) {
+        return res.status(409).json({ error: `Role "${roleName}" is used by existing profiles. Reassign those profiles first.` });
+      }
+      await storage.deleteLibraryEntry(req.params.id);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
