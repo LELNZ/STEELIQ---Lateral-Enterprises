@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3 } from "lucide-react";
+import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import {
@@ -89,6 +89,15 @@ export function AppSidebar() {
                   <Link href="/quotes" onClick={(e) => guardedClick(e, "/quotes")} data-testid="link-sidebar-quotes">
                     <FileText />
                     <span>Quotes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/customers")} tooltip="Customers">
+                  <Link href="/customers" onClick={(e) => guardedClick(e, "/customers")} data-testid="link-sidebar-customers">
+                    <Users />
+                    <span>Customers</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

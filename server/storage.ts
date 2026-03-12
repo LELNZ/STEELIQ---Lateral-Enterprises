@@ -14,11 +14,17 @@ import {
   type DivisionSettings, type InsertDivisionSettings,
   type SpecDictionaryEntry, type InsertSpecDictionary,
   type ItemPhoto,
+  type UserSession,
+  type Customer, type InsertCustomer,
+  type CustomerContact, type InsertCustomerContact,
+  type Project, type InsertProject,
+  type Invoice, type InsertInvoice,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
   orgSettings, divisionSettings, specDictionary,
   itemPhotos,
+  userSessions, customers, customerContacts, projects, invoices,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, sql, isNull, isNotNull, inArray } from "drizzle-orm";
@@ -32,6 +38,13 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
+
+  createUserSession(userId: string, token: string, expiresAt: Date): Promise<UserSession>;
+  getUserSessionByToken(token: string): Promise<UserSession | undefined>;
+  deleteUserSession(token: string): Promise<void>;
+  deleteExpiredSessions(): Promise<void>;
 
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
@@ -89,6 +102,7 @@ export interface IStorage {
   updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined>;
   updateQuoteStatus(id: string, status: string): Promise<Quote | undefined>;
   updateQuoteCurrentRevision(id: string, revisionId: string): Promise<Quote | undefined>;
+  acceptQuote(id: string, data: { acceptedAt: Date; acceptedByUserId: string | null; acceptedValue: number; acceptedRevisionId: string }): Promise<Quote | undefined>;
   deleteQuoteAndRevisions(id: string): Promise<void>;
   deleteAllQuotesAndRevisions(): Promise<number>;
 
@@ -114,6 +128,30 @@ export interface IStorage {
   getItemPhoto(key: string): Promise<{ data: Buffer; mimeType: string } | undefined>;
   deleteItemPhoto(key: string): Promise<void>;
   deleteItemPhotos(keys: string[]): Promise<void>;
+
+  getAllCustomers(): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  createCustomer(data: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
+  archiveCustomer(id: string): Promise<Customer | undefined>;
+
+  getCustomerContacts(customerId: string): Promise<CustomerContact[]>;
+  createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact>;
+  updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined>;
+  deleteCustomerContact(id: string): Promise<void>;
+
+  getAllProjects(): Promise<Project[]>;
+  getProjectsByCustomer(customerId: string): Promise<Project[]>;
+  getProject(id: string): Promise<Project | undefined>;
+  createProject(data: InsertProject): Promise<Project>;
+  updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined>;
+
+  getNextInvoiceNumber(): Promise<string>;
+  createInvoice(data: InsertInvoice): Promise<Invoice>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  getInvoicesByQuote(quoteId: string): Promise<Invoice[]>;
+  getAllInvoices(): Promise<Invoice[]>;
+  updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -128,8 +166,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db.insert(users).values(insertUser as any).returning();
     return user;
+  }
+
+  async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
+    const [updated] = await db.update(users).set(data as any).where(eq(users.id, id)).returning();
+    return updated;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(asc(users.displayName));
+  }
+
+  async createUserSession(userId: string, token: string, expiresAt: Date): Promise<UserSession> {
+    const [session] = await db.insert(userSessions).values({ userId, token, expiresAt }).returning();
+    return session;
+  }
+
+  async getUserSessionByToken(token: string): Promise<UserSession | undefined> {
+    const [session] = await db.select().from(userSessions).where(eq(userSessions.token, token));
+    return session;
+  }
+
+  async deleteUserSession(token: string): Promise<void> {
+    await db.delete(userSessions).where(eq(userSessions.token, token));
+  }
+
+  async deleteExpiredSessions(): Promise<void> {
+    await db.delete(userSessions).where(sql`${userSessions.expiresAt} < NOW()`);
   }
 
   async createJob(job: InsertJob): Promise<Job> {
@@ -368,6 +433,21 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async acceptQuote(id: string, data: { acceptedAt: Date; acceptedByUserId: string | null; acceptedValue: number; acceptedRevisionId: string }): Promise<Quote | undefined> {
+    const [updated] = await db.update(quotes)
+      .set({
+        status: "accepted",
+        acceptedAt: data.acceptedAt,
+        acceptedByUserId: data.acceptedByUserId,
+        acceptedValue: data.acceptedValue,
+        acceptedRevisionId: data.acceptedRevisionId,
+        updatedAt: new Date(),
+      } as any)
+      .where(eq(quotes.id, id))
+      .returning();
+    return updated;
+  }
+
   async deleteQuoteAndRevisions(id: string): Promise<void> {
     await db.delete(quoteRevisions).where(eq(quoteRevisions.quoteId, id));
     await db.delete(quotes).where(eq(quotes.id, id));
@@ -507,6 +587,106 @@ export class DatabaseStorage implements IStorage {
   async deleteItemPhotos(keys: string[]): Promise<void> {
     if (keys.length === 0) return;
     await db.delete(itemPhotos).where(inArray(itemPhotos.key, keys));
+  }
+
+  async getAllCustomers(): Promise<Customer[]> {
+    return db.select().from(customers).where(isNull(customers.archivedAt)).orderBy(asc(customers.name));
+  }
+
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    const [row] = await db.select().from(customers).where(eq(customers.id, id));
+    return row;
+  }
+
+  async createCustomer(data: InsertCustomer): Promise<Customer> {
+    const [created] = await db.insert(customers).values(data).returning();
+    return created;
+  }
+
+  async updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined> {
+    const [updated] = await db.update(customers).set(data).where(eq(customers.id, id)).returning();
+    return updated;
+  }
+
+  async archiveCustomer(id: string): Promise<Customer | undefined> {
+    const [updated] = await db.update(customers).set({ archivedAt: new Date() } as any).where(eq(customers.id, id)).returning();
+    return updated;
+  }
+
+  async getCustomerContacts(customerId: string): Promise<CustomerContact[]> {
+    return db.select().from(customerContacts).where(eq(customerContacts.customerId, customerId)).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+  }
+
+  async createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact> {
+    const [created] = await db.insert(customerContacts).values(data).returning();
+    return created;
+  }
+
+  async updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined> {
+    const [updated] = await db.update(customerContacts).set(data).where(eq(customerContacts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCustomerContact(id: string): Promise<void> {
+    await db.delete(customerContacts).where(eq(customerContacts.id, id));
+  }
+
+  async getAllProjects(): Promise<Project[]> {
+    return db.select().from(projects).where(isNull(projects.archivedAt)).orderBy(desc(projects.createdAt));
+  }
+
+  async getProjectsByCustomer(customerId: string): Promise<Project[]> {
+    return db.select().from(projects).where(and(eq(projects.customerId, customerId), isNull(projects.archivedAt))).orderBy(desc(projects.createdAt));
+  }
+
+  async getProject(id: string): Promise<Project | undefined> {
+    const [row] = await db.select().from(projects).where(eq(projects.id, id));
+    return row;
+  }
+
+  async createProject(data: InsertProject): Promise<Project> {
+    const [created] = await db.insert(projects).values(data).returning();
+    return created;
+  }
+
+  async updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set(data).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+
+  async getNextInvoiceNumber(): Promise<string> {
+    await db.insert(numberSequences).values({ id: "invoice", currentValue: 0 }).onConflictDoNothing();
+    const [row] = await db.update(numberSequences)
+      .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
+      .where(eq(numberSequences.id, "invoice"))
+      .returning();
+    return `INV-${String(row.currentValue).padStart(4, "0")}`;
+  }
+
+  async createInvoice(data: InsertInvoice): Promise<Invoice> {
+    const [created] = await db.insert(invoices).values(data as any).returning();
+    return created;
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    const [row] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return row;
+  }
+
+  async getInvoicesByQuote(quoteId: string): Promise<Invoice[]> {
+    return db.select().from(invoices).where(eq(invoices.quoteId, quoteId)).orderBy(desc(invoices.createdAt));
+  }
+
+  async getAllInvoices(): Promise<Invoice[]> {
+    return db.select().from(invoices).orderBy(desc(invoices.createdAt));
+  }
+
+  async updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined> {
+    const [updated] = await db.update(invoices)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(invoices.id, id))
+      .returning();
+    return updated;
   }
 }
 

@@ -140,6 +140,22 @@ export async function registerRoutes(
   await seedOrgAndDivisions();
   await seedSpecDictionary();
 
+  const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
+  if (!existingAdmin) {
+    console.log("Creating default admin user...");
+    const { hashPassword: _seedHash } = await import("./auth");
+    const pw = await _seedHash("SteelIQ2025!");
+    await storage.createUser({
+      username: "admin",
+      password: pw,
+      email: "admin@lateralenterprises.co.nz",
+      displayName: "Admin",
+      role: "admin",
+      divisionCode: undefined,
+    });
+    console.log("Default admin user created (username: admin, password: SteelIQ2025!)");
+  }
+
   const ljDiv = await storage.getDivisionSettings("LJ");
   if (ljDiv) {
     const specKeys = (ljDiv as any).specDisplayDefaultsJson as string[] | null;
@@ -1379,6 +1395,390 @@ export async function registerRoutes(
       }
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ─── Auth Routes ────────────────────────────────────────────────────────
+  const { hashPassword, verifyPassword, generateSessionToken, SESSION_COOKIE, SESSION_DURATION_MS, logActivity } = await import("./auth");
+
+  app.get("/api/auth/me", (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Not authenticated" });
+    const { password: _pw, ...safeUser } = req.user;
+    return res.json(safeUser);
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
+    try {
+      const user = await storage.getUserByUsername(username);
+      if (!user || !user.isActive) return res.status(401).json({ error: "Invalid credentials" });
+      const valid = await verifyPassword(password, user.password);
+      if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+      const token = generateSessionToken();
+      const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+      await storage.createUserSession(user.id, token, expiresAt);
+      res.setHeader("Set-Cookie", `${SESSION_COOKIE}=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${Math.floor(SESSION_DURATION_MS / 1000)}`);
+      const { password: _pw, ...safeUser } = user;
+      return res.json(safeUser);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    const { parse: parseCookies } = await import("cookie");
+    const cookies = parseCookies(req.headers.cookie || "");
+    const token = cookies[SESSION_COOKIE];
+    if (token) await storage.deleteUserSession(token).catch(() => {});
+    res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0`);
+    return res.json({ ok: true });
+  });
+
+  app.get("/api/auth/users", async (req, res) => {
+    try {
+      const all = await storage.getAllUsers();
+      return res.json(all.map(({ password: _pw, ...u }) => u));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/auth/users", async (req, res) => {
+    const schema = z.object({
+      username: z.string().min(2),
+      password: z.string().min(6),
+      email: z.string().email().optional(),
+      displayName: z.string().optional(),
+      role: z.enum(["owner", "admin", "estimator", "finance", "production", "viewer"]).default("estimator"),
+      divisionCode: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const hashed = await hashPassword(parsed.data.password);
+      const user = await storage.createUser({ ...parsed.data, password: hashed } as any);
+      const { password: _pw, ...safeUser } = user;
+      return res.status(201).json(safeUser);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Customer Routes ─────────────────────────────────────────────────────
+  app.get("/api/customers", async (_req, res) => {
+    try {
+      return res.json(await storage.getAllCustomers());
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/customers", async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(1),
+      email: z.string().email().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      address: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      return res.status(201).json(await storage.createCustomer(parsed.data));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/customers/:id", async (req, res) => {
+    const customer = await storage.getCustomer(req.params.id);
+    if (!customer) return res.status(404).json({ error: "Not found" });
+    return res.json(customer);
+  });
+
+  app.patch("/api/customers/:id", async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      email: z.string().email().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      address: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const updated = await storage.updateCustomer(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/customers/:id/contacts", async (req, res) => {
+    try {
+      return res.json(await storage.getCustomerContacts(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/customers/:id/contacts", async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(1),
+      email: z.string().email().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      role: z.string().optional().nullable(),
+      isPrimary: z.boolean().default(false),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const contact = await storage.createCustomerContact({ ...parsed.data, customerId: req.params.id });
+      return res.status(201).json(contact);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/contacts/:id", async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      email: z.string().email().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      role: z.string().optional().nullable(),
+      isPrimary: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const updated = await storage.updateCustomerContact(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/contacts/:id", async (req, res) => {
+    try {
+      await storage.deleteCustomerContact(req.params.id);
+      return res.json({ ok: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/customers/:id/projects", async (req, res) => {
+    try {
+      return res.json(await storage.getProjectsByCustomer(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Project Routes ───────────────────────────────────────────────────────
+  app.get("/api/projects", async (_req, res) => {
+    try {
+      return res.json(await storage.getAllProjects());
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/projects", async (req, res) => {
+    const schema = z.object({
+      customerId: z.string(),
+      name: z.string().min(1),
+      address: z.string().optional().nullable(),
+      description: z.string().optional().nullable(),
+      divisionCode: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      return res.status(201).json(await storage.createProject(parsed.data));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/projects/:id", async (req, res) => {
+    const project = await storage.getProject(req.params.id);
+    if (!project) return res.status(404).json({ error: "Not found" });
+    return res.json(project);
+  });
+
+  app.patch("/api/projects/:id", async (req, res) => {
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      address: z.string().optional().nullable(),
+      description: z.string().optional().nullable(),
+      divisionCode: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const updated = await storage.updateProject(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Quote Acceptance ─────────────────────────────────────────────────────
+  app.post("/api/quotes/:id/accept", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (quote.status === "accepted") return res.status(409).json({ error: "Quote is already accepted" });
+      if (!["sent", "review"].includes(quote.status)) {
+        return res.status(400).json({ error: `Cannot accept a quote with status '${quote.status}'` });
+      }
+      if (!quote.currentRevisionId) return res.status(400).json({ error: "Quote has no current revision" });
+      const acceptedValue = quote.totalValue ?? 0;
+      const userId = req.user?.id ?? null;
+      const updated = await storage.acceptQuote(quote.id, {
+        acceptedAt: new Date(),
+        acceptedByUserId: userId,
+        acceptedValue,
+        acceptedRevisionId: quote.currentRevisionId,
+      });
+      logActivity("quote_accepted", "quote", quote.id, userId, {
+        quoteNumber: quote.number,
+        acceptedValue,
+        revisionId: quote.currentRevisionId,
+      });
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/quotes/:id/customer", async (req, res) => {
+    const schema = z.object({
+      customerId: z.string().nullable().optional(),
+      projectId: z.string().nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const updated = await storage.updateQuote(req.params.id, parsed.data as any);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Invoice Routes ───────────────────────────────────────────────────────
+  app.get("/api/invoices", async (_req, res) => {
+    try {
+      return res.json(await storage.getAllInvoices());
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/quotes/:id/invoices", async (req, res) => {
+    try {
+      return res.json(await storage.getInvoicesByQuote(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/invoices", async (req, res) => {
+    const schema = z.object({
+      quoteId: z.string().optional().nullable(),
+      quoteRevisionId: z.string().optional().nullable(),
+      divisionCode: z.string().optional().nullable(),
+      customerId: z.string().optional().nullable(),
+      projectId: z.string().optional().nullable(),
+      type: z.enum(["deposit", "progress", "variation", "final", "retention_release", "credit_note"]).default("deposit"),
+      depositType: z.enum(["percentage", "fixed"]).optional().nullable(),
+      depositPercentage: z.number().optional().nullable(),
+      amountExclGst: z.number().optional().nullable(),
+      gstAmount: z.number().optional().nullable(),
+      amountInclGst: z.number().optional().nullable(),
+      description: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const number = await storage.getNextInvoiceNumber();
+      const userId = req.user?.id ?? null;
+      const invoice = await storage.createInvoice({
+        ...parsed.data,
+        number,
+        status: "draft",
+        createdByUserId: userId ?? undefined,
+      } as any);
+      logActivity("invoice_created", "invoice", invoice.id, userId, { number, type: parsed.data.type });
+      return res.status(201).json(invoice);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/invoices/:id", async (req, res) => {
+    const invoice = await storage.getInvoice(req.params.id);
+    if (!invoice) return res.status(404).json({ error: "Not found" });
+    return res.json(invoice);
+  });
+
+  app.patch("/api/invoices/:id", async (req, res) => {
+    const schema = z.object({
+      type: z.enum(["deposit", "progress", "variation", "final", "retention_release", "credit_note"]).optional(),
+      status: z.enum(["draft", "ready_for_xero", "pushed_to_xero_draft", "approved", "returned_to_draft"]).optional(),
+      depositType: z.enum(["percentage", "fixed"]).optional().nullable(),
+      depositPercentage: z.number().optional().nullable(),
+      amountExclGst: z.number().optional().nullable(),
+      gstAmount: z.number().optional().nullable(),
+      amountInclGst: z.number().optional().nullable(),
+      description: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+      xeroInvoiceId: z.string().optional().nullable(),
+      xeroInvoiceNumber: z.string().optional().nullable(),
+      xeroStatus: z.string().optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ error: "Not found" });
+      const userId = req.user?.id ?? null;
+      if (parsed.data.status) {
+        logActivity("invoice_updated", "invoice", invoice.id, userId, { from: invoice.status, to: parsed.data.status });
+      }
+      const updated = await storage.updateInvoice(req.params.id, parsed.data as any);
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/invoices/:id/return-to-draft", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ error: "Not found" });
+      const userId = req.user?.id ?? null;
+      const updated = await storage.updateInvoice(req.params.id, { status: "returned_to_draft" } as any);
+      logActivity("invoice_returned_to_draft", "invoice", invoice.id, userId, {
+        previousStatus: invoice.status,
+        xeroInvoiceId: invoice.xeroInvoiceId,
+      });
+      return res.json({
+        invoice: updated,
+        xeroWarning: invoice.xeroInvoiceId
+          ? "The Xero invoice must be deleted before reissuing a replacement invoice."
+          : null,
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
     }
   });
 

@@ -1,0 +1,330 @@
+STEELIQ PROJECT CONTROL HEADER — MUST FOLLOW
+
+Implement exactly what is requested.
+Do not redesign architecture.
+
+Do NOT:
+- change the quote lifecycle
+- bypass QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- introduce schema creep outside this request
+- add unapproved endpoints
+- perform hidden refactors
+- change snapshot behaviour unless explicitly requested
+- create alternative rendering systems
+- make speculative architectural changes
+- redesign auth architecture beyond this phase
+- build unrelated modules “while here”
+
+Current-state facts that MUST remain true:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- Job type presets already exist and are persisted in division settings
+- Schedule first-item-fit pagination is already implemented
+- Hardware consolidation is partial because Wanz Bar still sits outside the Hardware tab
+- Quote creation is stable
+- PDF output is stable
+- Pricing inputs are acceptable
+- Revisions are clear
+- Known issue: site photos persistence still needs attention
+
+All work must be incremental, architecture-safe, and backward-compatible.
+If a structural change seems necessary, stop and explain before changing it.
+
+STEELIQ PLATFORM PROFILE
+
+Purpose
+SteelIQ is the shared business operating system for Lateral Enterprises, starting with estimating and quoting, then extending into jobs, invoicing, customer management, production, and division-specific manufacturing modules.
+
+Vision
+Build a modular, enterprise-grade, multi-division platform for:
+- Lateral Engineering
+- Lateral Joinery
+- Lateral Laser Cutting
+
+Direction
+Build in controlled layers:
+1. Quote engine
+2. Identity and access
+3. Customers and projects
+4. Acceptance and job conversion
+5. Invoicing and Xero
+6. Customer portal
+7. Division-specific production modules
+
+Architecture principles
+- Preserve QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- Shared core, division-specific operations
+- Freeze issued and accepted commercial history
+- Convert accepted quotes into jobs without mutating historical quote data
+- Integrate with Xero rather than replacing accounting
+- Keep modules logical, staged, and reusable
+
+CURRENT PHASE OBJECTIVE
+
+Implement the next foundational commercial layer required to safely move SteelIQ from quoting-only into accepted-quote control and invoice readiness.
+
+This phase should deliver:
+- authentication foundations
+- division-aware users and roles
+- customer/contact/project foundations
+- accepted quote commercial locking
+- invoice foundations
+- deposit invoice support
+- Xero draft-first scaffolding
+- test-safe auth that does not break Replit test execution
+
+IMPORTANT OPERATING CONTEXT
+
+- Another JMS will manage jobs temporarily
+- Do NOT build full job management in this phase
+- However, acceptance must now be commercially controlled so that job creation can happen cleanly later
+- A client is expected to pay a 50% deposit imminently, so deposit invoice support is important in this phase
+
+IMPLEMENT ONLY THE FOLLOWING
+
+1. Authentication foundations
+Implement a minimal, production-safe auth foundation:
+- users
+- login
+- logout
+- session handling
+- division-aware access
+- simple role model only:
+  - owner
+  - admin
+  - estimator
+  - finance
+  - production
+  - viewer
+
+Do NOT implement an oversized enterprise permission engine in this phase.
+
+2. Test-safe auth mode
+The auth/role system must NOT prevent Replit tests from running.
+
+Requirements:
+- when NODE_ENV=test, allow a safe mock/test auth path
+- automated tests must be able to run without being blocked by full UI login
+- do not weaken production auth behaviour
+- clearly separate production auth from test-mode auth
+
+3. Customer/contact/project foundations
+Implement shared commercial entities:
+- customers
+- customer contacts
+- projects
+
+Requirements:
+- organisation/shared level entities
+- quotes can link cleanly to customer and project
+- division can still own the quote, but customer/project must not be duplicated unnecessarily across divisions
+
+4. Accepted quote commercial controls
+Acceptance must not be just a cosmetic status change.
+
+Add support for:
+- accepted date
+- accepted by
+- accepted value
+- accepted revision reference
+- preserved accepted commercial state
+
+Acceptance requirements:
+- once a quote revision is accepted, preserve the accepted revision reference and commercial values used
+- do not mutate accepted quote history afterward
+- if needed, introduce a safe transitional status such as:
+  - Accepted (Awaiting Job Creation)
+or equivalent architecture-safe handling
+
+Do NOT build full job workflow yet.
+
+5. Invoice foundations
+Implement invoice foundations linked to:
+- organisation
+- division
+- customer
+- project
+- accepted quote revision where relevant
+
+Support invoice types:
+- deposit
+- progress
+- variation
+- final
+- retention release
+- credit note
+
+Do NOT implement full payment reconciliation yet.
+
+6. Deposit invoice support
+Support both:
+- percentage-based deposit invoice
+- exact dollar deposit invoice
+
+Examples:
+- 50% deposit
+- fixed NZD amount deposit
+
+7. Xero draft-first scaffolding
+Implement invoice lifecycle scaffolding for Xero-safe behaviour.
+
+Required states:
+- draft
+- ready_for_xero
+- pushed_to_xero_draft
+- approved
+- returned_to_draft
+
+Store fields for:
+- xero_invoice_id
+- xero_invoice_number
+- xero_status
+
+Critical rule:
+If an invoice has already been pushed to Xero and needs to be changed, allow the SteelIQ invoice to be returned to draft, but show a clear warning:
+
+"The Xero invoice must be deleted before reissuing a replacement invoice."
+
+Requirements:
+- do not create unsafe duplicate reissue flows
+- do not pretend SteelIQ can overwrite an existing Xero invoice automatically unless that is already implemented and proven
+- preserve accounting safety
+
+8. Activity logging
+Log these events at minimum:
+- quote accepted
+- invoice created
+- invoice updated
+- invoice pushed to Xero draft
+- invoice returned to draft
+
+Keep this simple and useful.
+Do NOT build a huge enterprise audit engine in this phase.
+
+DATA OWNERSHIP RULES
+
+Keep these shared at organisation level:
+- users
+- customers
+- contacts
+- projects
+- activity log
+- integration framework
+
+Keep these division-scoped:
+- quotes
+- invoice defaults
+- division settings
+- future jobs
+- future manufacturing modules
+- operational workflows
+
+Freeze these at accepted/issued commercial state:
+- accepted quote revision
+- commercial text used
+- totals used
+- pricing snapshot used
+
+SCHEMA EXPECTATIONS
+
+Implement the schema required for this phase only.
+
+At minimum include logical support for:
+- organisations
+- divisions
+- users
+- roles
+- user_division_roles
+- user_sessions
+- customers
+- customer_contacts
+- projects
+- quotes
+- quote_revisions
+- invoices
+- activity_log
+
+Use sensible naming aligned with the existing codebase where possible.
+
+Do NOT overbuild:
+- no giant workflow engine
+- no 22-role enterprise permission matrix
+- no procurement module
+- no production scheduler
+- no full customer portal
+- no full job costing module yet
+
+LIFECYCLE RULES
+
+Quote acceptance must preserve:
+- accepted revision
+- accepted date
+- accepted by
+- accepted value
+
+Invoice rules:
+- deposit invoice may be percentage-based or fixed-dollar
+- Xero is the accounting source of truth once invoice is pushed
+- if pushed invoice needs changing, allow return to draft in SteelIQ
+- warn clearly that the Xero invoice must be deleted before replacement invoice creation
+
+UI EXPECTATIONS
+
+Add only the minimum UI required for this phase:
+- login/auth flow if not already present
+- customer/contact/project management surfaces
+- accepted quote metadata display
+- invoice creation UI
+- deposit invoice controls:
+  - percentage
+  - fixed amount
+- Xero state display
+- return-to-draft warning display
+
+Keep the UI clean and functional.
+Do NOT do a broad visual redesign in this phase.
+
+NON-GOALS FOR THIS PHASE
+
+Do NOT implement yet:
+- full job management module
+- cut sheet generation
+- division-specific production engines
+- customer portal
+- full payment reconciliation
+- full Xero bi-directional sync
+- advanced workflow engine
+- enterprise-grade SoD matrix
+- back-costing module
+- retention release workflow beyond schema/readiness support
+
+MANDATORY HANDOVER UPDATE
+
+After implementation produce a structured handover update.
+
+Include:
+1. Files changed
+2. Behaviour changes
+3. Schema/API changes
+4. UI changes
+5. Architecture verification
+6. Risks/limitations
+7. Updated current system state
+8. Updated recommended next tasks
+9. Regression checks
+
+Regression checks must explicitly confirm:
+- quote creation still works
+- preview still works
+- PDF still works
+- revisions still work
+- auth does not break tests
+- accepted quote locking works
+- deposit invoice logic works
+- Xero warning flow works
+
+FINAL INSTRUCTION
+
+Implement only this phase.
+Keep it controlled, modular, and logically staged.
+Prefer small safe steps over broad platform expansion.
+If existing code and this prompt differ, preserve the locked quote pipeline and report the mismatch explicitly in the handover.

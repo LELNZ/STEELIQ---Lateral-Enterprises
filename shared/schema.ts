@@ -9,19 +9,88 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   fromDriver(value: Buffer): Buffer { return Buffer.from(value); },
 });
 
+export const USER_ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer"] as const;
+export type UserRole = typeof USER_ROLES[number];
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email"),
+  displayName: text("display_name"),
+  role: text("role").notNull().default("estimator"),
+  divisionCode: text("division_code"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+}).extend({
+  email: z.string().email().optional(),
+  displayName: z.string().optional(),
+  role: z.enum(USER_ROLES).default("estimator"),
+  divisionCode: z.string().optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const userSessions = pgTable("user_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type UserSession = typeof userSessions.$inferSelect;
+
+export const customers = pgTable("customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  address: text("address"),
+  notes: text("notes"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, archivedAt: true, createdAt: true });
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type Customer = typeof customers.$inferSelect;
+
+export const customerContacts = pgTable("customer_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  role: text("role"),
+  isPrimary: boolean("is_primary").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCustomerContactSchema = createInsertSchema(customerContacts).omit({ id: true, createdAt: true });
+export type InsertCustomerContact = z.infer<typeof insertCustomerContactSchema>;
+export type CustomerContact = typeof customerContacts.$inferSelect;
+
+export const projects = pgTable("projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull(),
+  name: text("name").notNull(),
+  address: text("address"),
+  description: text("description"),
+  divisionCode: text("division_code"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, archivedAt: true, createdAt: true });
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type Project = typeof projects.$inferSelect;
 
 export const customColumnRowSchema = z.object({
   height: z.number().min(0).default(0),
@@ -251,6 +320,12 @@ export const quotes = pgTable("quotes", {
   currentRevisionId: varchar("current_revision_id"),
   createdByUserId: varchar("created_by_user_id"),
   totalValue: real("total_value"),
+  customerId: varchar("customer_id"),
+  projectId: varchar("project_id"),
+  acceptedAt: timestamp("accepted_at"),
+  acceptedByUserId: varchar("accepted_by_user_id"),
+  acceptedValue: real("accepted_value"),
+  acceptedRevisionId: varchar("accepted_revision_id"),
   archivedAt: timestamp("archived_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -367,3 +442,41 @@ export const itemPhotos = pgTable("item_photos", {
 });
 
 export type ItemPhoto = typeof itemPhotos.$inferSelect;
+
+export const INVOICE_TYPES = ["deposit", "progress", "variation", "final", "retention_release", "credit_note"] as const;
+export type InvoiceType = typeof INVOICE_TYPES[number];
+
+export const INVOICE_STATUSES = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved", "returned_to_draft"] as const;
+export type InvoiceStatus = typeof INVOICE_STATUSES[number];
+
+export const DEPOSIT_TYPES = ["percentage", "fixed"] as const;
+export type DepositType = typeof DEPOSIT_TYPES[number];
+
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  number: text("number").notNull().unique(),
+  quoteId: varchar("quote_id"),
+  quoteRevisionId: varchar("quote_revision_id"),
+  divisionCode: text("division_code"),
+  customerId: varchar("customer_id"),
+  projectId: varchar("project_id"),
+  type: text("type").notNull().default("deposit"),
+  status: text("status").notNull().default("draft"),
+  depositType: text("deposit_type"),
+  depositPercentage: real("deposit_percentage"),
+  amountExclGst: real("amount_excl_gst"),
+  gstAmount: real("gst_amount"),
+  amountInclGst: real("amount_incl_gst"),
+  description: text("description"),
+  notes: text("notes"),
+  xeroInvoiceId: text("xero_invoice_id"),
+  xeroInvoiceNumber: text("xero_invoice_number"),
+  xeroStatus: text("xero_status"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;

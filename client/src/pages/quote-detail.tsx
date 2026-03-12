@@ -1,17 +1,23 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { type Quote, type QuoteRevision, type AuditLog, VALID_STATUS_TRANSITIONS, type QuoteStatus } from "@shared/schema";
+import { type Quote, type QuoteRevision, type AuditLog, type Invoice, VALID_STATUS_TRANSITIONS, type QuoteStatus } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
@@ -101,6 +107,26 @@ export default function QuoteDetail() {
     },
     onError: (err: Error) => {
       toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/quotes/${quoteId}/accept`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Acceptance failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "audit-log"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Quote accepted", description: "Acceptance recorded and commercial state preserved." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Acceptance failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -218,18 +244,67 @@ export default function QuoteDetail() {
 
       {allowedTransitions.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          {allowedTransitions.map((nextStatus) => (
-            <Button
-              key={nextStatus}
-              variant={nextStatus === "declined" ? "destructive" : "default"}
-              size="sm"
-              onClick={() => statusMutation.mutate(nextStatus)}
-              disabled={statusMutation.isPending}
-              data-testid={`button-status-${nextStatus}`}
-            >
-              {TRANSITION_LABELS[nextStatus] || nextStatus}
-            </Button>
-          ))}
+          {allowedTransitions.map((nextStatus) => {
+            if (nextStatus === "accepted") {
+              return (
+                <Button
+                  key={nextStatus}
+                  variant="default"
+                  size="sm"
+                  onClick={() => acceptMutation.mutate()}
+                  disabled={acceptMutation.isPending}
+                  data-testid="button-status-accepted"
+                >
+                  {acceptMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                  Accept Quote
+                </Button>
+              );
+            }
+            return (
+              <Button
+                key={nextStatus}
+                variant={nextStatus === "declined" ? "destructive" : "default"}
+                size="sm"
+                onClick={() => statusMutation.mutate(nextStatus)}
+                disabled={statusMutation.isPending}
+                data-testid={`button-status-${nextStatus}`}
+              >
+                {TRANSITION_LABELS[nextStatus] || nextStatus}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
+      {quote.status === "accepted" && quote.acceptedAt && (
+        <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <h3 className="text-sm font-semibold">Accepted</h3>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Accepted Date</p>
+              <p className="font-medium" data-testid="text-accepted-at">
+                {new Date(quote.acceptedAt).toLocaleDateString("en-NZ")}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Accepted Value</p>
+              <p className="font-medium" data-testid="text-accepted-value">
+                ${quote.acceptedValue != null ? quote.acceptedValue.toLocaleString("en-NZ", { minimumFractionDigits: 2 }) : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Revision</p>
+              <p className="font-medium" data-testid="text-accepted-revision">
+                {quote.revisions?.find((r) => r.id === quote.acceptedRevisionId)
+                  ? `v${quote.revisions.find((r) => r.id === quote.acceptedRevisionId)!.versionNumber}`
+                  : "—"}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -290,6 +365,13 @@ export default function QuoteDetail() {
 
       {quote.sourceJobId && <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />}
 
+      {quote.status === "accepted" && (
+        <>
+          <Separator />
+          <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} />
+        </>
+      )}
+
       <Separator />
 
       <div className="space-y-4">
@@ -322,6 +404,244 @@ export default function QuoteDetail() {
           <p className="text-sm text-muted-foreground">No audit events recorded.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  ready_for_xero: "Ready for Xero",
+  pushed_to_xero_draft: "Pushed to Xero",
+  approved: "Approved",
+  returned_to_draft: "Returned to Draft",
+};
+
+const INVOICE_TYPE_LABELS: Record<string, string> = {
+  deposit: "Deposit",
+  progress: "Progress",
+  variation: "Variation",
+  final: "Final",
+  retention_release: "Retention Release",
+  credit_note: "Credit Note",
+};
+
+function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: string; acceptedValue: number; divisionCode?: string }) {
+  const { toast } = useToast();
+  const [showCreate, setShowCreate] = useState(false);
+  const [depositMode, setDepositMode] = useState<"percentage" | "fixed">("percentage");
+  const [depositPct, setDepositPct] = useState("50");
+  const [depositFixed, setDepositFixed] = useState("");
+  const [xeroWarn, setXeroWarn] = useState<string | null>(null);
+
+  const { data: invoices = [] } = useQuery<Invoice[]>({
+    queryKey: ["/api/quotes", quoteId, "invoices"],
+    queryFn: () => fetch(`/api/quotes/${quoteId}/invoices`).then((r) => r.json()),
+  });
+
+  const GST_RATE = 0.15;
+  const exclGst = depositMode === "percentage"
+    ? (acceptedValue * (parseFloat(depositPct) || 0)) / 100
+    : parseFloat(depositFixed) || 0;
+  const gst = exclGst * GST_RATE;
+  const inclGst = exclGst + gst;
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/invoices", {
+        quoteId,
+        divisionCode,
+        type: "deposit",
+        depositType: depositMode,
+        depositPercentage: depositMode === "percentage" ? parseFloat(depositPct) : null,
+        amountExclGst: exclGst,
+        gstAmount: gst,
+        amountInclGst: inclGst,
+        description: depositMode === "percentage"
+          ? `${depositPct}% deposit on accepted quotation`
+          : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      setShowCreate(false);
+      toast({ title: "Deposit invoice created" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const returnToDraftMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("POST", `/api/invoices/${invoiceId}/return-to-draft`, {});
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      if (data.xeroWarning) setXeroWarn(data.xeroWarning);
+      toast({ title: "Invoice returned to draft" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ReceiptText className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoices</h2>
+        </div>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCreate(true)} data-testid="button-create-invoice">
+          <Plus className="h-3 w-3 mr-1" /> Create Deposit Invoice
+        </Button>
+      </div>
+
+      {xeroWarn && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-sm">{xeroWarn}</AlertDescription>
+        </Alert>
+      )}
+
+      {invoices.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No invoices yet.</p>
+      ) : (
+        <div className="rounded-lg border bg-card overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Number</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Excl. GST</TableHead>
+                <TableHead className="text-right">Incl. GST</TableHead>
+                <TableHead className="w-[100px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoices.map((inv) => (
+                <TableRow key={inv.id} data-testid={`row-invoice-${inv.id}`}>
+                  <TableCell className="font-mono text-sm" data-testid={`text-invoice-number-${inv.id}`}>{inv.number}</TableCell>
+                  <TableCell className="text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
+                  <TableCell>
+                    <Badge variant={inv.status === "approved" ? "default" : inv.status === "returned_to_draft" ? "destructive" : "secondary"} className="text-xs">
+                      {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                    </Badge>
+                    {inv.xeroInvoiceId && (
+                      <span className="ml-2 text-xs text-muted-foreground">Xero: {inv.xeroInvoiceNumber || inv.xeroInvoiceId}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right text-sm">
+                    ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell className="text-right text-sm font-medium">
+                    ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell>
+                    {["pushed_to_xero_draft", "approved"].includes(inv.status) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => returnToDraftMutation.mutate(inv.id)}
+                        disabled={returnToDraftMutation.isPending}
+                        data-testid={`button-return-to-draft-${inv.id}`}
+                      >
+                        Return to Draft
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create Deposit Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Deposit Type</Label>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={depositMode === "percentage" ? "default" : "outline"}
+                  onClick={() => setDepositMode("percentage")}
+                  data-testid="button-deposit-percentage"
+                >
+                  Percentage
+                </Button>
+                <Button
+                  size="sm"
+                  variant={depositMode === "fixed" ? "default" : "outline"}
+                  onClick={() => setDepositMode("fixed")}
+                  data-testid="button-deposit-fixed"
+                >
+                  Fixed Amount
+                </Button>
+              </div>
+            </div>
+            {depositMode === "percentage" ? (
+              <div>
+                <Label>Deposit Percentage</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={depositPct}
+                    onChange={(e) => setDepositPct(e.target.value)}
+                    className="w-24"
+                    data-testid="input-deposit-percentage"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Label>Amount (NZD excl. GST)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={depositFixed}
+                  onChange={(e) => setDepositFixed(e.target.value)}
+                  placeholder="0.00"
+                  data-testid="input-deposit-fixed"
+                />
+              </div>
+            )}
+            <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Excl. GST</span>
+                <span>${exclGst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">GST (15%)</span>
+                <span>${gst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between font-semibold border-t pt-1">
+                <span>Incl. GST</span>
+                <span data-testid="text-deposit-incl-gst">${inclGst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending || exclGst <= 0}
+              data-testid="button-save-invoice"
+            >
+              {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+              Create Invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
