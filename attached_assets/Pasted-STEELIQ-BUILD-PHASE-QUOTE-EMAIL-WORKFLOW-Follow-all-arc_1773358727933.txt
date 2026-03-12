@@ -1,0 +1,172 @@
+STEELIQ BUILD PHASE
+QUOTE EMAIL WORKFLOW
+
+Follow all architecture rules already established.
+
+DO NOT:
+- change QuoteDocument → QuoteRenderModel → Preview/PDF pipeline
+- redesign quoting logic
+- modify snapshot behaviour
+- change quote lifecycle
+- redesign customers/projects/jobs modules
+- introduce unrelated schema changes
+
+CONTEXT
+
+The PDF engine has been stabilised and PDFs are now email-safe.
+
+The next step is to allow quotes to be emailed directly from SteelIQ.
+
+Currently users must:
+1. Download the PDF
+2. Attach it manually to an email
+
+This phase introduces a basic internal email workflow.
+
+OBJECTIVES
+
+1. Add a "Send Quote" button to the quote detail page
+2. Generate the PDF server-side
+3. Send the PDF as an email attachment
+4. Record when a quote was sent
+
+This is the foundation for future features:
+- quote viewed tracking
+- customer portal access
+- automated reminders
+
+REQUIRED IMPLEMENTATION
+
+1. EMAIL SENDING BACKEND
+
+Create a server-side endpoint:
+
+POST /api/quotes/:id/send
+
+Responsibilities:
+- load the quote
+- generate the PDF using the existing PDF engine
+- attach the PDF to an email
+- send the email
+
+Do NOT generate the PDF in the browser for this workflow.
+
+Use the same QuoteRenderModel pipeline.
+
+2. EMAIL PROVIDER
+
+Use a simple transactional email provider.
+
+Acceptable options:
+
+- SendGrid
+- Resend
+- Postmark
+- Nodemailer SMTP
+
+Prefer something lightweight and reliable.
+
+Store provider configuration via environment variables.
+
+3. EMAIL CONTENT
+
+Email should include:
+
+Subject:
+Quote Q-XXXX from Lateral Enterprises
+
+Body example:
+
+Hello [Customer Name],
+
+Please find attached your quotation Q-XXXX.
+
+If you have any questions or require adjustments, please let us know.
+
+Kind regards,
+Lateral Enterprises
+
+Attach the generated PDF.
+
+4. SENT STATE
+
+Add minimal send tracking.
+
+Either:
+
+- add `sentAt` timestamp to quotes table
+
+OR
+
+- create a small send log record
+
+The quote detail page should show:
+
+Sent: [date/time]
+
+This is informational only for now.
+
+Do NOT build viewed tracking yet.
+
+5. UI
+
+Add a "Send Quote" button to the quote detail page.
+
+Behaviour:
+
+Click → open small dialog:
+
+Send To: [customer email]
+Subject: editable
+Message: editable textarea
+
+User clicks "Send".
+
+On success:
+- close dialog
+- show confirmation toast
+- update quote sent timestamp.
+
+NON-GOALS
+
+Do NOT implement:
+
+- customer portal
+- email templates system
+- viewed tracking
+- automated reminders
+- CRM integrations
+- bulk emailing
+- marketing features
+
+This is a simple operational send feature.
+
+EXPECTED RESULT
+
+Users can:
+
+1. Open a quote
+2. Click Send Quote
+3. Email the PDF directly to the customer
+4. See when the quote was sent
+
+MANDATORY HANDOVER
+
+After implementation report:
+
+1. Files changed
+2. Email provider used
+3. PDF generation method
+4. Schema changes
+5. UI changes
+6. Regression checks
+
+Regression checks must confirm:
+
+Quote creation still works
+Preview still works
+PDF generation still works
+Job conversion still works
+Deposit invoice flow still works
+Sending email successfully attaches the PDF
+Sent timestamp updates correctly

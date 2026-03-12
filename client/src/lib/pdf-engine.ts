@@ -376,6 +376,59 @@ export async function generateQuotePdf(
   pdf.save(`${safeName}.pdf`);
 }
 
+export async function generateQuotePdfBase64(
+  model: QuoteRenderModel,
+  onProgress?: (status: string) => void,
+): Promise<string> {
+  onProgress?.("Initializing PDF...");
+
+  applyTemplate(model.resolvedTemplate ?? COMPANY_MASTER_TEMPLATE);
+
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+  let y = TOP_MARGIN;
+
+  if (isSectionVisible(T, "header")) {
+    y = await renderHeader(pdf, y, model);
+    y = renderSeparator(pdf, y);
+  }
+
+  y = renderQuotationTitle(pdf, y);
+
+  if (isSectionVisible(T, "disclaimer")) {
+    y = renderDisclaimer(pdf, y, model.disclaimerText);
+  }
+
+  if (isSectionVisible(T, "customerProject")) {
+    y = renderCustomerProject(pdf, y, model);
+  }
+
+  if (isSectionVisible(T, "totals")) {
+    y = renderTotals(pdf, y, model);
+  }
+
+  if (isSectionVisible(T, "schedule")) {
+    onProgress?.("Rendering schedule...");
+    y = await renderSchedule(pdf, y, model, onProgress);
+  }
+
+  if (isSectionVisible(T, "legal")) {
+    onProgress?.("Rendering terms...");
+    y = renderLegal(pdf, y, model);
+  }
+
+  if (isSectionVisible(T, "acceptance")) {
+    onProgress?.("Rendering acceptance...");
+    y = renderAcceptance(pdf, y, model);
+  }
+
+  renderPageNumbers(pdf);
+
+  onProgress?.("Encoding...");
+  const dataUri = pdf.output("datauristring");
+  const base64 = dataUri.split(",")[1];
+  return base64;
+}
+
 async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promise<number> {
   const { branding, orgContact } = model;
   const startY = y;

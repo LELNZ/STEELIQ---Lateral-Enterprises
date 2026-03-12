@@ -327,6 +327,8 @@ export const quotes = pgTable("quotes", {
   acceptedByUserId: varchar("accepted_by_user_id"),
   acceptedValue: real("accepted_value"),
   acceptedRevisionId: varchar("accepted_revision_id"),
+  sentAt: timestamp("sent_at"),
+  sentToEmail: text("sent_to_email"),
   archivedAt: timestamp("archived_at"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow(),

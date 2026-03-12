@@ -17,13 +17,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink } from "lucide-react";
+import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
 import type { PreviewData } from "@/lib/quote-document";
 import { buildQuoteRenderModel } from "@/lib/quote-renderer";
-import { generateQuotePdf } from "@/lib/pdf-engine";
+import { generateQuotePdf, generateQuotePdfBase64 } from "@/lib/pdf-engine";
+import { Textarea } from "@/components/ui/textarea";
 
 interface QuoteWithRevisions extends Quote {
   revisions: QuoteRevision[];
@@ -65,6 +66,7 @@ export default function QuoteDetail() {
   const { toast } = useToast();
   const quoteId = params?.id;
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
 
   async function handleExportPdf() {
     if (!quoteId || pdfExporting) return;
@@ -191,6 +193,14 @@ export default function QuoteDetail() {
             {pdfExporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
             {pdfExporting ? "Exporting..." : "Export PDF"}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSendDialogOpen(true)}
+            data-testid="button-send-quote"
+          >
+            <Send className="h-4 w-4 mr-1" /> Send Quote
+          </Button>
           <Badge variant={STATUS_VARIANT[quote.status] || "secondary"} className="text-sm px-3 py-1" data-testid="badge-quote-status">
             {STATUS_LABELS[quote.status] || quote.status}
           </Badge>
@@ -240,6 +250,21 @@ export default function QuoteDetail() {
             </Button>
           </div>
         )}
+        <div className="rounded-lg border bg-card p-3">
+          <p className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" /> Last Sent</p>
+          {quote.sentAt ? (
+            <div>
+              <p className="text-sm font-medium" data-testid="text-sent-at">
+                {new Date(quote.sentAt).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}
+              </p>
+              {quote.sentToEmail && (
+                <p className="text-xs text-muted-foreground truncate" data-testid="text-sent-to">{quote.sentToEmail}</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic" data-testid="text-not-sent">Not sent</p>
+          )}
+        </div>
       </div>
 
       {allowedTransitions.length > 0 && (
@@ -378,6 +403,17 @@ export default function QuoteDetail() {
 
       <Separator />
 
+      {sendDialogOpen && (
+        <SendQuoteDialog
+          quoteId={quote.id}
+          quoteNumber={quote.number}
+          customerName={quote.customer}
+          defaultToEmail=""
+          open={sendDialogOpen}
+          onClose={() => setSendDialogOpen(false)}
+        />
+      )}
+
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
@@ -409,6 +445,130 @@ export default function QuoteDetail() {
         )}
       </div>
     </div>
+  );
+}
+
+interface SendQuoteDialogProps {
+  quoteId: string;
+  quoteNumber: string;
+  customerName: string;
+  defaultToEmail: string;
+  open: boolean;
+  onClose: () => void;
+}
+
+function SendQuoteDialog({ quoteId, quoteNumber, customerName, defaultToEmail, open, onClose }: SendQuoteDialogProps) {
+  const { toast } = useToast();
+  const [toEmail, setToEmail] = useState(defaultToEmail);
+  const [subject, setSubject] = useState(`${quoteNumber} from Lateral Enterprises`);
+  const [message, setMessage] = useState(
+    `Hello ${customerName},\n\nPlease find attached your quotation ${quoteNumber}.\n\nIf you have any questions or require adjustments, please let us know.\n\nKind regards,\nLateral Enterprises`
+  );
+  const [sending, setSending] = useState(false);
+  const [progress, setProgress] = useState<string>("");
+
+  async function handleSend() {
+    if (!toEmail || !subject || !message) return;
+    setSending(true);
+    setProgress("Loading quote data...");
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}/preview-data`);
+      if (!res.ok) throw new Error("Failed to load quote data");
+      const preview: PreviewData = await res.json();
+      const doc = buildQuoteDocumentModel(preview);
+      const renderModel = buildQuoteRenderModel(doc);
+
+      setProgress("Generating PDF...");
+      const pdfBase64 = await generateQuotePdfBase64(renderModel, (s) => setProgress(s));
+
+      setProgress("Sending email...");
+      const sendRes = await apiRequest("POST", `/api/quotes/${quoteId}/send`, {
+        pdfBase64,
+        toEmail,
+        subject,
+        message,
+      });
+      if (!sendRes.ok) {
+        const body = await sendRes.json().catch(() => ({}));
+        throw new Error(body.error || "Send failed");
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      toast({ title: "Quote sent", description: `Email delivered to ${toEmail}` });
+      onClose();
+    } catch (err: any) {
+      toast({ title: "Failed to send quote", description: err.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+      setProgress("");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !sending) onClose(); }}>
+      <DialogContent className="max-w-md" data-testid="dialog-send-quote">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="h-4 w-4" /> Send Quote
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="send-to-email">To</Label>
+            <Input
+              id="send-to-email"
+              type="email"
+              placeholder="customer@example.com"
+              value={toEmail}
+              onChange={(e) => setToEmail(e.target.value)}
+              disabled={sending}
+              data-testid="input-send-to-email"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="send-subject">Subject</Label>
+            <Input
+              id="send-subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              disabled={sending}
+              data-testid="input-send-subject"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="send-message">Message</Label>
+            <Textarea
+              id="send-message"
+              rows={7}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              disabled={sending}
+              data-testid="input-send-message"
+            />
+          </div>
+          {sending && progress && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span data-testid="text-send-progress">{progress}</span>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={sending} data-testid="button-cancel-send">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSend}
+            disabled={sending || !toEmail || !subject || !message}
+            data-testid="button-confirm-send"
+          >
+            {sending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Sending...</> : <><Send className="h-4 w-4 mr-1" />Send</>}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

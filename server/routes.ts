@@ -13,6 +13,7 @@ import { GLASS_LIBRARY } from "@shared/glass-library";
 import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS } from "@shared/item-options";
 import multer from "multer";
 import path from "path";
+import { sendQuoteEmail, isEmailConfigured } from "./email";
 import fs from "fs";
 import crypto from "crypto";
 import {
@@ -1881,6 +1882,50 @@ export async function registerRoutes(
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
       const updated = await storage.updateQuote(req.params.id, parsed.data);
       return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Quote Send (Email) ────────────────────────────────────────────────────
+  app.post("/api/quotes/:id/send", async (req, res) => {
+    try {
+      if (!isEmailConfigured()) {
+        return res.status(503).json({ error: "Email is not configured on this server. Set RESEND_API_KEY to enable sending." });
+      }
+
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      const schema = z.object({
+        pdfBase64: z.string().min(100),
+        toEmail: z.string().email(),
+        subject: z.string().min(1),
+        message: z.string().min(1),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const { pdfBase64, toEmail, subject, message } = parsed.data;
+
+      await sendQuoteEmail({
+        toEmail,
+        subject,
+        message,
+        pdfBase64,
+        quoteNumber: quote.number,
+        customerName: quote.customer,
+      });
+
+      const now = new Date();
+      const updated = await storage.updateQuote(req.params.id, {
+        sentAt: now,
+        sentToEmail: toEmail,
+      });
+
+      return res.json({ success: true, sentAt: now, quote: updated });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
