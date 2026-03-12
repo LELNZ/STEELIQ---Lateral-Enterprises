@@ -180,7 +180,15 @@ function renderRichTextPdf(pdf: Pdf, y: number, text: string | null, opts: RichT
       continue;
     }
 
-    y = ensureSpace(pdf, y, lineH + 2);
+    const indent = (block.type === "bullet" || block.type === "numbered") ? bulletIndent : 0;
+    const measuredW = contentWidth - indent;
+    pdf.setFontSize(fontSize);
+    const plainText = tokensToPlainText(block.tokens);
+    const wrappedLines = plainText.trim()
+      ? (pdf.splitTextToSize(plainText, measuredW) as string[])
+      : ["x"];
+    const blockH = Math.max(1, wrappedLines.length) * lineH + lineH;
+    y = ensureSpace(pdf, y, blockH);
 
     if (block.type === "bullet") {
       const bColor = color;
@@ -260,12 +268,57 @@ function getImageDimensions(dataUrl: string): Promise<{ w: number; h: number }> 
   });
 }
 
+async function compressImageForPdf(
+  dataUrl: string,
+  maxPixelW: number,
+  maxPixelH: number,
+  useJpeg = true,
+  quality = 0.82,
+): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(maxPixelW / img.naturalWidth, maxPixelH / img.naturalHeight, 1);
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(dataUrl); return; }
+        if (useJpeg) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, w, h);
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        const fmt = useJpeg ? "image/jpeg" : "image/png";
+        const compressed = canvas.toDataURL(fmt, quality);
+        resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 async function preloadPhotos(photos: { url: string; key: string }[]): Promise<Map<string, string>> {
   const loaded = new Map<string, string>();
   await Promise.all(
     photos.map(async (p) => {
-      const data = await loadImageAsDataUrl(p.url);
-      if (data) loaded.set(p.key, data);
+      const raw = await loadImageAsDataUrl(p.url);
+      if (!raw) return;
+      const isDrawing = p.key.startsWith("draw-");
+      const compressed = await compressImageForPdf(
+        raw,
+        isDrawing ? 1800 : 1200,
+        isDrawing ? 1200 : 900,
+        true,
+        isDrawing ? 0.88 : 0.80,
+      );
+      loaded.set(p.key, compressed);
     }),
   );
   return loaded;
@@ -279,7 +332,7 @@ export async function generateQuotePdf(
 
   applyTemplate(model.resolvedTemplate ?? COMPANY_MASTER_TEMPLATE);
 
-  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
   let y = TOP_MARGIN;
 
   if (isSectionVisible(T, "header")) {
@@ -334,8 +387,9 @@ async function renderHeader(pdf: Pdf, y: number, model: QuoteRenderModel): Promi
   let actualLogoW = 0;
 
   if (branding.logoUrl) {
-    const logoData = await loadImageAsDataUrl(branding.logoUrl);
-    if (logoData) {
+    const logoRaw = await loadImageAsDataUrl(branding.logoUrl);
+    if (logoRaw) {
+      const logoData = await compressImageForPdf(logoRaw, 800, 400, false);
       try {
         const dims = await getImageDimensions(logoData);
         const scale = Math.min(logoMaxW / dims.w, logoMaxH / dims.h, 1);
