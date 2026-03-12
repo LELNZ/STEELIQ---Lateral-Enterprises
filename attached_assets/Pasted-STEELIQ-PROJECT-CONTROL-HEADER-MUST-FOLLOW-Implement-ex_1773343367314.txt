@@ -1,0 +1,251 @@
+STEELIQ PROJECT CONTROL HEADER — MUST FOLLOW
+
+Implement exactly what is requested.
+Do not redesign architecture.
+
+Do NOT:
+- change the quote lifecycle
+- bypass QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- introduce schema creep outside this request
+- add unapproved endpoints
+- perform hidden refactors
+- change snapshot behaviour unless explicitly requested
+- create alternative rendering systems
+- make speculative architectural changes
+- redesign auth architecture beyond this phase
+
+Current-state facts that MUST remain true:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- Job type presets already exist and are persisted in division settings
+- Schedule first-item-fit pagination is already implemented
+- Hardware consolidation is partial because Wanz Bar still sits outside the Hardware tab
+- Quote creation is stable
+- PDF output is stable
+- Pricing inputs are acceptable
+- Revisions are clear
+- Auth/login bootstrap exists
+- Customer/contact/project foundations exist
+- Accepted quote + deposit invoice foundation exists
+
+All work must be incremental, architecture-safe, and backward-compatible.
+If a structural change seems necessary, stop and explain before changing it.
+
+STEELIQ PLATFORM PROFILE
+
+Purpose
+SteelIQ is the shared business operating system for Lateral Enterprises, starting with estimating and quoting, then extending into jobs, invoicing, customer management, production, and division-specific manufacturing modules.
+
+Vision
+Build a modular, enterprise-grade, multi-division platform for:
+- Lateral Engineering
+- Lateral Joinery
+- Lateral Laser Cutting
+
+Direction
+Build in controlled layers:
+1. Quote engine
+2. Identity and access
+3. Customers and projects
+4. Acceptance and job conversion
+5. Invoicing and Xero
+6. Customer portal
+7. Division-specific production modules
+
+Architecture principles
+- Preserve QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- Shared core, division-specific operations
+- Freeze issued and accepted commercial history
+- Convert accepted quotes into jobs without mutating historical quote data
+- Integrate with Xero rather than replacing accounting
+- Keep modules logical, staged, and reusable
+
+CURRENT PHASE OBJECTIVE
+
+Complete the missing practical layer of the auth system:
+- user administration UI
+- role/division assignment UI
+- auth enforcement hardening
+
+This phase must make the system usable by multiple internal staff safely.
+
+IMPLEMENT ONLY THE FOLLOWING
+
+1. Users admin page
+Add a proper Users management screen for admin-level use.
+
+Requirements:
+- list all users
+- show username
+- display name
+- email
+- role
+- division assignment
+- active/inactive status
+- created date if available
+
+2. Create user UI
+Add a create-user flow using the existing auth users API.
+
+Fields:
+- username
+- password
+- email
+- display name
+- role
+- division code
+- active state if supported
+
+Use the existing simplified role model only:
+- owner
+- admin
+- estimator
+- finance
+- production
+- viewer
+
+3. Edit/deactivate user support
+Add minimum practical account management support.
+
+Requirements:
+- activate/deactivate user
+- update display name
+- update email
+- update role
+- update division assignment
+
+If backend endpoints do not yet support editing users, implement only the minimum required backend additions for this phase.
+Do not build a giant permissions system.
+
+4. Password management
+Add minimum safe admin password handling.
+
+Requirements:
+- admin can reset a user password
+or
+- admin can set a replacement password
+
+Do not build full forgot-password email recovery yet.
+
+5. Sidebar/navigation
+Add a Users navigation entry visible only where appropriate in the app shell.
+
+Keep it consistent with the existing UI.
+
+6. Auth enforcement hardening
+Review the existing API route protection and ensure protected business endpoints require auth appropriately.
+
+Requirements:
+- apply requireAuth consistently to protected app routes/endpoints
+- do not leave customer, quote, invoice, or settings routes unintentionally open
+- keep test mode working
+- preserve existing UI flows
+
+7. Test-safe auth mode
+Do NOT break Replit testing.
+
+Requirements:
+- preserve NODE_ENV=test mock/test auth path
+- test runs must continue without manual login steps
+- production auth must remain enforced outside test mode
+
+8. Seeded admin safety
+Do not remove bootstrap access in this phase, but improve safety if practical.
+
+Preferred:
+- keep seed-on-empty-system behavior only
+- avoid reseeding duplicate admin users
+- report clearly how the bootstrap admin works
+
+DATA OWNERSHIP RULES
+
+Keep these shared at organisation level:
+- users
+- customers
+- contacts
+- projects
+- activity log
+- integration framework
+
+Keep these division-scoped:
+- quotes
+- invoice defaults
+- division settings
+- future jobs
+- future manufacturing modules
+
+SCHEMA/API EXPECTATIONS
+
+Implement only what is required for this phase.
+
+At minimum support:
+- listing users
+- creating users
+- updating users
+- activating/deactivating users
+- resetting/replacing passwords if added
+
+Do NOT overbuild:
+- no enterprise permission matrix
+- no advanced workflow engine
+- no SSO
+- no MFA
+- no customer portal
+- no full HR system
+
+UI EXPECTATIONS
+
+Add only the minimum UI required for this phase:
+- Users page
+- create user dialog/form
+- edit/deactivate controls
+- role/division selection
+- password reset/set control if implemented
+
+Keep the UI clean and functional.
+Do NOT do a broad visual redesign in this phase.
+
+NON-GOALS FOR THIS PHASE
+
+Do NOT implement yet:
+- full job module
+- portal
+- cut sheet generation
+- back-costing
+- advanced approval engine
+- full Xero sync expansion
+- complex permissions matrix
+- MFA
+- forgot-password email system
+
+MANDATORY HANDOVER UPDATE
+
+After implementation produce a structured handover update.
+
+Include:
+1. Files changed
+2. Behaviour changes
+3. Schema/API changes
+4. UI changes
+5. Architecture verification
+6. Risks/limitations
+7. Updated current system state
+8. Updated recommended next tasks
+9. Regression checks
+
+Regression checks must explicitly confirm:
+- login still works
+- logout still works
+- quote creation still works
+- preview still works
+- PDF still works
+- revisions still work
+- accepted quote flow still works
+- deposit invoice flow still works
+- auth does not break tests
+- protected routes are now correctly guarded
+
+FINAL INSTRUCTION
+
+Implement only this phase.
+Keep it controlled, modular, and logically staged.
+If existing code and this prompt differ, preserve the locked quote pipeline and report the mismatch explicitly in the handover.

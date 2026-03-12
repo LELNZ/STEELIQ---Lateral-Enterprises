@@ -24,6 +24,7 @@ import {
   clearAllQuotes,
   type QuoteCascadeAction,
 } from "./quote-lifecycle";
+import { requireAuth } from "./auth";
 
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
@@ -1444,7 +1445,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/users", async (req, res) => {
+  app.post("/api/auth/users", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const schema = z.object({
       username: z.string().min(2),
       password: z.string().min(6),
@@ -1460,6 +1464,48 @@ export async function registerRoutes(
       const user = await storage.createUser({ ...parsed.data, password: hashed } as any);
       const { password: _pw, ...safeUser } = user;
       return res.status(201).json(safeUser);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/auth/users/:id", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const schema = z.object({
+      displayName: z.string().optional(),
+      email: z.string().email().optional().nullable(),
+      role: z.enum(["owner", "admin", "estimator", "finance", "production", "viewer"]).optional(),
+      divisionCode: z.string().optional().nullable(),
+      isActive: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const userId = String(req.params.id);
+      const updated = await storage.updateUser(userId, parsed.data as any);
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      const { password: _pw, ...safeUser } = updated;
+      return res.json(safeUser);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/auth/users/:id/reset-password", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const schema = z.object({ password: z.string().min(6) });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const userId = String(req.params.id);
+      const hashed = await hashPassword(parsed.data.password);
+      const updated = await storage.updateUser(userId, { password: hashed });
+      if (!updated) return res.status(404).json({ error: "User not found" });
+      return res.json({ ok: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

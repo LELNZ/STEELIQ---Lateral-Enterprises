@@ -1,7 +1,8 @@
 import { useCallback } from "react";
-import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users } from "lucide-react";
+import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
+import { useAuth } from "@/lib/auth-context";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +21,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 export function AppSidebar() {
   const [location, navigate] = useLocation();
   const { checkGuard } = useNavigationGuard();
+  const { user } = useAuth();
+  const canManageUsers = user?.role === "admin" || user?.role === "owner";
 
   const guardedClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     const guard = checkGuard();
@@ -101,6 +104,17 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {canManageUsers && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location.startsWith("/users")} tooltip="Users">
+                    <Link href="/users" onClick={(e) => guardedClick(e, "/users")} data-testid="link-sidebar-users">
+                      <ShieldCheck />
+                      <span>Users</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isLibraryActive} tooltip="Library">

@@ -22,6 +22,7 @@ import QuoteDetail from "@/pages/quote-detail";
 import QuotePreview from "@/pages/quote-preview";
 import Login from "@/pages/login";
 import Customers from "@/pages/customers";
+import Users from "@/pages/users";
 
 function Router() {
   return (
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/quote/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id" component={QuoteDetail} />
       <Route path="/customers" component={Customers} />
+      <Route path="/users" component={Users} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
