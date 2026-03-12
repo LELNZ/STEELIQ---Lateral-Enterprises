@@ -21,6 +21,7 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("estimator"),
   divisionCode: text("division_code"),
   isActive: boolean("is_active").notNull().default(true),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -899,19 +899,25 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/quotes", async (_req, res) => {
+  app.get("/api/quotes", async (req, res) => {
     try {
       const allQuotes = await storage.getAllQuotes();
       const enriched = await enrichQuotesWithOrphanState(allQuotes);
 
-      const jobIds = Array.from(new Set(enriched.map(q => q.sourceJobId).filter(Boolean))) as string[];
+      const userDivision = req.user?.divisionCode;
+      const isAllDivision = !req.user?.divisionCode || req.user?.role === "admin" || req.user?.role === "owner";
+      const filtered = isAllDivision
+        ? enriched
+        : enriched.filter(q => (q.divisionId || null) === userDivision);
+
+      const jobIds = Array.from(new Set(filtered.map(q => q.sourceJobId).filter(Boolean))) as string[];
       const jobNameMap: Record<string, string> = {};
       for (const jid of jobIds) {
         const job = await storage.getJob(jid);
         if (job) jobNameMap[jid] = job.name;
       }
 
-      const withEstimateName = enriched.map(q => ({
+      const withEstimateName = filtered.map(q => ({
         ...q,
         sourceEstimateName: q.sourceJobId ? (jobNameMap[q.sourceJobId] || null) : null,
       }));
@@ -926,6 +932,11 @@ export async function registerRoutes(
     try {
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const userDivision = req.user?.divisionCode;
+      const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+      if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
+        return res.status(403).json({ error: "Access denied: different division" });
+      }
       const revisions = await storage.getQuoteRevisions(quote.id);
       res.json({ ...quote, revisions });
     } catch (e: any) {
@@ -1461,9 +1472,27 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const hashed = await hashPassword(parsed.data.password);
-      const user = await storage.createUser({ ...parsed.data, password: hashed } as any);
+      const user = await storage.createUser({ ...parsed.data, password: hashed, mustChangePassword: true } as any);
       const { password: _pw, ...safeUser } = user;
       return res.status(201).json(safeUser);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/auth/change-password", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const schema = z.object({ currentPassword: z.string(), newPassword: z.string().min(6) });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const fullUser = await storage.getUser(req.user.id);
+      if (!fullUser) return res.status(404).json({ error: "User not found" });
+      const valid = await verifyPassword(parsed.data.currentPassword, fullUser.password);
+      if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
+      const hashed = await hashPassword(parsed.data.newPassword);
+      await storage.updateUser(req.user.id, { password: hashed, mustChangePassword: false });
+      return res.json({ ok: true });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -1503,7 +1532,7 @@ export async function registerRoutes(
     try {
       const userId = String(req.params.id);
       const hashed = await hashPassword(parsed.data.password);
-      const updated = await storage.updateUser(userId, { password: hashed });
+      const updated = await storage.updateUser(userId, { password: hashed, mustChangePassword: true });
       if (!updated) return res.status(404).json({ error: "User not found" });
       return res.json({ ok: true });
     } catch (e: any) {
@@ -1720,9 +1749,13 @@ export async function registerRoutes(
   });
 
   // ─── Invoice Routes ───────────────────────────────────────────────────────
-  app.get("/api/invoices", async (_req, res) => {
+  app.get("/api/invoices", async (req, res) => {
     try {
-      return res.json(await storage.getAllInvoices());
+      const all = await storage.getAllInvoices();
+      const userDivision = req.user?.divisionCode;
+      const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+      const filtered = isAllDivision ? all : all.filter(i => (i.divisionCode || null) === userDivision);
+      return res.json(filtered);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -1730,6 +1763,13 @@ export async function registerRoutes(
 
   app.get("/api/quotes/:id/invoices", async (req, res) => {
     try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const userDivision = req.user?.divisionCode;
+      const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+      if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
+        return res.status(403).json({ error: "Access denied: different division" });
+      }
       return res.json(await storage.getInvoicesByQuote(req.params.id));
     } catch (e: any) {
       return res.status(500).json({ error: e.message });

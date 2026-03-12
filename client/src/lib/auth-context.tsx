@@ -10,6 +10,7 @@ export interface AuthUser {
   role: string;
   divisionCode: string | null;
   isActive: boolean;
+  mustChangePassword: boolean;
 }
 
 interface AuthContextValue {
@@ -17,6 +18,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -24,6 +26,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   login: async () => {},
   logout: async () => {},
+  refreshUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -31,14 +34,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [, navigate] = useLocation();
 
+  async function fetchMe() {
+    try {
+      const r = await fetch("/api/auth/me", { credentials: "include" });
+      const data = r.ok ? await r.json() : null;
+      setUser(data);
+    } catch {
+      setUser(null);
+    }
+  }
+
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        setUser(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    fetchMe().finally(() => setLoading(false));
   }, []);
 
   async function login(username: string, password: string) {
@@ -58,8 +65,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     navigate("/login");
   }
 
+  async function refreshUser() {
+    await fetchMe();
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -38,6 +38,7 @@ export const TEST_MOCK_USER: User = {
   role: "admin",
   divisionCode: null,
   isActive: true,
+  mustChangePassword: false,
   createdAt: new Date(),
 };
 

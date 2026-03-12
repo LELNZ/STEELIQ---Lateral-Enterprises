@@ -1,0 +1,377 @@
+STEELIQ PROJECT CONTROL HEADER — MUST FOLLOW
+
+Implement exactly what is requested.
+Do not redesign architecture.
+
+Do NOT:
+- change the quote lifecycle
+- bypass QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- introduce schema creep outside this request
+- add unapproved endpoints
+- perform hidden refactors
+- change snapshot behaviour unless explicitly requested
+- create alternative rendering systems
+- make speculative architectural changes
+- redesign auth architecture beyond this phase
+- build unrelated modules “while here”
+
+Current-state facts that MUST remain true:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- Job type presets already exist and are persisted in division settings
+- Schedule first-item-fit pagination is already implemented
+- Hardware consolidation is partial because Wanz Bar still sits outside the Hardware tab
+- Quote creation is stable
+- PDF output is stable
+- Pricing inputs are acceptable
+- Revisions are clear
+- Auth/login exists
+- Users admin UI exists
+- Accepted quote flow exists
+- Deposit invoice foundation exists
+- All /api/* routes are now authenticated except intended public auth endpoints
+
+All work must be incremental, architecture-safe, and backward-compatible.
+If a structural change seems necessary, stop and explain before changing it.
+
+AGENT EXECUTION RULES
+
+You may internally plan tasks and run multiple subtasks in parallel.
+
+However:
+- Do NOT expand scope beyond what is explicitly requested
+- Do NOT redesign architecture
+- Do NOT introduce schema changes outside this prompt
+- Do NOT perform speculative refactors
+- If useful additional improvements are identified, report them in the handover instead of implementing them
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark this phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+STEELIQ PLATFORM PROFILE
+
+Purpose
+SteelIQ is the shared business operating system for Lateral Enterprises, starting with estimating and quoting, then extending into jobs, invoicing, customer management, production, and division-specific manufacturing modules.
+
+Vision
+Build a modular, enterprise-grade, multi-division platform for:
+- Lateral Engineering
+- Lateral Joinery
+- Lateral Laser Cutting
+
+Direction
+Build in controlled layers:
+1. Quote engine
+2. Identity and access
+3. Customers and projects
+4. Acceptance and job conversion
+5. Invoicing and Xero
+6. Customer portal
+7. Division-specific production modules
+
+Architecture principles
+- Preserve QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- Shared core, division-specific operations
+- Freeze issued and accepted commercial history
+- Convert accepted quotes into jobs without mutating historical quote data
+- Integrate with Xero rather than replacing accounting
+- Keep modules logical, staged, and reusable
+
+CURRENT PHASE OBJECTIVE
+
+Complete the next authorization and onboarding layer so SteelIQ can be used more safely by multiple staff across divisions.
+
+This phase should deliver:
+- division-scoped access enforcement
+- practical role meaning/help text in the UI
+- user invite/onboarding flow suitable for internal staff rollout
+- bootstrap admin safety improvements
+
+IMPORTANT CONTEXT
+
+- Users admin UI now exists
+- The next gap is not login, but authorization maturity and onboarding usability
+- Users assigned to a division should not be able to see cross-division commercial data unless explicitly allowed
+- Do NOT build the customer portal yet
+- Do NOT build a giant enterprise permissions engine yet
+
+REQUIRED DELIVERABLES
+
+This phase is only complete when all of the following exist:
+
+1. Division-scoped access enforcement
+- users assigned to a specific division only see data for that division where applicable
+- this applies at minimum to:
+  - quotes
+  - accepted quotes
+  - invoices
+  - customers/projects only where those views are division-filtered in current UI flows
+- admin/owner can still see all divisions if that is the current intended model
+- both backend filtering and frontend behaviour must align
+
+2. Role meaning/help text
+- add practical role descriptions in the Users UI
+- admin creating/editing a user should be able to understand what each role means
+- include concise explanations for:
+  - owner
+  - admin
+  - estimator
+  - finance
+  - production
+  - viewer
+
+3. User invite/onboarding flow
+Implement a practical internal onboarding flow.
+
+At minimum:
+- admin can create a user without manually inventing an undocumented process
+- the UI clearly tells admin how the new user will sign in
+- if email sending is not implemented in this phase, clearly support and document a manual invite flow:
+  - username/login identifier
+  - temporary password set/reset
+  - login URL/instruction
+- if a lightweight invite email is practical within this phase, implement it only if it can be done safely and clearly
+- do NOT overbuild a full password-recovery product flow unless explicitly needed
+
+4. First-login / temporary password safety
+Implement the safest practical behaviour for this stage.
+
+Preferred outcomes:
+- clearly mark temporary/bootstrap credentials in UI/workflow
+- encourage or require password change after first login if practical
+- improve bootstrap admin handling so it is clearly seed-only and not casually left as production-standard behaviour
+
+5. Internal operational usability
+- this must be usable by staff/admin in the app
+- no backend-only division scoping
+- no backend-only invite logic
+- no hidden assumptions that require developer intervention to onboard a new user
+
+IMPLEMENT ONLY THE FOLLOWING
+
+1. Division-scoped authorization enforcement
+Apply division-aware filtering/authorization to current business data access.
+
+Requirements:
+- users with a specific divisionCode or division assignment should only access relevant division-scoped records
+- owner/admin may retain all-division visibility if already intended
+- do not silently leak cross-division quote/invoice data
+- protect both API responses and UI views
+- keep this phase focused on current core commercial entities, not every future module
+
+At minimum enforce for:
+- quote list/detail access
+- invoice list/detail access
+- accepted quote related commercial surfaces
+- any current related API endpoints already in use
+
+2. Role descriptions in Users UI
+Add visible role explanations in the Users management interface.
+
+Requirements:
+- show brief descriptions near role selector in create/edit dialogs
+- optionally add helper text/tooltip/table on the Users page
+- keep wording practical and staff-friendly
+
+Suggested meanings:
+- owner: full system oversight across divisions
+- admin: manages users/settings and broad operational access
+- estimator: create/edit quotes and commercial work
+- finance: invoice/commercial finance access
+- production: operational access for jobs/production later
+- viewer: read-only access
+
+3. Invite/onboarding flow
+Implement a controlled internal onboarding flow.
+
+Minimum acceptable version:
+- after creating a user, clearly show onboarding details to admin:
+  - login URL
+  - username/email used
+  - whether a temporary password was set
+  - next steps for the staff member
+- add clear UI text explaining that the system does not yet send a fully automated invite email if that remains true
+- if invite email is implemented, document exactly what is sent and when
+
+Do NOT fake email sending if it is not actually implemented.
+
+4. Password-change safety
+Implement the safest practical improvement in this phase.
+
+Preferred:
+- force or strongly prompt password change after admin-set temporary password / bootstrap password on first login
+OR
+- clearly mark temporary password status and surface a required next step
+
+Do not overcomplicate this with full recovery flows.
+
+5. Bootstrap admin safety
+Improve bootstrap admin handling where practical.
+
+Requirements:
+- keep bootstrap/seed admin only for empty-system setup if that is current behaviour
+- do not duplicate bootstrap admin repeatedly
+- make the UI/admin note clearer that bootstrap credentials must be changed
+- if practical, reduce reliance on a fixed obvious default after first real admin/user setup
+
+DATA OWNERSHIP RULES
+
+Keep these shared at organisation level:
+- users
+- customers
+- contacts
+- projects
+- activity log
+- integration framework
+
+Keep these division-scoped:
+- quotes
+- invoice defaults
+- division settings
+- jobs (future/current where applicable)
+- manufacturing modules
+- operational workflows
+
+Freeze these at accepted/issued commercial state:
+- accepted quote revision
+- commercial text used
+- totals used
+- pricing snapshot used
+
+SCHEMA/API EXPECTATIONS
+
+Implement only what is required for this phase.
+
+Allowed:
+- small schema additions if required for onboarding/password-change flags or division scoping support
+- route updates for division filtering
+- UI updates in Users/auth/commercial list/detail surfaces
+
+Do NOT overbuild:
+- no enterprise permission matrix
+- no advanced workflow engine
+- no SSO
+- no MFA
+- no full customer portal
+- no forgot-password email recovery product
+- no broad refactor of all modules
+
+LIFECYCLE RULES
+
+Authorization rules:
+- unauthenticated users cannot access protected routes
+- authenticated users should only access data within allowed division scope unless role permits all-division access
+
+Onboarding rules:
+- do not imply an email invite exists unless it actually does
+- do not leave new-user onboarding ambiguous
+- temporary credentials should be clearly treated as temporary
+
+UI EXPECTATIONS
+
+Add only the minimum UI required for this phase:
+- Users page improvements for role meaning/help text
+- onboarding/invite confirmation surface after user creation
+- any first-login password change prompt/screen if implemented
+- division-aware behaviour in current quote/invoice views where needed
+
+Keep the UI clean and functional.
+Do NOT do a broad visual redesign in this phase.
+
+NON-GOALS FOR THIS PHASE
+
+Do NOT implement yet:
+- full customer portal
+- full granular permissions matrix
+- MFA
+- SSO
+- forgot-password email product flow
+- full job module
+- cut sheet generation
+- back-costing
+- advanced approval engine
+- broad Xero expansion beyond current foundation
+
+DEFINITION OF DONE
+
+Done means:
+- division access is materially safer and enforced in current commercial flows
+- users UI explains roles clearly
+- onboarding a new staff user is operationally clear
+- temporary/bootstrap password handling is safer than before
+- internal staff/admin can use this without guessing undocumented steps
+- regression-safe with current quote/invoice flows intact
+
+MANDATORY HANDOVER UPDATE
+
+After implementation produce a structured handover update.
+
+Include:
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Regression checks must explicitly confirm:
+- login still works
+- logout still works
+- user creation still works
+- user editing still works
+- password reset/onboarding flow works
+- quote creation still works
+- preview still works
+- PDF still works
+- revisions still work
+- accepted quote flow still works
+- deposit invoice flow still works
+- auth does not break tests
+- division-scoped visibility is enforced as intended
+
+FINAL INSTRUCTION
+
+Implement only this phase.
+Keep it controlled, modular, and logically staged.
+If anything remains partially implemented, say so explicitly in the handover rather than reporting it complete.
