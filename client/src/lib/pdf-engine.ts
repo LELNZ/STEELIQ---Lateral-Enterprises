@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine, RenderSpecEntry } from "./quote-renderer";
 import { isSectionVisible, LOGO_SCALE_PRESETS, COMPANY_MASTER_TEMPLATE } from "./quote-template";
+import { parseRichText, isAllBold, tokensToPlainText, type InlineToken } from "./rich-text-parser";
 import type { QuoteTemplate, ScheduleLayoutVariant, TotalsLayoutVariant } from "./quote-template";
 
 const PAGE_WIDTH = 210;
@@ -89,6 +90,148 @@ function drawLine(pdf: Pdf, y: number, x1?: number, x2?: number) {
 
 function wrapText(pdf: Pdf, text: string, maxWidth: number): string[] {
   return pdf.splitTextToSize(text, maxWidth) as string[];
+}
+
+function renderInlineTokensPdf(
+  pdf: Pdf,
+  tokens: InlineToken[],
+  x: number,
+  y: number,
+  maxX: number,
+  fontSize: number,
+  color: string,
+  lineH: number,
+): { y: number; x: number } {
+  let curX = x;
+  let curY = y;
+
+  for (const token of tokens) {
+    const style =
+      token.bold && token.italic ? "bolditalic" :
+      token.bold ? "bold" :
+      token.italic ? "italic" :
+      "normal";
+    pdf.setFont(FONT_NORMAL, style);
+    pdf.setFontSize(fontSize);
+    pdf.setTextColor(color);
+
+    const words = token.text.split(" ");
+    for (let wi = 0; wi < words.length; wi++) {
+      const word = words[wi];
+      if (!word) { if (wi < words.length - 1) curX += pdf.getTextWidth(" "); continue; }
+
+      const wordW = pdf.getTextWidth(word);
+      const spaceW = wi < words.length - 1 ? pdf.getTextWidth(" ") : 0;
+
+      if (curX + wordW > maxX && curX > x) {
+        curY += lineH;
+        curX = x;
+      }
+
+      pdf.text(word, curX, curY);
+
+      if (token.underline) {
+        pdf.setDrawColor(color);
+        pdf.setLineWidth(0.2);
+        pdf.line(curX, curY + 0.6, curX + wordW, curY + 0.6);
+      }
+
+      curX += wordW + spaceW;
+    }
+  }
+
+  return { y: curY, x: curX };
+}
+
+interface RichTextPdfOptions {
+  fontSize: number;
+  color: string;
+  boldColor?: string;
+  leftMargin: number;
+  contentWidth: number;
+  lineH: number;
+  paragraphGap: number;
+  bulletIndent?: number;
+  boldHeadings?: boolean;
+}
+
+function renderRichTextPdf(pdf: Pdf, y: number, text: string | null, opts: RichTextPdfOptions): number {
+  if (!text) return y;
+  const blocks = parseRichText(text);
+  if (blocks.length === 0) return y;
+
+  const {
+    fontSize,
+    color,
+    boldColor,
+    leftMargin,
+    contentWidth,
+    lineH,
+    paragraphGap,
+    bulletIndent = 4,
+    boldHeadings = false,
+  } = opts;
+
+  const maxX = leftMargin + contentWidth;
+
+  for (const block of blocks) {
+    if (block.type === "spacer") {
+      y += paragraphGap;
+      continue;
+    }
+
+    y = ensureSpace(pdf, y, lineH + 2);
+
+    if (block.type === "bullet") {
+      const bColor = color;
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(fontSize);
+      pdf.setTextColor(bColor);
+      const bulletX = leftMargin;
+      const textX = leftMargin + bulletIndent;
+      pdf.text("•", bulletX, y);
+      const { y: newY } = renderInlineTokensPdf(pdf, block.tokens, textX, y, maxX, fontSize, bColor, lineH);
+      y = newY + lineH;
+      continue;
+    }
+
+    if (block.type === "numbered") {
+      const bColor = color;
+      const labelW = bulletIndent;
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(fontSize);
+      pdf.setTextColor(bColor);
+      pdf.text(`${block.n}.`, leftMargin, y);
+      const textX = leftMargin + labelW;
+      const { y: newY } = renderInlineTokensPdf(pdf, block.tokens, textX, y, maxX, fontSize, bColor, lineH);
+      y = newY + lineH;
+      continue;
+    }
+
+    if (block.type === "paragraph") {
+      const allBold = boldHeadings && isAllBold(block.tokens);
+      const pColor = allBold && boldColor ? boldColor : color;
+
+      if (allBold) {
+        y += 1.5;
+      }
+
+      const { y: newY } = renderInlineTokensPdf(
+        pdf,
+        block.tokens,
+        leftMargin,
+        y,
+        maxX,
+        fontSize,
+        pColor,
+        lineH,
+      );
+      y = newY + lineH;
+      continue;
+    }
+  }
+
+  return y;
 }
 
 async function loadImageAsDataUrl(url: string): Promise<string | null> {
@@ -293,12 +436,15 @@ function renderPageNumbers(pdf: Pdf) {
 
 function renderDisclaimer(pdf: Pdf, y: number, text: string): number {
   y = ensureSpace(pdf, y, 8);
-  pdf.setFont(FONT_NORMAL, "italic");
-  pdf.setFontSize(mmSize(T.typography.legalLineSize));
-  pdf.setTextColor(COLOR_MUTED);
-  const lines = wrapText(pdf, text, CONTENT_WIDTH);
-  pdf.text(lines, LEFT_MARGIN, y + 3);
-  y += lines.length * 3.5 + INNER_PAD;
+  y = renderRichTextPdf(pdf, y, text, {
+    fontSize: mmSize(T.typography.legalLineSize),
+    color: COLOR_MUTED,
+    leftMargin: LEFT_MARGIN,
+    contentWidth: CONTENT_WIDTH,
+    lineH: 3.5,
+    paragraphGap: INNER_PAD,
+  });
+  y += INNER_PAD;
   return y;
 }
 
@@ -463,40 +609,68 @@ function renderTotalsInline(pdf: Pdf, y: number, totals: QuoteRenderModel["total
 
 function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   const { legal } = model;
-  if (legal.sections.length === 0 && !legal.hasBankDetails) return y;
+  const hasContent =
+    legal.sections.length > 0 ||
+    legal.hasBankDetails ||
+    !!legal.additionalCapabilities;
+  if (!hasContent) return y;
+
+  const bodyFontSize = mmSize(T.typography.bodyTextSize);
+  const bodyLineH = 3.8;
+  const paragraphGap = SECTION_GAP;
+
+  const richOpts: RichTextPdfOptions = {
+    fontSize: bodyFontSize,
+    color: COLOR_BLACK,
+    leftMargin: LEFT_MARGIN,
+    contentWidth: CONTENT_WIDTH,
+    lineH: bodyLineH,
+    paragraphGap,
+    bulletIndent: 4,
+  };
 
   y = ensureSpace(pdf, y, 30);
   y += SECTION_GAP;
   drawLine(pdf, y);
   y += SECTION_GAP;
 
-  pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(mmSize(T.typography.itemTitleSize));
-  pdf.setTextColor(COLOR_ACCENT);
-  pdf.text("TERMS & CONDITIONS", LEFT_MARGIN, y + 4);
-  y += 10;
-
-  for (const section of legal.sections) {
-    y = ensureSpace(pdf, y, 15);
-
+  if (legal.additionalCapabilities) {
     pdf.setFont(FONT_NORMAL, "bold");
     pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
-    pdf.text(section.heading.toUpperCase(), LEFT_MARGIN, y + 3);
+    pdf.text("ADDITIONAL CAPABILITIES", LEFT_MARGIN, y + 3);
     y += SECTION_GAP;
 
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(mmSize(T.typography.bodyTextSize));
-    pdf.setTextColor(COLOR_BLACK);
-    const bodyLines = wrapText(pdf, section.body, CONTENT_WIDTH);
-
-    for (let i = 0; i < bodyLines.length; i++) {
-      y = ensureSpace(pdf, y, 4);
-      pdf.text(bodyLines[i], LEFT_MARGIN, y + 3);
-      y += 3.5;
-    }
+    y = renderRichTextPdf(pdf, y, legal.additionalCapabilities, {
+      ...richOpts,
+      boldColor: COLOR_BLACK,
+      boldHeadings: true,
+      paragraphGap: INNER_PAD,
+    });
 
     y += INNER_PAD;
+  }
+
+  if (legal.sections.length > 0) {
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(mmSize(T.typography.itemTitleSize));
+    pdf.setTextColor(COLOR_ACCENT);
+    pdf.text("TERMS & CONDITIONS", LEFT_MARGIN, y + 4);
+    y += 10;
+
+    for (const section of legal.sections) {
+      y = ensureSpace(pdf, y, 15);
+
+      pdf.setFont(FONT_NORMAL, "bold");
+      pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
+      pdf.setTextColor(COLOR_MUTED);
+      pdf.text(section.heading.toUpperCase(), LEFT_MARGIN, y + 3);
+      y += SECTION_GAP;
+
+      y = renderRichTextPdf(pdf, y, section.body, richOpts);
+
+      y += INNER_PAD;
+    }
   }
 
   if (legal.hasBankDetails && legal.bankDetails) {
@@ -509,15 +683,8 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
     pdf.text("REMITTANCE / BANK DETAILS", LEFT_MARGIN, y + 3);
     y += SECTION_GAP;
 
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(mmSize(T.typography.bodyTextSize));
-    pdf.setTextColor(COLOR_BLACK);
-    const bankLines = wrapText(pdf, legal.bankDetails, CONTENT_WIDTH);
-    for (const bl of bankLines) {
-      y = ensureSpace(pdf, y, 4);
-      pdf.text(bl, LEFT_MARGIN, y + 3);
-      y += 3.5;
-    }
+    y = renderRichTextPdf(pdf, y, legal.bankDetails, richOpts);
+
     y += INNER_PAD;
   }
 

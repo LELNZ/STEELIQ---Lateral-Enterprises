@@ -96,6 +96,7 @@ export interface QuoteDocumentContent {
   exclusions: string | null;
   terms: string | null;
   paymentTerms: string | null;
+  additionalCapabilities: string | null;
 }
 
 export interface QuoteDocumentSpecDisplay {
@@ -215,6 +216,7 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       })(),
       terms: div.termsOverrideBlock || org.defaultTermsBlock || null,
       paymentTerms: org.paymentTermsBlock || null,
+      additionalCapabilities: div.additionalCapabilitiesBlock || null,
     },
     specDisplay: {
       effectiveKeys: preview.effectiveSpecDisplayKeys,

@@ -93,6 +93,7 @@ export interface RenderLegalBlock {
   sections: RenderContentSection[];
   hasBankDetails: boolean;
   bankDetails: string | null;
+  additionalCapabilities: string | null;
 }
 
 export interface QuoteRenderModel {
@@ -199,6 +200,7 @@ function buildLegal(doc: QuoteDocumentModel): RenderLegalBlock {
     sections,
     hasBankDetails: !!doc.org.bankDetails,
     bankDetails: doc.org.bankDetails || null,
+    additionalCapabilities: doc.content.additionalCapabilities || null,
   };
 }
 

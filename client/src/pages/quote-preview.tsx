@@ -16,6 +16,7 @@ import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-rendere
 import { MediaViewer } from "@/components/media-viewer";
 import { generateQuotePdf } from "@/lib/pdf-engine";
 import { isSectionVisible } from "@/lib/quote-template";
+import { RichTextRenderer } from "@/components/ui/rich-text-renderer";
 import type { QuoteTemplate } from "@/lib/quote-template";
 
 export default function QuotePreview() {
@@ -201,9 +202,13 @@ export default function QuotePreview() {
         </h2>
 
         {isSectionVisible(T, "disclaimer") && (
-          <p className="text-sm italic" style={{ color: T.colors.headingMuted }} data-testid="text-preliminary-disclaimer">
-            {disclaimerText}
-          </p>
+          <div data-testid="text-preliminary-disclaimer">
+            <RichTextRenderer
+              text={disclaimerText}
+              color={T.colors.headingMuted}
+              className="space-y-0.5 text-sm italic"
+            />
+          </div>
         )}
 
         {isSectionVisible(T, "customerProject") && (
@@ -421,17 +426,40 @@ function TotalsLineRow({ line, template }: { line: RenderTotalsLine; template: Q
 function LegalSection({ legal, template }: { legal: QuoteRenderModel["legal"]; template: QuoteTemplate }) {
   return (
     <div className="space-y-5">
-      <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: template.colors.accent }}>Terms & Conditions</h3>
-      {legal.sections.map((section) => (
-        <div key={section.heading} className="space-y-1.5">
-          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>{section.heading}</p>
-          <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: template.colors.bodyText }}>{section.body}</p>
+      {legal.additionalCapabilities && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Additional Capabilities</p>
+          <RichTextRenderer
+            text={legal.additionalCapabilities}
+            color={template.colors.bodyText}
+            boldHeadings
+            className="space-y-1"
+          />
         </div>
-      ))}
+      )}
+      {legal.sections.length > 0 && (
+        <>
+          <h3 className="text-base font-bold uppercase tracking-wider" style={{ color: template.colors.accent }}>Terms & Conditions</h3>
+          {legal.sections.map((section) => (
+            <div key={section.heading} className="space-y-1.5">
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>{section.heading}</p>
+              <RichTextRenderer
+                text={section.body}
+                color={template.colors.bodyText}
+                className="space-y-0.5"
+              />
+            </div>
+          ))}
+        </>
+      )}
       {legal.hasBankDetails && (
         <div className="space-y-1.5 pt-2">
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color: template.colors.headingMuted }}>Remittance / Bank Details</p>
-          <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: template.colors.bodyText }}>{legal.bankDetails}</p>
+          <RichTextRenderer
+            text={legal.bankDetails}
+            color={template.colors.bodyText}
+            className="space-y-0.5"
+          />
         </div>
       )}
     </div>

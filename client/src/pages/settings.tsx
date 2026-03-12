@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -59,6 +59,7 @@ interface DivisionSettings {
   termsOverrideBlock: string | null;
   headerNotesOverrideBlock: string | null;
   exclusionsOverrideBlock: string | null;
+  additionalCapabilitiesBlock: string | null;
   fontFamily: string | null;
   accentColor: string | null;
   logoPosition: string | null;
@@ -188,9 +189,9 @@ function OrgSettingsTab() {
           <div>
             <Label className="text-sm font-medium mb-1 block">Bank Details</Label>
             <p className="text-xs text-muted-foreground mb-2">Displayed on customer invoices and quotes</p>
-            <Textarea
+            <RichTextEditor
               value={form.bankDetails || ""}
-              onChange={(e) => setForm({ ...form, bankDetails: e.target.value })}
+              onChange={(v) => setForm({ ...form, bankDetails: v })}
               rows={3}
               data-testid="input-org-bankDetails"
             />
@@ -222,36 +223,36 @@ function OrgSettingsTab() {
           <Separator />
           <div>
             <Label className="text-sm font-medium mb-1 block">Default Header Notes</Label>
-            <Textarea
+            <RichTextEditor
               value={form.defaultHeaderNotesBlock || ""}
-              onChange={(e) => setForm({ ...form, defaultHeaderNotesBlock: e.target.value })}
+              onChange={(v) => setForm({ ...form, defaultHeaderNotesBlock: v })}
               rows={3}
               data-testid="input-org-defaultHeaderNotesBlock"
             />
           </div>
           <div>
             <Label className="text-sm font-medium mb-1 block">Default Terms</Label>
-            <Textarea
+            <RichTextEditor
               value={form.defaultTermsBlock || ""}
-              onChange={(e) => setForm({ ...form, defaultTermsBlock: e.target.value })}
+              onChange={(v) => setForm({ ...form, defaultTermsBlock: v })}
               rows={4}
               data-testid="input-org-defaultTermsBlock"
             />
           </div>
           <div>
             <Label className="text-sm font-medium mb-1 block">Default Exclusions</Label>
-            <Textarea
+            <RichTextEditor
               value={form.defaultExclusionsBlock || ""}
-              onChange={(e) => setForm({ ...form, defaultExclusionsBlock: e.target.value })}
+              onChange={(v) => setForm({ ...form, defaultExclusionsBlock: v })}
               rows={3}
               data-testid="input-org-defaultExclusionsBlock"
             />
           </div>
           <div>
             <Label className="text-sm font-medium mb-1 block">Payment Terms</Label>
-            <Textarea
+            <RichTextEditor
               value={form.paymentTermsBlock || ""}
-              onChange={(e) => setForm({ ...form, paymentTermsBlock: e.target.value })}
+              onChange={(v) => setForm({ ...form, paymentTermsBlock: v })}
               rows={3}
               data-testid="input-org-paymentTermsBlock"
             />
@@ -794,29 +795,40 @@ function DivisionSettingsTab() {
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-sm font-medium mb-1 block">Terms Override</Label>
-                <Textarea
+                <RichTextEditor
                   value={form.termsOverrideBlock || ""}
-                  onChange={(e) => setForm({ ...form, termsOverrideBlock: e.target.value })}
+                  onChange={(v) => setForm({ ...form, termsOverrideBlock: v })}
                   rows={3}
                   data-testid="input-div-termsOverrideBlock"
                 />
               </div>
               <div>
                 <Label className="text-sm font-medium mb-1 block">Header Notes Override</Label>
-                <Textarea
+                <RichTextEditor
                   value={form.headerNotesOverrideBlock || ""}
-                  onChange={(e) => setForm({ ...form, headerNotesOverrideBlock: e.target.value })}
+                  onChange={(v) => setForm({ ...form, headerNotesOverrideBlock: v })}
                   rows={3}
                   data-testid="input-div-headerNotesOverrideBlock"
                 />
               </div>
               <div>
                 <Label className="text-sm font-medium mb-1 block">Exclusions Override</Label>
-                <Textarea
+                <RichTextEditor
                   value={form.exclusionsOverrideBlock || ""}
-                  onChange={(e) => setForm({ ...form, exclusionsOverrideBlock: e.target.value })}
+                  onChange={(v) => setForm({ ...form, exclusionsOverrideBlock: v })}
                   rows={3}
                   data-testid="input-div-exclusionsOverrideBlock"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-1 block">Additional Capabilities</Label>
+                <p className="text-xs text-muted-foreground mb-2">Cross-promotes other Lateral divisions on the quote. Use **bold** for service headings and a blank line between each service block.</p>
+                <RichTextEditor
+                  value={form.additionalCapabilitiesBlock || ""}
+                  onChange={(v) => setForm({ ...form, additionalCapabilitiesBlock: v })}
+                  rows={6}
+                  placeholder={"Many of our clients also engage us across multiple stages.\n\n**Lateral Engineering**\nStructural steel fabrication, general engineering, repairs and custom manufacturing.\n\n**Lateral Laser Cutting**\nCNC fibre laser cutting, folded components, sheet processing and small-batch production."}
+                  data-testid="input-div-additionalCapabilitiesBlock"
                 />
               </div>
             </CardContent>

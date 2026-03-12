@@ -1181,6 +1181,7 @@ export async function registerRoutes(
     termsOverrideBlock: z.string().optional().nullable(),
     headerNotesOverrideBlock: z.string().optional().nullable(),
     exclusionsOverrideBlock: z.string().optional().nullable(),
+    additionalCapabilitiesBlock: z.string().optional().nullable(),
     fontFamily: z.string().optional().nullable(),
     accentColor: z.string().optional().nullable(),
     logoPosition: z.string().optional().nullable(),
