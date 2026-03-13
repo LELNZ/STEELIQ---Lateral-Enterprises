@@ -158,8 +158,13 @@ export interface IStorage {
   createOpJob(data: InsertOpJob): Promise<OpJob>;
   getOpJob(id: string): Promise<OpJob | undefined>;
   getAllOpJobs(): Promise<OpJob[]>;
+  getArchivedOpJobs(): Promise<OpJob[]>;
+  archiveOpJob(id: string): Promise<OpJob | undefined>;
+  unarchiveOpJob(id: string): Promise<OpJob | undefined>;
   updateOpJob(id: string, data: Partial<InsertOpJob>): Promise<OpJob | undefined>;
   getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined>;
+  getDemoQuotes(): Promise<Quote[]>;
+  getDemoOpJobs(): Promise<OpJob[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -717,7 +722,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllOpJobs(): Promise<OpJob[]> {
-    return db.select().from(opJobs).orderBy(desc(opJobs.createdAt));
+    return db.select().from(opJobs).where(isNull(opJobs.archivedAt)).orderBy(desc(opJobs.createdAt));
+  }
+
+  async getArchivedOpJobs(): Promise<OpJob[]> {
+    return db.select().from(opJobs).where(isNotNull(opJobs.archivedAt)).orderBy(desc(opJobs.createdAt));
+  }
+
+  async archiveOpJob(id: string): Promise<OpJob | undefined> {
+    const job = await this.getOpJob(id);
+    if (!job || job.archivedAt) return undefined;
+    const [updated] = await db.update(opJobs).set({ archivedAt: new Date() } as any).where(eq(opJobs.id, id)).returning();
+    return updated;
+  }
+
+  async unarchiveOpJob(id: string): Promise<OpJob | undefined> {
+    const job = await this.getOpJob(id);
+    if (!job || !job.archivedAt) return undefined;
+    const [updated] = await db.update(opJobs).set({ archivedAt: null } as any).where(eq(opJobs.id, id)).returning();
+    return updated;
   }
 
   async updateOpJob(id: string, data: Partial<InsertOpJob>): Promise<OpJob | undefined> {
@@ -731,6 +754,15 @@ export class DatabaseStorage implements IStorage {
   async getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined> {
     const [row] = await db.select().from(opJobs).where(eq(opJobs.sourceQuoteId, quoteId));
     return row;
+  }
+
+  async getDemoQuotes(): Promise<Quote[]> {
+    return db.select().from(quotes)
+      .where(and(eq(quotes.isDemoRecord, true), isNull(quotes.deletedAt)));
+  }
+
+  async getDemoOpJobs(): Promise<OpJob[]> {
+    return db.select().from(opJobs).where(eq(opJobs.isDemoRecord, true));
   }
 }
 

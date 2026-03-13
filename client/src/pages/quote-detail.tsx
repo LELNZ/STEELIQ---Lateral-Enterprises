@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import { type Quote, type QuoteRevision, type AuditLog, type Invoice, type Customer, type Project, type OpJob, VALID_STATUS_TRANSITIONS, type QuoteStatus } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle } from "lucide-react";
+import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
@@ -76,6 +77,8 @@ export default function QuoteDetail() {
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const { user } = useAuth();
 
   async function handleExportPdf() {
     if (!quoteId || pdfExporting) return;
@@ -195,6 +198,43 @@ export default function QuoteDetail() {
     },
   });
 
+  const unarchiveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/quotes/${quoteId}/unarchive`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Unarchive failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Quote restored to draft" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Unarchive failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async (isDemoRecord: boolean) => {
+      const res = await apiRequest("PATCH", `/api/quotes/${quoteId}/demo-flag`, { isDemoRecord });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -264,6 +304,34 @@ export default function QuoteDetail() {
           </Badge>
         </div>
       </div>
+
+      {quote.archivedAt && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950/30 p-4 flex items-center justify-between gap-4" data-testid="banner-archived">
+          <div className="flex items-center gap-2 text-sm">
+            <Archive className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0" />
+            <span className="text-yellow-800 dark:text-yellow-300">
+              This quote was archived on <strong>{new Date(quote.archivedAt).toLocaleDateString("en-NZ")}</strong>. It is hidden from active lists.
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => unarchiveMutation.mutate()}
+            disabled={unarchiveMutation.isPending}
+            data-testid="button-unarchive-quote"
+          >
+            {unarchiveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+            Unarchive
+          </Button>
+        </div>
+      )}
+
+      {quote.isDemoRecord && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 px-4 py-2 flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300" data-testid="banner-demo-record">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          This quote is flagged as a demo/test record and may be bulk-archived by an administrator.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-lg border bg-card p-3">
@@ -479,6 +547,30 @@ export default function QuoteDetail() {
       )}
 
       <Separator />
+
+      {(user?.role === "admin" || user?.role === "owner") && (
+        <>
+          <Separator />
+          <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-admin-demo-flag">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Admin: Demo / Test Record</p>
+            <p className="text-xs text-muted-foreground">Flag this quote as a demo/test record so it can be bulk-archived from the admin panel without affecting real operational data.</p>
+            <div className="flex items-center gap-3">
+              <Button
+                variant={quote.isDemoRecord ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => demoFlagMutation.mutate(!quote.isDemoRecord)}
+                disabled={demoFlagMutation.isPending}
+                data-testid="button-toggle-demo-flag"
+              >
+                {quote.isDemoRecord ? "✓ Flagged as Demo/Test" : "Mark as Demo/Test"}
+              </Button>
+              {quote.isDemoRecord && (
+                <span className="text-xs text-muted-foreground">This record will be archived by the next demo cleanup.</span>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent data-testid="dialog-confirm-delete">

@@ -302,7 +302,7 @@ export const VALID_STATUS_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
   accepted: ["archived"],
   declined: ["archived"],
   archived: [],
-  cancelled: [],
+  cancelled: ["archived"],
 };
 
 export const numberSequences = pgTable("number_sequences", {
@@ -332,6 +332,7 @@ export const quotes = pgTable("quotes", {
   sentToEmail: text("sent_to_email"),
   archivedAt: timestamp("archived_at"),
   deletedAt: timestamp("deleted_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -499,6 +500,8 @@ export const opJobs = pgTable("op_jobs", {
   sourceQuoteId: varchar("source_quote_id"),
   acceptedRevisionId: varchar("accepted_revision_id"),
   notes: text("notes"),
+  archivedAt: timestamp("archived_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdByUserId: varchar("created_by_user_id"),
   convertedAt: timestamp("converted_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),

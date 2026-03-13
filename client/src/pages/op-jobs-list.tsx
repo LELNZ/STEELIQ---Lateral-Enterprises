@@ -1,12 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { type OpJob, type Customer, type Project } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { HardHat, ExternalLink } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { HardHat, ExternalLink, RotateCcw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
@@ -24,9 +32,19 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "des
 
 export default function OpJobsList() {
   const [, navigate] = useLocation();
+  const [tab, setTab] = useState<"active" | "archived">("active");
 
   const { data: jobs = [], isLoading } = useQuery<OpJob[]>({
     queryKey: ["/api/op-jobs"],
+  });
+
+  const { data: archivedJobs = [], isLoading: archivedLoading } = useQuery<OpJob[]>({
+    queryKey: ["/api/op-jobs", "archived"],
+    queryFn: async () => {
+      const res = await fetch("/api/op-jobs?scope=archived", { credentials: "include" });
+      return res.json();
+    },
+    enabled: tab === "archived",
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
@@ -49,7 +67,78 @@ export default function OpJobsList() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "active" | "archived")}>
+        <TabsList>
+          <TabsTrigger value="active" data-testid="tab-active-jobs">
+            Active {jobs.length > 0 ? `(${jobs.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="archived" data-testid="tab-archived-jobs">
+            Archived {archivedJobs.length > 0 ? `(${archivedJobs.length})` : ""}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="active">
+          <JobsTable
+            jobs={jobs}
+            isLoading={isLoading}
+            customerMap={customerMap}
+            projectMap={projectMap}
+            onNavigate={(id) => navigate(`/op-jobs/${id}`)}
+            isArchived={false}
+          />
+        </TabsContent>
+
+        <TabsContent value="archived">
+          <JobsTable
+            jobs={archivedJobs}
+            isLoading={archivedLoading}
+            customerMap={customerMap}
+            projectMap={projectMap}
+            onNavigate={(id) => navigate(`/op-jobs/${id}`)}
+            isArchived={true}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function JobsTable({
+  jobs, isLoading, customerMap, projectMap, onNavigate, isArchived,
+}: {
+  jobs: OpJob[];
+  isLoading: boolean;
+  customerMap: Record<string, string>;
+  projectMap: Record<string, string>;
+  onNavigate: (id: string) => void;
+  isArchived: boolean;
+}) {
+  const { toast } = useToast();
+  const [unarchiveTarget, setUnarchiveTarget] = useState<OpJob | null>(null);
+
+  const unarchiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("PATCH", `/api/op-jobs/${id}/unarchive`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Unarchive failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", "archived"] });
+      toast({ title: "Job restored to active list" });
+      setUnarchiveTarget(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <>
+      <div className="rounded-lg border bg-card overflow-x-auto mt-4">
         <Table>
           <TableHeader>
             <TableRow>
@@ -61,7 +150,7 @@ export default function OpJobsList() {
               <TableHead>Status</TableHead>
               <TableHead>Source Quote</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead className="w-[60px]" />
+              <TableHead className="w-[80px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -77,8 +166,12 @@ export default function OpJobsList() {
                 <TableCell colSpan={9} className="text-center py-12">
                   <div className="space-y-2">
                     <HardHat className="h-8 w-8 mx-auto text-muted-foreground/30" />
-                    <p className="text-sm text-muted-foreground">No jobs yet</p>
-                    <p className="text-xs text-muted-foreground">Accept a quote and use the "Convert to Job" action to create the first job.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isArchived ? "No archived jobs" : "No jobs yet"}
+                    </p>
+                    {!isArchived && (
+                      <p className="text-xs text-muted-foreground">Accept a quote and use the "Convert to Job" action to create the first job.</p>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -87,7 +180,7 @@ export default function OpJobsList() {
               <TableRow
                 key={job.id}
                 className="cursor-pointer hover:bg-muted/40"
-                onClick={() => navigate(`/op-jobs/${job.id}`)}
+                onClick={() => onNavigate(job.id)}
                 data-testid={`row-job-${job.id}`}
               >
                 <TableCell className="font-mono font-medium text-sm" data-testid={`text-job-number-${job.id}`}>
@@ -95,6 +188,9 @@ export default function OpJobsList() {
                 </TableCell>
                 <TableCell className="font-medium text-sm" data-testid={`text-job-title-${job.id}`}>
                   {job.title}
+                  {job.isDemoRecord && (
+                    <Badge variant="secondary" className="ml-2 text-xs" data-testid={`badge-demo-${job.id}`}>Demo</Badge>
+                  )}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground" data-testid={`text-job-customer-${job.id}`}>
                   {job.customerId ? customerMap[job.customerId] ?? <span className="italic">Unknown</span> : <span className="italic text-xs">—</span>}
@@ -106,9 +202,14 @@ export default function OpJobsList() {
                   {job.divisionId ?? <span className="text-muted-foreground text-xs">—</span>}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_VARIANTS[job.status] ?? "outline"} className="text-xs" data-testid={`badge-job-status-${job.id}`}>
-                    {STATUS_LABELS[job.status] ?? job.status}
-                  </Badge>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant={STATUS_VARIANTS[job.status] ?? "outline"} className="text-xs" data-testid={`badge-job-status-${job.id}`}>
+                      {STATUS_LABELS[job.status] ?? job.status}
+                    </Badge>
+                    {job.archivedAt && (
+                      <Badge variant="secondary" className="text-xs" data-testid={`badge-archived-job-${job.id}`}>Archived</Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-sm font-mono text-muted-foreground" data-testid={`text-job-source-quote-${job.id}`}>
                   {job.sourceQuoteId ? <span className="text-xs">linked</span> : "—"}
@@ -117,19 +218,51 @@ export default function OpJobsList() {
                   {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-NZ") : "—"}
                 </TableCell>
                 <TableCell>
-                  <Button
-                    variant="ghost" size="sm" className="h-7 w-7 p-0"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/op-jobs/${job.id}`); }}
-                    data-testid={`button-view-job-${job.id}`}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {isArchived && (
+                      <Button
+                        variant="ghost" size="sm" className="h-7 w-7 p-0"
+                        onClick={(e) => { e.stopPropagation(); setUnarchiveTarget(job); }}
+                        title="Unarchive"
+                        data-testid={`button-unarchive-job-${job.id}`}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost" size="sm" className="h-7 w-7 p-0"
+                      onClick={(e) => { e.stopPropagation(); onNavigate(job.id); }}
+                      data-testid={`button-view-job-${job.id}`}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-    </div>
+
+      <AlertDialog open={!!unarchiveTarget} onOpenChange={(v) => !v && setUnarchiveTarget(null)}>
+        <AlertDialogContent data-testid="dialog-confirm-unarchive-job">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore {unarchiveTarget?.jobNumber}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will unarchive the job and return it to the active list. The job status (e.g. Cancelled) remains unchanged.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => unarchiveTarget && unarchiveMutation.mutate(unarchiveTarget.id)}
+              data-testid="button-confirm-unarchive-job"
+            >
+              Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

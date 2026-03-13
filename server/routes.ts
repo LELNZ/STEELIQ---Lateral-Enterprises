@@ -20,6 +20,7 @@ import {
   handleEstimateDeleteCascade,
   handleEstimateArchiveCascade,
   archiveQuote,
+  unarchiveQuote,
   hardDeleteQuote,
   enrichQuotesWithOrphanState,
   clearAllQuotes,
@@ -1065,6 +1066,19 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/quotes/:id/unarchive", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (!quote.archivedAt) return res.status(400).json({ error: "Quote is not archived" });
+
+      const restored = await unarchiveQuote(req.params.id);
+      res.json(restored);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   app.delete("/api/quotes/:id", async (req, res) => {
     try {
       const confirm = req.query.confirm;
@@ -2038,9 +2052,142 @@ export async function registerRoutes(
   // ─── Op Jobs Routes ────────────────────────────────────────────────────────
   app.get("/api/op-jobs", async (req, res) => {
     try {
+      const scope = req.query.scope as string | undefined;
+      if (scope === "archived") {
+        return res.json(await storage.getArchivedOpJobs());
+      }
       return res.json(await storage.getAllOpJobs());
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/op-jobs/:id/archive", async (req, res) => {
+    try {
+      const job = await storage.getOpJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.archivedAt) return res.status(400).json({ error: "Job is already archived" });
+
+      const updated = await storage.archiveOpJob(req.params.id);
+      await storage.createAuditLog({
+        entityType: "op_job",
+        entityId: req.params.id,
+        action: "archived",
+        performedByUserId: (req as any).user?.id,
+        metadataJson: {},
+      });
+      res.json({ ok: true, job: updated });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/op-jobs/:id/unarchive", async (req, res) => {
+    try {
+      const job = await storage.getOpJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      if (!job.archivedAt) return res.status(400).json({ error: "Job is not archived" });
+
+      const updated = await storage.unarchiveOpJob(req.params.id);
+      await storage.createAuditLog({
+        entityType: "op_job",
+        entityId: req.params.id,
+        action: "unarchived",
+        performedByUserId: (req as any).user?.id,
+        metadataJson: {},
+      });
+      res.json({ ok: true, job: updated });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/admin/cleanup-demo", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const demoQuotes = await storage.getDemoQuotes();
+      const demoJobs = await storage.getDemoOpJobs();
+
+      let quotesArchived = 0;
+      let jobsArchived = 0;
+
+      for (const q of demoQuotes) {
+        if (!q.archivedAt && !q.deletedAt) {
+          await archiveQuote(q.id);
+          quotesArchived++;
+        }
+      }
+      for (const j of demoJobs) {
+        if (!j.archivedAt) {
+          await storage.archiveOpJob(j.id);
+          jobsArchived++;
+        }
+      }
+
+      await storage.createAuditLog({
+        entityType: "system",
+        entityId: "admin-cleanup",
+        action: "demo_cleanup",
+        performedByUserId: user.id,
+        metadataJson: { quotesArchived, jobsArchived },
+      });
+
+      res.json({ ok: true, quotesArchived, jobsArchived });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/demo-stats", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const demoQuotes = await storage.getDemoQuotes();
+      const demoJobs = await storage.getDemoOpJobs();
+      res.json({
+        demoQuoteCount: demoQuotes.filter(q => !q.archivedAt && !q.deletedAt).length,
+        demoJobCount: demoJobs.filter(j => !j.archivedAt).length,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/quotes/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateQuote(req.params.id, { isDemoRecord } as any);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/op-jobs/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const job = await storage.getOpJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateOpJob(req.params.id, { isDemoRecord } as any);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
     }
   });
 

@@ -30,6 +30,26 @@ export async function archiveQuote(id: string): Promise<Quote | undefined> {
   return updated;
 }
 
+export async function unarchiveQuote(id: string): Promise<Quote | undefined> {
+  const quote = await storage.getQuote(id);
+  if (!quote || !quote.archivedAt) return undefined;
+
+  const updated = await storage.updateQuote(id, {
+    status: "draft",
+    archivedAt: null,
+  } as any);
+
+  if (updated) {
+    await storage.createAuditLog({
+      entityType: "quote",
+      entityId: id,
+      action: "unarchived",
+      metadataJson: { previousStatus: quote.status },
+    });
+  }
+  return updated;
+}
+
 export async function softDeleteQuote(id: string): Promise<Quote | undefined> {
   const now = new Date();
   const updated = await storage.updateQuote(id, {

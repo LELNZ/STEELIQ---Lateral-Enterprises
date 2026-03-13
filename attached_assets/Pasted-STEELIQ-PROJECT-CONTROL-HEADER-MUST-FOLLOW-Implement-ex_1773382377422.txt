@@ -1,0 +1,312 @@
+STEELIQ PROJECT CONTROL HEADER — MUST FOLLOW
+
+Implement exactly what is requested.
+Do not redesign architecture.
+
+Do NOT:
+- change the quote lifecycle foundations already implemented
+- bypass QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- introduce schema creep outside this request
+- add unapproved endpoints
+- perform hidden refactors
+- change snapshot behaviour unless explicitly requested
+- create alternative rendering systems
+- make speculative architectural changes
+- touch Xero, email, PDF, or customer portal in this phase
+- use real customer/client records for demo or test flows
+
+Current-state facts that MUST remain true:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- Quote creation is stable
+- PDF output is stable and compressed
+- Email sending exists
+- Auth/login exists
+- Users admin UI exists
+- Customers/projects are integrated into quote workflow
+- Quote -> Job shell conversion exists
+- Lifecycle safety controls exist:
+  - draft quote delete
+  - quote cancel
+  - accepted quote revert-to-draft with safeguards
+  - job cancel
+- Current issue: archive behaviour and demo/test cleanup are incomplete
+- Current issue: test/demo flows must not mutate live-looking customer records
+
+All work must be incremental, architecture-safe, and backward-compatible.
+If a structural change seems necessary, stop and explain before changing it.
+
+AGENT EXECUTION RULES
+
+You may internally plan tasks and run multiple subtasks in parallel.
+
+However:
+- Do NOT expand scope beyond what is explicitly requested
+- Do NOT redesign architecture
+- Do NOT introduce schema changes outside this prompt
+- Do NOT perform speculative refactors
+- If useful additional improvements are identified, report them in the handover instead of implementing them
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark this phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+STEELIQ PLATFORM PROFILE
+
+Purpose
+SteelIQ is the shared business operating system for Lateral Enterprises, starting with estimating and quoting, then extending into jobs, invoicing, customer management, production, and division-specific manufacturing modules.
+
+Vision
+Build a modular, enterprise-grade, multi-division platform for:
+- Lateral Engineering
+- Lateral Joinery
+- Lateral Laser Cutting
+
+System positioning
+- GoHighLevel remains the CRM front office for leads, pipeline, marketing automation, and follow-up workflows
+- SteelIQ is the commercial ERP and operational core for customers, projects, estimating, quoting, acceptance, jobs, invoicing, cost tracking, and division-specific operational modules
+- Xero remains the accounting source of truth for invoices, payments, and financial ledger data
+
+CURRENT PHASE OBJECTIVE
+
+Stabilise lifecycle visibility and demo/test cleanup.
+
+This phase should deliver:
+- proper archive/unarchive controls for quotes
+- proper archive/unarchive controls for jobs
+- clear separation between cancelled vs archived
+- safe admin-only cleanup path for demo/test records
+- strong test/demo data isolation so real customer records are not mutated by demo/testing flows
+
+IMPORTANT CONTEXT
+
+Current observed issue:
+- cancelled quotes are not clearly archivable from the UI
+- jobs can be cancelled but not properly hidden/archived
+- demo/test records cannot be cleaned up cleanly
+- a real-looking client quote was used in a demo/test flow and converted into a job, which is not acceptable behaviour
+
+This phase must fix that safely.
+
+REQUIRED DELIVERABLES
+
+This phase is only complete when all of the following exist:
+
+1. Quote archive/unarchive controls
+- quotes can be archived from the UI where appropriate
+- archived quotes move out of normal active lists
+- archived quotes can be viewed in an archived list/tab
+- unarchive is possible for admin/staff where appropriate
+
+2. Job archive/unarchive controls
+- jobs can be archived from the UI where appropriate
+- archived jobs move out of active operational lists
+- archived jobs can be restored if needed
+- jobs are still not normally deleted
+
+3. Clear cancelled vs archived behaviour
+- cancelled = lifecycle/commercial status
+- archived = visibility/state for list management
+- cancelling a quote or job must not be confused with archiving it
+- UI must make this distinction clear
+
+4. Admin-safe demo/test cleanup
+Implement a safe cleanup path for clearly identified demo/test records.
+
+Requirements:
+- admin-only cleanup/archive action for demo/test records
+- do NOT hard-delete live commercial records by default
+- if hard delete is supported at all, it must be strictly limited to clearly identified demo/test records with no downstream dependencies
+- report exactly what is supported
+
+5. Test/demo data isolation
+- automated tests and demo flows must use synthetic test data only
+- do NOT mutate real-looking client/customer records during tests
+- create or use dedicated seeded test/demo data
+- if test records are created, they must be clearly identifiable and safely cleanable
+
+IMPLEMENT ONLY THE FOLLOWING
+
+1. Quote archive/unarchive
+Add quote archive/unarchive controls.
+
+Requirements:
+- archive action available where appropriate
+- archived quotes visible in Archived tab/list
+- unarchive action available where appropriate
+- archived quotes should not clutter active operational lists
+- preserve existing delete rule:
+  - draft-only delete remains
+- preserve existing cancel rule
+
+2. Job archive/unarchive
+Add archive/unarchive support for jobs.
+
+Requirements:
+- job cancel remains a lifecycle action
+- archive is a separate visibility action
+- archived jobs move out of active list by default
+- archived jobs can still be opened if needed
+
+3. Demo/test cleanup model
+Implement a simple, safe model for non-production record cleanup.
+
+Preferred approach:
+- use a clear flag/tag/marker or deterministic test naming convention for demo/test records
+- allow admin cleanup/archive tools for those records
+- do NOT create a dangerous broad delete-anything capability
+
+4. Test safety
+Update tests/demo fixtures so they do not touch genuine-looking live records.
+
+Requirements:
+- e2e tests should create/use dedicated test customers/projects/quotes/jobs
+- no tests should depend on or mutate user-created live records
+- report clearly how test isolation now works
+
+5. UI expectations
+Add only the minimum UI required for this phase:
+- archive/unarchive controls in quote list/detail
+- archive/unarchive controls in jobs list/detail
+- archived tab/filter where needed
+- clear admin-only cleanup affordance for demo/test records if implemented
+
+Keep the UI clean and functional.
+Do NOT do a broad visual redesign in this phase.
+
+SCHEMA/API EXPECTATIONS
+
+Implement only what is required for this phase.
+
+Allowed:
+- archive flags/fields if not already present
+- archive/unarchive routes
+- safe cleanup metadata for demo/test identification if needed
+- test fixture/support improvements
+
+Do NOT overbuild:
+- no full recycle-bin system
+- no enterprise retention engine
+- no broad hard-delete for live records
+- no portal work
+- no Xero work
+- no costing work
+
+LIFECYCLE RULES
+
+- cancelled and archived are different concepts and must remain separate
+- accepted quotes and jobs remain historically traceable
+- archive actions must not rewrite commercial history
+- demo/test cleanup must not allow unsafe removal of real operational records
+- automated tests must not mutate live-looking user data
+
+NON-GOALS FOR THIS PHASE
+
+Do NOT implement yet:
+- Xero lifecycle
+- invoice lifecycle expansion
+- customer portal
+- approval engine
+- back-costing
+- variation workflow
+- retention workflow
+- duplicate quote tools
+- payment schedule builder
+
+DEFINITION OF DONE
+
+Done means:
+- cancelled quotes/jobs can now be archived cleanly
+- archived records are separated from active records
+- demo/test records can be handled safely by admin
+- test/demo flows no longer mutate real-looking client records
+- lifecycle history remains safe and truthful
+- internal staff can manage record visibility without guessing
+
+MANDATORY HANDOVER UPDATE
+
+After implementation produce a structured handover update.
+
+Include:
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Lifecycle/archive rules implemented
+7. Test/demo isolation changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+Regression checks must explicitly confirm:
+- quote creation still works
+- preview still works
+- PDF generation still works
+- email sending still works
+- accepted quote flow still works
+- deposit invoice flow still works
+- job conversion still works
+- cancelled quotes can be archived
+- cancelled jobs can be archived
+- archived records are separated from active lists
+- test/demo records no longer mutate real-looking customer data
+- auth/test mode still works
+
+FINAL INSTRUCTION
+
+Implement only this phase.
+Keep it controlled, modular, and logically staged.
+If anything remains partially implemented, say so explicitly in the handover rather than reporting it complete.

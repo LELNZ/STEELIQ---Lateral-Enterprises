@@ -18,8 +18,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle,
+  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
@@ -49,6 +50,8 @@ export default function OpJobDetail() {
   const [editStatus, setEditStatus] = useState<string>("active");
   const [editNotes, setEditNotes] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const { user } = useAuth();
 
   const { data: job, isLoading } = useQuery<OpJob>({
     queryKey: ["/api/op-jobs", jobId],
@@ -108,6 +111,57 @@ export default function OpJobDetail() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/op-jobs/${jobId}/archive`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Archive failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
+      toast({ title: "Job archived" });
+      setArchiveDialogOpen(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/op-jobs/${jobId}/unarchive`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Unarchive failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
+      toast({ title: "Job restored to active list" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async (isDemoRecord: boolean) => {
+      const res = await apiRequest("PATCH", `/api/op-jobs/${jobId}/demo-flag`, { isDemoRecord });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", jobId] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   function startEdit() {
     if (!job) return;
     setEditTitle(job.title);
@@ -151,7 +205,7 @@ export default function OpJobDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {job.status !== "cancelled" && job.status !== "completed" && (
+          {!job.archivedAt && job.status !== "cancelled" && job.status !== "completed" && (
             <Button
               variant="ghost"
               size="sm"
@@ -161,6 +215,18 @@ export default function OpJobDetail() {
               data-testid="button-cancel-job"
             >
               <XCircle className="h-3.5 w-3.5 mr-1.5" /> Cancel Job
+            </Button>
+          )}
+          {!job.archivedAt && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setArchiveDialogOpen(true)}
+              disabled={archiveMutation.isPending}
+              data-testid="button-archive-job"
+            >
+              <Archive className="h-3.5 w-3.5 mr-1.5" /> Archive
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={startEdit} data-testid="button-edit-job">
@@ -234,6 +300,29 @@ export default function OpJobDetail() {
           </p>
         </div>
       </div>
+
+      {job.archivedAt && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 px-4 py-3" data-testid="banner-archived-job">
+          <Archive className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          <div className="space-y-1 flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">This job is archived</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Archived on {new Date(job.archivedAt).toLocaleDateString("en-NZ")}. The job is hidden from the active list.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-1 h-7 text-xs border-amber-400"
+              onClick={() => unarchiveMutation.mutate()}
+              disabled={unarchiveMutation.isPending}
+              data-testid="button-unarchive-job-inline"
+            >
+              <RotateCcw className="h-3 w-3 mr-1.5" />
+              Restore to Active List
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Separator />
 
@@ -346,6 +435,30 @@ export default function OpJobDetail() {
         </>
       )}
 
+      {(user?.role === "admin" || user?.role === "owner") && (
+        <>
+          <Separator />
+          <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-admin-demo-flag-job">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Admin: Demo / Test Record</p>
+            <p className="text-xs text-muted-foreground">Flag this job as a demo/test record so it can be bulk-archived from the admin panel.</p>
+            <div className="flex items-center gap-3">
+              <Button
+                variant={job.isDemoRecord ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => demoFlagMutation.mutate(!job.isDemoRecord)}
+                disabled={demoFlagMutation.isPending}
+                data-testid="button-toggle-demo-flag-job"
+              >
+                {job.isDemoRecord ? "✓ Flagged as Demo/Test" : "Mark as Demo/Test"}
+              </Button>
+              {job.isDemoRecord && (
+                <span className="text-xs text-muted-foreground">This record will be archived by the next demo cleanup.</span>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent data-testid="dialog-confirm-cancel-job">
           <AlertDialogHeader>
@@ -362,6 +475,27 @@ export default function OpJobDetail() {
               data-testid="button-confirm-cancel-job"
             >
               Cancel Job
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <AlertDialogContent data-testid="dialog-confirm-archive-job">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive {job.jobNumber}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This hides the job from the active list and moves it to the Archived tab. The job can be restored at any time. Its status and linked quote are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => archiveMutation.mutate()}
+              disabled={archiveMutation.isPending}
+              data-testid="button-confirm-archive-job"
+            >
+              Archive Job
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
