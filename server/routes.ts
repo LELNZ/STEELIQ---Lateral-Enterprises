@@ -278,6 +278,17 @@ export async function registerRoutes(
       const job = await storage.getJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
 
+      const linkedQuotes = await storage.getQuotesByJobId(req.params.id);
+      const activeQuotes = linkedQuotes.filter(
+        (q) => q.status !== "draft" && q.status !== "archived" && q.status !== "cancelled" && !q.deletedAt,
+      );
+      if (activeQuotes.length > 0 && req.body?.force !== true) {
+        return res.status(422).json({
+          error: `This estimate has ${activeQuotes.length} active quote(s) (${activeQuotes.map((q) => q.number).join(", ")}). Archive or cancel them before deleting this estimate, or pass force: true to override.`,
+          activeQuotes: activeQuotes.map((q) => ({ id: q.id, number: q.number, status: q.status })),
+        });
+      }
+
       const cascadeAction: QuoteCascadeAction = req.body?.quoteCascade || "archive";
       const validActions: QuoteCascadeAction[] = ["archive", "delete", "keep"];
       if (!validActions.includes(cascadeAction)) {
@@ -1065,6 +1076,12 @@ export async function registerRoutes(
 
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      if (quote.status !== "draft") {
+        return res.status(422).json({
+          error: `Only draft quotes can be deleted. This quote has status '${quote.status}'. Cancel or archive it first.`,
+        });
+      }
 
       await hardDeleteQuote(req.params.id);
       res.json({ ok: true, deleted: quote.number });
@@ -1926,6 +1943,44 @@ export async function registerRoutes(
       });
 
       return res.json({ success: true, sentAt: now, quote: updated });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Revert Accepted Quote to Draft ───────────────────────────────────────
+  app.post("/api/quotes/:id/revert-to-draft", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      if (quote.status !== "accepted") {
+        return res.status(422).json({ error: "Only accepted quotes can be reverted to draft." });
+      }
+
+      const invoices = await storage.getInvoicesByQuote(req.params.id);
+      if (invoices.length > 0) {
+        return res.status(422).json({
+          error: "This quote cannot be reverted because invoices exist against it.",
+        });
+      }
+
+      const existingJob = await storage.getOpJobByQuoteId(req.params.id);
+      if (existingJob) {
+        return res.status(422).json({
+          error: "This quote cannot be reverted because it has been converted to a job.",
+        });
+      }
+
+      const updated = await storage.updateQuote(req.params.id, {
+        status: "draft",
+        acceptedAt: null,
+        acceptedByUserId: null,
+        acceptedValue: null,
+        acceptedRevisionId: null,
+      });
+
+      return res.json(updated);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

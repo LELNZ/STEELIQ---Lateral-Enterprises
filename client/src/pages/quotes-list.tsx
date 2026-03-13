@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
 import { type Quote } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,10 +14,16 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  FileText, ArrowRight, Search, ArrowUpDown, Filter, Calendar, X,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  FileText, ArrowRight, Search, ArrowUpDown, Filter, Calendar, X, Trash2,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 type EnrichedQuote = Quote & {
   isOrphaned: boolean;
@@ -32,6 +38,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   accepted: "default",
   declined: "destructive",
   archived: "secondary",
+  cancelled: "destructive",
 };
 
 const SORT_OPTIONS = [
@@ -447,11 +454,16 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
                 {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-NZ") : "—"}
               </TableCell>
               <TableCell>
-                <Link href={`/quote/${q.id}`}>
-                  <Button variant="ghost" size="icon" data-testid={`button-view-quote-${q.id}`}>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <div className="flex items-center justify-end gap-1">
+                  {q.status === "draft" && (
+                    <QuoteDeleteButton quoteId={q.id} quoteNumber={q.number} />
+                  )}
+                  <Link href={`/quote/${q.id}`}>
+                    <Button variant="ghost" size="icon" data-testid={`button-view-quote-${q.id}`}>
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -500,5 +512,64 @@ function MobileQuoteCards({ quotes }: { quotes: EnrichedQuote[] }) {
         </Link>
       ))}
     </div>
+  );
+}
+
+function QuoteDeleteButton({ quoteId, quoteNumber }: { quoteId: string; quoteNumber: string }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/quotes/${quoteId}?confirm=permanent`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Quote deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(true); }}
+        disabled={deleteMutation.isPending}
+        data-testid={`button-delete-quote-${quoteId}`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent data-testid={`dialog-confirm-delete-${quoteId}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {quoteNumber}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes this draft quote and all its revisions. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-delete-${quoteId}`}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteMutation.mutate()}
+              data-testid={`button-confirm-delete-${quoteId}`}
+            >
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -289,7 +289,7 @@ export const insertConfigurationLaborSchema = createInsertSchema(configurationLa
 export type InsertConfigurationLabor = z.infer<typeof insertConfigurationLaborSchema>;
 export type ConfigurationLabor = typeof configurationLabor.$inferSelect;
 
-export const QUOTE_STATUSES = ["draft", "review", "sent", "accepted", "declined", "archived"] as const;
+export const QUOTE_STATUSES = ["draft", "review", "sent", "accepted", "declined", "archived", "cancelled"] as const;
 export type QuoteStatus = typeof QUOTE_STATUSES[number];
 
 export const QUOTE_TYPES = ["renovation", "new_build", "tender"] as const;
@@ -297,11 +297,12 @@ export type QuoteType = typeof QUOTE_TYPES[number];
 
 export const VALID_STATUS_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
   draft: ["review", "archived"],
-  review: ["sent", "archived"],
-  sent: ["accepted", "declined"],
+  review: ["sent", "archived", "cancelled"],
+  sent: ["accepted", "declined", "cancelled"],
   accepted: ["archived"],
   declined: ["archived"],
   archived: [],
+  cancelled: [],
 };
 
 export const numberSequences = pgTable("number_sequences", {

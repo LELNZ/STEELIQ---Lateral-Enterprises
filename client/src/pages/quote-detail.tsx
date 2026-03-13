@@ -16,8 +16,12 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail } from "lucide-react";
+import { ArrowLeftCircle, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { buildQuoteDocumentModel } from "@/lib/quote-document";
@@ -37,6 +41,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   accepted: "default",
   declined: "destructive",
   archived: "secondary",
+  cancelled: "destructive",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -46,6 +51,7 @@ const STATUS_LABELS: Record<string, string> = {
   accepted: "Accepted",
   declined: "Declined",
   archived: "Archived",
+  cancelled: "Cancelled",
 };
 
 const TRANSITION_LABELS: Record<string, string> = {
@@ -54,6 +60,7 @@ const TRANSITION_LABELS: Record<string, string> = {
   accepted: "Accept",
   declined: "Decline",
   archived: "Archive",
+  cancelled: "Cancel Quote",
 };
 
 function fmt(n: number): string {
@@ -67,6 +74,8 @@ export default function QuoteDetail() {
   const quoteId = params?.id;
   const [pdfExporting, setPdfExporting] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [revertDialogOpen, setRevertDialogOpen] = useState(false);
 
   async function handleExportPdf() {
     if (!quoteId || pdfExporting) return;
@@ -148,6 +157,44 @@ export default function QuoteDetail() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/quotes/${quoteId}?confirm=permanent`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Quote deleted" });
+      navigate("/quotes");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const revertMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/quotes/${quoteId}/revert-to-draft`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Revert failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Quote reverted to draft" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Cannot revert", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -201,6 +248,17 @@ export default function QuoteDetail() {
           >
             <Send className="h-4 w-4 mr-1" /> Send Quote
           </Button>
+          {quote.status === "draft" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => setDeleteDialogOpen(true)}
+              data-testid="button-delete-quote"
+            >
+              <Trash2 className="h-4 w-4 mr-1" /> Delete
+            </Button>
+          )}
           <Badge variant={STATUS_VARIANT[quote.status] || "secondary"} className="text-sm px-3 py-1" data-testid="badge-quote-status">
             {STATUS_LABELS[quote.status] || quote.status}
           </Badge>
@@ -398,10 +456,70 @@ export default function QuoteDetail() {
           <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} />
           <Separator />
           <ConvertToJobSection quoteId={quote.id} />
+          <Separator />
+          <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-revert-to-draft">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <RotateCcw className="h-4 w-4 text-muted-foreground" /> Revert to Draft
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Only available if no invoices have been raised and no job has been created from this quote.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={() => setRevertDialogOpen(true)}
+              disabled={revertMutation.isPending}
+              data-testid="button-revert-to-draft"
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Revert to Draft
+            </Button>
+          </div>
         </>
       )}
 
       <Separator />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent data-testid="dialog-confirm-delete">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {quote.number}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes this draft quote and all its revisions. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteMutation.mutate()}
+              data-testid="button-confirm-delete"
+            >
+              Delete permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={revertDialogOpen} onOpenChange={setRevertDialogOpen}>
+        <AlertDialogContent data-testid="dialog-confirm-revert">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revert {quote.number} to Draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will clear the acceptance record and return the quote to draft status. The revision history is preserved. This action cannot be undone if invoices or a job exist.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-revert">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { revertMutation.mutate(); setRevertDialogOpen(false); }}
+              data-testid="button-confirm-revert"
+            >
+              Revert to Draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {sendDialogOpen && (
         <SendQuoteDialog

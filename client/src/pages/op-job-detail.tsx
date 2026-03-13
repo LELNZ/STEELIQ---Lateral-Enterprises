@@ -14,7 +14,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import {
-  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -44,6 +48,7 @@ export default function OpJobDetail() {
   const [editTitle, setEditTitle] = useState("");
   const [editStatus, setEditStatus] = useState<string>("active");
   const [editNotes, setEditNotes] = useState("");
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const { data: job, isLoading } = useQuery<OpJob>({
     queryKey: ["/api/op-jobs", jobId],
@@ -81,6 +86,24 @@ export default function OpJobDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
       toast({ title: "Job updated" });
       setEditing(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/op-jobs/${jobId}`, { status: "cancelled" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Cancel failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
+      toast({ title: "Job cancelled" });
+      setCancelDialogOpen(false);
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -127,9 +150,23 @@ export default function OpJobDetail() {
             <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-job-title">{job.title}</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={startEdit} data-testid="button-edit-job">
-          <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
-        </Button>
+        <div className="flex items-center gap-2">
+          {job.status !== "cancelled" && job.status !== "completed" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={() => setCancelDialogOpen(true)}
+              disabled={cancelMutation.isPending}
+              data-testid="button-cancel-job"
+            >
+              <XCircle className="h-3.5 w-3.5 mr-1.5" /> Cancel Job
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={startEdit} data-testid="button-edit-job">
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+          </Button>
+        </div>
       </div>
 
       {editing && (
@@ -308,6 +345,27 @@ export default function OpJobDetail() {
           </div>
         </>
       )}
+
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent data-testid="dialog-confirm-cancel-job">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel {job.jobNumber}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This marks the job as cancelled. The source quote and its history are not affected. The job can be re-activated by editing the status.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-cancel-job">Back</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => cancelMutation.mutate()}
+              data-testid="button-confirm-cancel-job"
+            >
+              Cancel Job
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
