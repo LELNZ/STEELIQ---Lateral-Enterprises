@@ -152,7 +152,7 @@ function OrgSettingsTab() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Customer-Facing Document Label</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Internal system logic and lifecycle remain quote-based. This label controls what customers see on documents, PDF headings, and email defaults.
+            Controls the heading shown on customer-facing quote documents — the live preview and exported PDF. Internal system logic, lifecycle, and numbering remain quote-based. This setting does not rename other document types or modules.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -168,7 +168,7 @@ function OrgSettingsTab() {
             />
             {form.documentLabel && form.documentLabel.trim() && (
               <p className="text-xs text-muted-foreground mt-2">
-                PDF heading will read: <strong className="font-semibold">{form.documentLabel.trim().toUpperCase()}</strong>
+                Preview and PDF heading will read: <strong className="font-semibold">{form.documentLabel.trim().toUpperCase()}</strong>
               </p>
             )}
           </div>

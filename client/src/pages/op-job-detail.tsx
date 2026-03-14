@@ -278,6 +278,25 @@ export default function OpJobDetail() {
         </div>
       )}
 
+      <div className="rounded-lg border bg-card p-4 flex items-center gap-4" data-testid="card-job-status">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-muted-foreground mb-1">Current Status</p>
+          <div className="flex items-center gap-2">
+            <Badge variant={STATUS_VARIANTS[job.status] ?? "outline"} className="text-sm px-3 py-1" data-testid="badge-job-status-detail">
+              {STATUS_LABELS[job.status] ?? job.status}
+            </Badge>
+            {job.notes && (
+              <p className="text-xs text-muted-foreground truncate" data-testid="text-job-notes-summary">{job.notes}</p>
+            )}
+          </div>
+        </div>
+        {!editing && !job.archivedAt && job.status !== "cancelled" && (
+          <Button variant="ghost" size="sm" onClick={startEdit} className="text-muted-foreground hover:text-foreground shrink-0" data-testid="button-change-status">
+            <Pencil className="h-3 w-3 mr-1.5" /> Change
+          </Button>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="rounded-lg border bg-card p-3 space-y-1">
           <p className="text-xs text-muted-foreground">Division</p>
