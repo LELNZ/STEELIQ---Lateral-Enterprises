@@ -1,0 +1,246 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 3.1
+RETIRE OR ALIGN LEGACY QUOTE CUSTOMER LINK ROUTE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+All changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark this phase complete if the feature exists only in backend/schema/API form without truthful reporting of call-site impact.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF is locked
+- quote/project/customer linkage hardening already exists on /api/quotes/:id/link
+- a legacy route /api/quotes/:id/customer still exists
+- this phase is to remove or neutralize the bypass risk before invoicing/Xero
+- LJ estimating builder must remain operationally unchanged
+
+CRITICAL LJ RULE
+
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Remove the quote linkage integrity gap created by the legacy route:
+
+- /api/quotes/:id/customer
+
+This phase must ensure there is no writable backend path that can bypass the customer/project validation rules already established for:
+
+- /api/quotes/:id/link
+
+This is a small hardening cleanup phase before invoicing/Xero.
+It is NOT a lifecycle redesign.
+It is NOT an invoice phase.
+It is NOT a route architecture rewrite.
+
+==================================================
+PART 1 — AUDIT LEGACY ROUTE USAGE
+==================================================
+
+Audit the codebase for all usage of:
+
+- PATCH /api/quotes/:id/customer
+
+Required outcome:
+- determine whether the route is actually used by any current client/UI code
+- determine whether any internal server flows still depend on it
+- report exact call sites truthfully in the handover
+
+Do NOT guess.
+Do NOT assume dead code without checking.
+
+==================================================
+PART 2 — SAFE RESOLUTION RULE
+==================================================
+
+Apply this decision rule:
+
+If /api/quotes/:id/customer is unused:
+- retire it safely
+- either remove it or convert it into a guarded/deprecated path that no longer performs unsafe writes
+- report exactly what was done
+
+If /api/quotes/:id/customer is still used:
+- do NOT leave it as a bypass
+- align it to the exact same validation behavior as /api/quotes/:id/link
+- ensure mismatched customer/project combinations are blocked there too
+- report every remaining caller
+
+Preferred outcome:
+- one canonical safe linkage route
+- no unsafe alternate write path
+
+==================================================
+PART 3 — VALIDATION CONSISTENCY
+==================================================
+
+After this phase, the following must be true:
+
+Any writable quote customer/project linkage path must enforce:
+1. project cannot be linked without customer
+2. linked project must belong to linked customer
+
+If the legacy route remains for backward compatibility:
+- it must enforce the same rules
+- it must not silently diverge
+
+==================================================
+PART 4 — UI / OPERATIONAL IMPACT
+==================================================
+
+Do not redesign quote detail UI in this phase.
+
+Only update UI/client code if needed to:
+- remove use of the legacy route
+- point any remaining callers to the canonical safe route
+
+Do NOT broaden scope.
+Do NOT touch unrelated quote behavior.
+
+==================================================
+NOT IN SCOPE
+==================================================
+
+Do NOT implement any of the following in this phase:
+- invoice lifecycle work
+- Xero integration
+- customer redesign
+- contact redesign
+- project redesign
+- job lifecycle redesign
+- route restructuring beyond this exact cleanup
+- LJ estimator redesign
+- library redesign
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- retiring legacy route if unused
+- aligning legacy route validation if still needed
+- minimal client call-site update if required
+- truthful deprecation comments if helpful
+
+Not allowed:
+- broad endpoint redesign
+- new unrelated endpoints
+- speculative cleanup
+- architecture refactor
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal commercial lifecycle remains quote-based
+- customer/project quote linkage remains safe
+- Customers remain global/shared
+- Contacts remain global/shared
+- Projects belong to one customer
+- Jobs remain division-owned
+- LJ estimating builder remains functionally unchanged
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. Search/audit results for all code usage of /api/quotes/:id/customer
+2. If unused, confirm it was retired safely
+3. If used, confirm it now enforces the same validation as /api/quotes/:id/link
+4. Quote detail customer/project linking still works
+5. Mismatched customer/project combinations are still blocked
+6. Project without customer is still blocked
+7. LJ estimate builder still creates/edits estimates correctly
+8. Quote generation from LJ estimate still works
+9. Quote preview/PDF pipeline still works
+10. TypeScript passes
+11. Build/runtime checks pass
+
+Do not claim completion if:
+- the legacy route still bypasses validation
+- usage was not truthfully audited
+- quote linkage behavior is ambiguous
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- whether /api/quotes/:id/customer was still used anywhere
+- whether it was retired or aligned
+- what the canonical safe route now is for quote customer/project linkage
+- whether any legacy route duality still remains
