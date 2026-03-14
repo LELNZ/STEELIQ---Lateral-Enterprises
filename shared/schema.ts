@@ -63,14 +63,21 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({ id: tru
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
 
+export const CONTACT_CATEGORIES = ["client", "supplier", "subcontractor", "consultant", "other"] as const;
+export type ContactCategory = typeof CONTACT_CATEGORIES[number];
+
 export const customerContacts = pgTable("customer_contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   customerId: varchar("customer_id").notNull(),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  mobile: text("mobile"),
   role: text("role"),
+  category: text("category").default("client"),
+  notes: text("notes"),
   isPrimary: boolean("is_primary").default(false),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2 } from "lucide-react";
+import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2, Contact } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useAuth } from "@/lib/auth-context";
@@ -45,6 +45,7 @@ export function AppSidebar() {
   const isEstimatesActive = location === "/" || location.startsWith("/job");
   const isQuotesActive = location === "/quotes" || location.startsWith("/quote/");
   const isJobsActive = location.startsWith("/op-jobs");
+  const isContactsActive = location.startsWith("/contacts");
   const isLibraryActive = location.startsWith("/library");
   const isSettingsActive = location.startsWith("/settings");
   const isAdminActive = location.startsWith("/admin") || location.startsWith("/users");
@@ -112,6 +113,15 @@ export function AppSidebar() {
                   <Link href="/customers" onClick={(e) => guardedClick(e, "/customers")} data-testid="link-sidebar-customers">
                     <Users />
                     <span>Customers</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isContactsActive} tooltip="Contacts">
+                  <Link href="/contacts" onClick={(e) => guardedClick(e, "/contacts")} data-testid="link-sidebar-contacts">
+                    <Contact />
+                    <span>Contacts</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

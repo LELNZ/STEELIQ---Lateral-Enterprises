@@ -28,6 +28,7 @@ import QuoteDetail from "@/pages/quote-detail";
 import QuotePreview from "@/pages/quote-preview";
 import Login from "@/pages/login";
 import Customers from "@/pages/customers";
+import Contacts from "@/pages/contacts";
 import Users from "@/pages/users";
 import OpJobsList from "@/pages/op-jobs-list";
 import OpJobDetail from "@/pages/op-job-detail";
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/quote/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id" component={QuoteDetail} />
       <Route path="/customers" component={Customers} />
+      <Route path="/contacts" component={Contacts} />
       <Route path="/admin" component={Users} />
       <Route path="/users" component={Users} />
       <Route path="/op-jobs" component={OpJobsList} />

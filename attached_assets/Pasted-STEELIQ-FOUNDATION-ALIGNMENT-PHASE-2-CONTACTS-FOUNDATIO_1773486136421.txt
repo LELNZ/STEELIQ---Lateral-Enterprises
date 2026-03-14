@@ -1,0 +1,421 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 2
+CONTACTS FOUNDATION (GLOBAL SHARED CONTACTS, ONE CUSTOMER PER CONTACT FOR NOW)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- internal quote lifecycle remains quote-based
+- customer-facing quote label setting already exists
+- numbering controls already exist
+- preview/PDF parity has been corrected
+- LJ estimating builder must remain operationally unchanged
+- Customers currently exist as shared records
+- Jobs remain division-owned
+- Contacts foundation is the next phase, not a full CRM redesign
+
+CRITICAL LJ RULE
+
+The current Lateral Joinery estimation builder must remain operationally unchanged.
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder in this phase.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Add a practical Contacts foundation without redesigning Customers or introducing the full broader Accounts / Relationships model yet.
+
+This phase must:
+1. Add a top-level Contacts module/page
+2. Keep Customers intact
+3. Make Contacts global shared records
+4. Link each Contact to one Customer/company for now
+5. Support contact categories/types
+6. Add minimum practical UI/admin surfaces for staff use
+7. Allow future evolution toward a broader shared party model later, without implementing that now
+
+This is a foundation phase.
+It is NOT a full CRM rewrite.
+It is NOT a Customers redesign.
+It is NOT multi-organisation contact reuse.
+It is NOT supplier procurement workflow.
+It is NOT Xero integration.
+
+==================================================
+CONTACT MODEL FOR THIS PHASE
+==================================================
+
+Use this exact model:
+
+- Customers remain global shared records
+- Contacts become global shared records
+- one Customer can have many Contacts
+- each Contact belongs to one Customer/company for now
+- no many-to-many relationship model in this phase
+- no multi-company contact reuse in this phase
+
+This is an intentional bridge model.
+
+Do NOT implement:
+- contact-to-multiple-customers join tables
+- relationship-role matrices
+- primary/secondary organisation logic across many organisations
+- a full Accounts / Relationships redesign
+
+==================================================
+PART 1 — DATA MODEL
+==================================================
+
+Add a minimal shared Contacts model.
+
+Required fields:
+- id
+- customerId (required for this phase)
+- firstName
+- lastName
+- fullName or safe derived display handling
+- email
+- phone
+- mobile (if your current patterns distinguish this; if not, one practical phone field is acceptable)
+- roleTitle / position (optional but recommended)
+- category
+- notes (optional)
+- isPrimaryContact (boolean, optional but recommended)
+- createdAt / updatedAt if consistent with current schema patterns
+- archivedAt or archived flag only if this is already consistent with current patterns and cheap to add safely
+
+Contact category values for this phase:
+- client
+- supplier
+- subcontractor
+- consultant
+- other
+
+Rules:
+- keep schema changes minimal
+- do not introduce a broad party abstraction
+- do not redesign Customers
+- do not create division-owned contacts; Contacts are shared/global for now
+
+Validation:
+- require customerId
+- require at least one meaningful identifier for the contact
+- email validation if email provided
+- category restricted to the above values
+
+==================================================
+PART 2 — BACKEND / API
+==================================================
+
+Add minimal routes required for operational use.
+
+Required capabilities:
+- list contacts
+- create contact
+- update contact
+- read contact detail if needed by current UI pattern
+- archive/deactivate contact only if this fits the current pattern safely; otherwise active-only with edit is acceptable in this phase
+
+Required filters:
+- by customer
+- by category
+- text search by name/email/phone where practical
+
+Do NOT add speculative endpoints.
+Do NOT add import/export in this phase unless already trivially supported and safe.
+Do NOT add contact merge/deduplication workflows in this phase.
+
+Keep routes aligned with current app conventions.
+
+==================================================
+PART 3 — CONTACTS UI
+==================================================
+
+Add a top-level sidebar/nav entry:
+- Contacts
+
+This page must be operationally usable, not backend-only.
+
+Required Contacts page:
+- list/table view
+- search
+- category filter
+- customer/company display
+- create contact action
+- edit contact action
+
+Minimum columns:
+- Name
+- Category
+- Customer / Company
+- Email
+- Phone
+- Primary indicator if implemented
+
+Required create/edit form fields:
+- customer/company selector
+- first name
+- last name
+- email
+- phone/mobile
+- role/title
+- category
+- primary contact toggle if implemented
+- notes optional
+
+Design intent:
+- simple, fast, operational
+- not a CRM mega-screen
+- not a multi-tab redesign
+
+==================================================
+PART 4 — CUSTOMER DETAIL INTEGRATION
+==================================================
+
+Without redesigning Customers, improve customer usability by showing linked contacts on the Customer detail page or equivalent customer surface if one exists.
+
+Required behavior:
+- customer detail shows linked contacts list/section
+- staff can see existing contacts for that customer
+- include an action to add a new contact already linked to that customer
+- include edit access for existing contacts
+
+If no suitable customer detail surface exists yet, use the most appropriate existing customer page area with minimal change.
+
+Do NOT redesign the entire Customers module in this phase.
+
+==================================================
+PART 5 — UI LANGUAGE / FOUNDATIONAL POSITIONING
+==================================================
+
+Use clear business language:
+- Customers = companies/organisations for now
+- Contacts = people linked to a customer/company
+
+Do NOT rename Customers to Accounts/Relationships in this phase.
+Do NOT implement supplier/customer model unification in this phase.
+Do NOT over-abstract the UI.
+
+The goal is practical foundation now, future flexibility later.
+
+==================================================
+PART 6 — FUTURE-SAFE CONSTRAINT
+==================================================
+
+Implement this phase so it can later evolve into a broader shared party model, but do not build that model now.
+
+That means:
+- keep the contact schema and UI clean
+- keep customer linkage explicit
+- avoid hardcoding assumptions that would make later migration impossible
+- but do NOT add speculative abstraction now
+
+Required handover note:
+Explain how the implemented model could later evolve into:
+- broader Accounts / Relationships
+- multi-organisation contact reuse
+without claiming that it has already been built
+
+==================================================
+NOT IN SCOPE
+==================================================
+
+Do NOT implement any of the following in this phase:
+- full Accounts / Relationships model
+- many-to-many contact/company relationships
+- supplier procurement workflows
+- subcontractor onboarding workflows
+- CRM pipeline management
+- email sync
+- contact import/export
+- dedupe/merge tools
+- customer module redesign
+- quote/customer lifecycle redesign
+- Xero integration
+- LJ estimator redesign
+- library redesign
+- granular permissions redesign
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal schema additions for Contacts
+- minimal storage/repository updates
+- minimal contact routes
+- minimal nav/sidebar update
+- minimal customer-page integration for linked contacts
+- minimal audit/activity logging if consistent with current patterns
+
+Not allowed:
+- party-model redesign
+- Customers table redesign
+- broad route restructuring
+- speculative abstractions
+- unrelated cleanup
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal quote architecture remains quote-based
+- LJ estimating builder remains functionally unchanged
+- Customers remain shared/global records
+- Jobs remain division-owned
+- Contacts are shared/global records
+- each Contact belongs to one Customer/company for now
+- no broader Accounts / Relationships redesign has been introduced
+
+==================================================
+REQUIRED UI / OPERATIONAL SURFACES
+==================================================
+
+To count as complete, this phase must include:
+
+1. Top-level Contacts navigation entry
+2. Contacts list page with usable search/filter
+3. Create contact form
+4. Edit contact form
+5. Customer-linked contacts visibility on customer surface
+6. Ability to create a contact directly against a customer
+7. Practical category support
+
+Do not mark this phase complete if contacts exist only in schema/API without staff-usable UI.
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. LJ estimate builder still creates/edits estimates correctly
+2. Quote generation from LJ estimate still works
+3. Quote preview still works through QuoteDocument -> QuoteRenderModel -> Preview/PDF
+4. PDF export still works through the locked pipeline
+5. Existing Customers flows are not broken
+6. Contacts page loads and lists contacts correctly
+7. New contact can be created and linked to a customer
+8. Existing contact can be edited
+9. Customer surface shows linked contacts correctly
+10. Contact category filter works
+11. Contact search works
+12. Contacts remain shared/global and are not division-scoped in this phase
+13. TypeScript passes
+14. Build/runtime checks pass
+
+Do not claim completion if:
+- contacts are backend-only
+- customer linkage is missing
+- contact category support is missing
+- LJ flow is broken
+- customer pages regress
+- a hidden many-to-many relationship model was introduced
+- customers were unintentionally redesigned
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- that Customers remain global shared records
+- that Contacts are now global shared records
+- that each Contact belongs to one Customer/company for now
+- that no broader Accounts / Relationships redesign was implemented
+- how this can later evolve safely without claiming it already exists

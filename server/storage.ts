@@ -28,7 +28,7 @@ import {
   userSessions, customers, customerContacts, projects, invoices, opJobs,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, asc, desc, and, sql, isNull, isNotNull, inArray } from "drizzle-orm";
+import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
 import pg from "pg";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL! });
@@ -136,9 +136,12 @@ export interface IStorage {
   updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
   archiveCustomer(id: string): Promise<Customer | undefined>;
 
+  listContacts(filters?: { customerId?: string; category?: string; search?: string }): Promise<CustomerContact[]>;
   getCustomerContacts(customerId: string): Promise<CustomerContact[]>;
+  getContact(id: string): Promise<CustomerContact | undefined>;
   createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact>;
   updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined>;
+  archiveContact(id: string): Promise<CustomerContact | undefined>;
   deleteCustomerContact(id: string): Promise<void>;
 
   getAllProjects(): Promise<Project[]>;
@@ -630,8 +633,24 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async listContacts(filters?: { customerId?: string; category?: string; search?: string }): Promise<CustomerContact[]> {
+    const conditions = [isNull(customerContacts.archivedAt)];
+    if (filters?.customerId) conditions.push(eq(customerContacts.customerId, filters.customerId));
+    if (filters?.category) conditions.push(eq(customerContacts.category, filters.category));
+    if (filters?.search) {
+      const q = `%${filters.search}%`;
+      conditions.push(or(ilike(customerContacts.name, q), ilike(customerContacts.email, q), ilike(customerContacts.phone, q))!);
+    }
+    return db.select().from(customerContacts).where(and(...conditions)).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+  }
+
   async getCustomerContacts(customerId: string): Promise<CustomerContact[]> {
-    return db.select().from(customerContacts).where(eq(customerContacts.customerId, customerId)).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+    return db.select().from(customerContacts).where(and(eq(customerContacts.customerId, customerId), isNull(customerContacts.archivedAt))).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+  }
+
+  async getContact(id: string): Promise<CustomerContact | undefined> {
+    const [contact] = await db.select().from(customerContacts).where(eq(customerContacts.id, id));
+    return contact;
   }
 
   async createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact> {
@@ -641,6 +660,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined> {
     const [updated] = await db.update(customerContacts).set(data).where(eq(customerContacts.id, id)).returning();
+    return updated;
+  }
+
+  async archiveContact(id: string): Promise<CustomerContact | undefined> {
+    const [updated] = await db.update(customerContacts).set({ archivedAt: new Date() }).where(eq(customerContacts.id, id)).returning();
     return updated;
   }
 

@@ -1681,6 +1681,27 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/contacts", async (req, res) => {
+    try {
+      const customerId = req.query.customerId as string | undefined;
+      const category = req.query.category as string | undefined;
+      const search = req.query.q as string | undefined;
+      return res.json(await storage.listContacts({ customerId, category, search }));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/contacts/:id", async (req, res) => {
+    try {
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Not found" });
+      return res.json(contact);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/customers/:id/contacts", async (req, res) => {
     try {
       return res.json(await storage.getCustomerContacts(req.params.id));
@@ -1689,15 +1710,19 @@ export async function registerRoutes(
     }
   });
 
+  const contactBodySchema = z.object({
+    name: z.string().min(1),
+    email: z.string().email().optional().nullable(),
+    phone: z.string().optional().nullable(),
+    mobile: z.string().optional().nullable(),
+    role: z.string().optional().nullable(),
+    category: z.enum(["client", "supplier", "subcontractor", "consultant", "other"]).default("client"),
+    notes: z.string().optional().nullable(),
+    isPrimary: z.boolean().default(false),
+  });
+
   app.post("/api/customers/:id/contacts", async (req, res) => {
-    const schema = z.object({
-      name: z.string().min(1),
-      email: z.string().email().optional().nullable(),
-      phone: z.string().optional().nullable(),
-      role: z.string().optional().nullable(),
-      isPrimary: z.boolean().default(false),
-    });
-    const parsed = schema.safeParse(req.body);
+    const parsed = contactBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const contact = await storage.createCustomerContact({ ...parsed.data, customerId: req.params.id });
@@ -1708,17 +1733,21 @@ export async function registerRoutes(
   });
 
   app.patch("/api/contacts/:id", async (req, res) => {
-    const schema = z.object({
-      name: z.string().min(1).optional(),
-      email: z.string().email().optional().nullable(),
-      phone: z.string().optional().nullable(),
-      role: z.string().optional().nullable(),
-      isPrimary: z.boolean().optional(),
-    });
+    const schema = contactBodySchema.partial();
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const updated = await storage.updateCustomerContact(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/contacts/:id/archive", async (req, res) => {
+    try {
+      const updated = await storage.archiveContact(req.params.id);
       if (!updated) return res.status(404).json({ error: "Not found" });
       return res.json(updated);
     } catch (e: any) {
