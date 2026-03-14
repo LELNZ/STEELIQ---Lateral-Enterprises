@@ -63,14 +63,21 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({ id: tru
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
 
+export const CONTACT_CATEGORIES = ["client", "supplier", "subcontractor", "consultant", "other"] as const;
+export type ContactCategory = typeof CONTACT_CATEGORIES[number];
+
 export const customerContacts = pgTable("customer_contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   customerId: varchar("customer_id").notNull(),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  mobile: text("mobile"),
   role: text("role"),
+  category: text("category").default("client"),
+  notes: text("notes"),
   isPrimary: boolean("is_primary").default(false),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -378,6 +385,7 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export const orgSettings = pgTable("org_settings", {
   id: varchar("id").primaryKey().default("default"),
   legalName: text("legal_name").notNull().default("Lateral Engineering Limited"),
+  businessDisplayName: text("business_display_name").default("Lateral Enterprises"),
   gstNumber: text("gst_number"),
   nzbn: text("nzbn"),
   address: text("address"),
@@ -391,6 +399,11 @@ export const orgSettings = pgTable("org_settings", {
   quoteValidityDays: integer("quote_validity_days").default(30),
   templateConfigJson: jsonb("template_config_json"),
   systemMode: text("system_mode").notNull().default("development"),
+  documentLabel: text("document_label").default("Quote"),
+  quoteNumberPrefix: text("quote_number_prefix").default("Q"),
+  quoteNumberUseDivisionSuffix: boolean("quote_number_use_division_suffix").default(false),
+  jobNumberPrefix: text("job_number_prefix").default("J"),
+  jobNumberUseDivisionSuffix: boolean("job_number_use_division_suffix").default(false),
 });
 
 export const insertOrgSettingsSchema = createInsertSchema(orgSettings).omit({});

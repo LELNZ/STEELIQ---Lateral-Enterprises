@@ -108,6 +108,7 @@ export interface QuoteRenderModel {
   legal: RenderLegalBlock;
   disclaimerText: string;
   itemCount: number;
+  documentLabel: string;
 }
 
 function formatDateNZ(iso: string | null): string {
@@ -267,6 +268,7 @@ export function buildQuoteRenderModel(
     legal: buildLegal(doc),
     disclaimerText: "Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.",
     itemCount: doc.items.length,
+    documentLabel: doc.org.documentLabel || "Quote",
   };
 }
 

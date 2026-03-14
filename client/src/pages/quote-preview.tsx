@@ -198,7 +198,7 @@ export default function QuotePreview() {
         )}
 
         <h2 className="text-lg font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
-          {T.documentMode === "tender" ? "Tender" : "Quotation"}
+          {T.documentMode === "tender" ? "TENDER" : renderModel.documentLabel.toUpperCase()}
         </h2>
 
         {isSectionVisible(T, "disclaimer") && (

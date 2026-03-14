@@ -1,0 +1,331 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 1.1
+PREVIEW/PDF PARITY + QUOTE DOCUMENT WORDING SCOPE + JOB STATUS VISIBILITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+All changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- internal lifecycle remains quote-based
+- customer-facing label setting exists
+- numbering settings exist
+- historical records must not be renumbered
+- new records can use new configured numbering
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF is locked
+- LJ estimation builder must remain operationally unchanged
+
+CRITICAL LJ RULE
+
+Do NOT redesign LJ estimating logic.
+Do NOT generalise LJ builder behavior.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Fix the Phase 1 inconsistencies without expanding scope.
+
+This phase must:
+1. Restore strict parity between live customer preview and exported PDF for quote documents
+2. Ensure the customer-facing document label setting applies only to quote/service-estimate customer-facing document surfaces, not unrelated documents
+3. Preserve historical quote numbers exactly as-is
+4. Keep new numbering applying only to future records
+5. Improve job detail visibility by showing a persistent visible status surface outside edit mode
+
+This is a bug-fix / parity / usability phase.
+It is NOT a redesign.
+It is NOT a contacts phase.
+It is NOT a numbering architecture rewrite.
+
+==================================================
+PART 1 — PREVIEW / PDF PARITY FOR QUOTE DOCUMENTS
+==================================================
+
+Current problem:
+- exported PDFs show the configured customer-facing document label correctly
+- live customer preview still shows "QUOTATION" / quote-oriented wording in places where it should match the PDF
+- this creates document-integrity confusion
+
+Required outcome:
+The live customer preview and exported PDF must show the same customer-facing quote document heading and wording source wherever they represent the same rendered commercial document.
+
+Important:
+- keep the locked pipeline:
+  QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- do NOT create a parallel preview title system
+- do NOT hardcode preview-only wording separately from PDF wording
+
+Implementation rule:
+Use the same customer-facing label source for:
+- quote document heading in live customer preview
+- quote document heading in exported PDF
+- other quote-document customer-facing labels that are clearly part of the same rendered document surface
+
+Examples:
+If settings label = "Service Estimate"
+then live preview heading should read:
+- SERVICE ESTIMATE
+and PDF heading should also read:
+- SERVICE ESTIMATE
+
+Do NOT let preview say "QUOTATION" while PDF says "SERVICE ESTIMATE".
+
+Likely files:
+- client/src/lib/quote-document.ts
+- client/src/lib/quote-renderer.ts
+- client/src/pages/quote-preview.tsx
+- client/src/lib/pdf-engine.ts
+- any shared display helpers used by preview/PDF
+
+==================================================
+PART 2 — CUSTOMER-FACING LABEL SCOPE CONTROL
+==================================================
+
+Current concern:
+The setting must only control quote/service-estimate customer-facing document wording.
+It must NOT become a broad rename of every PDF or document type.
+
+Required rule:
+The customer-facing document label setting applies only to quote/customer proposal/service-estimate commercial document surfaces.
+
+It should affect only quote-related customer-facing surfaces such as:
+- quote document heading in preview
+- quote document heading in PDF
+- quote send/customer-facing copy where already driven from the same quote document concept
+
+It must NOT silently rename unrelated documents/modules/pages that are not quote customer documents.
+
+Do NOT implement a cross-platform generic "rename all documents" behavior.
+
+Add concise settings help text if needed to make this explicit:
+- this label applies to customer-facing quote documents only
+
+==================================================
+PART 3 — HISTORICAL NUMBER INTEGRITY
+==================================================
+
+Preserve this rule exactly:
+
+- historical/existing quote and job numbers must remain unchanged
+- numbering settings affect future records only
+
+Required behavior:
+- existing records such as Q-0136 remain Q-0136
+- changing prefix/suffix settings must not mutate stored historical record numbers
+- new records created after the settings change use the new format
+
+Do NOT implement any renumbering migration.
+Do NOT attempt to “backfill” existing records into the new format.
+
+If preview currently derives display number incorrectly from settings instead of stored record state, fix it so:
+- existing records show their real stored identifier
+- new records show their generated stored identifier
+- preview and PDF agree
+
+This phase is about consistency, not renumbering.
+
+==================================================
+PART 4 — JOB DETAIL STATUS VISIBILITY
+==================================================
+
+Current problem:
+A job status can be changed in edit mode, but the detail surface needs a clearer always-visible operational status presentation.
+
+Required outcome:
+On the job detail page, the current job status must be clearly visible outside edit mode in an operationally obvious way.
+
+Requirements:
+- keep the existing edit capability
+- add or improve a persistent status display/card/badge/section on the main detail view
+- after saving a status change, the non-edit view must clearly reflect the current status
+- do NOT redesign the job lifecycle
+- do NOT add new job states in this phase
+
+Goal:
+A user opening a job detail should immediately see status without needing to enter edit mode.
+
+Likely files:
+- client/src/pages/op-job-detail.tsx
+- any job detail display components
+
+==================================================
+NOT IN SCOPE
+==================================================
+
+Do NOT implement any of the following in this phase:
+- Contacts module
+- broader Accounts / Relationships model
+- Xero integration
+- invoice lifecycle work
+- per-division numbering counters
+- historical renumbering
+- LJ estimator redesign
+- job architecture merge
+- broad settings redesign
+- library redesign
+- generic document-type labeling system for everything
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal display/render logic corrections needed for preview/PDF parity
+- minimal settings help-text refinement
+- minimal job detail UI improvements for status visibility
+- minimal data-fetch refresh fixes if preview/detail surfaces are stale after save
+
+Not allowed:
+- lifecycle redesign
+- schema expansion unrelated to this fix
+- numbering model rewrite
+- broad UI restructuring
+- speculative refactors
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal quote architecture remains quote-based
+- customer-facing label affects quote commercial document surfaces only
+- historical numbers remain preserved
+- future numbering still applies only to future records
+- LJ estimation builder remains unchanged
+- job detail remains downstream from accepted quote/job state and does not mutate quote history
+
+==================================================
+REQUIRED UI / BEHAVIOURAL OUTCOMES
+==================================================
+
+1. Existing quote:
+- heading label in live preview matches PDF heading
+- record number remains its original stored number
+- no historical renumbering occurs
+
+2. New quote created after numbering change:
+- live preview heading matches PDF heading
+- stored/generated number uses configured future format
+- preview and PDF show the same number and same heading
+
+3. Job detail:
+- current job status is visible outside edit mode
+- status updates remain clear after save
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. Existing historical quote keeps its original quote number in detail, preview, and PDF
+2. Existing historical quote preview heading matches PDF heading
+3. New quote created after numbering changes uses the new stored number format
+4. New quote preview shows the same number as the quote detail and PDF
+5. New quote preview heading matches PDF heading
+6. Customer-facing label applies only to quote/service-estimate customer document surfaces
+7. No unrelated document/module wording was unintentionally renamed
+8. LJ estimate builder still creates/edits estimates correctly
+9. Quote generation from LJ estimate flow still works
+10. PDF export still works through the locked pipeline
+11. Job detail shows current status clearly outside edit mode
+12. Job status update still saves correctly
+13. TypeScript passes
+14. Build/runtime checks pass
+
+Do not claim completion if:
+- preview still differs from PDF
+- historical numbers are mutated
+- new numbers appear in PDF but not preview/detail
+- customer-facing label leaks into unrelated document types
+- job status remains unclear outside edit mode
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- whether preview/PDF parity is now restored
+- whether historical quote/job numbers were preserved unchanged
+- whether new numbering still applies only to future records
+- whether the customer-facing label is now scoped only to quote customer documents
+- whether job status is now clearly visible outside edit mode

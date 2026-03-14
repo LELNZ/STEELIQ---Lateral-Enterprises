@@ -28,7 +28,7 @@ import {
   userSessions, customers, customerContacts, projects, invoices, opJobs,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, asc, desc, and, sql, isNull, isNotNull, inArray } from "drizzle-orm";
+import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
 import pg from "pg";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL! });
@@ -94,7 +94,7 @@ export interface IStorage {
   updateProfilesByMouldNumber(mouldNumber: string, data: Partial<InsertConfigurationProfile>): Promise<number>;
   updateAccessoriesByCode(code: string, data: Partial<InsertConfigurationAccessory>): Promise<number>;
 
-  getNextQuoteNumber(): Promise<string>;
+  getNextQuoteNumber(divisionCode?: string): Promise<string>;
   createQuote(data: InsertQuote): Promise<Quote>;
   getQuote(id: string): Promise<Quote | undefined>;
   getQuoteByJobId(jobId: string): Promise<Quote | undefined>;
@@ -136,9 +136,12 @@ export interface IStorage {
   updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
   archiveCustomer(id: string): Promise<Customer | undefined>;
 
+  listContacts(filters?: { customerId?: string; category?: string; search?: string }): Promise<CustomerContact[]>;
   getCustomerContacts(customerId: string): Promise<CustomerContact[]>;
+  getContact(id: string): Promise<CustomerContact | undefined>;
   createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact>;
   updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined>;
+  archiveContact(id: string): Promise<CustomerContact | undefined>;
   deleteCustomerContact(id: string): Promise<void>;
 
   getAllProjects(): Promise<Project[]>;
@@ -155,7 +158,9 @@ export interface IStorage {
   getAllInvoices(): Promise<Invoice[]>;
   updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
 
-  getNextJobNumber(): Promise<string>;
+  getNextJobNumber(divisionCode?: string): Promise<string>;
+  getNumberSequences(): Promise<{ id: string; currentValue: number }[]>;
+  setNumberSequence(id: string, nextValue: number): Promise<void>;
   createOpJob(data: InsertOpJob): Promise<OpJob>;
   getOpJob(id: string): Promise<OpJob | undefined>;
   getAllOpJobs(): Promise<OpJob[]>;
@@ -395,13 +400,14 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getNextQuoteNumber(): Promise<string> {
+  async getNextQuoteNumber(divisionCode?: string): Promise<string> {
     await db.insert(numberSequences).values({ id: "quote", currentValue: 0 }).onConflictDoNothing();
     const [row] = await db.update(numberSequences)
       .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
       .where(eq(numberSequences.id, "quote"))
       .returning();
-    return formatQuoteNumber(row.currentValue);
+    const org = await this.getOrgSettings();
+    return formatQuoteNumber(row.currentValue, org?.quoteNumberPrefix ?? "Q", divisionCode, org?.quoteNumberUseDivisionSuffix ?? false);
   }
 
   async createQuote(data: InsertQuote): Promise<Quote> {
@@ -627,8 +633,24 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async listContacts(filters?: { customerId?: string; category?: string; search?: string }): Promise<CustomerContact[]> {
+    const conditions = [isNull(customerContacts.archivedAt)];
+    if (filters?.customerId) conditions.push(eq(customerContacts.customerId, filters.customerId));
+    if (filters?.category) conditions.push(eq(customerContacts.category, filters.category));
+    if (filters?.search) {
+      const q = `%${filters.search}%`;
+      conditions.push(or(ilike(customerContacts.name, q), ilike(customerContacts.email, q), ilike(customerContacts.phone, q))!);
+    }
+    return db.select().from(customerContacts).where(and(...conditions)).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+  }
+
   async getCustomerContacts(customerId: string): Promise<CustomerContact[]> {
-    return db.select().from(customerContacts).where(eq(customerContacts.customerId, customerId)).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+    return db.select().from(customerContacts).where(and(eq(customerContacts.customerId, customerId), isNull(customerContacts.archivedAt))).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+  }
+
+  async getContact(id: string): Promise<CustomerContact | undefined> {
+    const [contact] = await db.select().from(customerContacts).where(eq(customerContacts.id, id));
+    return contact;
   }
 
   async createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact> {
@@ -638,6 +660,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined> {
     const [updated] = await db.update(customerContacts).set(data).where(eq(customerContacts.id, id)).returning();
+    return updated;
+  }
+
+  async archiveContact(id: string): Promise<CustomerContact | undefined> {
+    const [updated] = await db.update(customerContacts).set({ archivedAt: new Date() }).where(eq(customerContacts.id, id)).returning();
     return updated;
   }
 
@@ -708,13 +735,30 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getNextJobNumber(): Promise<string> {
+  async getNextJobNumber(divisionCode?: string): Promise<string> {
     await db.insert(numberSequences).values({ id: "op_job", currentValue: 0 }).onConflictDoNothing();
     const [row] = await db.update(numberSequences)
       .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
       .where(eq(numberSequences.id, "op_job"))
       .returning();
-    return `J-${String(row.currentValue).padStart(4, "0")}`;
+    const org = await this.getOrgSettings();
+    const prefix = org?.jobNumberPrefix ?? "J";
+    const base = `${prefix}-${String(row.currentValue).padStart(4, "0")}`;
+    if (org?.jobNumberUseDivisionSuffix && divisionCode) return `${base}-${divisionCode}`;
+    return base;
+  }
+
+  async getNumberSequences(): Promise<{ id: string; currentValue: number }[]> {
+    return db.select().from(numberSequences).where(
+      sql`${numberSequences.id} IN ('quote', 'op_job', 'invoice')`
+    );
+  }
+
+  async setNumberSequence(id: string, nextValue: number): Promise<void> {
+    await db.insert(numberSequences).values({ id, currentValue: 0 }).onConflictDoNothing();
+    await db.update(numberSequences)
+      .set({ currentValue: nextValue - 1 })
+      .where(eq(numberSequences.id, id));
   }
 
   async createOpJob(data: InsertOpJob): Promise<OpJob> {
@@ -772,8 +816,10 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export function formatQuoteNumber(seq: number): string {
-  return `Q-${String(seq).padStart(4, "0")}`;
+export function formatQuoteNumber(seq: number, prefix = "Q", divisionCode?: string, useDivisionSuffix = false): string {
+  const base = `${prefix}-${String(seq).padStart(4, "0")}`;
+  if (useDivisionSuffix && divisionCode) return `${base}-${divisionCode}`;
+  return base;
 }
 
 export const storage = new DatabaseStorage();

@@ -1383,7 +1383,7 @@ export default function QuoteBuilder() {
             </div>
             <div className="min-w-0">
               <h1 className="text-sm lg:text-lg font-semibold tracking-tight truncate" data-testid="text-app-title">
-                {isLargeScreen ? "Pro-Quote CAD Generator" : (jobName.trim() || (savedJobId ? "Editing" : "New Estimate"))}
+                {isLargeScreen ? "LJ Estimator" : (jobName.trim() || (savedJobId ? "Editing" : "New Estimate"))}
               </h1>
               {isLargeScreen ? (
                 <p className="text-xs text-muted-foreground">
