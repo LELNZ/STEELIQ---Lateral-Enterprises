@@ -146,6 +146,7 @@ export interface IStorage {
   getProject(id: string): Promise<Project | undefined>;
   createProject(data: InsertProject): Promise<Project>;
   updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined>;
+  archiveProject(id: string): Promise<Project | undefined>;
 
   getNextInvoiceNumber(): Promise<string>;
   createInvoice(data: InsertInvoice): Promise<Invoice>;
@@ -664,6 +665,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined> {
     const [updated] = await db.update(projects).set(data).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+
+  async archiveProject(id: string): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set({ archivedAt: new Date() } as any).where(eq(projects.id, id)).returning();
     return updated;
   }
 

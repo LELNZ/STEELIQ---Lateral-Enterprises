@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useSystemMode } from "@/hooks/use-system-mode";
 import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, OP_JOB_STATUSES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,9 @@ export default function OpJobDetail() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const { user } = useAuth();
+  const { mode: systemMode, isLoading: modeLoading } = useSystemMode();
+  const isProduction = !modeLoading && systemMode === "production";
+  const showDemoTools = !modeLoading && systemMode !== "production";
 
   const { data: job, isLoading } = useQuery<OpJob>({
     queryKey: ["/api/op-jobs", jobId],
@@ -435,7 +439,7 @@ export default function OpJobDetail() {
         </>
       )}
 
-      {(user?.role === "admin" || user?.role === "owner") && (
+      {(user?.role === "admin" || user?.role === "owner") && showDemoTools && (
         <>
           <Separator />
           <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-admin-demo-flag-job">

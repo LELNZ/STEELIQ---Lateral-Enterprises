@@ -11,7 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield } from "lucide-react";
+import { useSystemMode, type SystemMode } from "@/hooks/use-system-mode";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { resolvePresetsForDivision, PRESET_FIELD_LABELS, type SiteVisitPresetDefaults, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
@@ -1453,6 +1454,120 @@ function TemplateBuilderTab() {
   );
 }
 
+const MODE_LABELS: Record<string, string> = {
+  development: "Development",
+  demo: "Demo",
+  production: "Production",
+};
+
+const MODE_DESCRIPTIONS: Record<string, string> = {
+  development: "Internal build and testing environment. All demo/reset tools are available.",
+  demo: "Sales, demo, and training environment. Demo and reset tools are available. Destructive actions require confirmation.",
+  production: "Live operational use. Demo/reset tools are hidden and all destructive admin routes are disabled.",
+};
+
+function SystemModeTab() {
+  const { toast } = useToast();
+  const { resolvedMode: mode, isLoading } = useSystemMode();
+  const [selected, setSelected] = useState<SystemMode | "">("");
+
+  const effective = (selected || mode) as SystemMode;
+
+  const modeMutation = useMutation({
+    mutationFn: async (newMode: SystemMode) => {
+      const res = await apiRequest("PATCH", "/api/settings/system-mode", { systemMode: newMode });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to save mode");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/system-mode"] });
+      toast({ title: "System mode saved" });
+      setSelected("");
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const handleSave = () => {
+    if (!selected) return;
+    modeMutation.mutate(selected as SystemMode);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shield className="h-4 w-4" /> System Mode
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Current mode:</span>
+                <span
+                  className={`font-semibold ${mode === "production" ? "text-destructive" : mode === "demo" ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"}`}
+                  data-testid="text-current-system-mode"
+                >
+                  {MODE_LABELS[mode]}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">{MODE_DESCRIPTIONS[mode]}</p>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Change system mode</Label>
+                <Select
+                  value={selected || mode}
+                  onValueChange={(v) => setSelected(v as SystemMode)}
+                >
+                  <SelectTrigger className="w-48" data-testid="select-system-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="development">Development</SelectItem>
+                    <SelectItem value="demo">Demo</SelectItem>
+                    <SelectItem value="production">Production</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {effective !== mode && (
+                  <p className="text-xs text-muted-foreground">{MODE_DESCRIPTIONS[effective]}</p>
+                )}
+
+                {(selected === "production" || (selected === "" && mode === "production")) && effective === "production" && selected === "production" && (
+                  <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                    <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                    <p className="text-xs text-destructive">
+                      Switching to Production will disable and hide all demo, test, and reset tools — in both the UI and backend. These tools will be inaccessible until you switch back to Development or Demo.
+                    </p>
+                  </div>
+                )}
+
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={!selected || selected === mode || modeMutation.isPending}
+                  data-testid="button-save-system-mode"
+                >
+                  {modeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+                  Save Mode
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { quoteListPosition, usdToNzdRate, gstRate, updateSetting } = useSettings();
 
@@ -1478,6 +1593,10 @@ export default function Settings() {
               <TabsTrigger value="template" data-testid="tab-template">
                 <Palette className="w-3.5 h-3.5 mr-1.5" />
                 Template
+              </TabsTrigger>
+              <TabsTrigger value="system" data-testid="tab-system">
+                <Shield className="w-3.5 h-3.5 mr-1.5" />
+                System
               </TabsTrigger>
             </TabsList>
 
@@ -1566,6 +1685,10 @@ export default function Settings() {
 
             <TabsContent value="template">
               <TemplateBuilderTab />
+            </TabsContent>
+
+            <TabsContent value="system">
+              <SystemModeTab />
             </TabsContent>
           </Tabs>
         </div>

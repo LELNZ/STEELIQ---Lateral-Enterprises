@@ -2126,11 +2126,15 @@ export async function registerRoutes(
   // ─── Op Jobs Routes ────────────────────────────────────────────────────────
   app.get("/api/op-jobs", async (req, res) => {
     try {
+      const userDivision = (req as any).user?.divisionCode;
+      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
       const scope = req.query.scope as string | undefined;
       if (scope === "archived") {
-        return res.json(await storage.getArchivedOpJobs());
+        const all = await storage.getArchivedOpJobs();
+        return res.json(isAllDivision ? all : all.filter(j => (j.divisionId || null) === userDivision));
       }
-      return res.json(await storage.getAllOpJobs());
+      const all = await storage.getAllOpJobs();
+      return res.json(isAllDivision ? all : all.filter(j => (j.divisionId || null) === userDivision));
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2140,6 +2144,9 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      const userDivision = (req as any).user?.divisionCode;
+      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
       if (job.archivedAt) return res.status(400).json({ error: "Job is already archived" });
 
       const updated = await storage.archiveOpJob(req.params.id);
@@ -2160,6 +2167,9 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      const userDivision = (req as any).user?.divisionCode;
+      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
       if (!job.archivedAt) return res.status(400).json({ error: "Job is not archived" });
 
       const updated = await storage.unarchiveOpJob(req.params.id);
@@ -2218,17 +2228,117 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/reset-demo-environment", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const mode = await getSystemMode();
+      if (!requireNonProductionMode(res, mode)) return;
+
+      // Locate the single live commercial record to preserve
+      const allQuotes = await storage.getAllQuotes();
+      const preserveQuote = allQuotes.find(q => q.number === "Q-0135");
+      const preserveQuoteId = preserveQuote?.id ?? null;
+      const preserveCustomerId = preserveQuote?.customerId ?? null;
+      const preserveProjectId = preserveQuote?.projectId ?? null;
+      const preserveEstimateId = preserveQuote?.sourceJobId ?? null;
+
+      let quotesArchived = 0;
+      let jobsArchived = 0;
+      let estimatesArchived = 0;
+      let customersArchived = 0;
+      let projectsArchived = 0;
+
+      // Archive all quotes except Q-0135
+      for (const q of allQuotes) {
+        if (q.id !== preserveQuoteId && !q.archivedAt && !q.deletedAt) {
+          await archiveQuote(q.id);
+          quotesArchived++;
+        }
+      }
+
+      // Archive all op-jobs not linked to Q-0135
+      const allOpJobs = await storage.getAllOpJobs();
+      const archivedOpJobs = await storage.getArchivedOpJobs();
+      const allJobsUnified = [...allOpJobs, ...archivedOpJobs.filter(j => !allOpJobs.find(a => a.id === j.id))];
+      for (const j of allJobsUnified) {
+        if (j.sourceQuoteId !== preserveQuoteId && !j.archivedAt) {
+          await storage.archiveOpJob(j.id);
+          jobsArchived++;
+        }
+      }
+
+      // Archive all estimates (jobs) except Q-0135's linked estimate
+      const allEstimates = await storage.getAllJobs();
+      for (const e of allEstimates) {
+        if (e.id !== preserveEstimateId && !e.archivedAt) {
+          await storage.archiveJob(e.id);
+          estimatesArchived++;
+        }
+      }
+
+      // Archive all projects except Q-0135's linked project
+      const allProjects = await storage.getAllProjects();
+      for (const p of allProjects) {
+        if (p.id !== preserveProjectId && !p.archivedAt) {
+          await storage.archiveProject(p.id);
+          projectsArchived++;
+        }
+      }
+
+      // Archive all customers except Q-0135's customer
+      const allCustomers = await storage.getAllCustomers();
+      for (const c of allCustomers) {
+        if (c.id !== preserveCustomerId && !c.archivedAt) {
+          await storage.archiveCustomer(c.id);
+          customersArchived++;
+        }
+      }
+
+      await storage.createAuditLog({
+        entityType: "system",
+        entityId: "admin-reset-demo",
+        action: "demo_environment_reset",
+        performedByUserId: user.id,
+        metadataJson: {
+          preservedQuote: preserveQuote?.number ?? "none",
+          quotesArchived,
+          jobsArchived,
+          estimatesArchived,
+          customersArchived,
+          projectsArchived,
+        },
+      });
+
+      res.json({
+        ok: true,
+        preserved: preserveQuote?.number ?? null,
+        quotesArchived,
+        jobsArchived,
+        estimatesArchived,
+        customersArchived,
+        projectsArchived,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/admin/demo-stats", async (req, res) => {
     try {
       const user = (req as any).user;
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
+      const mode = await getSystemMode();
+      if (!requireNonProductionMode(res, mode)) return;
       const demoQuotes = await storage.getDemoQuotes();
       const demoJobs = await storage.getDemoOpJobs();
       res.json({
-        demoQuoteCount: demoQuotes.filter(q => !q.archivedAt && !q.deletedAt).length,
-        demoJobCount: demoJobs.filter(j => !j.archivedAt).length,
+        quotes: demoQuotes.filter(q => !q.archivedAt && !q.deletedAt).length,
+        opJobs: demoJobs.filter(j => !j.archivedAt).length,
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -2241,6 +2351,8 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
+      const mode = await getSystemMode();
+      if (!requireNonProductionMode(res, mode)) return;
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
@@ -2257,6 +2369,8 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
+      const mode = await getSystemMode();
+      if (!requireNonProductionMode(res, mode)) return;
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
@@ -2271,6 +2385,9 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      const userDivision = (req as any).user?.divisionCode;
+      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
       return res.json(job);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2279,6 +2396,11 @@ export async function registerRoutes(
 
   app.patch("/api/op-jobs/:id", async (req, res) => {
     try {
+      const job = await storage.getOpJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      const userDivision = (req as any).user?.divisionCode;
+      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
       const schema = z.object({
         title: z.string().min(1).optional(),
         status: z.enum(["active", "on_hold", "completed", "cancelled"]).optional(),
