@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useDeferredValue } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact } from "@shared/schema";
 import { CONTACT_CATEGORIES } from "@shared/schema";
+import { contactDisplayName } from "@/lib/contact-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,11 +40,12 @@ const CATEGORY_VARIANTS: Record<string, "default" | "secondary" | "outline"> = {
 };
 
 const emptyForm = {
-  name: "",
+  firstName: "",
+  lastName: "",
   email: "",
   phone: "",
   mobile: "",
-  role: "",
+  roleTitle: "",
   category: "client" as string,
   notes: "",
   isPrimary: false,
@@ -82,12 +84,32 @@ function ContactForm({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label>Full Name *</Label>
+          <Label>First Name *</Label>
           <Input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. Jane Smith"
-            data-testid="input-contact-name"
+            value={form.firstName}
+            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+            placeholder="e.g. Jane"
+            data-testid="input-contact-firstname"
+          />
+        </div>
+        <div>
+          <Label>Last Name</Label>
+          <Input
+            value={form.lastName}
+            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+            placeholder="e.g. Smith"
+            data-testid="input-contact-lastname"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Role Title</Label>
+          <Input
+            value={form.roleTitle}
+            onChange={(e) => setForm({ ...form, roleTitle: e.target.value })}
+            placeholder="e.g. Site Manager, Owner"
+            data-testid="input-contact-roletitle"
           />
         </div>
         <div>
@@ -103,15 +125,6 @@ function ContactForm({
             </SelectContent>
           </Select>
         </div>
-      </div>
-      <div>
-        <Label>Role / Title</Label>
-        <Input
-          value={form.role}
-          onChange={(e) => setForm({ ...form, role: e.target.value })}
-          placeholder="e.g. Site Manager, Owner"
-          data-testid="input-contact-role"
-        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -166,39 +179,29 @@ export default function Contacts() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const deferredSearch = useDeferredValue(search);
+  const deferredCategory = useDeferredValue(categoryFilter);
   const [createOpen, setCreateOpen] = useState(false);
   const [editContact, setEditContact] = useState<CustomerContact | null>(null);
   const [createForm, setCreateForm] = useState({ ...emptyForm });
   const [editForm, setEditForm] = useState({ ...emptyForm });
 
+  const searchParams = new URLSearchParams();
+  if (deferredSearch.trim()) searchParams.set("q", deferredSearch.trim());
+  if (deferredCategory !== "all") searchParams.set("category", deferredCategory);
+  const queryString = searchParams.toString();
+
   const { data: contacts = [], isLoading } = useQuery<CustomerContact[]>({
-    queryKey: ["/api/contacts"],
+    queryKey: ["/api/contacts", deferredSearch.trim(), deferredCategory],
+    queryFn: () => fetch(`/api/contacts${queryString ? `?${queryString}` : ""}`).then((r) => r.json()),
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 
-  const customerMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    customers.forEach((c) => { m[c.id] = c.name; });
-    return m;
-  }, [customers]);
-
-  const filtered = useMemo(() => {
-    let list = contacts;
-    if (categoryFilter !== "all") list = list.filter((c) => c.category === categoryFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter((c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.email || "").toLowerCase().includes(q) ||
-        (c.phone || "").toLowerCase().includes(q) ||
-        (customerMap[c.customerId] || "").toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [contacts, categoryFilter, search, customerMap]);
+  const customerMap: Record<string, string> = {};
+  customers.forEach((c) => { customerMap[c.id] = c.name; });
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof emptyForm) => {
@@ -257,11 +260,12 @@ export default function Contacts() {
   function openEdit(contact: CustomerContact) {
     setEditContact(contact);
     setEditForm({
-      name: contact.name,
+      firstName: contact.firstName || "",
+      lastName: contact.lastName || "",
       email: contact.email || "",
       phone: contact.phone || "",
       mobile: contact.mobile || "",
-      role: contact.role || "",
+      roleTitle: contact.roleTitle || "",
       category: contact.category || "client",
       notes: contact.notes || "",
       isPrimary: contact.isPrimary ?? false,
@@ -286,7 +290,7 @@ export default function Contacts() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Search by name, email, phone, company…"
+            placeholder="Search name, email, phone, company…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             data-testid="input-contacts-search"
@@ -307,11 +311,11 @@ export default function Contacts() {
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : filtered.length === 0 ? (
+      ) : contacts.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             <User className="h-8 w-8 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">{contacts.length === 0 ? "No contacts yet. Add your first contact to get started." : "No contacts match your search."}</p>
+            <p className="text-sm">{!deferredSearch.trim() && deferredCategory === "all" ? "No contacts yet. Add your first contact to get started." : "No contacts match your search."}</p>
           </CardContent>
         </Card>
       ) : (
@@ -328,13 +332,15 @@ export default function Contacts() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((contact) => (
+              {contacts.map((contact) => (
                 <TableRow key={contact.id} data-testid={`row-contact-${contact.id}`}>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm" data-testid={`text-contact-name-${contact.id}`}>{contact.name}</span>
-                      {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
-                      {contact.role && <span className="text-xs text-muted-foreground hidden sm:inline">{contact.role}</span>}
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm" data-testid={`text-contact-name-${contact.id}`}>{contactDisplayName(contact)}</span>
+                        {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
+                      </div>
+                      {contact.roleTitle && <span className="text-xs text-muted-foreground">{contact.roleTitle}</span>}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -391,7 +397,7 @@ export default function Contacts() {
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate(createForm)}
-              disabled={!createForm.name || !createForm.customerId || createMutation.isPending}
+              disabled={!createForm.firstName || !createForm.customerId || createMutation.isPending}
               data-testid="button-save-new-contact"
             >
               {createMutation.isPending ? "Creating…" : "Create Contact"}
@@ -412,7 +418,7 @@ export default function Contacts() {
             <Button variant="outline" onClick={() => setEditContact(null)}>Cancel</Button>
             <Button
               onClick={() => editMutation.mutate(editForm)}
-              disabled={!editForm.name || editMutation.isPending}
+              disabled={!editForm.firstName || editMutation.isPending}
               data-testid="button-save-edit-contact"
             >
               {editMutation.isPending ? "Saving…" : "Save Changes"}

@@ -1,0 +1,379 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 2.1
+CONTACTS FOUNDATION CORRECTION
+FIRST/LAST NAME + ROLE TITLE + TRUE BACKEND SEARCH PARITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- Customers remain global/shared records
+- Contacts are global/shared records
+- each Contact belongs to one Customer/company for now
+- no broader Accounts / Relationships redesign exists yet
+- LJ estimating builder must remain operationally unchanged
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF remains locked
+- this phase is a correction/refinement of Contacts, not a redesign
+
+CRITICAL LJ RULE
+
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Complete the Contacts foundation properly by tightening the contact data model and search behavior.
+
+This phase must:
+1. Replace single contact name field with:
+   - firstName
+   - lastName
+2. Replace role field with:
+   - roleTitle
+3. Preserve one-customer-per-contact model
+4. Add true backend search parity for contact search/filtering
+5. Update UI/forms/lists/customer contact surfaces accordingly
+6. Preserve current Contacts architecture and avoid broader redesign
+
+This is a correction phase.
+It is NOT a full Accounts / Relationships redesign.
+It is NOT a contact multi-company phase.
+It is NOT a customer redesign.
+It is NOT Phase 3 yet.
+
+==================================================
+PART 1 — CONTACT DATA MODEL REFINEMENT
+==================================================
+
+Current problem:
+Contacts are currently stored with:
+- name
+- role
+
+We want the proper foundation:
+- firstName
+- lastName
+- roleTitle
+
+Required schema direction:
+Replace or migrate the contact record fields so contacts now store:
+- customerId
+- firstName
+- lastName
+- email
+- phone
+- mobile
+- roleTitle
+- category
+- notes
+- isPrimary
+- archivedAt / createdAt if already present
+
+Rules:
+- Contacts remain global/shared
+- each Contact belongs to one Customer/company for now
+- do NOT add many-to-many relationships
+- do NOT add division ownership to contacts
+- do NOT redesign Customers
+
+Migration requirement:
+Existing contacts created under the old schema must be handled safely.
+
+Acceptable migration approach:
+- preserve old records
+- split existing name into best-effort firstName / lastName
+- move existing role into roleTitle
+- if exact split is ambiguous, preserve meaning safely and report the rule used in handover
+
+Examples of safe migration logic:
+- "Jane Smith" -> firstName "Jane", lastName "Smith"
+- single-token names may become firstName only, lastName empty
+- role -> roleTitle directly
+
+Do NOT delete existing contacts.
+Do NOT require manual DB reset.
+
+==================================================
+PART 2 — API / BACKEND SEARCH PARITY
+==================================================
+
+Current issue:
+Search behavior is partially split between frontend filtering and backend filtering.
+
+Required outcome:
+The Contacts page search/filter behavior should be backed by the API consistently.
+
+Backend contact list/search must support:
+- search by first name
+- search by last name
+- search by full displayed name
+- search by email
+- search by phone
+- search by mobile
+- search by customer/company name
+- filter by category
+- filter by customerId
+
+Required implementation behavior:
+- frontend should pass filters/search to backend
+- backend should perform the filtering
+- frontend should not rely on an inconsistent second search layer for the core list behavior
+
+Lightweight client-side display sorting is fine.
+Core search/filter matching must be true backend parity.
+
+Do NOT add speculative full-text search infrastructure unless already trivial.
+Use the simplest safe backend filtering consistent with current stack.
+
+==================================================
+PART 3 — CONTACTS UI UPDATE
+==================================================
+
+Update the Contacts page and customer-linked contact forms/surfaces.
+
+Required form changes:
+Replace:
+- Full Name
+- Role
+
+With:
+- First Name
+- Last Name
+- Role Title
+
+Keep:
+- Customer / Company
+- Category
+- Email
+- Phone
+- Mobile
+- Notes
+- Primary toggle
+
+Required list behavior:
+Display a clean contact name composed from:
+- firstName + lastName
+
+Role title should display where appropriate.
+
+Required customer page behavior:
+Any customer-linked contact add/edit UI must use:
+- firstName
+- lastName
+- roleTitle
+
+Do NOT redesign the Customers page beyond the required contact field update.
+
+==================================================
+PART 4 — BACKWARD COMPATIBILITY / DISPLAY CONTRACT
+==================================================
+
+Where the UI needs a single display name, derive it safely from:
+- firstName
+- lastName
+
+Examples:
+- if both exist: "Jane Smith"
+- if only firstName exists: "Jane"
+- if only lastName exists: "Smith"
+
+Keep display handling centralized if practical.
+Do NOT create conflicting name formatting logic across pages.
+
+If existing components still expect a contact display string, update them safely without broad refactor.
+
+==================================================
+PART 5 — SCOPE LOCK
+==================================================
+
+Do NOT implement any of the following in this phase:
+- many-to-many contact/customer relationships
+- supplier procurement workflow
+- full Accounts / Relationships model
+- contact import/export
+- dedupe/merge tools
+- email sync
+- CRM pipeline logic
+- customer model redesign
+- quote/job linkage redesign
+- Xero integration
+- LJ estimator redesign
+- Phase 3 relationship hardening
+
+This phase is only to complete the Contacts foundation correctly.
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal schema migration/refinement from name -> firstName/lastName and role -> roleTitle
+- minimal storage and route updates
+- minimal contact list/search improvements
+- minimal UI/form/list updates
+- minimal display helpers if required
+
+Not allowed:
+- broader party-model redesign
+- division model changes
+- unrelated route restructuring
+- speculative abstractions
+- broad cleanup beyond contact model/search parity
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- Customers remain global/shared records
+- Contacts remain global/shared records
+- each Contact belongs to one Customer/company for now
+- no broader Accounts / Relationships redesign is introduced
+- LJ estimating builder remains functionally unchanged
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- quote/job/invoice architecture untouched by this phase
+
+==================================================
+REQUIRED UI / OPERATIONAL SURFACES
+==================================================
+
+To count as complete, this phase must include:
+
+1. Contacts list page updated to first/last name model
+2. Create contact form updated
+3. Edit contact form updated
+4. Customer-linked contacts surfaces updated
+5. Backend search/filter parity implemented and used by Contacts page
+6. Existing contacts preserved safely
+
+Do not mark complete if:
+- schema changed but UI still uses Full Name/Role
+- search is still mostly frontend-only
+- existing contacts were lost or corrupted
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. Existing contacts remain present after migration/refinement
+2. Existing contact names were migrated safely
+3. Existing role values were preserved into roleTitle
+4. New contact can be created with firstName/lastName/roleTitle
+5. Existing contact can be edited with firstName/lastName/roleTitle
+6. Contacts page search works through backend for:
+   - first name
+   - last name
+   - email
+   - phone/mobile
+   - customer/company name
+7. Category filter still works
+8. Customer-linked contact section still works
+9. Customers remain global/shared
+10. Contacts remain global/shared
+11. No many-to-many relationship model was introduced
+12. LJ estimate builder still creates/edits estimates correctly
+13. Quote generation from LJ estimate still works
+14. Quote preview/PDF pipeline still works
+15. TypeScript passes
+16. Build/runtime checks pass
+
+Do not claim completion if:
+- contacts still use only name/role
+- backend search parity is not actually implemented
+- customer/company search only works client-side
+- existing contacts are lost
+- customer/contact linkage is broken
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- that Customers remain global/shared records
+- that Contacts remain global/shared records
+- that each Contact belongs to one Customer/company for now
+- that firstName/lastName/roleTitle replaced the prior simplified contact model
+- how existing contacts were migrated safely
+- whether backend search parity is now fully implemented
