@@ -1,0 +1,388 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 3
+CUSTOMER / PROJECT / QUOTE / JOB RELATIONSHIP HARDENING
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- internal quote lifecycle remains quote-based
+- customer-facing document label setting already exists
+- numbering controls already exist
+- Customers are global/shared records
+- Contacts are global/shared records
+- each Contact belongs to one Customer/company for now
+- Jobs are division-owned
+- LJ estimating builder must remain operationally unchanged
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF is locked
+- this phase is relationship hardening, not an invoice/Xero phase yet
+
+CRITICAL LJ RULE
+
+The current Lateral Joinery estimation builder must remain operationally unchanged.
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder in this phase.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Harden the shared business relationships between:
+- Customers
+- Contacts
+- Projects
+- Quotes
+- Jobs
+
+This phase must:
+1. Make customer/project linkage clearer and safer
+2. Ensure quote customer/project linkage is operationally usable and consistent
+3. Ensure op-job customer/project linkage is clearly visible and safe
+4. Tighten conversion behavior from accepted quote to job so linked records stay coherent
+5. Add practical UI surfaces for staff to see and manage these relationships
+6. Preserve all existing lifecycle and rendering architecture
+
+This is a relationship-hardening phase.
+It is NOT Xero integration.
+It is NOT invoice lifecycle buildout.
+It is NOT a broader Accounts / Relationships redesign.
+It is NOT a Jobs architecture redesign.
+It is NOT an LJ estimator redesign.
+
+==================================================
+PART 1 — RELATIONSHIP RULES TO ENFORCE
+==================================================
+
+Use these exact rules:
+
+1. Customers are global/shared company records
+2. Contacts are global/shared people records linked to one customer for now
+3. Projects belong to one customer
+4. Quotes may be linked to:
+   - customer only
+   - customer + project
+5. If a project is linked to a quote, that project must belong to the same customer linked to the quote
+6. Op-jobs created from accepted quotes must inherit:
+   - customerId
+   - projectId
+   - division ownership
+   from the source accepted quote state where present
+7. Jobs must not drift into inconsistent customer/project linkage after conversion
+8. Accepted quote history must remain frozen commercial truth
+9. Jobs remain downstream consumers and must not rewrite quote history
+
+==================================================
+PART 2 — QUOTE LINKAGE HARDENING
+==================================================
+
+Review and tighten the quote linkage flows.
+
+Required behavior:
+- quote detail must clearly show linked customer and linked project
+- staff must be able to link or update quote customer/project safely where allowed
+- if a project is selected, validate that it belongs to the selected customer
+- prevent invalid mismatched customer/project combinations
+- if a customer changes and the currently selected project belongs to a different customer, handle safely:
+  - either clear the project selection automatically with explicit UI feedback
+  - or block save with clear message
+Choose the safest minimal behavior and report which was implemented
+
+Important:
+- do NOT redesign quote lifecycle
+- do NOT mutate accepted quote history outside allowed existing rules
+- do NOT add broad new workflow states
+
+UI requirement:
+Quote detail/edit surface must make customer/project linkage operationally clear.
+
+==================================================
+PART 3 — CUSTOMER / PROJECT USABILITY IMPROVEMENTS
+==================================================
+
+Improve the shared-record usability without redesigning the modules.
+
+Required behavior:
+- customer detail/surface should clearly show its projects
+- project records should clearly show owning customer
+- where users are linking a quote to a project, the project picker should be filtered to that customer’s projects once a customer is selected
+- if no customer is selected, project selection should either be disabled or clearly constrained until customer is chosen
+
+Goal:
+Make the relationship model obvious and safe in the UI.
+
+Do NOT redesign the Customers page broadly.
+Do NOT redesign Projects into a new subsystem.
+Keep this targeted and operational.
+
+==================================================
+PART 4 — JOB RELATIONSHIP VISIBILITY
+==================================================
+
+Improve op-job detail/list visibility for linked business context.
+
+Required behavior:
+- op-job detail should clearly show:
+  - linked customer
+  - linked project
+  - source quote reference
+  - division ownership
+- if these references already exist in data, surface them clearly in the UI
+- if some are missing from current display, add minimum practical display surfaces
+- job list should remain division-filtered as already established
+
+Optional but recommended if safe:
+- show customer/project columns or badges in jobs list where practical
+
+Do NOT redesign job lifecycle.
+Do NOT redesign jobs into per-division modules.
+Do NOT merge legacy /api/jobs and /api/op-jobs in this phase.
+
+==================================================
+PART 5 — QUOTE -> JOB CONVERSION INTEGRITY
+==================================================
+
+Review the accepted quote to op-job conversion path and harden it.
+
+Required behavior:
+- converting an accepted quote to a job must preserve coherent linkage:
+  - division
+  - customerId
+  - projectId
+  - sourceQuoteId
+  - acceptedRevisionId
+- if customer/project are not linked on the quote, conversion should still behave safely, but linkage should not become misleading
+- if quote linkage exists, op-job should inherit it correctly
+
+Add/confirm clear UI messaging around conversion if needed, but keep changes minimal.
+
+Do NOT redesign conversion flow.
+Do NOT add variation workflow.
+Do NOT add invoice generation in this phase.
+
+==================================================
+PART 6 — RELATIONSHIP VALIDATION
+==================================================
+
+Add the minimal validation required for foundation correctness.
+
+Required validations:
+- project.customerId must match quote.customerId when both are present
+- project.customerId must match op-job.customerId when both are present and editable
+- if editing an op-job’s project/customer linkage is currently allowed, preserve consistency rules
+- if editing op-job customer/project linkage is not currently supported, do not expand scope unless needed for display/integrity
+
+Do not build a generalized rules engine.
+Implement only the minimal safe validations needed.
+
+==================================================
+PART 7 — UI SURFACES REQUIRED
+==================================================
+
+To count as complete, this phase must include usable UI for:
+
+1. Quote detail:
+- visible customer
+- visible project
+- safe link/edit behavior
+- clear validation feedback
+
+2. Customer/project relationship visibility:
+- customer surface shows projects clearly
+- project ownership is obvious
+
+3. Job detail:
+- visible customer
+- visible project
+- visible source quote
+- visible division
+
+Do not mark this phase complete if the relationship rules exist only in backend without practical UI surfaces.
+
+==================================================
+NOT IN SCOPE
+==================================================
+
+Do NOT implement any of the following in this phase:
+- Xero integration
+- invoice lifecycle expansion
+- payment workflows
+- many-to-many Accounts / Relationships redesign
+- contact multi-company reuse
+- supplier procurement workflows
+- granular permissions redesign
+- legacy jobs/op-jobs merge
+- LJ estimator redesign
+- library redesign
+- LEL estimator
+- variations
+- retentions
+- customer portal
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal schema additions only if strictly required for relationship integrity or display
+- minimal route validation hardening
+- minimal UI changes on quote detail / customers / projects / op-jobs
+- minimal filtering improvements for project selection
+- minimal relationship display helpers
+
+Not allowed:
+- lifecycle redesign
+- broad schema refactor
+- unrelated endpoints
+- speculative abstraction
+- broad page rewrites
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal commercial lifecycle remains quote-based
+- accepted quote history remains frozen unless safely reverted under allowed rules
+- Customers remain global/shared
+- Contacts remain global/shared
+- Projects belong to one customer
+- Jobs remain division-owned
+- op-jobs remain downstream from accepted quote state
+- LJ estimating builder remains functionally unchanged
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. LJ estimate builder still creates/edits estimates correctly
+2. Quote generation from LJ estimate still works
+3. Quote preview still works through QuoteDocument -> QuoteRenderModel -> Preview/PDF
+4. PDF export still works through the locked pipeline
+5. Existing Customers flows are not broken
+6. Existing Contacts flows are not broken
+7. Existing Projects flows are not broken
+8. Quote detail clearly shows linked customer/project
+9. Quote customer/project linking validates mismatched combinations correctly
+10. Project picker/filtering behaves correctly relative to selected customer
+11. Customer surface clearly shows projects
+12. Op-job detail clearly shows customer/project/source quote/division
+13. Accepted quote -> job conversion preserves coherent linkage
+14. Jobs remain division-filtered
+15. No accepted quote history is mutated improperly
+16. TypeScript passes
+17. Build/runtime checks pass
+
+Do not claim completion if:
+- quote/project/customer mismatch is still possible without validation
+- relationship display is still unclear for staff
+- job linkage is inconsistent after conversion
+- UI surfaces are missing
+- LJ flow regresses
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- that Customers remain global/shared records
+- that Contacts remain global/shared records
+- that Projects belong to one customer
+- how quote customer/project validation now works
+- how op-job customer/project/source-quote visibility now works
+- whether accepted quote -> job linkage integrity was verified
+- whether any legacy /api/jobs vs /api/op-jobs duality still remains
