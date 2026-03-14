@@ -46,6 +46,7 @@ export interface QuoteDocumentOrg {
   gstNumber: string | null;
   nzbn: string | null;
   bankDetails: string | null;
+  documentLabel: string;
 }
 
 export interface QuoteDocumentCustomer {
@@ -166,7 +167,7 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       validityDays,
     },
     branding: {
-      tradingName: div.tradingName || org.legalName || "Pro-Quote",
+      tradingName: div.tradingName || org.legalName || "SteelIQ",
       legalLine: div.requiredLegalLine || "A trading division of Lateral Engineering Limited",
       logoUrl: div.logoUrl || null,
       fontFamily: div.fontFamily || null,
@@ -184,6 +185,7 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       gstNumber: org.gstNumber || null,
       nzbn: org.nzbn || null,
       bankDetails: org.bankDetails || null,
+      documentLabel: org.documentLabel || "Quote",
     },
     customer: {
       name: quote.customer,

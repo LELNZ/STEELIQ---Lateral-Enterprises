@@ -791,6 +791,9 @@ export async function registerRoutes(
 
       const divSettings = await storage.getDivisionSettings(divisionCode);
       const templateKey = divSettings?.templateKey || "base_v1";
+      const orgForNumbering = await storage.getOrgSettings();
+      const quotePrefix = orgForNumbering?.quoteNumberPrefix ?? "Q";
+      const quoteUseDivSuffix = orgForNumbering?.quoteNumberUseDivisionSuffix ?? false;
 
       const client = await pool.connect();
       try {
@@ -853,7 +856,7 @@ export async function registerRoutes(
         const seqResult = await client.query(
           `UPDATE number_sequences SET current_value = current_value + 1 WHERE id = 'quote' RETURNING current_value`
         );
-        const number = formatQuoteNumber(seqResult.rows[0].current_value);
+        const number = formatQuoteNumber(seqResult.rows[0].current_value, quotePrefix, divisionCode, quoteUseDivSuffix);
 
         const newQuoteSellValue = (snapshot as any).totals?.sell ?? null;
         const quoteInsert = await client.query(
@@ -2094,7 +2097,7 @@ export async function registerRoutes(
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
       const userId = req.user?.id ?? null;
-      const jobNumber = await storage.getNextJobNumber();
+      const jobNumber = await storage.getNextJobNumber(quote.divisionId ?? undefined);
       const title = parsed.data.title || quote.customer || `Job from ${quote.number}`;
 
       const opJob = await storage.createOpJob({
@@ -2181,6 +2184,45 @@ export async function registerRoutes(
         metadataJson: {},
       });
       res.json({ ok: true, job: updated });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/number-sequences", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin only" });
+      }
+      const sequences = await storage.getNumberSequences();
+      res.json(sequences);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/admin/number-sequences/:id", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin only" });
+      }
+      const { id } = req.params;
+      if (!["quote", "op_job"].includes(id)) {
+        return res.status(400).json({ error: "Invalid sequence id. Must be 'quote' or 'op_job'." });
+      }
+      const parsed = z.object({ nextValue: z.number().int().min(1) }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      await storage.setNumberSequence(id, parsed.data.nextValue);
+      await storage.createAuditLog({
+        entityType: "number_sequence",
+        entityId: id,
+        action: "set_next_number",
+        performedByUserId: user.id ?? null,
+        metadataJson: { id, nextValue: parsed.data.nextValue, changedBy: user.username },
+      });
+      res.json({ ok: true, id, nextValue: parsed.data.nextValue });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

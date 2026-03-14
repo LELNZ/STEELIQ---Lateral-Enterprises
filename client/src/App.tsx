@@ -45,6 +45,7 @@ function Router() {
       <Route path="/quote/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id" component={QuoteDetail} />
       <Route path="/customers" component={Customers} />
+      <Route path="/admin" component={Users} />
       <Route path="/users" component={Users} />
       <Route path="/op-jobs" component={OpJobsList} />
       <Route path="/op-jobs/:id" component={OpJobDetail} />

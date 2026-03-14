@@ -1,8 +1,9 @@
 import { useCallback } from "react";
-import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat } from "lucide-react";
+import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useAuth } from "@/lib/auth-context";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +25,12 @@ export function AppSidebar() {
   const { user } = useAuth();
   const canManageUsers = user?.role === "admin" || user?.role === "owner";
 
+  const { data: orgSettings } = useQuery<any>({
+    queryKey: ["/api/settings/org"],
+    staleTime: 60_000,
+  });
+  const businessDisplayName = orgSettings?.businessDisplayName || "Lateral Enterprises";
+
   const guardedClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     const guard = checkGuard();
     if (guard.blocked) {
@@ -40,13 +47,16 @@ export function AppSidebar() {
   const isJobsActive = location.startsWith("/op-jobs");
   const isLibraryActive = location.startsWith("/library");
   const isSettingsActive = location.startsWith("/settings");
+  const isAdminActive = location.startsWith("/admin") || location.startsWith("/users");
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
-        <span className="text-base font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-          Pro-Quote
-        </span>
+        <div className="group-data-[collapsible=icon]:hidden">
+          <span className="text-base font-bold tracking-tight leading-none">STEELIQ</span>
+          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{businessDisplayName}</p>
+        </div>
+        <span className="hidden group-data-[collapsible=icon]:block text-xs font-bold tracking-tight">SI</span>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -115,17 +125,6 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              {canManageUsers && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={location.startsWith("/users")} tooltip="Users">
-                    <Link href="/users" onClick={(e) => guardedClick(e, "/users")} data-testid="link-sidebar-users">
-                      <ShieldCheck />
-                      <span>Users</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isLibraryActive} tooltip="Library">
                   <Link href="/library" onClick={(e) => guardedClick(e, "/library")} data-testid="link-sidebar-library">
@@ -134,6 +133,32 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {canManageUsers && (
+                <Collapsible className="group/admin-collapsible">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton tooltip="Admin" isActive={isAdminActive} data-testid="button-sidebar-admin">
+                        <ShieldCheck />
+                        <span>Admin</span>
+                        <ChevronDown className="ml-auto transition-transform group-data-[state=open]/admin-collapsible:rotate-180" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={location.startsWith("/admin") || location.startsWith("/users")}>
+                            <Link href="/admin" onClick={(e) => guardedClick(e, "/admin")} data-testid="link-sidebar-admin-users">
+                              <Building2 className="w-3.5 h-3.5" />
+                              <span>Users</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              )}
 
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isSettingsActive} tooltip="Settings">

@@ -16,6 +16,7 @@ const MAX_Y = PAGE_HEIGHT - BOTTOM_MARGIN;
 const FONT_NORMAL = "helvetica";
 
 let T: QuoteTemplate;
+let DOCUMENT_LABEL: string = "Quote";
 let COLOR_BLACK: string;
 let COLOR_MUTED: string;
 let COLOR_ACCENT: string;
@@ -330,6 +331,7 @@ export async function generateQuotePdf(
 ): Promise<void> {
   onProgress?.("Initializing PDF...");
 
+  DOCUMENT_LABEL = model.documentLabel || "Quote";
   applyTemplate(model.resolvedTemplate ?? COMPANY_MASTER_TEMPLATE);
 
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
@@ -382,6 +384,7 @@ export async function generateQuotePdfBase64(
 ): Promise<string> {
   onProgress?.("Initializing PDF...");
 
+  DOCUMENT_LABEL = model.documentLabel || "Quote";
   applyTemplate(model.resolvedTemplate ?? COMPANY_MASTER_TEMPLATE);
 
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
@@ -520,7 +523,7 @@ function renderSeparator(pdf: Pdf, y: number): number {
 }
 
 function renderQuotationTitle(pdf: Pdf, y: number): number {
-  const title = T.documentMode === "tender" ? "TENDER" : "QUOTATION";
+  const title = T.documentMode === "tender" ? "TENDER" : DOCUMENT_LABEL.toUpperCase();
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(12);
   pdf.setTextColor(COLOR_ACCENT);

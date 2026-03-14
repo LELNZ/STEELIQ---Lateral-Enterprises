@@ -94,7 +94,7 @@ export interface IStorage {
   updateProfilesByMouldNumber(mouldNumber: string, data: Partial<InsertConfigurationProfile>): Promise<number>;
   updateAccessoriesByCode(code: string, data: Partial<InsertConfigurationAccessory>): Promise<number>;
 
-  getNextQuoteNumber(): Promise<string>;
+  getNextQuoteNumber(divisionCode?: string): Promise<string>;
   createQuote(data: InsertQuote): Promise<Quote>;
   getQuote(id: string): Promise<Quote | undefined>;
   getQuoteByJobId(jobId: string): Promise<Quote | undefined>;
@@ -155,7 +155,9 @@ export interface IStorage {
   getAllInvoices(): Promise<Invoice[]>;
   updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
 
-  getNextJobNumber(): Promise<string>;
+  getNextJobNumber(divisionCode?: string): Promise<string>;
+  getNumberSequences(): Promise<{ id: string; currentValue: number }[]>;
+  setNumberSequence(id: string, nextValue: number): Promise<void>;
   createOpJob(data: InsertOpJob): Promise<OpJob>;
   getOpJob(id: string): Promise<OpJob | undefined>;
   getAllOpJobs(): Promise<OpJob[]>;
@@ -395,13 +397,14 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getNextQuoteNumber(): Promise<string> {
+  async getNextQuoteNumber(divisionCode?: string): Promise<string> {
     await db.insert(numberSequences).values({ id: "quote", currentValue: 0 }).onConflictDoNothing();
     const [row] = await db.update(numberSequences)
       .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
       .where(eq(numberSequences.id, "quote"))
       .returning();
-    return formatQuoteNumber(row.currentValue);
+    const org = await this.getOrgSettings();
+    return formatQuoteNumber(row.currentValue, org?.quoteNumberPrefix ?? "Q", divisionCode, org?.quoteNumberUseDivisionSuffix ?? false);
   }
 
   async createQuote(data: InsertQuote): Promise<Quote> {
@@ -708,13 +711,30 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getNextJobNumber(): Promise<string> {
+  async getNextJobNumber(divisionCode?: string): Promise<string> {
     await db.insert(numberSequences).values({ id: "op_job", currentValue: 0 }).onConflictDoNothing();
     const [row] = await db.update(numberSequences)
       .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
       .where(eq(numberSequences.id, "op_job"))
       .returning();
-    return `J-${String(row.currentValue).padStart(4, "0")}`;
+    const org = await this.getOrgSettings();
+    const prefix = org?.jobNumberPrefix ?? "J";
+    const base = `${prefix}-${String(row.currentValue).padStart(4, "0")}`;
+    if (org?.jobNumberUseDivisionSuffix && divisionCode) return `${base}-${divisionCode}`;
+    return base;
+  }
+
+  async getNumberSequences(): Promise<{ id: string; currentValue: number }[]> {
+    return db.select().from(numberSequences).where(
+      sql`${numberSequences.id} IN ('quote', 'op_job', 'invoice')`
+    );
+  }
+
+  async setNumberSequence(id: string, nextValue: number): Promise<void> {
+    await db.insert(numberSequences).values({ id, currentValue: 0 }).onConflictDoNothing();
+    await db.update(numberSequences)
+      .set({ currentValue: nextValue - 1 })
+      .where(eq(numberSequences.id, id));
   }
 
   async createOpJob(data: InsertOpJob): Promise<OpJob> {
@@ -772,8 +792,10 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export function formatQuoteNumber(seq: number): string {
-  return `Q-${String(seq).padStart(4, "0")}`;
+export function formatQuoteNumber(seq: number, prefix = "Q", divisionCode?: string, useDivisionSuffix = false): string {
+  const base = `${prefix}-${String(seq).padStart(4, "0")}`;
+  if (useDivisionSuffix && divisionCode) return `${base}-${divisionCode}`;
+  return base;
 }
 
 export const storage = new DatabaseStorage();

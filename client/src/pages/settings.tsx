@@ -11,8 +11,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield, Hash } from "lucide-react";
 import { useSystemMode, type SystemMode } from "@/hooks/use-system-mode";
+import { useAuth } from "@/lib/auth-context";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
 import { resolvePresetsForDivision, PRESET_FIELD_LABELS, type SiteVisitPresetDefaults, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
@@ -38,6 +39,7 @@ import { Slider } from "@/components/ui/slider";
 interface OrgSettings {
   id: string;
   legalName: string;
+  businessDisplayName: string | null;
   gstNumber: string | null;
   nzbn: string | null;
   address: string | null;
@@ -49,6 +51,11 @@ interface OrgSettings {
   defaultExclusionsBlock: string | null;
   paymentTermsBlock: string | null;
   quoteValidityDays: number;
+  documentLabel: string | null;
+  quoteNumberPrefix: string | null;
+  quoteNumberUseDivisionSuffix: boolean | null;
+  jobNumberPrefix: string | null;
+  jobNumberUseDivisionSuffix: boolean | null;
 }
 
 interface DivisionSettings {
@@ -122,6 +129,52 @@ function OrgSettingsTab() {
 
   return (
     <div className="space-y-4" data-testid="org-settings-tab">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Branding</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Controls how STEELIQ appears to operators in the sidebar and app shell.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Business Display Name</Label>
+            <p className="text-xs text-muted-foreground mb-2">Shown beneath STEELIQ in the sidebar as a sub-label (e.g. Lateral Enterprises)</p>
+            <Input
+              value={form.businessDisplayName || ""}
+              onChange={(e) => setForm({ ...form, businessDisplayName: e.target.value })}
+              placeholder="Lateral Enterprises"
+              data-testid="input-org-businessDisplayName"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Customer-Facing Document Label</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Internal system logic and lifecycle remain quote-based. This label controls what customers see on documents, PDF headings, and email defaults.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Document Label</Label>
+            <p className="text-xs text-muted-foreground mb-2">Examples: Quote, Service Estimate, Proposal</p>
+            <Input
+              value={form.documentLabel || ""}
+              onChange={(e) => setForm({ ...form, documentLabel: e.target.value })}
+              placeholder="Quote"
+              className="w-64"
+              data-testid="input-org-documentLabel"
+            />
+            {form.documentLabel && form.documentLabel.trim() && (
+              <p className="text-xs text-muted-foreground mt-2">
+                PDF heading will read: <strong className="font-semibold">{form.documentLabel.trim().toUpperCase()}</strong>
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Company Details</CardTitle>
@@ -1466,6 +1519,244 @@ const MODE_DESCRIPTIONS: Record<string, string> = {
   production: "Live operational use. Demo/reset tools are hidden and all destructive admin routes are disabled.",
 };
 
+function NumberingTab() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
+
+  const { data: org, isLoading: orgLoading } = useQuery<OrgSettings>({
+    queryKey: ["/api/settings/org"],
+  });
+
+  const { data: sequences, isLoading: seqLoading } = useQuery<{ id: string; currentValue: number }[]>({
+    queryKey: ["/api/admin/number-sequences"],
+    enabled: isAdmin,
+  });
+
+  const [quotePrefix, setQuotePrefix] = useState("");
+  const [quoteDivSuffix, setQuoteDivSuffix] = useState(false);
+  const [jobPrefix, setJobPrefix] = useState("");
+  const [jobDivSuffix, setJobDivSuffix] = useState(false);
+  const [quoteNext, setQuoteNext] = useState("");
+  const [jobNext, setJobNext] = useState("");
+
+  useEffect(() => {
+    if (org) {
+      setQuotePrefix(org.quoteNumberPrefix || "Q");
+      setQuoteDivSuffix(org.quoteNumberUseDivisionSuffix ?? false);
+      setJobPrefix(org.jobNumberPrefix || "J");
+      setJobDivSuffix(org.jobNumberUseDivisionSuffix ?? false);
+    }
+  }, [org]);
+
+  useEffect(() => {
+    if (sequences) {
+      const qSeq = sequences.find(s => s.id === "quote");
+      const jSeq = sequences.find(s => s.id === "op_job");
+      if (qSeq) setQuoteNext(String(qSeq.currentValue + 1));
+      if (jSeq) setJobNext(String(jSeq.currentValue + 1));
+    }
+  }, [sequences]);
+
+  const prefixMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", "/api/settings/org", {
+        quoteNumberPrefix: quotePrefix || "Q",
+        quoteNumberUseDivisionSuffix: quoteDivSuffix,
+        jobNumberPrefix: jobPrefix || "J",
+        jobNumberUseDivisionSuffix: jobDivSuffix,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/org"] });
+      toast({ title: "Numbering prefix settings saved" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }),
+  });
+
+  const seqMutation = useMutation({
+    mutationFn: async ({ id, nextValue }: { id: string; nextValue: number }) => {
+      const res = await apiRequest("PATCH", `/api/admin/number-sequences/${id}`, { nextValue });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/number-sequences"] });
+      toast({ title: "Next number updated" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to update", description: err.message, variant: "destructive" }),
+  });
+
+  const handleSetNext = (id: string, rawValue: string) => {
+    const v = parseInt(rawValue, 10);
+    if (isNaN(v) || v < 1) {
+      toast({ title: "Next number must be a whole number ≥ 1", variant: "destructive" });
+      return;
+    }
+    seqMutation.mutate({ id, nextValue: v });
+  };
+
+  const quotePreview = quotePrefix
+    ? `${quotePrefix}-${String(parseInt(quoteNext || "1")).padStart(4, "0")}${quoteDivSuffix ? "-LJ" : ""}`
+    : "";
+  const jobPreview = jobPrefix
+    ? `${jobPrefix}-${String(parseInt(jobNext || "1")).padStart(4, "0")}${jobDivSuffix ? "-LJ" : ""}`
+    : "";
+
+  if (!isAdmin) {
+    return (
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+        Numbering settings are admin-only.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4" data-testid="numbering-tab">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 p-3 flex gap-2 text-sm text-amber-800 dark:text-amber-300">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+        <span>Changes apply to future records only. Historical records are not renumbered. All changes are audit-logged.</span>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Quote / Document Numbering</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Controls the prefix for customer-facing document numbers (e.g. Q-0135, SE-0135).</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Prefix</Label>
+              <Input
+                value={quotePrefix}
+                onChange={(e) => setQuotePrefix(e.target.value)}
+                placeholder="Q"
+                className="w-24"
+                data-testid="input-quote-number-prefix"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex items-center gap-2 pb-1">
+                <Switch
+                  checked={quoteDivSuffix}
+                  onCheckedChange={setQuoteDivSuffix}
+                  data-testid="switch-quote-division-suffix"
+                />
+                <Label className="text-sm">Add division suffix (e.g. -LJ)</Label>
+              </div>
+            </div>
+          </div>
+          {quotePreview && (
+            <p className="text-xs text-muted-foreground">Preview: <strong>{quotePreview}</strong></p>
+          )}
+          <Separator />
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Next Quote Number</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              The next quote created will use this sequence number. Current next: <strong>{seqLoading ? "…" : quoteNext}</strong>
+            </p>
+            <div className="flex gap-2 items-center">
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={quoteNext}
+                onChange={(e) => setQuoteNext(e.target.value)}
+                className="w-32"
+                data-testid="input-quote-next-number"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={seqMutation.isPending}
+                onClick={() => handleSetNext("quote", quoteNext)}
+                data-testid="button-set-quote-next"
+              >
+                Set
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Job Numbering</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Controls the prefix for operational job numbers (e.g. J-0042).</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Prefix</Label>
+              <Input
+                value={jobPrefix}
+                onChange={(e) => setJobPrefix(e.target.value)}
+                placeholder="J"
+                className="w-24"
+                data-testid="input-job-number-prefix"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex items-center gap-2 pb-1">
+                <Switch
+                  checked={jobDivSuffix}
+                  onCheckedChange={setJobDivSuffix}
+                  data-testid="switch-job-division-suffix"
+                />
+                <Label className="text-sm">Add division suffix (e.g. -LJ)</Label>
+              </div>
+            </div>
+          </div>
+          {jobPreview && (
+            <p className="text-xs text-muted-foreground">Preview: <strong>{jobPreview}</strong></p>
+          )}
+          <Separator />
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Next Job Number</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              The next job created will use this sequence number. Current next: <strong>{seqLoading ? "…" : jobNext}</strong>
+            </p>
+            <div className="flex gap-2 items-center">
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={jobNext}
+                onChange={(e) => setJobNext(e.target.value)}
+                className="w-32"
+                data-testid="input-job-next-number"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={seqMutation.isPending}
+                onClick={() => handleSetNext("op_job", jobNext)}
+                data-testid="button-set-job-next"
+              >
+                Set
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button
+          onClick={() => prefixMutation.mutate()}
+          disabled={prefixMutation.isPending || orgLoading}
+          data-testid="button-save-numbering"
+        >
+          {prefixMutation.isPending ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+          ) : (
+            <><Save className="w-4 h-4 mr-2" /> Save Prefix Settings</>
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SystemModeTab() {
   const { toast } = useToast();
   const { resolvedMode: mode, isLoading } = useSystemMode();
@@ -1590,6 +1881,10 @@ export default function Settings() {
               <TabsTrigger value="application" data-testid="tab-application">Application</TabsTrigger>
               <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation</TabsTrigger>
               <TabsTrigger value="divisions" data-testid="tab-divisions">Divisions</TabsTrigger>
+              <TabsTrigger value="numbering" data-testid="tab-numbering">
+                <Hash className="w-3.5 h-3.5 mr-1.5" />
+                Numbering
+              </TabsTrigger>
               <TabsTrigger value="template" data-testid="tab-template">
                 <Palette className="w-3.5 h-3.5 mr-1.5" />
                 Template
@@ -1681,6 +1976,10 @@ export default function Settings() {
 
             <TabsContent value="divisions">
               <DivisionSettingsTab />
+            </TabsContent>
+
+            <TabsContent value="numbering">
+              <NumberingTab />
             </TabsContent>
 
             <TabsContent value="template">

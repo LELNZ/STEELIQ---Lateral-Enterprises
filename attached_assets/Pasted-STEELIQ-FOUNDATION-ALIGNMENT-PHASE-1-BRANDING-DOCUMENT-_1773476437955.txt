@@ -1,0 +1,477 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 1
+BRANDING + DOCUMENT LABELS + NUMBERING + ADMIN/SETTINGS STRUCTURE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these current truths:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- LJ estimating builder is active and must not be redesigned
+- job type presets are already persisted
+- schedule first-item-fit pagination is already implemented
+- archive/unarchive and system mode work already exist
+- quote -> operational job shell conversion exists
+- jobs are intended to be universal with division-owned filtering
+- invoice/Xero is not yet fully operational
+
+CRITICAL LJ RULE
+
+The current Lateral Joinery estimation builder must remain operationally unchanged.
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder in this phase.
+Do NOT abstract LJ-specific estimating behavior in this phase.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Implement a tightly scoped foundation alignment phase that:
+1. Cleans up visible branding
+2. Adds customer-facing document label controls for Quotes
+3. Adds numbering controls for quote/service-estimate and job numbering
+4. Separates Admin from Settings in the user-facing navigation and page structure
+5. Produces a truthful legacy usage inventory for /api/jobs vs /api/op-jobs
+6. Preserves the LJ estimation builder exactly
+
+This phase is about foundation cleanup and safe business controls.
+It is NOT a lifecycle redesign.
+It is NOT a division-engine redesign.
+It is NOT a contacts/accounts migration.
+It is NOT Xero integration.
+
+==================================================
+PART 1 — BRANDING CLEANUP
+==================================================
+
+Replace visible product branding "Pro-Quote" with the new platform brand:
+
+Primary product name:
+- STEELIQ
+
+Business name / sublabel:
+- configurable in Settings
+- initial target usage example: Lateral Enterprises
+
+Required behavior:
+- visible app header/sidebar/login branding should use STEELIQ
+- where appropriate, show optional configurable business sublabel/tagline underneath or beside it
+- do NOT perform a broad internal code-symbol rename just to change visible branding
+- this phase is for visible product branding cleanup, not a deep internal rename
+
+Settings requirement:
+Add a setting for business display name / business sublabel that can be edited by admin.
+Example:
+- product: STEELIQ
+- business display name: Lateral Enterprises
+
+Do NOT build a large theming/branding engine.
+Keep this minimal and safe.
+
+Likely files:
+- client app shell / sidebar / header / login related files
+- settings page
+- existing settings persistence files
+- any visible template/header components where branding is rendered
+
+==================================================
+PART 2 — CUSTOMER-FACING DOCUMENT LABEL CONTROL
+==================================================
+
+Keep internal system code and lifecycle terminology as "quote".
+
+Do NOT rename core system code from quote to service estimate.
+Do NOT do a deep find/replace.
+Do NOT redesign the lifecycle.
+
+Instead:
+Add a customer-facing document label setting that allows the business to change the outward-facing label used for quote documents.
+
+Examples of outward-facing label values:
+- Quote
+- Service Estimate
+- Proposal
+
+Initial expected use:
+- Service Estimate
+
+This label should drive customer-facing wording only where safe and appropriate, such as:
+- document headings in preview/PDF where customer-facing
+- relevant customer-facing UI labels
+- email subject/body defaults where quote documents are sent
+- list/detail headings where the label is explicitly customer-facing and does not create operator confusion
+
+Important:
+- internal routes, schema, business logic, and code terminology remain quote-based
+- preserve accepted quote history and rendering pipeline
+- do not create ambiguity between internal quote lifecycle and outward-facing label
+
+Add a concise help text in settings explaining:
+- internal system logic remains quote-based
+- customer-facing wording can be customized
+
+Likely files:
+- settings page
+- quote preview/document heading code
+- quote email subject/body defaults if currently centralized
+- customer-facing label display points
+- QuoteDocument / renderer only where headings/text are sourced, without redesigning pipeline
+
+==================================================
+PART 3 — NUMBERING CONTROLS
+==================================================
+
+Add a practical admin-only numbering control surface in Settings.
+
+Business requirement:
+The company has existing operational history and needs continuity when moving to this platform.
+
+Required controls:
+1. Quote/customer-facing document numbering settings
+2. Job numbering settings
+
+Use the existing internal quote lifecycle, but allow the customer-facing document number format to support service-estimate style formatting.
+
+Required quote numbering settings:
+- prefix, example: SE
+- next sequence number
+- optional division suffix toggle
+- preview example
+
+Required job numbering settings:
+- prefix
+- next sequence number
+- optional division suffix toggle if the current architecture supports safe display/generation without lifecycle risk
+- preview example
+
+Division suffix guidance:
+Use a shared global sequence with optional division suffix.
+Example:
+- SE-0135-LJ
+- SE-0136-LEL
+
+Important rules:
+- one shared numeric sequence across the company for now
+- do NOT introduce separate per-division counters in this phase
+- design the settings and persistence so future evolution remains possible
+- do NOT renumber historical issued records automatically
+- changing numbering settings affects future generated records only
+- any admin change to numbering settings must be auditable
+
+Required safeguards:
+- admin-only editing
+- warning/help text that changes apply to future records only
+- audit/activity log entry when numbering settings are changed
+- clear validation to prevent invalid empty/broken formats
+
+Required implementation detail:
+If current quote/job numbering logic is hardcoded, update only the minimal generation/configuration path needed to respect the new settings for future records.
+
+Do NOT redesign numbering architecture broadly.
+Do NOT migrate historical data.
+Do NOT break existing records.
+
+Likely files:
+- settings page
+- settings persistence/storage
+- quote number generation path
+- job number generation path
+- activity/audit logging path if available
+
+==================================================
+PART 4 — ADMIN VS SETTINGS STRUCTURE
+==================================================
+
+Implement a cleaner top-level structure:
+
+Settings:
+- business display name
+- document labels
+- numbering
+- existing operational/business settings that logically belong there
+
+Admin:
+- users
+- system controls already appropriate for admin
+- existing user management surface should move under Admin in the navigation model
+
+Required behavior:
+- create a clear top-level Admin area/tab/nav entry
+- move Users under Admin in the user-facing structure
+- keep Settings as business configuration
+- do NOT redesign auth
+- do NOT add granular permissions in this phase
+- do NOT broadly restructure unrelated pages
+
+Important:
+This is a navigation and page-structure cleanup, not a full administrative subsystem redesign.
+
+If there is already a settings page containing mixed admin/business controls:
+- separate the user-facing organization cleanly
+- preserve existing functionality
+
+Likely files:
+- sidebar/nav config
+- routes
+- users page location/entry point
+- settings page tabs/sections as needed
+
+==================================================
+PART 5 — LEGACY USAGE INVENTORY
+==================================================
+
+Produce a truthful handover inventory of:
+- where /api/jobs is still used
+- where /api/op-jobs is used
+- whether LJ estimate flows still depend on legacy /api/jobs
+- whether user-facing navigation/routes expose only the intended operational jobs experience
+
+This phase is NOT to merge or redesign jobs systems.
+This phase is only to document the current state truthfully so future cleanup can be planned safely.
+
+Required outcome:
+In the handover, include a specific subsection under Risks/limitations or Updated current system state that lists:
+- remaining legacy jobs usage points
+- operational jobs usage points
+- any user-facing confusion risk
+- whether legacy jobs can be safely deferred for a later phase
+
+Do NOT remove legacy jobs code unless it is provably dead and unreferenced and removing it is absolutely safe.
+If unsure, leave it and report it.
+
+==================================================
+PART 6 — UI LANGUAGE CLEANUP
+==================================================
+
+Clean up visible language so the platform looks intentional and enterprise-ready.
+
+Scope:
+- replace visible leftover Pro-Quote branding
+- use STEELIQ as product name
+- apply business display name where appropriate
+- use the configured customer-facing quote label where safe
+- reduce confusing mismatches in obvious user-facing labels
+
+Do NOT perform a broad terminology rewrite across the codebase.
+Do NOT destabilize operator flows.
+Do NOT relabel deeply technical/internal UI in ways that create confusion for current users.
+
+Goal:
+Cleaner outward-facing UI language with minimal architecture risk.
+
+==================================================
+NOT IN SCOPE
+==================================================
+
+Do NOT implement any of the following in this phase:
+- full Contacts module
+- full Accounts / Relationships model
+- Xero integration
+- invoice lifecycle redesign
+- granular permissions
+- per-division numbering counters
+- LJ estimator redesign
+- library redesign
+- LEL estimator
+- job architecture merge
+- broad dead-code deletion without proof of safety
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal settings persistence additions required for:
+  - business display name
+  - customer-facing quote label
+  - numbering settings
+  - optional division suffix toggle
+- minimal route/storage updates required to read/save those settings
+- minimal generation-path changes to use future numbering settings safely
+- minimal nav/route updates to expose Admin cleanly
+- audit logging for numbering setting changes
+
+Not allowed:
+- lifecycle redesign
+- broad schema refactor
+- removal of quote-based internal model
+- deep route/module restructuring
+- speculative cleanup
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal commercial lifecycle remains quote-based
+- customer-facing quote label is configurable without changing internal quote architecture
+- LJ estimation builder remains functionally unchanged
+- accepted quote history remains frozen unless safely reverted under allowed rules
+- jobs remain downstream consumers of accepted quote state
+- jobs remain division-owned
+- numbering changes affect future records only
+- Admin/Settings separation improves usability without changing permission architecture
+
+==================================================
+REQUIRED UI / SETTINGS SURFACES
+==================================================
+
+Settings must include a practical surface for:
+1. Product/business branding
+   - product name displayed as STEELIQ
+   - business display name editable
+2. Customer-facing document label
+   - editable label for quote documents
+3. Numbering
+   - quote/service-estimate prefix
+   - quote/service-estimate next number
+   - quote/service-estimate optional division suffix toggle
+   - job prefix
+   - job next number
+   - job optional division suffix toggle if safely supported
+   - examples/previews
+   - save action
+   - help/warning text
+4. Admin navigation
+   - Users accessible under Admin
+
+Do not mark this phase complete if the settings exist only in backend without a usable admin UI.
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. LJ estimate builder still creates/edits estimates correctly
+2. Quote generation from LJ estimate flow still works
+3. Quote preview still works through QuoteDocument -> QuoteRenderModel -> Preview/PDF
+4. PDF export still works through the existing pipeline
+5. Accepted quote lifecycle behavior is unchanged except where previously stabilized
+6. Existing quotes/jobs remain intact and readable
+7. Visible product branding is now STEELIQ
+8. Business display name can be saved and displayed
+9. Customer-facing quote label can be saved and is reflected in the intended customer-facing surfaces
+10. Numbering settings can be saved by admin
+11. Future quote numbering uses the configured format
+12. Future job numbering uses the configured format
+13. Historical records are not renumbered
+14. Users are now accessed under Admin in the navigation structure
+15. No auth/role behavior was broken by Admin/Settings separation
+16. TypeScript passes
+17. Build/runtime checks pass
+
+Do not claim completion if:
+- branding changed but settings surface is missing
+- numbering settings save but generation logic ignores them
+- historical records were mutated
+- LJ estimate builder behavior changed
+- Admin nav exists but Users/settings access is broken
+- document label setting exists but does not affect intended customer-facing surfaces
+- legacy jobs usage was not truthfully inventoried
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- whether internal quote architecture remains unchanged
+- whether LJ estimation builder was preserved unchanged
+- how future quote numbering now works
+- how future job numbering now works
+- whether historical record numbering was preserved
+- where /api/jobs is still used versus /api/op-jobs
+- whether any visible legacy Pro-Quote branding remains
