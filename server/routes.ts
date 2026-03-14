@@ -1226,12 +1226,12 @@ export async function registerRoutes(
     handleType: z.string().optional(),
     wallThickness: z.number().min(0).max(500).optional(),
     windZone: z.string().optional(),
-  }).strict();
+  });
 
   const jobTypePresetsSchema = z.object({
     renovation: presetDefaultsSchema.optional(),
     new_build: presetDefaultsSchema.optional(),
-  }).strict();
+  });
 
   const divisionPatchSchema = z.object({
     tradingName: z.string().optional().nullable(),
@@ -1264,6 +1264,61 @@ export async function registerRoutes(
       res.status(400).json({ error: e.message });
     }
   });
+
+  // ─── System Mode ──────────────────────────────────────────────────────────
+
+  const VALID_SYSTEM_MODES = ["development", "demo", "production"] as const;
+  type SystemMode = typeof VALID_SYSTEM_MODES[number];
+
+  async function getSystemMode(): Promise<SystemMode> {
+    const org = await storage.getOrgSettings();
+    const mode = (org?.systemMode ?? "development") as SystemMode;
+    return VALID_SYSTEM_MODES.includes(mode) ? mode : "development";
+  }
+
+  function requireNonProductionMode(res: any, mode: SystemMode): boolean {
+    if (mode === "production") {
+      res.status(403).json({ error: "This action is disabled in production mode." });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/settings/system-mode", async (_req, res) => {
+    try {
+      const mode = await getSystemMode();
+      res.json({ systemMode: mode });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/settings/system-mode", async (req, res) => {
+    try {
+      const reqUser = (req as any).user;
+      if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { systemMode } = z.object({
+        systemMode: z.enum(VALID_SYSTEM_MODES),
+      }).parse(req.body);
+
+      const updated = await storage.upsertOrgSettings({ systemMode } as any);
+      await storage.createAuditLog({
+        entityType: "system",
+        entityId: "system-mode",
+        action: "system_mode_changed",
+        performedByUserId: reqUser.id,
+        metadataJson: { newMode: systemMode },
+      });
+      res.json({ systemMode: (updated as any).systemMode ?? systemMode });
+    } catch (e: any) {
+      if (e instanceof z.ZodError) return res.status(400).json({ error: "Invalid system mode", details: e.errors });
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
 
   app.get("/api/spec-dictionary", async (req, res) => {
     try {
@@ -1980,9 +2035,9 @@ export async function registerRoutes(
       }
 
       const existingJob = await storage.getOpJobByQuoteId(req.params.id);
-      if (existingJob) {
+      if (existingJob && existingJob.status !== "cancelled") {
         return res.status(422).json({
-          error: "This quote cannot be reverted because it has been converted to a job.",
+          error: `This quote cannot be reverted because it has an active job (${existingJob.jobNumber}). Cancel the job first, then revert.`,
         });
       }
 
@@ -1993,6 +2048,25 @@ export async function registerRoutes(
         acceptedValue: null,
         acceptedRevisionId: null,
       });
+
+      const userId = (req as any).user?.id;
+      await storage.createAuditLog({
+        entityType: "quote",
+        entityId: req.params.id,
+        action: "reverted_to_draft",
+        performedByUserId: userId,
+        metadataJson: { hadCancelledJob: !!existingJob, linkedJobId: existingJob?.id ?? null },
+      });
+
+      if (existingJob) {
+        await storage.createAuditLog({
+          entityType: "op_job",
+          entityId: existingJob.id,
+          action: "linked_quote_reverted_to_draft",
+          performedByUserId: userId,
+          metadataJson: { quoteId: req.params.id },
+        });
+      }
 
       return res.json(updated);
     } catch (e: any) {
@@ -2108,6 +2182,8 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
+      const mode = await getSystemMode();
+      if (!requireNonProductionMode(res, mode)) return;
 
       const demoQuotes = await storage.getDemoQuotes();
       const demoJobs = await storage.getDemoOpJobs();

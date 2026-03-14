@@ -1,0 +1,510 @@
+STEELIQ STABILISATION + ENVIRONMENT SAFETY + JOBS ACCESS PHASE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+The following current-state assumptions are already established and must be preserved:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- job type presets are already persisted
+- schedule first-item-fit pagination is already implemented
+- hardware consolidation is still partial because Wanz Bar remains outside the Hardware tab
+- quote -> operational job shell conversion exists
+- archive/unarchive and demo/test cleanup foundations already exist in part
+- some division-aware access exists, but jobs division scoping is still incomplete
+- invoice/Xero is not yet fully operational
+
+DO NOT redesign these areas.
+Implement only the requested stabilisation and safety work.
+
+==================================================
+PLANNED TASKS FOR THIS PHASE
+==================================================
+
+Implement the following exact deliverables:
+
+1. Fix quote revert-to-draft logic so a cancelled job no longer blocks safe revert.
+2. Add explicit system modes:
+   - development
+   - demo
+   - production
+3. Add minimum admin UI to view and change system mode.
+4. Gate demo/test/reset/destructive admin tools by system mode in both UI and backend.
+5. Add a controlled admin “Reset Demo Environment” tool.
+6. Reset logic must preserve the one live commercial record:
+   - Quote Q-0135
+   - its connected estimate
+   - linked customer
+   - linked project
+   - quote/estimate numbering continuity
+7. Keep Jobs as one universal top-level module, but enforce division-owned filtering/access consistently across jobs routes and job UI surfaces.
+8. Fix the settings save issue only as far as necessary so the system mode and existing settings can save without breaking persisted jobTypePresets.
+9. Preserve full auditability and truthful handover reporting.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+Do not redesign this.
+Do not create a parallel rendering system.
+Do not bypass this flow for “faster” implementation.
+
+==================================================
+PART 1 — FIX QUOTE REVERT LOGIC
+==================================================
+
+Problem:
+A quote that has been converted to a job cannot currently be reverted to draft even when the linked job has been cancelled.
+
+Current incorrect behavior:
+- route blocks revert if any linked op-job exists
+
+Required correct behavior:
+Allow revert-to-draft when:
+- quote status is accepted
+- no dependent invoices exist
+- linked op-job exists but its status is cancelled
+
+Still block revert when:
+- an active/non-cancelled job exists
+- any dependent invoice exists
+
+Implementation requirements:
+- Preserve accepted quote history and audit trail
+- Do NOT delete the cancelled job
+- Do NOT unlink the cancelled job
+- Do NOT mutate historical accepted quote snapshot state
+- Keep the cancelled job record for auditability
+- Revert should only change the quote back to draft under allowed rules
+
+Add explicit audit entries:
+- on quote: "Quote reverted to draft after cancelled job."
+- on job if appropriate: "Linked quote reverted to draft after job cancellation."
+
+Update UI copy in quote detail so staff clearly understand:
+- revert is blocked if active job exists
+- revert is allowed after job cancellation if no invoices exist
+
+Likely files:
+- server/routes.ts
+- server/quote-lifecycle.ts
+- server/storage.ts
+- client/src/pages/quote-detail.tsx
+
+==================================================
+PART 2 — SYSTEM MODES
+==================================================
+
+Add an explicit system mode setting with exactly these values:
+- development
+- demo
+- production
+
+Architectural intent:
+- this is a small environment safety/control layer
+- not a new workflow owner
+- not a broad feature-flag framework
+- not a redesign of settings architecture
+
+Persist system mode in the smallest safe way that fits the existing settings/admin pattern.
+Prefer existing app/org/settings persistence if present.
+If a minimal schema addition is required, keep it tightly scoped.
+
+Required backend capability:
+- read current system mode
+- update current system mode (admin only)
+
+Required frontend/admin capability:
+- show current mode
+- allow admin to change mode
+- save successfully through the existing settings/admin flow
+- show concise explanatory help text:
+  - development = internal build/testing
+  - demo = sales/demo/training environment
+  - production = live operational use
+
+When switching into production, show a clear warning that demo/reset tools will be disabled.
+
+Likely files:
+- shared/schema.ts only if strictly required
+- server/routes.ts
+- server/storage.ts
+- client/src/pages/settings.tsx
+
+==================================================
+PART 3 — SYSTEM MODE GUARD RAILS
+==================================================
+
+Use system mode to control dangerous demo/test/reset tooling.
+
+Required behavior by mode:
+
+development:
+- demo/test cleanup tools visible
+- reset demo environment tool visible
+- demo/test marking tools allowed
+
+demo:
+- demo/test cleanup tools visible
+- reset demo environment tool visible
+- demo/test marking tools allowed
+- destructive actions require confirmation
+
+production:
+- reset demo environment tool hidden or disabled
+- bulk demo cleanup hidden or disabled
+- demo/test marking tools hidden or disabled
+- destructive demo/test admin routes must reject execution even if called directly
+
+Important:
+- enforce both in UI and backend
+- backend must not rely on hidden buttons
+- do not block normal live workflows in production
+- this is an environment-safety layer only
+
+Likely impacted areas:
+- users/admin page demo cleanup section
+- quote detail demo/test flag controls
+- op-job detail demo/test flag controls
+- any existing archive/demo cleanup admin routes
+
+==================================================
+PART 4 — RESET DEMO ENVIRONMENT
+==================================================
+
+Add an admin-only controlled reset tool to prepare the environment for a new company onboarding while preserving the single live record set.
+
+Goal:
+Delete or archive all demo/test/non-live data while preserving:
+- Quote Q-0135
+- its connected estimate
+- its linked customer
+- its linked project
+
+Important:
+- keep quote number Q-0135
+- keep estimate numbering continuity
+- keep next numbering moving forward
+- do NOT reset counters/sequences back to 1
+- next quote should continue from Q-0136
+- preserve downstream numbering continuity for jobs/invoices where relevant
+
+This is a controlled environment reset, not a historical rewrite.
+
+Required behavior:
+- admin-only
+- available only in development/demo mode
+- not executable in production mode
+- strong confirmation modal/dialog required
+- confirmation text must clearly state what is preserved
+
+Delete/archive scope:
+- all demo/test records
+- all non-live quotes other than preserved quote Q-0135
+- all non-live estimates other than the estimate linked to Q-0135
+- all non-live op-jobs
+- all non-live customers/projects except those required by Q-0135
+- any orphaned demo/test supporting records created for testing, where safe
+
+Do NOT delete or corrupt:
+- Q-0135
+- connected estimate
+- required customer/project references
+- numbering continuity
+- historical auditability of the kept record set
+
+Add system/audit log entry:
+- "Admin demo environment reset executed."
+
+Required admin UI:
+Location:
+- existing admin/users/demo cleanup surface or the most appropriate existing admin area
+Controls:
+- "Reset Demo Environment"
+Confirmation text:
+- "This will permanently remove demo and test data while preserving Q-0135 and its linked live records. Numbering will continue from the current sequence."
+Buttons:
+- Cancel
+- Confirm Reset
+
+After execution, UI should clearly show the remaining live set.
+
+Likely files:
+- server/routes.ts
+- server/storage.ts
+- client/src/pages/users.tsx
+
+==================================================
+PART 5 — JOBS ARCHITECTURE ALIGNMENT
+==================================================
+
+Architectural decision for SteelIQ in this phase:
+
+Jobs remain:
+- one universal top-level module
+- division-owned records
+- division-filtered access
+
+Do NOT create separate job modules per division.
+Do NOT split navigation into per-division Jobs apps.
+Do NOT redesign jobs architecture.
+
+Correct intended model:
+- one Jobs section
+- every job has division ownership
+- lists are filtered by user division access
+- detail routes enforce division access
+- actions enforce division access
+- admins/owners can see broader scope as allowed by current role model
+- division-specific workflows can later live inside job detail tabs/sections, but not as separate top-level jobs systems
+
+Review current jobs implementation, especially active operational jobs routes.
+If both legacy /api/jobs and newer /api/op-jobs exist:
+- do NOT redesign that duality in this phase
+- preserve current structure
+- truthfully report any remaining duality in handover
+- apply consistent division-safe behavior to the active operational jobs flow now
+
+Enforce division-aware filtering and access for:
+- jobs list
+- job detail
+- archive/unarchive
+- restore
+- any current mutable job actions
+
+Reuse the existing division-filter pattern already used in quote/invoice routes where possible.
+Do NOT redesign auth.
+Do NOT introduce granular permissions in this phase.
+
+Likely files:
+- server/routes.ts
+- server/storage.ts
+- client/src/pages/op-jobs-list.tsx
+- client/src/pages/op-job-detail.tsx
+
+==================================================
+PART 6 — SETTINGS SAVE FIX
+==================================================
+
+There is a current settings save failure around division settings / jobTypePresets payload validation.
+
+Observed issue:
+- saving settings fails with invalid division settings / jobTypePresets shape mismatch
+
+Required scope:
+Fix only what is necessary so:
+- existing persisted job type presets continue to load/save correctly
+- new system mode setting can save successfully
+- current settings page remains operational
+
+Do NOT redesign the whole settings payload model.
+Do NOT restructure settings architecture broadly.
+Make the smallest safe fix required.
+
+Likely files:
+- server/routes.ts
+- shared/schema.ts if strictly required
+- client/src/pages/settings.tsx
+- any settings validation helpers/storage code
+
+==================================================
+BEHAVIOURAL REQUIREMENTS
+==================================================
+
+After this phase:
+
+Quote revert:
+- accepted quote can revert to draft if linked job is cancelled and no invoices exist
+- accepted quote cannot revert if active job exists
+- accepted quote cannot revert if invoice exists
+
+System mode:
+- exactly three modes: development, demo, production
+- visible and changeable by admin through UI
+- production blocks demo/reset/destructive test utilities in backend and UI
+- development/demo allow controlled cleanup/reset/admin demo tooling
+
+Demo reset:
+- preserves Q-0135 and its linked live dependencies
+- clears the rest of demo/test/non-live environment safely
+- does not reset numbering backward
+
+Jobs:
+- one universal Jobs module
+- division-owned records
+- division-filtered visibility/access
+- no separate per-division Jobs module architecture
+
+Settings:
+- system mode can save
+- jobTypePresets persistence is not broken
+- current settings page works
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal settings persistence required for systemMode
+- minimal route additions/updates required for reading/updating systemMode
+- minimal backend route guards on demo/reset tooling
+- minimal job division-access enforcement updates
+- minimal reset-demo-data route if required
+- minimal settings validation fix
+
+Not allowed:
+- redesign of lifecycle
+- broad permissions rewrite
+- new unrelated endpoints
+- schema creep outside this phase
+- speculative cleanup or refactors
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- accepted quote history remains frozen unless safely reverted under allowed rules
+- jobs remain downstream consumers of accepted quote state
+- jobs do not mutate accepted quote history
+- dashboards remain read layers
+- customers/projects remain shared records
+- jobs remain division-owned
+- system mode is only an environment safety/control layer
+- no parallel rendering/document model is introduced
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. Quote preview still works through QuoteDocument -> QuoteRenderModel -> Preview/PDF
+2. PDF export still works through the existing pipeline
+3. Accepted quote revert is allowed when linked op-job status is cancelled and no invoices exist
+4. Accepted quote revert is still blocked when an active job exists
+5. Accepted quote revert is still blocked when dependent invoices exist
+6. Settings page saves successfully with existing jobTypePresets intact
+7. System mode can be changed by admin
+8. Demo/reset tools are blocked in production mode at backend and UI level
+9. Demo/reset tools remain available in development/demo mode
+10. Reset Demo Environment preserves Q-0135 and its linked estimate/customer/project
+11. Numbering continues correctly after reset
+12. Jobs list respects division access
+13. Job detail respects division access
+14. Job archive/unarchive respects division access
+15. TypeScript passes
+16. Build/runtime checks pass
+
+Do not claim completion if:
+- backend guard rails exist but admin UI is missing
+- UI exists but backend guard rails are not enforced
+- reset tool exists but Q-0135 preservation is unreliable
+- settings save still breaks jobTypePresets
+- jobs remain cross-division accessible where they should not be
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- whether Jobs is now implemented as a universal module with division-owned filtering
+- whether any legacy /api/jobs vs /api/op-jobs duality still remains
+- whether system mode is fully enforced in backend as well as UI
+- whether Q-0135 preservation and numbering continuity were verified
