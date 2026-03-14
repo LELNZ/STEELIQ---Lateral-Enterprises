@@ -82,6 +82,46 @@ export async function downloadPng(svgElement: SVGSVGElement, filename: string): 
   downloadBlob(blob, safeName);
 }
 
+export async function compressImageToBlob(file: File, maxLongEdge = 1600, quality = 0.82): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width;
+        let h = img.height;
+        const longEdge = Math.max(w, h);
+        if (longEdge > maxLongEdge) {
+          const scale = maxLongEdge / longEdge;
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Failed to get canvas context"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Failed to create JPEG blob"));
+          },
+          "image/jpeg",
+          quality,
+        );
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function compressImage(file: File, maxWidth = 1200, quality = 0.8): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

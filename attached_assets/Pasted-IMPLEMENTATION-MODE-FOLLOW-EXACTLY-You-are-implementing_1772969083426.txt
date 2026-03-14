@@ -1,0 +1,252 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create an unrelated second content model for preview vs PDF.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/storage support strictly required for photo persistence if needed.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/storage changes made
+4. Any migration/backfill actions performed
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Do a focused two-part pass:
+
+PART A:
+Fix customer photo persistence by moving photo storage off the volatile Replit filesystem and into persistent database-backed storage.
+
+PART B:
+Introduce a shared presentation template layer so the Customer Quote Preview and the generated PDF are driven by the same presentation structure and look materially closer to each other.
+
+This is NOT a user-facing template builder.
+This is a locked internal template alignment pass only.
+
+
+--------------------------------------------------
+PART A — PHOTO PERSISTENCE FIX
+--------------------------------------------------
+
+T031 — Persist customer photo binaries in PostgreSQL instead of volatile filesystem
+
+Problem:
+Photo metadata persists in DB, but photo files stored in uploads/item-photos/ do not survive reliably in Replit.
+Result:
+- drawings survive because they are regenerated
+- photos disappear because they are stored once and lost from filesystem
+- quotes/previews/PDFs then show broken/missing images
+
+Required implementation:
+
+1. Add the minimum required persistent storage for uploaded customer/item photos in PostgreSQL.
+   Preferred implementation:
+   - separate table for item photo binaries
+   Suggested columns:
+   • key (primary key / stable lookup key)
+   • data (binary / bytea)
+   • mimeType
+   • createdAt
+   Optional only if truly needed:
+   • sizeBytes
+
+2. Keep existing photo metadata/key usage as stable as possible.
+   The QuoteDocument / Snapshot / Renderer pipeline should continue referring to photo keys, not be redesigned.
+
+3. Update the photo upload flow so uploaded photos are persisted to PostgreSQL-backed storage.
+   Filesystem storage may be removed or left as non-primary fallback, but DB must be the source of truth.
+
+4. Update the photo serving route to read from DB-backed storage.
+
+5. Update any delete/cleanup logic so DB-backed photo blobs are deleted only when appropriate and not while still referenced.
+
+Acceptance criteria:
+- newly uploaded customer/item photos persist across Replit restarts/rebuilds
+- quote preview can still render photos
+- PDF export can still embed photos
+- no quote lifecycle redesign is introduced
+
+
+T032 — Preserve compatibility with existing quote/photo references
+
+Problem:
+Existing quote/snapshot/photo references already depend on photo keys.
+
+Required implementation:
+
+1. Do NOT redesign the photo reference model if avoidable.
+2. Existing metadata structures should continue to work with photo keys.
+3. Migrate serving/storage behind the existing key abstraction.
+
+Acceptance criteria:
+- preview and PDF continue to resolve photos by key
+- minimal ripple effects through quote pipeline
+
+
+T033 — Backfill / transition behavior
+
+Problem:
+Some existing photo keys refer to missing files on disk.
+
+Required implementation:
+
+1. Add the smallest safe transition handling.
+2. If an old photo file still exists on disk and is not yet in DB storage, allow a transition path if practical.
+3. If a file is already gone, fail gracefully.
+4. Do NOT over-engineer a historical recovery system.
+
+Acceptance criteria:
+- system handles mixed legacy state safely
+- no crashes on old broken photo references
+- new uploads use persistent storage going forward
+
+
+--------------------------------------------------
+PART B — SHARED PREVIEW / PDF TEMPLATE ALIGNMENT
+--------------------------------------------------
+
+T034 — Introduce a shared locked presentation template layer
+
+Problem:
+Customer Quote Preview and generated PDF currently use the same source data but different final layout execution, so they look materially different.
+
+Required implementation:
+
+1. Introduce a shared internal presentation template definition that both Preview and PDF can consume.
+2. This is NOT a template builder.
+3. This is a single locked system template for now.
+
+The shared template should define, at minimum:
+- section ordering
+- section presence/visibility rules
+- major header composition
+- customer/project info block structure
+- totals block structure
+- terms/exclusions/payment block structure
+- schedule item card structure
+- drawing/photo placement rules
+- key typography/spacing intent
+- acceptance block structure
+
+4. Keep it implementation-friendly and explicit.
+   Example:
+   - shared config object / template module
+   - small presentation primitives
+   - section composer
+   Use the smallest safe structure that improves alignment.
+
+Acceptance criteria:
+- preview and PDF are clearly driven by the same presentation structure
+- no user-facing template builder is introduced
+- template remains locked/system-defined
+
+
+T035 — Align preview rendering with the PDF presentation structure
+
+Problem:
+The PDF now looks more controlled than the preview; the preview needs to move closer to the document layout.
+
+Required implementation:
+
+1. Refactor Customer Quote Preview so it consumes the shared presentation template.
+2. Bring preview materially closer to PDF in:
+   - section order
+   - hierarchy
+   - spacing intent
+   - card/group structure
+   - item schedule layout
+   - image/photo placement
+   - acceptance block positioning
+
+3. Do NOT make preview pretend to be paginated like a PDF if that adds unnecessary complexity.
+   It can still be a scrollable screen document, but should look like the same document family.
+
+Acceptance criteria:
+- preview looks materially closer to exported PDF
+- preview is clearly a screen version of the same document
+
+
+T036 — Align PDF engine with the shared presentation template
+
+Problem:
+The PDF engine should not drift away from preview.
+
+Required implementation:
+
+1. Refactor the PDF engine to consume the same shared presentation template rules where practical.
+2. Keep PDF-specific pagination/layout logic where needed, but base section structure and presentation choices on the shared template.
+3. Do NOT create a separate unrelated visual language for PDF.
+
+Acceptance criteria:
+- preview and PDF remain aligned in document structure
+- PDF keeps its controlled pagination while sharing the same presentation intent
+
+
+T037 — Keep this pass tightly scoped
+
+Do NOT:
+- build a user-editable template builder
+- add multiple template variants
+- redesign the full theme system
+- add customer portal/email logic
+- redesign lifecycle
+- add speculative future configuration systems
+- rebuild the entire renderer stack from scratch
+
+This is a focused persistence + locked-template alignment pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Customer photos are stored in persistent DB-backed storage and survive Replit restarts/rebuilds.
+2. Preview and PDF both continue using the existing QuoteDocument / QuoteRenderer pipeline.
+3. A single locked shared presentation template now drives both preview and PDF structure.
+4. The Customer Quote Preview looks materially closer to the generated PDF.
+5. The generated PDF remains a true document-engine export, not a snapshot.
+
+
+END OF IMPLEMENTATION

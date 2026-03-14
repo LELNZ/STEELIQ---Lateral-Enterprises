@@ -1,0 +1,82 @@
+Bug: Saving a job fails with 400 invalid_type: Expected string, received undefined at path ["config","id"].
+
+Confirmed by shared/schema.ts
+
+quoteItemSchema requires id: z.string() (no default, not optional).
+
+insertQuoteItemSchema = quoteItemSchema.omit({ id: true }), so form data never contains id.
+
+job_items.config is jsonb().$type<QuoteItem>() so API expects full QuoteItem including id.
+
+Where the id is lost in client/src/pages/quote-builder.tsx
+
+editItem() strips id before form.reset():
+
+const { id, ...rest } = iwp.item;
+form.reset(rest);
+
+In onSubmit() edit branch, we replace state with itemWithWeight built from InsertQuoteItem (no id):
+
+setItems(items.map(iwp => iwp.uiId === editingId ? { ...iwp, item: itemWithWeight } : iwp))
+
+=> edited item in state becomes { id: undefined, ... } and next save posts config.id = undefined.
+
+Fix requirements
+
+Keep the existing uiId solution exactly (React keys + identity checks must stay on uiId)
+
+Do NOT overwrite uiId
+
+Ensure every items[i].item has a valid string id at all times (especially after edits and on load)
+
+Implementation steps
+
+Add helper in quote-builder.tsx:
+
+function ensureConfigId(config: any): QuoteItem {
+  return { ...config, id: config?.id ?? crypto.randomUUID() };
+}
+
+Load path (existingJob useEffect): ensure loaded configs always have id:
+
+Change:
+
+item: ji.config as QuoteItem
+
+To:
+
+item: ensureConfigId(ji.config as QuoteItem)
+
+Edit submit path: preserve existing item.id when updating
+
+In onSubmit() when editingId is set, do not replace with itemWithWeight directly.
+
+Instead, carry over the existing iwp.item.id:
+
+if (editingId) {
+  setItems(items.map((iwp) => {
+    if (iwp.uiId !== editingId) return iwp;
+    const preservedId = iwp.item.id;
+    return { ...iwp, item: ensureConfigId({ ...itemWithWeight, id: preservedId }) };
+  }));
+  setEditingId(null);
+}
+
+Defensive save (optional but recommended): normalize before POST loop in saveJob():
+
+const normalized = items.map(iwp => ({ ...iwp, item: ensureConfigId(iwp.item) }));
+// use normalized[i].item as config
+
+Acceptance
+
+Create item → Save Job succeeds
+
+Edit item → Save Job succeeds
+
+Create then immediately edit before saving → Save Job succeeds
+
+Legacy jobs with missing config.id → Save Job succeeds (id auto-generated)
+
+No regression to uiId / no duplicate React keys
+
+No estimator/costing regressions

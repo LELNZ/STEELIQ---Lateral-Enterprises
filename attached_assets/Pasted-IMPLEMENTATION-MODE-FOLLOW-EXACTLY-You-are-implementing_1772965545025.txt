@@ -1,0 +1,213 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add new endpoints unless explicitly instructed.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any print/layout control changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Stabilize quote printing for Monday use.
+
+Current problem:
+- The customer preview looks better than the browser print result
+- Print from the quote page and print from the customer preview do not behave consistently
+- Browser print preview is not producing a controlled A4-style customer document
+- The customer preview print path appears constrained by scroll containers / layout wrappers
+- Only page 1 is reliably visible from one print entry path
+
+This pass is ONLY for print correctness and print control.
+It is NOT a full visual redesign.
+
+
+--------------------------------------------------
+T015 — Establish a single supported print entry point
+--------------------------------------------------
+
+Problem:
+There appear to be multiple print paths with inconsistent results.
+
+Required implementation:
+
+1. Identify all current print actions related to quotes.
+   This includes:
+   - print from quote detail page
+   - print from customer preview page
+   - any other quote print buttons or print handlers
+
+2. Choose one supported print path for Monday:
+   Preferred path:
+   - Customer Quote Preview page print action
+
+3. Make behavior consistent:
+   - if quote detail page has a print button that produces a different/worse result, either:
+     • remove it for now, OR
+     • redirect it to the supported customer preview print flow
+   Use the smallest safe implementation.
+
+Acceptance criteria:
+- There is one clearly supported print behavior for customer-facing quotes
+- Users are not exposed to two conflicting print results
+
+
+--------------------------------------------------
+T016 — Make customer quote print output A4-friendly and browser-print-safe
+--------------------------------------------------
+
+Problem:
+The browser print output is not matching the preview and is not producing a clean professional document.
+
+Required implementation:
+
+1. Add or refine print-specific styling for the customer quote preview.
+
+2. Ensure print uses a controlled A4-style layout as closely as browser print allows:
+   - portrait
+   - sensible margins
+   - clean printable width
+   - no clipping
+   - no app-shell chrome in output
+
+3. Add `@media print` rules to:
+   - hide app navigation / sidebar / toolbars / non-print UI
+   - hide snapshot banners or controls that should not appear in final printed output unless intentionally desired
+   - ensure only the quote document content is printed
+
+4. Add `@page` rules if appropriate and supported:
+   - size: A4
+   - sensible margins
+
+Acceptance criteria:
+- Print preview is clearly closer to an A4 customer document
+- Non-document UI is removed from print
+- Customer-facing print output is cleaner and more controlled
+
+
+--------------------------------------------------
+T017 — Remove print-breaking scroll/container constraints
+--------------------------------------------------
+
+Problem:
+Scrollable wrappers and fixed-height containers can cause browser print to capture only part of the document or break pagination.
+
+Required implementation:
+
+1. Inspect the customer preview layout for:
+   - overflow: auto
+   - overflow: scroll
+   - fixed heights
+   - sticky wrappers
+   - viewport-bound containers
+
+2. In print mode, override those constraints so the full quote document can flow naturally across pages:
+   - overflow becomes visible
+   - height becomes auto
+   - sticky/fixed positioning is neutralized where necessary
+
+3. Ensure all quote pages/content can be reached in browser print preview, not just page 1.
+
+Acceptance criteria:
+- Browser print preview can access all pages of the quote
+- No major content disappears because of scroll-container constraints
+
+
+--------------------------------------------------
+T018 — Add page-break control for customer quote sections
+--------------------------------------------------
+
+Problem:
+Browser print can split sections awkwardly, making the quote look unprofessional.
+
+Required implementation:
+
+1. Add print-aware page-break handling for major quote structures where feasible:
+   - quote summary block
+   - terms/exclusions sections
+   - item cards / schedule items
+   - media/image blocks where practical
+
+2. Use conservative rules:
+   - avoid breaking inside critical cards/sections where possible
+   - avoid over-constraining the browser so hard that pagination fails
+
+3. Prefer small safe rules over an over-engineered print system.
+
+Acceptance criteria:
+- Major sections are less likely to split awkwardly
+- Print pagination is more readable and professional
+
+
+--------------------------------------------------
+T019 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- redesign the entire customer quote styling system
+- add a new PDF rendering engine
+- implement server-side PDF generation
+- redesign quote renderer architecture
+- add new lifecycle logic
+- add theme systems
+- perform a broad visual redesign
+
+This is a print-stabilization pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. There is one clear supported print flow for customer quotes.
+2. Print from customer preview produces a much cleaner A4-style browser print result.
+3. The full quote can be reached in browser print preview across all pages.
+4. Print output is closer to the on-screen customer preview and no longer clearly broken by scroll/layout constraints.
+5. Monday users can reliably use:
+   Estimate → Exec Summary → Quote → Customer Preview → Print / Save as PDF
+
+
+END OF IMPLEMENTATION

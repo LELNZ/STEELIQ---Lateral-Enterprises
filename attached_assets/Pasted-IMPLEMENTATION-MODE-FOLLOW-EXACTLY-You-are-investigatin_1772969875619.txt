@@ -1,0 +1,75 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are investigating a scoped quote item duplication bug in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT redesign architecture unless a concrete root cause proves it is necessary.
+2. Do NOT add new schema fields, endpoints, or workflows unless explicitly instructed.
+3. Do NOT guess. Inspect the exact item counts through the pipeline.
+4. Compare the item count at each stage from estimate to PDF.
+5. Preserve Quote/Revision/Snapshot semantics.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Exact quote / revision inspected
+2. Item count in source estimate
+3. Item count in revision snapshot
+4. Item count in QuoteDocumentModel
+5. Item count in QuoteRenderModel
+6. Item count rendered into PDF
+7. Exact stage where duplication begins
+8. Root cause category:
+   - snapshot duplication
+   - revision update merge bug
+   - QuoteDocument build bug
+   - QuoteRenderer build bug
+   - PDF engine loop bug
+   - other
+9. Files inspected
+10. Files changed
+11. Confirmation architecture guards were preserved
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+Objective:
+Find and fix the bug where updating a quote with photos causes the quote item list to double.
+
+Context:
+A generated PDF for quote Q-0127 shows 16 schedule items instead of the expected 8.
+The duplication is systematic: item configurations appear twice in sequence after updating the quote.
+
+Required tasks:
+1. Inspect the exact quote/revision that produced the duplicated PDF.
+2. Trace item counts through:
+   - estimate source data
+   - quote revision snapshot
+   - QuoteDocumentModel
+   - QuoteRenderModel
+   - PDF generation loop
+3. Identify the exact stage where the count doubles.
+4. Fix the duplication with the smallest safe change.
+5. Confirm that updating a quote with photos does not duplicate schedule items.
+6. Test both:
+   - quote preview
+   - exported PDF
+7. Do not redesign the quote lifecycle or rendering architecture.
+
+Acceptance criteria:
+- updated quote has the correct item count
+- preview and PDF match the correct count
+- adding photos does not duplicate schedule items
+- no regressions to drawings, photos, totals, or terms

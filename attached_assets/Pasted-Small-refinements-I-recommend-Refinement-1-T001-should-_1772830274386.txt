@@ -1,0 +1,87 @@
+Small refinements I recommend
+Refinement 1 — T001 should explicitly avoid touching other pages’ scroll behavior
+
+Add one sentence:
+
+Do not make any shell-level scroll changes that alter normal scrolling on Jobs, Quotes, Library, or Settings unless Quote Builder still has a proven issue after the h-full fix.
+
+This prevents unnecessary experimentation in App.tsx.
+
+Refinement 2 — T002 is really a verification task, not a redesign task
+
+That is good, but I would tighten the wording slightly:
+
+Keep the existing ScrollArea only if it remains the single scroll container for the Config tab after T001. Do not add additional scroll wrappers.
+
+That helps prevent accidental nesting.
+
+Refinement 3 — T005 should avoid overcommitting to example strings
+
+The wording is mostly good now, but I’d tighten one part:
+
+Instead of:
+
+e.g., "Clear" if it exists
+
+Use:
+
+use the closest existing option value already available through the current app/library option sets; do not invent fallback keys.
+
+Because "Clear" alone may not be the real stored value.
+
+Refinement 4 — T006 should explicitly say wall thickness 140 is the only guaranteed new-build override for now
+
+That avoids the agent trying to “guess” other new build defaults.
+
+Suggested wording:
+
+For Phase 1, New Build only guarantees wallThickness: 140; all other fields can continue using current standard defaults unless a reliable existing default already exists.
+
+Refinement 5 — T007 is good, but note one behavior edge case
+
+Your auto-fill rule is good. I would just add:
+
+Do not auto-fill wind zone while editing an existing item unless the same empty/auto-set conditions apply.
+
+This prevents weird edit surprises.
+
+One extra acceptance criterion I would add
+
+Under T003 or global acceptance, add:
+
+Switching between Config, Preview, and Items on mobile must not clear unsaved form inputs.
+
+That is critical for onsite use.
+
+Final assessment by task
+T001
+
+Good and likely the real fix.
+
+T002
+
+Good. Keep it as a single-scroll verification/correction.
+
+T003
+
+Good. Correctly framed as verify/fix, not redesign.
+
+T004
+
+Good. Properly scoped and useful.
+
+T005
+
+Good. Just be careful to use existing option values only.
+
+T006
+
+Good. Minimal and safe.
+
+T007
+
+Good. Nice balance of smart defaulting without overriding the user.
+
+T008
+
+Good. High-value onsite warning, low risk.

@@ -1,0 +1,278 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create separate unrelated content models for preview and PDF.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any template/layout changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Do a focused master-template visual refinement pass so the customer quote looks like a polished professional quotation rather than a system export.
+
+Use the existing:
+- QuoteDocumentModel
+- QuoteRenderModel
+- company master template
+- division overrides
+- preview + PDF pipeline
+
+This is NOT a new template system.
+This is refinement of the current company-wide default template and its visual composition.
+
+
+--------------------------------------------------
+T049 — Establish the company-wide default quote composition
+--------------------------------------------------
+
+Problem:
+The system now has a shared master template and aligned preview/PDF rendering, but the quote still needs a stronger company-standard document structure and visual hierarchy.
+
+Required implementation:
+
+1. Refine the company-wide default quote composition so it follows this structure as closely as practical:
+
+PAGE 1 PRIORITY ORDER
+- header / branding
+- quote title + key metadata
+- customer + project details
+- quote summary / totals
+- concise exclusions / terms intro if appropriate
+
+FOLLOWING PAGES
+- schedule of items
+- drawings and related site photos within item cards
+
+FINAL PAGE / FINAL SECTION
+- payment terms / remittance details
+- acceptance block
+
+2. Keep this as the default company-wide quote structure unless there is a strong reason not to.
+
+3. Do not force fake page behavior into preview if it adds complexity. The preview can remain a scroll document, but the visual hierarchy should reflect this intended document order.
+
+Acceptance criteria:
+- the quote reads like a professional quotation
+- page 1 content is more commercially useful and easier to scan
+- schedule items become the main body of the document
+- acceptance/payment content sits at the end rather than interrupting the main flow
+
+
+--------------------------------------------------
+T050 — Refine header, metadata, and summary presentation
+--------------------------------------------------
+
+Problem:
+The quote needs a stronger first impression and faster readability.
+
+Required implementation:
+
+1. Improve header presentation using the existing master template:
+   - logo placement
+   - trading name / legal line
+   - company contact block
+   - subtle divider/rule if appropriate
+
+2. Improve quote metadata block:
+   - quote number
+   - revision
+   - issue date
+   - validity date
+   - customer name
+   - project/site address
+
+3. Refine totals summary block so it is visually prominent and easy to scan.
+   Preferred default:
+   - totals_block_v1 unless there is a clear better company-standard option already available
+
+4. Make sure typography hierarchy is clear:
+   - heading
+   - muted labels
+   - totals emphasis
+   - body text readability
+
+Acceptance criteria:
+- the top of the quote looks intentional and professional
+- quote number/date/customer/site/total are easy to find in seconds
+- summary block feels like a commercial summary, not raw system output
+
+
+--------------------------------------------------
+T051 — Refine schedule item card design for company default layout
+--------------------------------------------------
+
+Problem:
+The schedule of items is the core of the quote and should feel clean, consistent, and customer-facing.
+
+Required implementation:
+
+1. Use the best current company-standard schedule layout as the default.
+   Preferred starting point:
+   - image_left_specs_right_v1
+   unless another existing variant is clearly better after review.
+
+2. Refine item cards so they feel more polished:
+   - clearer item header
+   - consistent spacing
+   - better relationship between drawing, specs, and site photos
+   - cleaner spec table readability
+   - avoid visual clutter
+
+3. Keep site photos associated with the relevant item card rather than making them feel detached.
+
+4. Maintain alignment between preview and PDF.
+
+Acceptance criteria:
+- item cards feel like the professional core of the quote
+- drawings/specs/photos are grouped logically
+- schedule section reads cleanly in both preview and PDF
+
+
+--------------------------------------------------
+T052 — Refine legal, payment, and acceptance sections
+--------------------------------------------------
+
+Problem:
+Terms, exclusions, payment, and acceptance content currently exist, but the overall composition should feel more deliberate and less like a raw system dump.
+
+Required implementation:
+
+1. Refine exclusions / terms / payment sections so they are visually structured and easier to read.
+2. Keep these sections customer-facing and professional.
+3. Place acceptance at the end in a clearly intentional way.
+4. Keep remittance/bank details near the end unless a clear existing company standard suggests otherwise.
+5. Preserve all current content semantics.
+
+Acceptance criteria:
+- legal/commercial content is readable and structured
+- acceptance feels like the final action area of the document
+- the quote ends in a clear, intentional way
+
+
+--------------------------------------------------
+T053 — Set company default template choices clearly
+--------------------------------------------------
+
+Problem:
+The system now supports template and layout variants, but the company default choices should be explicit and consistent.
+
+Required implementation:
+
+1. Make the company-wide default choices explicit for now.
+   Recommended defaults unless review proves otherwise:
+   - master template: company_master_v1
+   - schedule layout: image_left_specs_right_v1
+   - totals layout: totals_block_v1
+
+2. Ensure these defaults are actually what preview and PDF use unless overridden by division settings.
+
+3. If the settings UI currently exposes inactive or misleading controls, either:
+   - wire them properly if already supported, or
+   - clearly constrain them so the UI reflects reality
+
+Acceptance criteria:
+- there is one clear company-standard default presentation
+- preview and PDF both use it unless valid overrides are present
+- settings are not misleading
+
+
+--------------------------------------------------
+T054 — Keep preview and PDF in the same visual family
+--------------------------------------------------
+
+Problem:
+Even with shared template support, preview and PDF can still drift if refinement is only applied to one renderer.
+
+Required implementation:
+
+1. Apply the visual refinement to both preview and PDF.
+2. Keep them aligned in:
+   - hierarchy
+   - spacing intent
+   - section structure
+   - card styling
+   - summary treatment
+   - acceptance structure
+
+3. PDF may still paginate differently, but it must clearly feel like the same document family as the preview.
+
+Acceptance criteria:
+- preview and PDF look materially closer
+- the preview resembles a professional document layout, not just a web page representation
+- PDF continues to be the stronger output but no longer feels like a completely different design
+
+
+--------------------------------------------------
+T055 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- build a user-editable template builder
+- add drag/drop editing
+- add multiple new template systems
+- redesign quote lifecycle
+- add portal/email logic
+- add speculative branding/theme systems beyond what is needed
+- rebuild the renderer stack from scratch
+
+This is a master-template visual refinement pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The company-wide default quote looks like a polished professional quotation.
+2. Page 1 is easier to scan and more commercially useful.
+3. Schedule items are the clear core body of the document.
+4. Legal/payment/acceptance sections feel structured and intentional.
+5. Preview and PDF remain aligned and clearly belong to the same template family.
+6. The company default presentation is explicit and stable.
+
+
+END OF IMPLEMENTATION

@@ -1,0 +1,315 @@
+STEELIQ PROJECT CONTROL HEADER — MUST FOLLOW
+
+Implement exactly what is requested.
+Do not redesign architecture.
+
+Do NOT:
+- change the quote lifecycle
+- bypass QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- introduce schema creep outside this request
+- add unapproved endpoints
+- perform hidden refactors
+- change snapshot behaviour unless explicitly requested
+- create alternative rendering systems
+- make speculative architectural changes
+- redesign auth, jobs, invoices, or customer/project architecture in this phase
+- build unrelated modules “while here”
+
+Current-state facts that MUST remain true:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked
+- Job type presets already exist and are persisted in division settings
+- Schedule first-item-fit pagination is already implemented
+- Hardware consolidation is partial because Wanz Bar still sits outside the Hardware tab
+- Quote creation is stable
+- PDF output exists but currently has file-size and overlapping rich-text issues
+- Pricing inputs are acceptable
+- Revisions are clear
+- Auth/login exists
+- Users admin UI exists
+- Forced password change on first login exists
+- Role descriptions/help text exist
+- Onboarding/manual invite flow exists
+- Accepted quote flow exists
+- Deposit invoice foundation exists
+- Basic division-scoped invoice filtering exists
+- Customers/projects are integrated into quote workflow
+- Quote -> Job shell conversion exists
+- Jobs list/detail pages exist
+
+All work must be incremental, architecture-safe, and backward-compatible.
+If a structural change seems necessary, stop and explain before changing it.
+
+AGENT EXECUTION RULES
+
+You may internally plan tasks and run multiple subtasks in parallel.
+
+However:
+- Do NOT expand scope beyond what is explicitly requested
+- Do NOT redesign architecture
+- Do NOT introduce schema changes outside this prompt
+- Do NOT perform speculative refactors
+- If useful additional improvements are identified, report them in the handover instead of implementing them
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark this phase complete if the feature exists only in backend/schema/API form without the minimum operational result required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend/rendering support
+- minimum practical user-visible result
+in the same phase unless explicitly told otherwise.
+
+If required operational results are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+STEELIQ PLATFORM PROFILE
+
+Purpose
+SteelIQ is the shared business operating system for Lateral Enterprises, starting with estimating and quoting, then extending into jobs, invoicing, customer management, production, and division-specific manufacturing modules.
+
+Vision
+Build a modular, enterprise-grade, multi-division platform for:
+- Lateral Engineering
+- Lateral Joinery
+- Lateral Laser Cutting
+
+System positioning
+- GoHighLevel remains the CRM front office for leads, pipeline, marketing automation, and follow-up workflows
+- SteelIQ is the commercial ERP and operational core for customers, projects, estimating, quoting, acceptance, jobs, invoicing, cost tracking, and division-specific operational modules
+- Xero remains the accounting source of truth for invoices, payments, and financial ledger data
+
+Direction
+Build in controlled layers:
+1. Quote engine
+2. Identity and access
+3. Customers and projects
+4. Acceptance and job conversion
+5. Invoicing and Xero
+6. Customer portal
+7. Division-specific production modules
+
+Architecture principles
+- Preserve QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- Shared core, division-specific operations
+- Freeze issued and accepted commercial history
+- Convert accepted quotes into jobs without mutating historical quote data
+- Integrate with Xero rather than replacing accounting
+- Replace spreadsheet logic module by module, not all at once
+- Keep modules logical, staged, and reusable
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+
+CURRENT PHASE OBJECTIVE
+
+Stabilise the PDF engine so quotes are safe to email and PDF output matches the on-platform preview more reliably.
+
+This phase should deliver:
+- dramatically reduced PDF file size
+- corrected rich-text spacing in Terms/Exclusions/Payment blocks
+- preview/PDF layout parity improvement
+- no overlap in rich-text sections
+- preserved schedule pagination and locked quote rendering pipeline
+
+IMPORTANT CONTEXT
+
+Current real problem:
+- generated quote PDFs can be 50MB+ and are too large for normal email sending
+- Terms & Conditions / rich-text sections can overlap in the PDF
+- the on-platform preview does not show the same overlap, so the bug is in PDF rendering/layout, not the commercial content itself
+
+This phase is ONLY for PDF engine stabilisation.
+Do NOT use this phase to touch jobs, customers, users, roles, invoices, or Xero workflows except where absolutely required by the PDF engine.
+
+REQUIRED DELIVERABLES
+
+This phase is only complete when all of the following are true:
+
+1. PDF file size is significantly reduced
+- generated quotes should no longer be tens of megabytes for typical documents
+- normal quote PDFs should be in an email-safe range where practical
+- images must not be embedded at wasteful full-resolution PNG quality if that is causing the blow-up
+
+2. Rich-text blocks no longer overlap in the PDF
+- Terms
+- Exclusions
+- Payment Terms
+- Additional Capabilities
+- similar rich-text sections
+must render without text collisions or overlapping vertical positions
+
+3. Preview/PDF parity is improved
+- the same content that appears correctly in preview should render correctly in PDF
+- PDF layout logic should better match the preview’s block/spacing behavior
+
+4. Existing pagination safety is preserved
+- schedule first-item-fit logic must remain intact
+- ensureSpace() or equivalent page-break safety must still protect item cards and text blocks
+
+IMPLEMENT ONLY THE FOLLOWING
+
+1. Image compression in PDF generation
+Review all image insertion paths used by the PDF engine.
+
+Requirements:
+- stop embedding unnecessarily large lossless images when not needed
+- where appropriate, convert image/canvas exports from PNG to compressed JPEG before embedding
+- compress drawings, uploaded images, logo rendering, and preview-generated canvases where applicable
+- keep visual quality professional and readable
+- do not degrade images so badly that the quote looks poor
+
+Preferred approach:
+- use JPEG for photographic or large raster content where practical
+- keep only those assets as PNG that genuinely require transparency or sharp line quality and do not explode size
+- be practical, not dogmatic
+
+2. Image resizing before embedding
+Before inserting images into the PDF:
+- clamp maximum image dimensions
+- resize/downsample oversized source images/canvases before embedding
+
+Use sensible limits for:
+- logo
+- item drawings
+- photos/images
+
+Do not embed original full-resolution assets if the rendered display size is much smaller.
+
+3. Enable PDF compression
+If jsPDF supports compression in the current implementation path, enable it.
+Use the safest supported compression mode consistent with the existing codebase.
+
+4. Fix rich-text vertical layout / block spacing
+Review the rich-text PDF rendering for:
+- headings
+- paragraphs
+- bullets
+- numbered lists
+- spacer blocks
+- bold-heading style blocks used by Additional Capabilities
+
+Requirements:
+- each block must calculate/use a reliable height
+- ensure page space before rendering each block
+- advance Y position correctly after each block
+- do not rely on loose estimates that cause overlap
+- maintain readable spacing between legal/commercial text groups
+
+5. Page-break safety for rich text
+Ensure rich-text sections use page-break protection consistently.
+If remaining space is insufficient for the next block, add a new page before rendering that block.
+
+6. Preserve existing quote design
+Do NOT redesign:
+- header
+- quote summary
+- schedule layout
+- acceptance layout
+- job conversion UI
+- customer/project UI
+
+This is a rendering-stability phase, not a redesign phase.
+
+NON-GOALS FOR THIS PHASE
+
+Do NOT implement yet:
+- email sending workflow
+- Xero lifecycle expansion
+- customer portal
+- full job management
+- back-costing
+- variation workflow
+- retention workflow
+- role/permission changes
+- template builder redesign
+- broad visual redesign
+- unrelated performance refactors
+
+DEFINITION OF DONE
+
+Done means:
+- quote PDFs are materially smaller and practical to email
+- rich-text legal/commercial sections no longer overlap in the PDF
+- preview and PDF are materially more consistent
+- schedule pagination still behaves correctly
+- quote design remains professional and unchanged in structure
+- regression-safe with current quote, invoice, and job-shell flows intact
+
+MANDATORY HANDOVER UPDATE
+
+After implementation produce a structured handover update.
+
+Include:
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Compression implementation details
+5. Rendering/layout fixes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Regression checks must explicitly confirm:
+- login still works
+- user management still works
+- quote creation still works
+- preview still works
+- PDF generation still works
+- revisions still work
+- accepted quote flow still works
+- deposit invoice flow still works
+- customers/projects quote workflow still works
+- job conversion still works
+- rich-text sections no longer overlap
+- generated PDF size is significantly reduced
+- schedule pagination remains correct
+- auth/test mode still works
+
+FINAL INSTRUCTION
+
+Implement only this phase.
+Keep it controlled, modular, and logically staged.
+If anything remains partially implemented, say so explicitly in the handover rather than reporting it complete.

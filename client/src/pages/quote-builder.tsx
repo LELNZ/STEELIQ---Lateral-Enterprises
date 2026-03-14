@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
-import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory } from "@shared/item-options";
-import type { LibraryEntry } from "@shared/schema";
+import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory, getLockTypeForCategory, getLocksForCategory, isDoorCategory } from "@shared/item-options";
+import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
+import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
+import { MediaViewer } from "@/components/media-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,14 +28,29 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
+import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useToast } from "@/hooks/use-toast";
 import { useRoute, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { downloadPng, compressImage, svgToPngBlob, downloadBlob, sanitizeFilename } from "@/lib/export-png";
+import { downloadPng, compressImage, compressImageToBlob, svgToPngBlob, downloadBlob, sanitizeFilename } from "@/lib/export-png";
 import { jsPDF } from "jspdf";
+
+function useIsLargeScreen() {
+  const [isLarge, setIsLarge] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsLarge(mql.matches);
+    mql.addEventListener("change", onChange);
+    setIsLarge(mql.matches);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return isLarge;
+}
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Windows Standard" },
@@ -155,14 +172,40 @@ const defaultValues: InsertQuoteItem = {
   wallThickness: 0,
   heightFromFloor: 0,
   handleType: "",
+  lockType: "",
   configurationId: "",
   cachedWeightKg: 0,
 };
 
+interface ItemPhotoRef {
+  key: string;
+  isPrimary?: boolean;
+  includeInCustomerPdf?: boolean;
+  caption?: string;
+  takenAt?: string;
+}
+
 interface ItemWithPhoto {
+  uiId: string;
   item: QuoteItem;
   photo?: string | null;
+  photos?: ItemPhotoRef[];
   dbId?: string;
+}
+
+function getPrimaryPhotoSrc(iwp: ItemWithPhoto): string | null {
+  if (iwp.photos && iwp.photos.length > 0) {
+    const primary = iwp.photos.find(p => p.isPrimary) || iwp.photos[0];
+    return `/api/item-photos/${primary.key}`;
+  }
+  if (iwp.photo && iwp.photo.startsWith("data:image/")) {
+    return iwp.photo;
+  }
+  return null;
+}
+
+function ensureConfigId(config: any): QuoteItem {
+  return { ...config, id: config?.id ?? crypto.randomUUID() };
 }
 
 export default function QuoteBuilder() {
@@ -182,24 +225,38 @@ export default function QuoteBuilder() {
   const [jobAddress, setJobAddress] = useState("");
   const [jobDate, setJobDate] = useState(new Date().toISOString().split("T")[0]);
   const [savedJobId, setSavedJobId] = useState<string | null>(jobId || null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const [galleryItemId, setGalleryItemId] = useState<string | null>(null);
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null);
+  const [viewerTitle, setViewerTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaveAndLeaving, setIsSaveAndLeaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [pendingNavigateTo, setPendingNavigateTo] = useState<string | null>(null);
   const [itemsExpanded, setItemsExpanded] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const headerFieldsRef = useRef<HTMLDivElement>(null);
   const [formTab, setFormTab] = useState<string>("drawing");
+  const [mobileTab, setMobileTab] = useState<"config" | "preview" | "items">("config");
+  const [siteType, setSiteType] = useState<"renovation" | "new_build" | null>(null);
+  const isLargeScreen = useIsLargeScreen();
   const { quoteListPosition, usdToNzdRate } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
   const skipCategoryResetRef = useRef(false);
+  const hydratedJobRef = useRef(false);
+  const didAutoCollapseOnFocusRef = useRef(false);
+  const lastAutoWindZone = useRef<string>("");
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoTargetItemId, setPhotoTargetItemId] = useState<string | null>(null);
+  const configScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const { data: existingJob, isLoading: jobLoading } = useQuery<{
-    id: string; name: string; address: string | null; date: string | null; items: JobItem[];
+    id: string; name: string; address: string | null; date: string | null; siteType?: string | null; items: JobItem[];
   }>({
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
@@ -221,14 +278,52 @@ export default function QuoteBuilder() {
   const { data: masterAccessories = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_accessory"], queryFn: fetchLib("direct_accessory") });
   const { data: masterLabour = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "labour_operation"], queryFn: fetchLib("labour_operation") });
 
-  const libFrameTypesForCategory = (cat: string) => {
+  const { data: specDictionary = [] } = useQuery<SpecDictionaryEntry[]>({
+    queryKey: ["/api/spec-dictionary", "LJ"],
+    queryFn: async () => {
+      const res = await fetch("/api/spec-dictionary?scope=LJ");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+  const { data: divisionSettings } = useQuery<DivisionSettings>({
+    queryKey: ["/api/settings/divisions", "LJ"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/divisions/LJ");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+  const [showAllSpecs, setShowAllSpecs] = useState(false);
+  const defaultSpecKeys = (divisionSettings?.specDisplayDefaultsJson as string[] | null) || [
+    "configuration","overallSize","frameSeries","frameColor","windZone","rValue",
+    "iguType","glassType","glassThickness","handleSet","lockSet","linerType","flashingSize",
+    "wallThickness","heightFromFloor"
+  ];
+
+  const specGroups = useMemo(() => {
+    const groups: Record<string, SpecDictionaryEntry[]> = {};
+    const layoutKeys = new Set(["layout","windowType","hingeSide","openDirection","halfSolid","panels",
+      "sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"]);
+    for (const spec of specDictionary) {
+      if (layoutKeys.has(spec.key)) continue;
+      if (!groups[spec.group]) groups[spec.group] = [];
+      groups[spec.group].push(spec);
+    }
+    return groups;
+  }, [specDictionary]);
+
+  const isSpecVisible = (key: string) => showAllSpecs || defaultSpecKeys.includes(key);
+  const hiddenSpecCount = specDictionary.filter(s => !defaultSpecKeys.includes(s.key) && !["layout","windowType","hingeSide","openDirection","halfSolid","panels","sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"].includes(s.key)).length;
+
+  const libFrameTypesForCategory = useCallback((cat: string) => {
     const fromDb = libFrameTypes.filter((e) => {
       const d = e.data as any;
       return d.categories?.includes(cat);
     }).map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }));
     if (fromDb.length > 0) return fromDb;
     return getFrameTypesForCategory(cat).map((ft) => ({ value: ft.value, label: ft.label }));
-  };
+  }, [libFrameTypes]);
   const libFrameColorOptions = libFrameColors.length > 0
     ? libFrameColors.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
     : FRAME_COLORS.map((fc) => ({ value: fc.value, label: fc.label }));
@@ -260,14 +355,20 @@ export default function QuoteBuilder() {
   };
 
   useEffect(() => {
-    if (existingJob) {
+    if (existingJob && !hydratedJobRef.current) {
+      hydratedJobRef.current = true;
       setJobName(existingJob.name);
       setJobAddress(existingJob.address || "");
       setJobDate(existingJob.date || "");
+      if (existingJob.siteType === "renovation" || existingJob.siteType === "new_build") {
+        setSiteType(existingJob.siteType);
+      }
       setSavedJobId(existingJob.id);
-      setItems(existingJob.items.map((ji) => ({
-        item: ji.config as QuoteItem,
+      setItems(existingJob.items.map((ji: any) => ({
+        uiId: ji.id || crypto.randomUUID(),
+        item: ensureConfigId(ji.config as QuoteItem),
         photo: ji.photo,
+        photos: ji.photos || [],
         dbId: ji.id,
       })));
     }
@@ -293,6 +394,67 @@ export default function QuoteBuilder() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  const divisionPresets = useMemo(() => {
+    return resolvePresetsForDivision("LJ", divisionSettings?.jobTypePresetsJson as JobTypePresetsConfig | null);
+  }, [divisionSettings?.jobTypePresetsJson]);
+
+  const getPresetDefaults = useCallback((preset: "renovation" | "new_build" | null, cat?: string): Partial<InsertQuoteItem> => {
+    if (!preset) return {};
+    const presetConfig = preset === "renovation" ? divisionPresets.renovation : divisionPresets.new_build;
+    if (!presetConfig) return {};
+
+    const result: Partial<InsertQuoteItem> = {};
+    const effectiveCat = cat || "windows-standard";
+
+    if (presetConfig.frameType) {
+      const frameTypes = libFrameTypesForCategory(effectiveCat);
+      const match = frameTypes.find(ft => ft.value.startsWith(presetConfig.frameType!))?.value || frameTypes[0]?.value || "";
+      result.frameType = match;
+    }
+
+    if (presetConfig.glassIguType) {
+      result.glassIguType = presetConfig.glassIguType;
+      const combos = libGlassCombos(presetConfig.glassIguType);
+      if (presetConfig.glassType) {
+        const match = combos.find(c => c.toLowerCase().includes(presetConfig.glassType!.toLowerCase())) || combos[0] || "";
+        result.glassType = match;
+      } else {
+        result.glassType = combos[0] || "";
+      }
+      const thicknesses = result.glassType ? libGlassThicknesses(presetConfig.glassIguType, result.glassType) : [];
+      result.glassThickness = presetConfig.glassThickness || thicknesses[0] || "";
+    }
+
+    if (presetConfig.linerType) {
+      result.linerType = libLinerOptions.find(lt => lt.value.includes(presetConfig.linerType!))?.value || libLinerOptions[0]?.value || LINER_TYPES[0]?.value || "";
+    }
+
+    if (presetConfig.handleType) {
+      const handles = DOOR_CATEGORIES.includes(effectiveCat) ? libDoorHandles : libWindowHandles;
+      const match = handles.find(h => ((h.data as any).value || "").includes(presetConfig.handleType!));
+      result.handleType = match ? (match.data as any).value : (handles.length > 0 ? (handles[0].data as any).value : getHandlesForCategory(effectiveCat)[0]?.value || "");
+    }
+
+    if (presetConfig.lockType && isDoorCategory(effectiveCat)) {
+      result.lockType = presetConfig.lockType;
+    }
+
+    if (presetConfig.wallThickness !== undefined) {
+      result.wallThickness = presetConfig.wallThickness;
+    }
+
+    if (presetConfig.windZone) {
+      result.windZone = presetConfig.windZone;
+    }
+
+    return result;
+  }, [divisionPresets, libFrameTypes, libGlass, libLiners, libWindowHandles, libDoorHandles]);
+
+  const getNewItemDefaults = useCallback((preset: "renovation" | "new_build" | null): InsertQuoteItem => {
+    const presetOverrides = getPresetDefaults(preset);
+    return { ...defaultValues, ...presetOverrides };
+  }, [getPresetDefaults]);
+
   const form = useForm<InsertQuoteItem>({
     resolver: zodResolver(insertQuoteItemSchema),
     defaultValues: { ...defaultValues },
@@ -305,6 +467,8 @@ export default function QuoteBuilder() {
   const formIsDirty = form.formState.isDirty;
   const currentHandleType = getHandleTypeForCategory(category || "windows-standard");
   const { data: libCategoryHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", currentHandleType], queryFn: fetchLib(currentHandleType) });
+  const currentLockType = getLockTypeForCategory(category || "windows-standard");
+  const { data: libCategoryLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", currentLockType || "__none__"], queryFn: fetchLib(currentLockType || "__none__"), enabled: !!currentLockType });
 
   const currentFrameTypeLibId = findFrameTypeLibId(w.frameType || "");
   const { data: configurations = [] } = useQuery<FrameConfiguration[]>({
@@ -379,6 +543,20 @@ export default function QuoteBuilder() {
     return fallback?.priceProvision ?? null;
   })();
 
+  const lockPriceEach = (() => {
+    if (!w.lockType) return null;
+    const specialNoPriceValues = ["Customer-Supplied", "TBC"];
+    if (specialNoPriceValues.includes(w.lockType)) return 0;
+    if (libCategoryLocks.length > 0) {
+      const catEntry = libCategoryLocks.find((e) => (e.data as any).value === w.lockType);
+      const catPrice = catEntry ? (catEntry.data as any).priceProvision : null;
+      if (catPrice != null) return catPrice;
+    }
+    const fallbackLocks = getLocksForCategory(w.category || "");
+    const fallback = fallbackLocks.find((l) => l.value === w.lockType);
+    return fallback?.priceProvision ?? null;
+  })();
+
   const openingPanelCount = configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount;
 
   const wanzBarPricingInput = (() => {
@@ -394,19 +572,63 @@ export default function QuoteBuilder() {
   })();
 
   const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
-  const currentPricing: PricingBreakdown | null = hasConfigData
-    ? calculatePricing(
-        w.width || 0, w.height || 0, w.quantity || 1,
-        configProfiles, configAccessories, configLabor,
-        usdToNzdRate, w.pricePerSqm || 500,
-        { glassPricePerSqm, linerPricePerM, handlePriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput },
-        { masterProfiles, masterAccessories, masterLabour }
-      )
-    : null;
+  const currentPricing: PricingBreakdown | null = useMemo(() => {
+    if (!hasConfigData) return null;
+    return calculatePricing(
+      w.width || 0, w.height || 0, w.quantity || 1,
+      configProfiles, configAccessories, configLabor,
+      usdToNzdRate, w.pricePerSqm || 500,
+      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput },
+      { masterProfiles, masterAccessories, masterLabour }
+    );
+  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
   }, [formIsDirty]);
+
+  useEffect(() => {
+    if (items.length > 0 && !savedJobId) setHasUnsavedChanges(true);
+  }, [items.length, savedJobId]);
+
+  const prevItemCountRef = useRef(items.length);
+  useEffect(() => {
+    const prev = prevItemCountRef.current;
+    prevItemCountRef.current = items.length;
+    if (prev === 0 && items.length > 0 && !isLargeScreen && !headerCollapsed) {
+      const focusInHeader = headerFieldsRef.current?.contains(document.activeElement);
+      if (!focusInHeader) {
+        setHeaderCollapsed(true);
+      }
+    }
+  }, [items.length, isLargeScreen]);
+
+  const guardedNavigate = useCallback((to: string) => {
+    if (hasUnsavedChanges || formIsDirty) {
+      setPendingNavigateTo(to);
+      setShowLeaveDialog(true);
+    } else {
+      navigate(to);
+    }
+  }, [hasUnsavedChanges, formIsDirty, navigate]);
+
+  const { registerGuard, unregisterGuard } = useNavigationGuard();
+  useEffect(() => {
+    registerGuard(() => {
+      if (hasUnsavedChanges || formIsDirty) {
+        return "You have unsaved changes in the quote builder. Leave without saving?";
+      }
+      return false;
+    });
+    return () => unregisterGuard();
+  }, [hasUnsavedChanges, formIsDirty, registerGuard, unregisterGuard]);
+
+  const handleConfigFieldFocus = useCallback(() => {
+    if (!isLargeScreen && !headerCollapsed && !didAutoCollapseOnFocusRef.current) {
+      didAutoCollapseOnFocusRef.current = true;
+      setHeaderCollapsed(true);
+    }
+  }, [isLargeScreen, headerCollapsed]);
 
   useEffect(() => {
     if (skipCategoryResetRef.current) {
@@ -449,6 +671,7 @@ export default function QuoteBuilder() {
     const frameTypes = libFrameTypesForCategory(category);
     if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
     form.setValue("handleType", "");
+    form.setValue("lockType", "");
     form.setValue("configurationId", "");
   }, [category]);
 
@@ -458,6 +681,20 @@ export default function QuoteBuilder() {
     const frameTypes = libFrameTypesForCategory(category);
     if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
   }, [libFrameTypes]);
+
+  useEffect(() => {
+    const ft = w.frameType || "";
+    if (!ft) return;
+    const currentWindZone = form.getValues("windZone");
+    const isAutoSettable = !currentWindZone || currentWindZone === lastAutoWindZone.current;
+    if (ft.startsWith("ES52") && isAutoSettable) {
+      form.setValue("windZone", "Extra High");
+      lastAutoWindZone.current = "Extra High";
+    } else if (!ft.startsWith("ES52") && currentWindZone === lastAutoWindZone.current && lastAutoWindZone.current) {
+      form.setValue("windZone", "");
+      lastAutoWindZone.current = "";
+    }
+  }, [w.frameType]);
 
   useEffect(() => {
     if (configurations.length === 0) return;
@@ -479,7 +716,7 @@ export default function QuoteBuilder() {
   const noCustomCategories = isEntrance || isHingeDoor || isFrench || isBifold || isStacker;
   const isCustom = layout === "custom" && !noCustomCategories;
   const isSlidingCategory = ["sliding-window", "sliding-door"].includes(category);
-  const isDoorCategory = ["french-door"].includes(category);
+  const isFrenchDoorCategory = ["french-door"].includes(category);
 
   const showWindowType = !isCustom && category === "windows-standard";
   const showHingeSide = ["entrance-door", "hinge-door"].includes(category);
@@ -539,7 +776,7 @@ export default function QuoteBuilder() {
         ...rows[rowIdx],
         type: cycle[current] || "fixed",
       };
-    } else if (isDoorCategory) {
+    } else if (isFrenchDoorCategory) {
       const cycle: Record<string, "fixed" | "awning" | "hinge"> = { fixed: "awning", awning: "hinge", hinge: "fixed" };
       rows[rowIdx] = {
         ...rows[rowIdx],
@@ -736,7 +973,15 @@ export default function QuoteBuilder() {
     }
   }
 
+  const immediateAutoSaveRef = useRef(false);
+  const saveInProgressRef = useRef(false);
+
   async function onSubmit(data: InsertQuoteItem) {
+    const wasNewJob = !savedJobId;
+    if (wasNewJob && !editingId) {
+      const newJobId = await ensureJobExists();
+      if (!newJobId) return;
+    }
     const sig = deriveConfigSignature(data as QuoteItem);
     const matchingConfig = findMatchingConfiguration(sig, configurations);
     let finalData = { ...data };
@@ -750,52 +995,108 @@ export default function QuoteBuilder() {
     const cachedWeightKg = currentPricing?.totalWeightKg ?? 0;
     const itemWithWeight = { ...finalData, cachedWeightKg };
     if (editingId) {
-      setItems(items.map((iwp) => (iwp.item.id === editingId ? { ...iwp, item: { ...itemWithWeight, id: editingId } } : iwp)));
+      setItems(items.map((iwp) => {
+        if (iwp.uiId !== editingId) return iwp;
+        const preservedId = iwp.item.id;
+        return { ...iwp, item: ensureConfigId({ ...itemWithWeight, id: preservedId }) };
+      }));
       setEditingId(null);
       toast({ title: "Item updated", description: `${finalData.name} has been updated.` });
     } else {
       const newItem: QuoteItem = { ...itemWithWeight, id: crypto.randomUUID() };
-      setItems([...items, { item: newItem }]);
+      setItems([...items, { uiId: crypto.randomUUID(), item: newItem }]);
       toast({ title: "Item added", description: `${finalData.name} added to quote.` });
     }
     setHasUnsavedChanges(true);
-    form.reset({ ...defaultValues });
+    if (wasNewJob) {
+      immediateAutoSaveRef.current = true;
+    }
+    form.reset(getNewItemDefaults(siteType));
+    lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
+  }
+
+  function scrollConfigToTop() {
+    requestAnimationFrame(() => {
+      const viewport = configScrollRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+      if (viewport) viewport.scrollTop = 0;
+    });
   }
 
   function editItem(iwp: ItemWithPhoto) {
     const { id, ...rest } = iwp.item;
     skipCategoryResetRef.current = true;
+    lastAutoWindZone.current = "";
     form.reset(rest);
-    setEditingId(id);
+    setEditingId(iwp.uiId);
+    if (!isLargeScreen) {
+      setMobileTab("config");
+      scrollConfigToTop();
+    }
   }
 
   function duplicateItem(iwp: ItemWithPhoto) {
     const newItem: QuoteItem = { ...iwp.item, id: crypto.randomUUID(), name: `${iwp.item.name} (copy)` };
-    setItems([...items, { item: newItem }]);
+    setItems([...items, { uiId: crypto.randomUUID(), item: newItem }]);
     setHasUnsavedChanges(true);
     toast({ title: "Item duplicated" });
   }
 
   function deleteItem(id: string) {
-    setItems(items.filter((iwp) => iwp.item.id !== id));
-    if (editingId === id) { setEditingId(null); form.reset({ ...defaultValues }); }
+    setItems(items.filter((iwp) => iwp.uiId !== id));
+    if (editingId === id) { setEditingId(null); form.reset(getNewItemDefaults(siteType)); lastAutoWindZone.current = getPresetDefaults(siteType).windZone || ""; }
     setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
   }
 
-  function cancelEdit() {
+  function resetFormForNewItem() {
     setEditingId(null);
-    form.reset({ ...defaultValues });
+    form.reset(getNewItemDefaults(siteType));
+    lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
+  }
+
+  function cancelEdit() {
+    resetFormForNewItem();
+  }
+
+  function startNewItem() {
+    resetFormForNewItem();
+    if (!isLargeScreen) {
+      setMobileTab("config");
+      scrollConfigToTop();
+    }
+  }
+
+  function handleSiteTypeChange(newType: "renovation" | "new_build" | null) {
+    setSiteType(newType);
+    setHasUnsavedChanges(true);
+    const presetOverrides = getPresetDefaults(newType);
+    const currentValues = form.getValues();
+    const merged = { ...currentValues, ...presetOverrides };
+    form.reset(merged);
+    lastAutoWindZone.current = presetOverrides.windZone || "";
   }
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !photoTargetItemId) return;
     try {
-      const compressed = await compressImage(file);
-      setItems(prev => prev.map(iwp =>
-        iwp.item.id === photoTargetItemId ? { ...iwp, photo: compressed } : iwp
-      ));
+      const blob = await compressImageToBlob(file);
+      const formData = new FormData();
+      formData.append("file", blob, "photo.jpg");
+      const uploadRes = await fetch("/api/item-photos", { method: "POST", body: formData });
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const { key } = await uploadRes.json();
+      setItems(prev => prev.map(iwp => {
+        if (iwp.uiId !== photoTargetItemId) return iwp;
+        const existing = iwp.photos || [];
+        const newPhoto: ItemPhotoRef = {
+          key,
+          isPrimary: existing.length === 0,
+          includeInCustomerPdf: false,
+          takenAt: new Date().toISOString(),
+        };
+        return { ...iwp, photos: [...existing, newPhoto] };
+      }));
       setHasUnsavedChanges(true);
       toast({ title: "Photo added" });
     } catch {
@@ -925,28 +1226,32 @@ export default function QuoteBuilder() {
     }
   }
 
-  async function saveJob() {
+  async function saveJob(): Promise<boolean> {
+    if (saveInProgressRef.current) {
+      return false;
+    }
     if (!jobName.trim()) {
       toast({ title: "Job name is required", variant: "destructive" });
-      return;
+      return false;
     }
     if (items.length === 0) {
       toast({ title: "Add at least one item before saving", variant: "destructive" });
-      return;
+      return false;
     }
+    saveInProgressRef.current = true;
     setIsSaving(true);
     try {
       let currentJobId = savedJobId;
       if (!currentJobId) {
         const res = await apiRequest("POST", "/api/jobs", {
-          name: jobName, address: jobAddress, date: jobDate,
+          name: jobName, address: jobAddress, date: jobDate, siteType: siteType || null,
         });
         const job = await res.json();
         currentJobId = job.id;
         setSavedJobId(job.id);
       } else {
         await apiRequest("PATCH", `/api/jobs/${currentJobId}`, {
-          name: jobName, address: jobAddress, date: jobDate,
+          name: jobName, address: jobAddress, date: jobDate, siteType: siteType || null,
         });
         const existingItems = await fetch(`/api/jobs/${currentJobId}`).then(r => r.json());
         for (const ei of (existingItems.items || [])) {
@@ -954,12 +1259,17 @@ export default function QuoteBuilder() {
         }
       }
 
-      for (let i = 0; i < items.length; i++) {
-        await apiRequest("POST", `/api/jobs/${currentJobId}/items`, {
-          config: items[i].item,
-          photo: items[i].photo || null,
+      const normalized = items.map(iwp => ({ ...iwp, item: ensureConfigId(iwp.item) }));
+      for (let i = 0; i < normalized.length; i++) {
+        const payload: any = {
+          config: normalized[i].item,
+          photos: normalized[i].photos || [],
           sortOrder: i,
-        });
+        };
+        if (normalized[i].photo && normalized[i].photo!.startsWith("data:image/") && !(normalized[i].photos?.length)) {
+          payload.photo = normalized[i].photo;
+        }
+        await apiRequest("POST", `/api/jobs/${currentJobId}/items`, payload);
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
@@ -968,9 +1278,12 @@ export default function QuoteBuilder() {
       if (isNewJob) {
         navigate(`/job/${currentJobId}`, { replace: true });
       }
+      return true;
     } catch (e: any) {
       toast({ title: "Failed to save job", description: e.message, variant: "destructive" });
+      return false;
     } finally {
+      saveInProgressRef.current = false;
       setIsSaving(false);
     }
   }
@@ -981,11 +1294,34 @@ export default function QuoteBuilder() {
   useEffect(() => {
     if (!savedJobId || !hasUnsavedChanges || items.length === 0 || !jobName.trim()) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    const delay = immediateAutoSaveRef.current ? 0 : 3000;
+    immediateAutoSaveRef.current = false;
     autoSaveTimerRef.current = setTimeout(() => {
       saveJobRef.current();
-    }, 3000);
+    }, delay);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-  }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate]);
+  }, [items, savedJobId, hasUnsavedChanges, jobName, jobAddress, jobDate, siteType]);
+
+  async function ensureJobExists(): Promise<string | null> {
+    if (savedJobId) return savedJobId;
+    if (!jobName.trim()) {
+      toast({ title: "Job name is required", variant: "destructive" });
+      return null;
+    }
+    try {
+      const res = await apiRequest("POST", "/api/jobs", {
+        name: jobName, address: jobAddress, date: jobDate,
+      });
+      const job = await res.json();
+      setSavedJobId(job.id);
+      navigate(`/job/${job.id}`, { replace: true });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      return job.id;
+    } catch (e: any) {
+      toast({ title: "Failed to create job", description: e.message, variant: "destructive" });
+      return null;
+    }
+  }
 
   function calcSqm(width: number, height: number, quantity: number): string {
     return ((width * height * quantity) / 1_000_000).toFixed(2);
@@ -1000,11 +1336,11 @@ export default function QuoteBuilder() {
     return amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  const totalSqm = items.reduce((sum, iwp) => {
+  const totalSqm = useMemo(() => items.reduce((sum, iwp) => {
     return sum + (iwp.item.width * iwp.item.height * (iwp.item.quantity || 1)) / 1_000_000;
-  }, 0).toFixed(2);
+  }, 0).toFixed(2), [items]);
 
-  const totalPrice = items.reduce((sum, iwp) => sum + calcItemPrice(iwp.item), 0);
+  const totalPrice = useMemo(() => items.reduce((sum, iwp) => sum + calcItemPrice(iwp.item), 0), [items]);
 
   const drawingConfig: InsertQuoteItem = {
     ...w,
@@ -1034,99 +1370,250 @@ export default function QuoteBuilder() {
         data-testid="input-photo-capture"
       />
 
-      <header className="border-b px-6 py-3 bg-card shrink-0">
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" data-testid="button-back-to-jobs" onClick={() => {
-              if (hasUnsavedChanges) { setShowLeaveDialog(true); } else { navigate("/"); }
+      <header className="border-b px-4 lg:px-6 py-3 bg-card shrink-0">
+        <div className="flex items-center justify-between gap-2 lg:gap-4 mb-3">
+          <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+            <Button variant="ghost" size="icon" className="shrink-0" data-testid="button-back-to-jobs" onClick={() => {
+              guardedNavigate("/");
             }}>
               <ArrowLeftCircle className="w-5 h-5" />
             </Button>
-            <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
+            <div className="hidden lg:flex items-center justify-center w-9 h-9 rounded-md bg-primary shrink-0">
               <LayoutGrid className="w-5 h-5 text-primary-foreground" />
             </div>
-            <div>
-              <h1 className="text-lg font-semibold tracking-tight" data-testid="text-app-title">
-                Pro-Quote CAD Generator
+            <div className="min-w-0">
+              <h1 className="text-sm lg:text-lg font-semibold tracking-tight truncate" data-testid="text-app-title">
+                {isLargeScreen ? "Pro-Quote CAD Generator" : (jobName.trim() || (savedJobId ? "Editing" : "New Estimate"))}
               </h1>
-              <p className="text-xs text-muted-foreground">
-                {savedJobId ? "Editing Job" : "New Job"}
-              </p>
+              {isLargeScreen ? (
+                <p className="text-xs text-muted-foreground">
+                  {savedJobId ? "Editing Job" : "New Job"}
+                </p>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+                  {jobAddress.trim() && <span className="truncate max-w-[120px]">{jobAddress}</span>}
+                  {siteType && <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{siteType === "renovation" ? "Reno" : "New Build"}</Badge>}
+                  {items.length > 0 && <span className="shrink-0">{items.length} item{items.length !== 1 ? "s" : ""}</span>}
+                </div>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {items.length > 0 && (
-              <Badge variant="secondary" data-testid="badge-item-count">
+              <Badge variant="secondary" data-testid="badge-item-count" className="hidden sm:inline-flex">
                 {items.length} item{items.length !== 1 ? "s" : ""}
               </Badge>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" data-testid="button-download-menu">
-                  <Download className="w-4 h-4 mr-1.5" /> Download <ChevronDown className="w-3 h-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-download-current-png">
-                  Current Drawing (PNG)
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-download-all-pngs">
-                  All Items (Individual PNGs)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-download-pdf">
-                  All Items (PDF)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {savedJobId && items.length > 0 && (
+            {isLargeScreen ? (
               <>
-                <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
-                  <FileText className="w-4 h-4 mr-1.5" /> Summary
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => navigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-exec-summary">
-                  <FileText className="w-4 h-4 mr-1.5" /> Exec Summary
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-download-menu">
+                      <Download className="w-4 h-4 mr-1.5" /> Download <ChevronDown className="w-3 h-3 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-download-current-png">
+                      Current Drawing (PNG)
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-download-all-pngs">
+                      All Items (Individual PNGs)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-download-pdf">
+                      All Items (PDF)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {savedJobId && items.length > 0 && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => guardedNavigate(`/job/${savedJobId}/summary`)} data-testid="button-quote-summary">
+                      <FileText className="w-4 h-4 mr-1.5" /> Summary
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-exec-summary">
+                      <FileText className="w-4 h-4 mr-1.5" /> Exec Summary
+                    </Button>
+                  </>
+                )}
               </>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" data-testid="button-mobile-more">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-mobile-download-png">
+                    <Download className="w-4 h-4 mr-2" /> Current Drawing (PNG)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-mobile-download-all">
+                    <Download className="w-4 h-4 mr-2" /> All Items (PNGs)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-mobile-download-pdf">
+                    <Download className="w-4 h-4 mr-2" /> All Items (PDF)
+                  </DropdownMenuItem>
+                  {savedJobId && items.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => guardedNavigate(`/job/${savedJobId}/summary`)} data-testid="menu-mobile-summary">
+                        <FileText className="w-4 h-4 mr-2" /> Summary
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="menu-mobile-exec-summary">
+                        <FileText className="w-4 h-4 mr-2" /> Review & Generate Estimate
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            <Button onClick={saveJob} disabled={isSaving} data-testid="button-save-job">
-              <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save Job"}
+            <Button onClick={saveJob} disabled={isSaving} size={isLargeScreen ? "default" : "sm"} data-testid="button-save-job">
+              <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save"}
             </Button>
           </div>
         </div>
-        <div className="flex items-end gap-3">
-          <div className="flex-1 min-w-0">
-            <Label className="text-xs">Job Name *</Label>
-            <Input
-              value={jobName}
-              onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
-              placeholder="e.g. Smith Residence"
-              data-testid="input-job-name"
-            />
+        {isLargeScreen ? (
+          <div className="flex items-end gap-3">
+            <div className="flex-1 min-w-0">
+              <Label className="text-xs">Job Name *</Label>
+              <Input
+                value={jobName}
+                onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
+                placeholder="e.g. Smith Residence"
+                data-testid="input-job-name"
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <Label className="text-xs">Address</Label>
+              <Input
+                value={jobAddress}
+                onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
+                placeholder="e.g. 123 Main St"
+                data-testid="input-job-address"
+              />
+            </div>
+            <div className="w-40 shrink-0">
+              <Label className="text-xs">Date</Label>
+              <Input
+                type="date"
+                value={jobDate}
+                onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
+                data-testid="input-job-date"
+              />
+            </div>
+            <div className="w-36 shrink-0">
+              <Label className="text-xs">Site Type</Label>
+              <Select value={siteType || "__none__"} onValueChange={(v) => handleSiteTypeChange(v === "__none__" ? null : v as "renovation" | "new_build")}>
+                <SelectTrigger data-testid="select-site-type"><SelectValue placeholder="Select..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  <SelectItem value="renovation">Renovation</SelectItem>
+                  <SelectItem value="new_build">New Build</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <Label className="text-xs">Address</Label>
-            <Input
-              value={jobAddress}
-              onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
-              placeholder="e.g. 123 Main St"
-              data-testid="input-job-address"
-            />
-          </div>
-          <div className="w-40 shrink-0">
-            <Label className="text-xs">Date</Label>
-            <Input
-              type="date"
-              value={jobDate}
-              onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
-              data-testid="input-job-date"
-            />
-          </div>
-        </div>
+        ) : (
+          headerCollapsed ? (
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 text-left py-1"
+              onClick={() => { setHeaderCollapsed(false); didAutoCollapseOnFocusRef.current = false; }}
+              data-testid="button-expand-header"
+            >
+              <span className="text-sm font-medium truncate flex-1 min-w-0">{jobName.trim() || "Untitled"}</span>
+              {jobAddress.trim() && <span className="text-xs text-muted-foreground truncate max-w-[100px]">{jobAddress}</span>}
+              {siteType && <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{siteType === "renovation" ? "Reno" : "New"}</Badge>}
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 shrink-0">{items.length} item{items.length !== 1 ? "s" : ""}</Badge>
+              <Pencil className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            </button>
+          ) : (
+            <div ref={headerFieldsRef} className="flex flex-col gap-2">
+              <div>
+                <Label className="text-xs">Job Name *</Label>
+                <Input
+                  value={jobName}
+                  onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
+                  placeholder="e.g. Smith Residence"
+                  data-testid="input-job-name"
+                />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1 min-w-0">
+                  <Label className="text-xs">Address</Label>
+                  <Input
+                    value={jobAddress}
+                    onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
+                    placeholder="e.g. 123 Main St"
+                    data-testid="input-job-address"
+                  />
+                </div>
+                <div className="w-32 shrink-0">
+                  <Label className="text-xs">Date</Label>
+                  <Input
+                    type="date"
+                    value={jobDate}
+                    onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
+                    data-testid="input-job-date"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Label className="text-xs">Site Type</Label>
+                  <Select value={siteType || "__none__"} onValueChange={(v) => handleSiteTypeChange(v === "__none__" ? null : v as "renovation" | "new_build")}>
+                    <SelectTrigger data-testid="select-site-type-mobile"><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      <SelectItem value="renovation">Renovation</SelectItem>
+                      <SelectItem value="new_build">New Build</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setHeaderCollapsed(true)} data-testid="button-collapse-header">
+                  <ChevronUp className="w-4 h-4 mr-1" /> Done
+                </Button>
+              </div>
+            </div>
+          )
+        )}
       </header>
 
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        <ScrollArea className="w-full lg:w-80 xl:w-96 border-r shrink-0">
+      {!isLargeScreen && (
+        <div className="flex border-b bg-card shrink-0">
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors ${mobileTab === "config" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            onClick={() => setMobileTab("config")}
+            data-testid="tab-mobile-config"
+          >
+            <Wrench className="w-4 h-4" /> Config
+          </button>
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors ${mobileTab === "preview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            onClick={() => setMobileTab("preview")}
+            data-testid="tab-mobile-preview"
+          >
+            <Eye className="w-4 h-4" /> Preview
+          </button>
+          <button
+            type="button"
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors ${mobileTab === "items" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            onClick={() => setMobileTab("items")}
+            data-testid="tab-mobile-items"
+          >
+            <List className="w-4 h-4" /> Items
+            {items.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-[10px] px-1.5 py-0">{items.length}</Badge>
+            )}
+          </button>
+        </div>
+      )}
+
+      <div className={`flex-1 min-h-0 flex ${isLargeScreen ? "lg:flex-row" : ""} flex-col overflow-hidden`}>
+        {(isLargeScreen || mobileTab === "config") && (
+        <ScrollArea ref={configScrollRef} className={isLargeScreen ? "w-full lg:w-80 xl:w-96 border-r shrink-0 h-full min-h-0" : "flex-1 min-h-0 native-scroll"}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="p-4 space-y-4">
             <Tabs value={formTab} onValueChange={setFormTab}>
               <TabsList className="w-full grid grid-cols-2 mb-3">
@@ -1205,8 +1692,9 @@ export default function QuoteBuilder() {
                 </div>
                 <div>
                   <Label htmlFor="quantity" className="text-xs">Quantity</Label>
-                  <Input id="quantity" type="number" min={1}
+                  <Input id="quantity" type="number" inputMode="numeric" min={1}
                     {...form.register("quantity", { valueAsNumber: true })}
+                    onFocus={handleConfigFieldFocus}
                     data-testid="input-quantity" />
                 </div>
               </div>
@@ -1233,14 +1721,16 @@ export default function QuoteBuilder() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label htmlFor="width" className="text-xs">Width (mm)</Label>
-                    <Input id="width" type="number" min={200}
+                    <Input id="width" type="number" inputMode="decimal" min={200}
                       {...form.register("width", { valueAsNumber: true })}
+                      onFocus={handleConfigFieldFocus}
                       data-testid="input-width" />
                   </div>
                   <div>
                     <Label htmlFor="height" className="text-xs">Height (mm)</Label>
-                    <Input id="height" type="number" min={200}
+                    <Input id="height" type="number" inputMode="decimal" min={200}
                       {...form.register("height", { valueAsNumber: true })}
+                      onFocus={handleConfigFieldFocus}
                       data-testid="input-height" />
                   </div>
                 </div>
@@ -1340,8 +1830,9 @@ export default function QuoteBuilder() {
                     </div>
                     <div>
                       <Label htmlFor="sidelightWidth" className="text-xs">Sidelight Width (mm)</Label>
-                      <Input id="sidelightWidth" type="number" min={100}
+                      <Input id="sidelightWidth" type="number" inputMode="decimal" min={100}
                         {...form.register("sidelightWidth", { valueAsNumber: true })}
+                        onFocus={handleConfigFieldFocus}
                         data-testid="input-sidelight-width" />
                     </div>
                   </>
@@ -1813,7 +2304,7 @@ export default function QuoteBuilder() {
                                           />
                                           <span className="text-xs text-muted-foreground shrink-0">mm</span>
                                         </div>
-                                        {isDoorCategory && row.type === "hinge" && (
+                                        {isFrenchDoorCategory && row.type === "hinge" && (
                                           <div className="flex items-center gap-1.5 pl-1">
                                             <button
                                               type="button"
@@ -1864,13 +2355,13 @@ export default function QuoteBuilder() {
                     <p className="text-xs text-muted-foreground">
                       {isSlidingCategory
                         ? "FIX / SLD / AWN cycle. Arrow buttons set slide direction. 0 = even split."
-                        : isDoorCategory
+                        : isFrenchDoorCategory
                         ? "FIX / AWN / HNG cycle. HNG shows open direction & hinge side. 0 = even split."
                         : "FIX = Fixed, AWN = Awning. Leave widths/heights at 0 for even split."
                       }
                     </p>
 
-                    {!isSlidingCategory && !isDoorCategory && (
+                    {!isSlidingCategory && !isFrenchDoorCategory && (
                       <div>
                         <Label className="text-xs">Opening Direction</Label>
                         <Select value={w.openDirection} onValueChange={(v) => form.setValue("openDirection", v as any)}>
@@ -1888,12 +2379,14 @@ export default function QuoteBuilder() {
             </div>
             </TabsContent>
 
-              <TabsContent value="specifics" className="space-y-4 mt-0">
+              <TabsContent value="specifics" className="space-y-3 mt-0">
+                {(isSpecVisible("frameSeries") || isSpecVisible("frameColor") || isSpecVisible("flashingSize") || isSpecVisible("configurationId")) && (
                 <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-FrameFinish">
                     Frame & Finish
                   </h2>
                   <div className="space-y-2">
+                    {isSpecVisible("frameSeries") && (
                     <div>
                       <Label className="text-xs">Frame Type</Label>
                       <Select value={w.frameType || ""} onValueChange={(v) => { form.setValue("frameType", v); form.setValue("configurationId", ""); }}>
@@ -1905,6 +2398,8 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                    )}
+                    {isSpecVisible("configurationId") && (
                     <div>
                       <Label className="text-xs mb-0.5">Configuration</Label>
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 whitespace-normal break-words max-w-full mb-1 block w-fit" data-testid="badge-detected-config">
@@ -1952,8 +2447,10 @@ export default function QuoteBuilder() {
                         </Button>
                       )}
                     </div>
+                    )}
+                    {isSpecVisible("frameColor") && (
                     <div>
-                      <Label className="text-xs">Frame Color</Label>
+                      <Label className="text-xs">Frame Colour</Label>
                       <Select value={w.frameColor || ""} onValueChange={(v) => form.setValue("frameColor", v)}>
                         <SelectTrigger data-testid="select-frame-color"><SelectValue placeholder="Select color" /></SelectTrigger>
                         <SelectContent>
@@ -1963,6 +2460,8 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                    )}
+                    {isSpecVisible("flashingSize") && (
                     <div>
                       <Label className="text-xs">Flashing (Head)</Label>
                       <Select value={String(w.flashingSize || 0)} onValueChange={(v) => form.setValue("flashingSize", Number(v))}>
@@ -1975,13 +2474,286 @@ export default function QuoteBuilder() {
                         </SelectContent>
                       </Select>
                     </div>
+                    )}
                   </div>
                 </div>
+                )}
+
+                {(isSpecVisible("frameSeries") || isSpecVisible("flashingSize")) && <Separator />}
+
+                {(isSpecVisible("iguType") || isSpecVisible("glassType") || isSpecVisible("glassThickness") || isSpecVisible("rValue")) && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Glazing">
+                    Glazing
+                  </h2>
+                  <div className="space-y-2">
+                    {isSpecVisible("iguType") && (
+                    <div>
+                      <Label className="text-xs">IGU Type</Label>
+                      <Select value={w.glassIguType || ""} onValueChange={(v) => {
+                        form.setValue("glassIguType", v);
+                        form.setValue("glassType", "");
+                        form.setValue("glassThickness", "");
+                      }}>
+                        <SelectTrigger data-testid="select-glass-igu"><SelectValue placeholder="Select IGU" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="EnergySaver">EnergySaver™ IGU (Entry-level Low-E)</SelectItem>
+                          <SelectItem value="LightBridge">LightBridge™ IGU (High Performance Low-E)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    )}
+                    {isSpecVisible("glassType") && w.glassIguType && (
+                      <div>
+                        <Label className="text-xs">Glass Type</Label>
+                        <Select value={w.glassType || ""} onValueChange={(v) => {
+                          form.setValue("glassType", v);
+                          form.setValue("glassThickness", "");
+                        }}>
+                          <SelectTrigger data-testid="select-glass-type"><SelectValue placeholder="Select glass" /></SelectTrigger>
+                          <SelectContent>
+                            {libGlassCombos(w.glassIguType).map((combo) => (
+                              <SelectItem key={combo} value={combo}>{combo}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {isSpecVisible("glassThickness") && w.glassIguType && w.glassType && (
+                      <div>
+                        <Label className="text-xs">Glass Thickness</Label>
+                        <Select value={w.glassThickness || ""} onValueChange={(v) => form.setValue("glassThickness", v)}>
+                          <SelectTrigger data-testid="select-glass-thickness"><SelectValue placeholder="Select thickness" /></SelectTrigger>
+                          <SelectContent>
+                            {libGlassThicknesses(w.glassIguType, w.glassType).map((t) => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {w.glassIguType && w.glassType && w.glassThickness && (
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-price">
+                          ${libGlassPrice(w.glassIguType, w.glassType, w.glassThickness)?.toFixed(2) ?? "—"}/m²
+                        </Badge>
+                        {isSpecVisible("rValue") && (
+                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-rvalue">
+                          R-Value: {getGlassRValue(w.glassIguType) ?? "—"}
+                        </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                <Separator />
+
+                {(isSpecVisible("windZone") || isSpecVisible("wallThickness") || isSpecVisible("heightFromFloor")) && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Performance">
+                    Performance & Install
+                  </h2>
+                  <div className="space-y-2">
+                    {isSpecVisible("windZone") && (
+                    <div>
+                      <Label className="text-xs">Wind Zone</Label>
+                      <Select value={w.windZone || ""} onValueChange={(v) => form.setValue("windZone", v)}>
+                        <SelectTrigger data-testid="select-wind-zone"><SelectValue placeholder="Select wind zone" /></SelectTrigger>
+                        <SelectContent>
+                          {WIND_ZONES.map((wz) => (
+                            <SelectItem key={wz} value={wz}>{wz}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    )}
+                    {isSpecVisible("wallThickness") && (
+                    <div>
+                      <Label className="text-xs">Wall Thickness (mm)</Label>
+                      <Input type="number" inputMode="decimal" min={0}
+                        value={w.wallThickness || ""}
+                        onChange={(e) => form.setValue("wallThickness", Number(e.target.value) || 0)}
+                        onFocus={handleConfigFieldFocus}
+                        data-testid="input-wall-thickness" />
+                    </div>
+                    )}
+                    {isSpecVisible("heightFromFloor") && (
+                    <div>
+                      <Label className="text-xs">Height from Floor (mm)</Label>
+                      <Input type="number" inputMode="decimal" min={0}
+                        value={w.heightFromFloor || ""}
+                        onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
+                        onFocus={handleConfigFieldFocus}
+                        placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
+                        data-testid="input-height-from-floor" />
+                      {w.heightFromFloor > 0 && w.heightFromFloor < 800 && (
+                        <div className="flex items-start gap-1.5 mt-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="warning-height-from-floor">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <span className="text-xs text-amber-700 dark:text-amber-300">Height under 800mm — safety glazing / toughening may be required. Check glass selection.</span>
+                        </div>
+                      )}
+                    </div>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                {(isSpecVisible("windZone") || isSpecVisible("wallThickness")) && <Separator />}
+
+                {isSpecVisible("linerType") && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-LinersFlashings">
+                    Liner / Reveal
+                  </h2>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Liner Type</Label>
+                      <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
+                        <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
+                        <SelectContent>
+                          {libLinerOptions.map((lt) => (
+                            <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                )}
+
+                {isSpecVisible("linerType") && <Separator />}
+
+                {(isSpecVisible("handleSet") || isSpecVisible("lockSet") || isSpecVisible("wanzBarEnabled") || isSpecVisible("wanzBarSize")) && (
+                <div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Hardware">
+                    Hardware & Components
+                  </h2>
+                  <div className="space-y-2">
+                    {isSpecVisible("handleSet") && (
+                    <div>
+                      <Label className="text-xs">Handle</Label>
+                      <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
+                        <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
+                        <SelectContent>
+                          {(libCategoryHandles.length > 0
+                            ? libCategoryHandles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
+                            : libHandlesForCategoryLegacy(w.category || "windows-standard")
+                          ).map((h) => (
+                            <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    )}
+
+                    {isSpecVisible("lockSet") && isDoorCategory(w.category || "") && (
+                    <div>
+                      <Label className="text-xs">Lock Type</Label>
+                      <Select value={w.lockType || "__none__"} onValueChange={(v) => form.setValue("lockType", v === "__none__" ? "" : v)}>
+                        <SelectTrigger data-testid="select-lock-type"><SelectValue placeholder="Select lock" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {(libCategoryLocks.length > 0
+                            ? libCategoryLocks.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
+                            : getLocksForCategory(w.category || "").map((l) => ({ value: l.value, label: l.label }))
+                          ).map((l) => (
+                            <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {w.lockType === "Custom-Local-Supply" && (
+                        <p className="text-[10px] text-muted-foreground mt-1" data-testid="text-lock-custom-note">
+                          Manual pricing — price override available in Cost Breakdown
+                        </p>
+                      )}
+                      {(w.lockType === "Customer-Supplied" || w.lockType === "TBC") && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1" data-testid="text-lock-exclusion-note">
+                          <AlertTriangle className="w-3 h-3 inline mr-1" />Lock not included in supply scope
+                        </p>
+                      )}
+                    </div>
+                    )}
+
+                    {isSpecVisible("wanzBarEnabled") && (
+                    <>
+                    <Separator className="my-3" />
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Wanz Bar (Sill Support)</Label>
+                        <div className="flex items-center gap-2">
+                          <Checkbox id="wanzBar" checked={w.wanzBar === true}
+                            onCheckedChange={(v) => {
+                              form.setValue("wanzBar", !!v);
+                              if (v && !w.wanzBarSource) form.setValue("wanzBarSource", "nz-local");
+                            }}
+                            data-testid="checkbox-wanz-bar" />
+                          <Label htmlFor="wanzBar" className="text-xs cursor-pointer">Enable</Label>
+                        </div>
+                      </div>
+                      {(w.width || 0) >= 600 && WINDOW_CATEGORIES.includes(w.category || "") && !w.wanzBar && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="text-wanz-bar-required">
+                          <AlertTriangle className="w-3 h-3 inline mr-1" />Required: width ≥ 600mm
+                        </p>
+                      )}
+                      {w.wanzBar && (
+                        <div className="space-y-2">
+                          {isSpecVisible("wanzBarSize") && (
+                          <div>
+                            <Label className="text-xs">Size</Label>
+                            <Select value={w.wanzBarSize || ""} onValueChange={(v) => form.setValue("wanzBarSize", v)}>
+                              <SelectTrigger data-testid="select-wanz-bar-size"><SelectValue placeholder="Select size" /></SelectTrigger>
+                              <SelectContent>
+                                {(libWanzBars.length > 0
+                                  ? libWanzBars.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label, kgPerMetre: (e.data as any).kgPerMetre }))
+                                  : WANZ_BAR_DEFAULTS.map((wb) => ({ value: wb.value, label: wb.label, kgPerMetre: wb.kgPerMetre }))
+                                ).map((wb) => (
+                                  <SelectItem key={wb.value} value={wb.value}>{wb.label} ({wb.kgPerMetre} kg/m)</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          )}
+                          {isSpecVisible("wanzBarSource") && (
+                          <div>
+                            <Label className="text-xs">Source</Label>
+                            <Select value={w.wanzBarSource || ""} onValueChange={(v) => form.setValue("wanzBarSource", v as any)}>
+                              <SelectTrigger data-testid="select-wanz-bar-source"><SelectValue placeholder="Select source" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="nz-local">NZ Local</SelectItem>
+                                <SelectItem value="direct">Direct Supplier</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          )}
+                          {w.wanzBarSize && w.wanzBarSource && (() => {
+                            const wbEntry = libWanzBars.find((e) => (e.data as any).value === w.wanzBarSize);
+                            const d = wbEntry ? (wbEntry.data as any) : WANZ_BAR_DEFAULTS.find((wb) => wb.value === w.wanzBarSize);
+                            if (!d) return null;
+                            return (
+                              <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 space-y-0.5" data-testid="text-wanz-bar-info">
+                                <div>{d.kgPerMetre} kg/m · Section: {d.sectionNumber || d.value}</div>
+                                {w.wanzBarSource === "nz-local" && <div>NZ Price: {d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}/lin.m` : "Not set"}</div>}
+                                {w.wanzBarSource === "direct" && <div>Direct Price: {d.pricePerKgUsd ? `$${d.pricePerKgUsd} USD/kg` : "Not set"}</div>}
+                                <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-1">Fixings: 10g × 50mm SS, max 300mm centres</div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                    </>
+                    )}
+                  </div>
+                </div>
+                )}
 
                 <Separator />
 
                 <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Pricing">
                     Pricing
                   </h2>
                   <div className="space-y-2">
@@ -2063,233 +2835,81 @@ export default function QuoteBuilder() {
 
                 <Separator />
 
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Environment
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Wind Zone</Label>
-                      <Select value={w.windZone || ""} onValueChange={(v) => form.setValue("windZone", v)}>
-                        <SelectTrigger data-testid="select-wind-zone"><SelectValue placeholder="Select wind zone" /></SelectTrigger>
-                        <SelectContent>
-                          {WIND_ZONES.map((wz) => (
-                            <SelectItem key={wz} value={wz}>{wz}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Wall Thickness (mm)</Label>
-                      <Input type="number" min={0}
-                        value={w.wallThickness || ""}
-                        onChange={(e) => form.setValue("wallThickness", Number(e.target.value) || 0)}
-                        data-testid="input-wall-thickness" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Height from Floor (mm)</Label>
-                      <Input type="number" min={0}
-                        value={w.heightFromFloor || ""}
-                        onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
-                        placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
-                        data-testid="input-height-from-floor" />
-                    </div>
-                  </div>
+                {isSpecVisible("overallSize") && (
+                <div className="flex gap-2 flex-wrap">
+                  <Badge variant="outline" className="text-xs" data-testid="badge-overall-size">
+                    Size: {w.width || 0} × {w.height || 0}mm
+                  </Badge>
+                  <Badge variant="outline" className="text-xs" data-testid="badge-live-sqm-specifics">
+                    {calcSqm(w.width || 0, w.height || 0, w.quantity || 1)} m²
+                  </Badge>
                 </div>
+                )}
 
-                <Separator />
-
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Liner / Reveal
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Liner Type</Label>
-                      <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
-                        <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
-                        <SelectContent>
-                          {libLinerOptions.map((lt) => (
-                            <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Glass
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">IGU Type</Label>
-                      <Select value={w.glassIguType || ""} onValueChange={(v) => {
-                        form.setValue("glassIguType", v);
-                        form.setValue("glassType", "");
-                        form.setValue("glassThickness", "");
-                      }}>
-                        <SelectTrigger data-testid="select-glass-igu"><SelectValue placeholder="Select IGU" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="EnergySaver">EnergySaver™ IGU (Entry-level Low-E)</SelectItem>
-                          <SelectItem value="LightBridge">LightBridge™ IGU (High Performance Low-E)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {w.glassIguType && (
-                      <div>
-                        <Label className="text-xs">Glass Type</Label>
-                        <Select value={w.glassType || ""} onValueChange={(v) => {
-                          form.setValue("glassType", v);
-                          form.setValue("glassThickness", "");
-                        }}>
-                          <SelectTrigger data-testid="select-glass-type"><SelectValue placeholder="Select glass" /></SelectTrigger>
-                          <SelectContent>
-                            {libGlassCombos(w.glassIguType).map((combo) => (
-                              <SelectItem key={combo} value={combo}>{combo}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-xs text-muted-foreground"
+                    onClick={() => setShowAllSpecs(!showAllSpecs)}
+                    data-testid="button-toggle-all-specs"
+                  >
+                    {showAllSpecs ? (
+                      <><ChevronUp className="w-3 h-3 mr-1" /> Show fewer specs</>
+                    ) : (
+                      <><ChevronDown className="w-3 h-3 mr-1" /> Show all specs ({hiddenSpecCount} more)</>
                     )}
-                    {w.glassIguType && w.glassType && (
-                      <div>
-                        <Label className="text-xs">Glass Thickness</Label>
-                        <Select value={w.glassThickness || ""} onValueChange={(v) => form.setValue("glassThickness", v)}>
-                          <SelectTrigger data-testid="select-glass-thickness"><SelectValue placeholder="Select thickness" /></SelectTrigger>
-                          <SelectContent>
-                            {libGlassThicknesses(w.glassIguType, w.glassType).map((t) => (
-                              <SelectItem key={t} value={t}>{t}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    {w.glassIguType && w.glassType && w.glassThickness && (
-                      <div className="flex gap-2">
-                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-price">
-                          ${libGlassPrice(w.glassIguType, w.glassType, w.glassThickness)?.toFixed(2) ?? "—"}/m²
-                        </Badge>
-                        <Badge variant="outline" className="text-xs" data-testid="badge-glass-rvalue">
-                          R-Value: {getGlassRValue(w.glassIguType) ?? "—"}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Hardware & Components
-                  </h2>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Handle</Label>
-                      <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
-                        <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
-                        <SelectContent>
-                          {(libCategoryHandles.length > 0
-                            ? libCategoryHandles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
-                            : libHandlesForCategoryLegacy(w.category || "windows-standard")
-                          ).map((h) => (
-                            <SelectItem key={h.value} value={h.value}>{h.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <Separator className="my-3" />
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold">Wanz Bar (Sill Support)</Label>
-                        <div className="flex items-center gap-2">
-                          <Checkbox id="wanzBar" checked={w.wanzBar === true}
-                            onCheckedChange={(v) => {
-                              form.setValue("wanzBar", !!v);
-                              if (v && !w.wanzBarSource) form.setValue("wanzBarSource", "nz-local");
-                            }}
-                            data-testid="checkbox-wanz-bar" />
-                          <Label htmlFor="wanzBar" className="text-xs cursor-pointer">Enable</Label>
-                        </div>
-                      </div>
-                      {(w.width || 0) >= 600 && WINDOW_CATEGORIES.includes(w.category || "") && !w.wanzBar && (
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="text-wanz-bar-required">
-                          <AlertTriangle className="w-3 h-3 inline mr-1" />Required: width ≥ 600mm
-                        </p>
-                      )}
-                      {w.wanzBar && (
-                        <div className="space-y-2">
-                          <div>
-                            <Label className="text-xs">Size</Label>
-                            <Select value={w.wanzBarSize || ""} onValueChange={(v) => form.setValue("wanzBarSize", v)}>
-                              <SelectTrigger data-testid="select-wanz-bar-size"><SelectValue placeholder="Select size" /></SelectTrigger>
-                              <SelectContent>
-                                {(libWanzBars.length > 0
-                                  ? libWanzBars.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label, kgPerMetre: (e.data as any).kgPerMetre }))
-                                  : WANZ_BAR_DEFAULTS.map((wb) => ({ value: wb.value, label: wb.label, kgPerMetre: wb.kgPerMetre }))
-                                ).map((wb) => (
-                                  <SelectItem key={wb.value} value={wb.value}>{wb.label} ({wb.kgPerMetre} kg/m)</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label className="text-xs">Source</Label>
-                            <Select value={w.wanzBarSource || ""} onValueChange={(v) => form.setValue("wanzBarSource", v as any)}>
-                              <SelectTrigger data-testid="select-wanz-bar-source"><SelectValue placeholder="Select source" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="nz-local">NZ Local</SelectItem>
-                                <SelectItem value="direct">Direct Supplier</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {w.wanzBarSize && w.wanzBarSource && (() => {
-                            const wbEntry = libWanzBars.find((e) => (e.data as any).value === w.wanzBarSize);
-                            const d = wbEntry ? (wbEntry.data as any) : WANZ_BAR_DEFAULTS.find((wb) => wb.value === w.wanzBarSize);
-                            if (!d) return null;
-                            return (
-                              <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2 space-y-0.5" data-testid="text-wanz-bar-info">
-                                <div>{d.kgPerMetre} kg/m · Section: {d.sectionNumber || d.value}</div>
-                                {w.wanzBarSource === "nz-local" && <div>NZ Price: {d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}/lin.m` : "Not set"}</div>}
-                                {w.wanzBarSource === "direct" && <div>Direct Price: {d.pricePerKgUsd ? `$${d.pricePerKgUsd} USD/kg` : "Not set"}</div>}
-                                <div className="text-[9px] text-amber-600 dark:text-amber-400 mt-1">Fixings: 10g × 50mm SS, max 300mm centres</div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  </Button>
                 </div>
               </TabsContent>
             </Tabs>
 
-            <Separator />
-
-            <div className="flex gap-2">
-              <Button type="submit" className="flex-1" data-testid="button-add-item">
-                {editingId ? (
-                  <><Pencil className="w-4 h-4 mr-2" /> Update Item</>
-                ) : (
-                  <><Plus className="w-4 h-4 mr-2" /> Add to Quote</>
-                )}
+            {isLargeScreen && (
+              <>
+                <Separator />
+                <div className="flex gap-2">
+                  <Button type="submit" className="flex-1" data-testid="button-add-item">
+                    {editingId ? (
+                      <><Pencil className="w-4 h-4 mr-2" /> Update Item</>
+                    ) : (
+                      <><Plus className="w-4 h-4 mr-2" /> Add to Quote</>
+                    )}
+                  </Button>
+                  {editingId && (
+                    <Button type="button" variant="outline" onClick={cancelEdit} data-testid="button-cancel-edit">
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </form>
+          {!isLargeScreen && (
+            <div className="sticky bottom-0 bg-card border-t px-3 py-2 flex items-center gap-2 z-10" data-testid="mobile-config-action-bar">
+              <Button size="sm" className="flex-1" onClick={form.handleSubmit(onSubmit)} data-testid="button-sticky-submit">
+                {editingId ? <><Pencil className="w-3.5 h-3.5 mr-1" /> Update Item</> : <><Plus className="w-3.5 h-3.5 mr-1" /> Add to Quote</>}
               </Button>
               {editingId && (
-                <Button type="button" variant="outline" onClick={cancelEdit} data-testid="button-cancel-edit">
-                  Cancel
+                <Button size="sm" variant="outline" onClick={cancelEdit} data-testid="button-sticky-cancel">
+                  <X className="w-3.5 h-3.5 mr-1" /> Cancel
                 </Button>
               )}
+              <Button size="icon" variant="ghost" className="shrink-0 h-8 w-8" onClick={() => setMobileTab("preview")} title="Preview" data-testid="button-sticky-preview">
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="ghost" className="shrink-0 h-8 w-8" onClick={() => setMobileTab("items")} title="Items" data-testid="button-sticky-items">
+                <List className="w-4 h-4" />
+              </Button>
             </div>
-          </form>
+          )}
         </ScrollArea>
+        )}
 
-        <div className={`flex-1 flex ${quoteListPosition === "right" ? "flex-row" : "flex-col"} overflow-hidden`}>
+        {(isLargeScreen || mobileTab === "preview") && (
+        <div className={isLargeScreen
+          ? `flex-1 min-h-0 flex flex-col ${quoteListPosition === "right" ? "lg:flex-row" : "lg:flex-col"} overflow-hidden`
+          : "flex-1 min-h-0 flex flex-col overflow-hidden"}>
           <div className="flex-1 flex items-center justify-center p-4 min-h-0"
             style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)" }}>
             <div className="w-full h-full max-w-3xl max-h-[600px]" data-testid="drawing-preview">
@@ -2297,10 +2917,45 @@ export default function QuoteBuilder() {
             </div>
           </div>
 
-          {items.length > 0 && (
+          {!isLargeScreen && (
+            <div className="px-4 py-3 border-t bg-card shrink-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <Button size="sm" className="flex-1" onClick={form.handleSubmit(onSubmit)} data-testid="button-preview-submit">
+                  {editingId ? <><Pencil className="w-3.5 h-3.5 mr-1" /> Update Item</> : <><Plus className="w-3.5 h-3.5 mr-1" /> Add to Quote</>}
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={startNewItem} data-testid="button-preview-add-next">
+                  <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="shrink-0 h-8 w-8"
+                  onClick={() => {
+                    if (editingId) {
+                      setPhotoTargetItemId(editingId);
+                      photoInputRef.current?.click();
+                    } else {
+                      toast({ title: "Add item to quote first, then capture photo" });
+                    }
+                  }}
+                  title="Capture Photo"
+                  data-testid="button-preview-photo"
+                >
+                  <Camera className="w-4 h-4" />
+                </Button>
+              </div>
+              {savedJobId && items.length > 0 && (
+                <Button size="sm" variant="outline" className="w-full" onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-preview-review-estimate">
+                  <FileText className="w-4 h-4 mr-1.5" /> Review & Generate Estimate
+                </Button>
+              )}
+            </div>
+          )}
+
+          {isLargeScreen && items.length > 0 && (
             <div className={`${quoteListPosition === "right"
               ? "border-l bg-card flex flex-col shrink-0 overflow-hidden w-80 xl:w-96"
-              : `border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "max-h-[50vh]" : "max-h-[33vh]"}`
+              : `border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "h-[55dvh]" : "h-[160px]"}`
             }`}>
               <div className="px-4 py-2 shrink-0 flex items-center justify-between">
                 <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
@@ -2320,6 +2975,8 @@ export default function QuoteBuilder() {
                 )}
               </div>
               <ScrollArea className="flex-1 min-h-0">
+                <div className="w-full overflow-x-auto">
+                <div className="min-w-max">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2337,7 +2994,7 @@ export default function QuoteBuilder() {
                   </TableHeader>
                   <TableBody>
                     {items.map((iwp, index) => (
-                      <TableRow key={iwp.item.id} data-testid={`row-item-${iwp.item.id}`}>
+                      <TableRow key={iwp.uiId} data-testid={`row-item-${iwp.uiId}`}>
                         <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
                         <TableCell className="font-medium">{iwp.item.name}</TableCell>
                         <TableCell className="text-sm">{getCategoryLabel(iwp.item.category)}</TableCell>
@@ -2345,53 +3002,63 @@ export default function QuoteBuilder() {
                           {getLayoutSummary(iwp.item)}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{iwp.item.width} x {iwp.item.height}</TableCell>
-                        <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.item.id}`}>
+                        <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.uiId}`}>
                           {calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm" data-testid={`text-price-${iwp.item.id}`}>
+                        <TableCell className="text-right font-mono text-sm" data-testid={`text-price-${iwp.uiId}`}>
                           ${formatPrice(calcItemPrice(iwp.item))}
                         </TableCell>
                         <TableCell className="text-center">{iwp.item.quantity}</TableCell>
                         <TableCell className="text-center">
-                          {iwp.photo ? (
-                            <button
-                              type="button"
-                              onClick={() => setPhotoPreview(iwp.photo!)}
-                              className="inline-block"
-                              data-testid={`button-view-photo-${iwp.item.id}`}
-                            >
-                              <img src={iwp.photo} alt="Site photo" className="w-8 h-8 rounded object-cover border" />
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
+                          {(() => {
+                            const src = getPrimaryPhotoSrc(iwp);
+                            const photoCount = (iwp.photos || []).length;
+                            if (src) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setGalleryItemId(iwp.uiId)}
+                                  className="inline-block relative"
+                                  data-testid={`button-view-photo-${iwp.uiId}`}
+                                >
+                                  <img src={src} alt="Site photo" className="w-8 h-8 rounded object-cover border" />
+                                  {photoCount > 1 && (
+                                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center" data-testid={`badge-photo-count-${iwp.uiId}`}>
+                                      +{photoCount - 1}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            }
+                            return <span className="text-xs text-muted-foreground">-</span>;
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-0.5">
                             <Button size="icon" variant="ghost" onClick={() => {
                               const { id, ...rest } = iwp.item;
-                              handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "" }, iwp.item.id);
+                              handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "" }, iwp.uiId);
                             }}
-                              title="Download PNG" data-testid={`button-download-${iwp.item.id}`}>
+                              title="Download PNG" data-testid={`button-download-${iwp.uiId}`}>
                               <Download className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => {
-                              setPhotoTargetItemId(iwp.item.id);
+                              setPhotoTargetItemId(iwp.uiId);
                               photoInputRef.current?.click();
                             }}
-                              title="Take Photo" data-testid={`button-photo-${iwp.item.id}`}>
+                              title="Take Photo" data-testid={`button-photo-${iwp.uiId}`}>
                               <Camera className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => editItem(iwp)}
-                              title="Edit" data-testid={`button-edit-${iwp.item.id}`}>
+                              title="Edit" data-testid={`button-edit-${iwp.uiId}`}>
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="icon" variant="ghost" onClick={() => duplicateItem(iwp)}
-                              title="Duplicate" data-testid={`button-duplicate-${iwp.item.id}`}>
+                              title="Duplicate" data-testid={`button-duplicate-${iwp.uiId}`}>
                               <Copy className="w-3.5 h-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" onClick={() => deleteItem(iwp.item.id)}
-                              title="Delete" data-testid={`button-delete-${iwp.item.id}`}>
+                            <Button size="icon" variant="ghost" onClick={() => deleteItem(iwp.uiId)}
+                              title="Delete" data-testid={`button-delete-${iwp.uiId}`}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
@@ -2400,10 +3067,104 @@ export default function QuoteBuilder() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
+                </div>
               </ScrollArea>
             </div>
           )}
         </div>
+        )}
+
+        {!isLargeScreen && mobileTab === "items" && (
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="p-3 space-y-2">
+              {items.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p className="text-sm">No items yet. Switch to the Config tab to add items.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-xs text-muted-foreground font-medium px-1 pb-1" data-testid="text-mobile-items-summary">
+                    {items.length} item{items.length !== 1 ? "s" : ""} — {totalSqm} m² — ${formatPrice(totalPrice)}
+                  </div>
+                  {items.map((iwp, index) => {
+                    const cardPhotoCount = (iwp.photos || []).length;
+                    const cardPhotoSrc = getPrimaryPhotoSrc(iwp);
+                    return (
+                    <div key={iwp.uiId} className="border rounded-md bg-card p-3" data-testid={`card-item-${iwp.uiId}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-muted-foreground shrink-0">{index + 1}.</span>
+                            <span className="font-medium text-sm truncate">{iwp.item.name}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{getCategoryLabel(iwp.item.category)}</Badge>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-sm font-semibold font-mono" data-testid={`text-card-dims-${iwp.uiId}`}>
+                            {iwp.item.width} × {iwp.item.height}
+                            <span className="text-xs font-normal text-muted-foreground">Qty: {iwp.item.quantity}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                            {iwp.item.frameType && <span data-testid={`text-card-frame-${iwp.uiId}`}>{iwp.item.frameType}</span>}
+                            {iwp.item.glassIguType && (
+                              <span data-testid={`text-card-glass-${iwp.uiId}`}>
+                                {[iwp.item.glassIguType, iwp.item.glassType].filter(Boolean).join(" / ")}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="shrink-0 flex flex-col items-end gap-1">
+                          {cardPhotoSrc ? (
+                            <button type="button" onClick={() => setGalleryItemId(iwp.uiId)} className="relative" data-testid={`button-card-photo-${iwp.uiId}`}>
+                              <img src={cardPhotoSrc} alt="Photo" className="w-10 h-10 rounded object-cover border" />
+                              {cardPhotoCount > 1 && (
+                                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">+{cardPhotoCount - 1}</span>
+                              )}
+                            </button>
+                          ) : null}
+                          <span className="text-sm font-medium">${formatPrice(calcItemPrice(iwp.item))}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 mt-2 border-t pt-2">
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => editItem(iwp)} data-testid={`button-card-edit-${iwp.uiId}`}>
+                          <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => duplicateItem(iwp)} data-testid={`button-card-duplicate-${iwp.uiId}`}>
+                          <Copy className="w-3.5 h-3.5 mr-1" /> Copy
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => {
+                          setPhotoTargetItemId(iwp.uiId);
+                          photoInputRef.current?.click();
+                        }} data-testid={`button-card-camera-${iwp.uiId}`}>
+                          <Camera className="w-3.5 h-3.5 mr-1" /> {cardPhotoCount > 0 ? `Photos (${cardPhotoCount})` : "Photo"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => {
+                          const { id, ...rest } = iwp.item;
+                          handleDownloadPng({ ...rest, width: rest.width || 1200, height: rest.height || 1500, quantity: rest.quantity || 1, name: rest.name || "" }, iwp.uiId);
+                        }} data-testid={`button-card-download-${iwp.uiId}`}>
+                          <Download className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-destructive ml-auto" onClick={() => deleteItem(iwp.uiId)} data-testid={`button-card-delete-${iwp.uiId}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    );
+                  })}
+                  <div className="pt-2 space-y-2">
+                    <Button variant="outline" className="w-full" onClick={startNewItem} data-testid="button-items-add-next">
+                      <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
+                    </Button>
+                    {savedJobId && (
+                      <Button className="w-full" onClick={() => guardedNavigate(`/job/${savedJobId}/exec-summary`)} data-testid="button-items-review-estimate">
+                        <FileText className="w-4 h-4 mr-1.5" /> Review & Generate Estimate
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {offscreenConfig && (
@@ -2412,7 +3173,7 @@ export default function QuoteBuilder() {
         </div>
       )}
 
-      <Dialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+      <Dialog open={showLeaveDialog} onOpenChange={(open) => { if (!open && !isSaveAndLeaving) { setShowLeaveDialog(false); setPendingNavigateTo(null); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2424,29 +3185,125 @@ export default function QuoteBuilder() {
             You have unsaved changes. Would you like to save before leaving?
           </p>
           <div className="flex justify-end gap-2 mt-2">
-            <Button variant="outline" onClick={() => setShowLeaveDialog(false)} data-testid="button-leave-cancel">
+            <Button variant="outline" disabled={isSaveAndLeaving} onClick={() => { setShowLeaveDialog(false); setPendingNavigateTo(null); }} data-testid="button-leave-cancel">
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => { setShowLeaveDialog(false); setHasUnsavedChanges(false); navigate("/"); }} data-testid="button-leave-discard">
+            <Button variant="destructive" disabled={isSaveAndLeaving} onClick={() => { const dest = pendingNavigateTo || "/"; setShowLeaveDialog(false); setHasUnsavedChanges(false); setPendingNavigateTo(null); navigate(dest); }} data-testid="button-leave-discard">
               Discard
             </Button>
-            <Button onClick={async () => { setShowLeaveDialog(false); await saveJob(); if (jobName.trim() && items.length > 0) navigate("/"); }} data-testid="button-leave-save">
-              <Save className="w-4 h-4 mr-1.5" /> Save & Leave
+            <Button disabled={isSaveAndLeaving} onClick={async () => { const dest = pendingNavigateTo || "/"; setIsSaveAndLeaving(true); try { const ok = await saveJob(); if (ok) { setShowLeaveDialog(false); setPendingNavigateTo(null); navigate(dest); } } finally { setIsSaveAndLeaving(false); } }} data-testid="button-leave-save">
+              {isSaveAndLeaving ? (<><span className="w-4 h-4 mr-1.5 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" /> Saving...</>) : (<><Save className="w-4 h-4 mr-1.5" /> Save & Leave</>)}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!photoPreview} onOpenChange={() => setPhotoPreview(null)}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={!!galleryItemId} onOpenChange={() => setGalleryItemId(null)}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-photo-gallery">
           <DialogHeader>
-            <DialogTitle>Site Photo</DialogTitle>
+            <DialogTitle>Item Photos</DialogTitle>
           </DialogHeader>
-          {photoPreview && (
-            <img src={photoPreview} alt="Site photo" className="w-full rounded" data-testid="img-photo-preview" />
-          )}
+          {galleryItemId && (() => {
+            const iwp = items.find(i => i.uiId === galleryItemId);
+            if (!iwp) return null;
+            const photos = iwp.photos || [];
+            const legacySrc = (!photos.length && iwp.photo?.startsWith("data:image/")) ? iwp.photo : null;
+            return (
+              <div className="space-y-4">
+                {legacySrc && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">Legacy photo (read-only)</p>
+                    <img src={legacySrc} alt="Legacy photo" className="w-full max-h-64 object-contain rounded border" />
+                  </div>
+                )}
+                {photos.length === 0 && !legacySrc && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No photos yet. Use the camera button to add photos.</p>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {photos.map((p, idx) => (
+                    <div key={p.key} className={`relative rounded-lg border-2 overflow-hidden ${p.isPrimary ? "border-primary" : "border-border"}`} data-testid={`gallery-photo-${idx}`}>
+                      <img
+                        src={`/api/item-photos/${p.key}`}
+                        alt={p.caption || `Photo ${idx + 1}`}
+                        className="w-full h-32 object-cover cursor-pointer"
+                        onClick={() => {
+                          setViewerSrc(`/api/item-photos/${p.key}`);
+                          setViewerTitle(p.caption || `Photo ${idx + 1}`);
+                        }}
+                      />
+                      {p.isPrimary && (
+                        <Badge className="absolute top-1 left-1 text-[10px] px-1 py-0" data-testid={`badge-primary-${idx}`}>Primary</Badge>
+                      )}
+                      {p.includeInCustomerPdf && (
+                        <Badge variant="secondary" className="absolute top-1 right-1 text-[10px] px-1 py-0" data-testid={`badge-pdf-${idx}`}>PDF</Badge>
+                      )}
+                      <div className="flex items-center justify-between p-1.5 bg-card">
+                        <div className="flex gap-1">
+                          {!p.isPrimary && (
+                            <Button size="sm" variant="ghost" className="h-6 text-xs px-1.5" data-testid={`button-set-primary-${idx}`}
+                              onClick={() => {
+                                setItems(prev => prev.map(i => {
+                                  if (i.uiId !== galleryItemId) return i;
+                                  return { ...i, photos: (i.photos || []).map(ph => ({ ...ph, isPrimary: ph.key === p.key })) };
+                                }));
+                                setHasUnsavedChanges(true);
+                              }}>
+                              Set Primary
+                            </Button>
+                          )}
+                          <Button size="sm" variant={p.includeInCustomerPdf ? "secondary" : "ghost"} className="h-6 text-xs px-1.5" data-testid={`button-toggle-pdf-${idx}`}
+                            onClick={() => {
+                              setItems(prev => prev.map(i => {
+                                if (i.uiId !== galleryItemId) return i;
+                                return { ...i, photos: (i.photos || []).map(ph => ph.key === p.key ? { ...ph, includeInCustomerPdf: !ph.includeInCustomerPdf } : ph) };
+                              }));
+                              setHasUnsavedChanges(true);
+                            }}>
+                            {p.includeInCustomerPdf ? "In PDF" : "Add to PDF"}
+                          </Button>
+                        </div>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" data-testid={`button-delete-photo-${idx}`}
+                          onClick={() => {
+                            setItems(prev => prev.map(i => {
+                              if (i.uiId !== galleryItemId) return i;
+                              let updated = (i.photos || []).filter(ph => ph.key !== p.key);
+                              if (updated.length > 0 && p.isPrimary) {
+                                updated = updated.map((ph, j) => j === 0 ? { ...ph, isPrimary: true } : ph);
+                              }
+                              return { ...i, photos: updated };
+                            }));
+                            setHasUnsavedChanges(true);
+                          }}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <Button variant="outline" size="sm" data-testid="button-gallery-add-photo"
+                    onClick={() => {
+                      setPhotoTargetItemId(galleryItemId);
+                      photoInputRef.current?.click();
+                    }}>
+                    <Camera className="w-4 h-4 mr-1.5" /> Add Photo
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setGalleryItemId(null)}>Close</Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
+
+      <MediaViewer
+        open={!!viewerSrc}
+        onOpenChange={(open) => { if (!open) setViewerSrc(null); }}
+        src={viewerSrc || ""}
+        alt={viewerTitle}
+        title={viewerTitle}
+        downloadFilename={`${viewerTitle.replace(/\s+/g, "_")}.png`}
+      />
     </div>
   );
 }

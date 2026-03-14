@@ -286,3 +286,103 @@
     inset: -1px;
   }
 }
+
+.native-scroll > [data-radix-scroll-area-viewport] {
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+}
+.native-scroll [data-radix-scroll-area-scrollbar] {
+  display: none !important;
+}
+
+@media (max-width: 1023px) {
+  .native-scroll input,
+  .native-scroll select,
+  .native-scroll textarea {
+    scroll-margin-bottom: 60px;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm;
+  }
+
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  [data-sidebar],
+  .flex.h-screen > .flex.flex-col > header {
+    display: none !important;
+  }
+
+  .flex.h-screen {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .flex.h-screen > .flex.flex-col {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+  }
+
+  main.flex-1.overflow-auto {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .overflow-wrap-anywhere {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  [data-testid="quote-preview-page"] {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  [data-testid="quote-preview-page"] img {
+    max-height: 200px !important;
+    page-break-inside: avoid;
+  }
+
+  [data-testid^="schedule-item-"] {
+    page-break-inside: avoid;
+  }
+
+  .space-y-1, .space-y-2, .space-y-3 {
+    page-break-inside: avoid;
+  }
+
+  .grid.grid-cols-1.sm\:grid-cols-3 {
+    page-break-inside: avoid;
+  }
+
+  .text-muted-foreground {
+    color: #6b7280 !important;
+  }
+
+  .bg-card {
+    background-color: white !important;
+  }
+
+  .border {
+    border-color: #d1d5db !important;
+  }
+
+  .bg-muted {
+    background-color: #f3f4f6 !important;
+  }
+
+  [data-testid="quote-preview-page"] .rounded-lg.border {
+    border: 1px solid #d1d5db !important;
+  }
+}

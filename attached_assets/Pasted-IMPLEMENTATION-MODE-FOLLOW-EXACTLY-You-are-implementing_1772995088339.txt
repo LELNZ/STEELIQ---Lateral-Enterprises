@@ -1,0 +1,216 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create separate unrelated template systems for preview and PDF.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required for company-template and division-override alignment.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any migration/backfill actions performed
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Refactor the current quote presentation system into a best-practice model:
+
+- one locked company-wide master template
+- division-level overrides for branding/content/layout options
+- shared use by both Customer Quote Preview and PDF export
+
+This is NOT a user-facing template builder.
+This is a controlled master-template + division-overrides architecture pass.
+
+
+--------------------------------------------------
+T038 — Audit current template/layout key usage and current division settings behavior
+--------------------------------------------------
+
+Problem:
+There is currently a locked template key in settings, but it is not yet clear whether preview and PDF are truly resolved from a single master template with clean division overrides.
+
+Required implementation:
+
+1. Inspect and document:
+   - what the current locked template key actually controls
+   - whether preview and PDF both use it
+   - where division branding/settings are applied
+   - where drift still exists between preview and PDF
+
+2. Identify what should belong to:
+   A. company-wide master template
+   B. division override profile
+
+3. Do not guess — inspect the real code paths.
+
+Acceptance criteria:
+- a clear understanding of current template key usage
+- a clear separation of master-template concerns vs division-override concerns
+
+
+--------------------------------------------------
+T039 — Establish one company-wide master quote template as the primary source of presentation truth
+--------------------------------------------------
+
+Problem:
+Preview and PDF need a stronger shared presentation contract.
+
+Required implementation:
+
+1. Create or refactor toward a single locked master template definition.
+2. This master template should own:
+   - section ordering
+   - section visibility defaults
+   - document structure
+   - header composition rules
+   - totals block structure
+   - legal/terms/acceptance structure
+   - schedule item card structure
+   - default typography/spacing tokens
+   - drawing/photo placement intent
+   - preview/PDF shared presentation contract
+
+3. The master template should be versioned/identified clearly, for example:
+   - company_master_v1
+   or similar
+   Use the best existing system if already close.
+
+4. The master template must remain system-controlled, not user-editable.
+
+Acceptance criteria:
+- one clear master template becomes the main source of presentation truth
+- preview and PDF both resolve from that same master template
+
+
+--------------------------------------------------
+T040 — Move division-specific behavior into clean override profiles
+--------------------------------------------------
+
+Problem:
+Divisions need branding/content differences, but should not become separate full templates.
+
+Required implementation:
+
+1. Define division overrides as a separate layer on top of the master template.
+2. Division overrides may include:
+   - trading name
+   - logo
+   - legal line
+   - accent colour
+   - default terms/header notes
+   - approved layout options if already supported
+
+3. Division overrides should NOT redefine the entire document structure.
+
+4. Update the settings page language/behavior so it reflects this model clearly:
+   - template is company-controlled / locked
+   - division settings are overrides
+   - avoid implying each division has a completely separate template unless that is truly implemented
+
+Acceptance criteria:
+- divisions use override profiles, not independent full templates
+- settings UI better reflects the true model
+
+
+--------------------------------------------------
+T041 — Align Customer Quote Preview and PDF export to the master template + division overrides model
+--------------------------------------------------
+
+Problem:
+Preview and PDF still risk drifting unless both resolve the same presentation layers in the same order.
+
+Required implementation:
+
+1. Ensure Preview resolves:
+   - master template
+   - then division overrides
+   - then quote content
+
+2. Ensure PDF export resolves:
+   - master template
+   - then division overrides
+   - then quote content
+
+3. Keep PDF-specific pagination logic where needed, but do not let it drift into a different document family.
+
+4. Preview should remain a screen document, PDF should remain a paginated document, but both should look recognizably like the same template.
+
+Acceptance criteria:
+- preview and PDF are materially closer
+- both are clearly driven by the same template + override stack
+
+
+--------------------------------------------------
+T042 — Keep this pass tightly scoped and best-practice
+--------------------------------------------------
+
+Do NOT:
+- build a user-editable template builder
+- add drag/drop template editing
+- add many template variants
+- redesign quote lifecycle
+- add customer portal/email logic
+- add speculative theme systems beyond what is needed
+- create separate division-owned template architectures
+
+This is a master-template + division-overrides pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The locked template key is clearly meaningful and tied to a company-wide master template.
+2. Division settings act as overrides, not separate independent templates.
+3. Customer Quote Preview and PDF export both resolve from:
+   - master template
+   - division overrides
+   - quote content
+4. Preview and PDF look materially more aligned.
+5. The system follows a cleaner industry-style model:
+   one company template, division-specific overrides.
+
+
+END OF IMPLEMENTATION

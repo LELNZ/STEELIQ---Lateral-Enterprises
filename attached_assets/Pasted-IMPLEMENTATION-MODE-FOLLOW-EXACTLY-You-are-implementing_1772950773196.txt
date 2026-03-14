@@ -1,0 +1,122 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT collapse quote vs revision semantics.
+Do NOT move photo/media controls into Visible Specs.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add new endpoints unless explicitly instructed.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+IMPLEMENTATION BEHAVIOR
+Implement the tasks exactly as written.
+Use existing patterns and components.
+Make the smallest safe changes needed.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files inspected
+2. Files changed
+3. Exact root cause found
+4. Exact behavior changes made
+5. Any schema/API/storage changes made
+6. Any risks or limitations remaining
+7. Confirmation architecture guards were preserved
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+Objective:
+Audit and fix quote preview item photo rendering so captions/lightbox do not appear for unresolved images, and confirm whether current storage is adequate.
+
+Context:
+In quote preview, an item can show:
+- generated drawing
+- site/customer photo
+- photo caption
+- lightbox/modal viewer
+
+Observed issue:
+A quote item shows “Photo unavailable” in preview, but still shows a photo caption beneath it.
+Opening the image viewer/lightbox also results in a blank image with the caption still present.
+This suggests metadata exists but the resolved image source is invalid or missing.
+
+Required tasks:
+
+1. Inspect the current photo storage and resolution path end-to-end.
+   Determine:
+   - where item photos are stored today
+   - what fields are stored in the database or snapshot for photos
+   - how those fields are transformed into QuoteDocumentModel
+   - how QuoteRenderer / preview resolves the final image src
+   - how the lightbox decides whether an image is openable
+
+2. Identify the exact root cause.
+   Examples of acceptable root-cause categories:
+   - stale metadata but missing actual file
+   - broken URL/path mapping
+   - renderer emits photo block when no valid renderable src exists
+   - preview caption/lightbox visibility checks are too loose
+   - fallback placeholder and openable image states are incorrectly mixed
+
+3. Fix the preview behavior with the smallest safe change.
+   Requirements:
+   - do not show clickable/lightbox-enabled photo UI unless there is a valid resolved image source
+   - do not show photo caption beneath an unavailable/missing image unless this is explicitly intended and implemented consistently
+   - keep graceful fallback behavior where appropriate
+   - do not break drawings or valid photo rendering
+
+4. Confirm whether a different database is actually needed.
+   - If current storage is sufficient, explicitly say so
+   - If storage is the root problem, explain exactly why
+   - Do not redesign storage unless absolutely necessary
+
+5. Keep the change focused.
+   - no broad media-system rewrite
+   - no schema redesign unless strictly required
+   - no speculative upload subsystem changes
+
+Acceptance criteria:
+- valid photos still render correctly
+- missing/broken photos do not show misleading caption/lightbox behavior
+- the system clearly distinguishes between:
+  - photo metadata exists
+  - photo source resolves
+  - photo is renderable/openable
+- explanation is provided on whether current storage is adequate
+
+At the end provide:
+1. Files inspected
+2. Files changed
+3. Exact root cause found
+4. Exact behavior changes made
+5. Any schema/API/storage changes made
+6. Any risks or limitations remaining
+7. Confirmation architecture guards were preserved

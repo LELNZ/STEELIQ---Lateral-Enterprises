@@ -1,0 +1,232 @@
+Recommended updated plan
+Objective
+
+Phase A — harden the quote/estimate lifecycle by implementing true estimate archive (not deletion), completing missing quote page filters, adding automated regression tests for archive vs delete semantics, and updating replit.md.
+
+T001: True Estimate Archive — Schema & Storage
+
+Blocked By: []
+
+Details:
+
+Add archivedAt (nullable timestamp) to the jobs table in shared/schema.ts
+
+Do not add deletedAt to jobs unless the codebase already uses soft-delete for jobs elsewhere
+
+Run npm run db:push to sync schema
+
+Update IStorage in server/storage.ts:
+
+getAllJobs() returns active jobs by default (archivedAt IS NULL)
+
+add getArchivedJobs() or support an archived filter in the existing method
+
+add archiveJob(id: string): Promise<Job | undefined> — sets archivedAt = now()
+
+add unarchiveJob(id: string): Promise<Job | undefined> — clears archivedAt
+
+getJob(id) must still return archived jobs
+
+Update insert schema/types accordingly
+
+Acceptance:
+
+schema pushed
+
+jobs can be archived/unarchived
+
+archived jobs remain retrievable by ID
+
+T002: True Estimate Archive — API Routes
+
+Blocked By: [T001]
+
+Details:
+
+Rewrite PATCH /api/jobs/:id/archive to call storage.archiveJob(id) instead of deleting
+
+Photos are not cleaned up on archive
+
+Quote cascade still applies if requested
+
+Add PATCH /api/jobs/:id/unarchive
+
+Update GET /api/jobs:
+
+default = active jobs only
+
+?archived=true = archived jobs only
+
+DELETE /api/jobs/:id remains permanent delete:
+
+removes row
+
+cascades quotes per selected action
+
+cleans photos
+
+Acceptance:
+
+archive keeps job in DB
+
+delete removes job
+
+archived jobs can be listed separately
+
+unarchive works
+
+T003: True Estimate Archive — Frontend (Jobs List)
+
+Blocked By: [T002]
+
+Details:
+
+Update client/src/pages/jobs-list.tsx
+
+Add tabs or toggle: Active / Archived
+
+Active tab:
+
+shows non-archived jobs
+
+Archived tab:
+
+shows archived jobs
+
+supports Unarchive
+
+supports Delete Permanently
+
+Archive dialog should explain archive behavior and quote cascade, but not imply data loss
+
+Archived jobs should not be editable in the normal active workflow unless first unarchived
+
+Acceptance:
+
+jobs can be archived, viewed in Archived, unarchived, and permanently deleted
+
+T004: Orphan Detection Update
+
+Blocked By: [T002]
+
+Details:
+
+Simplify orphan detection in server/quote-lifecycle.ts
+
+Rule:
+
+linked job exists → not orphaned
+
+linked job missing → orphaned
+
+Archived jobs are not orphaned because they still exist
+
+Acceptance:
+
+archived estimate → linked quotes not orphaned
+
+deleted estimate → linked quotes orphaned
+
+T005: Quote Page — Additional Filters
+
+Blocked By: []
+
+Details:
+
+Add to client/src/pages/quotes-list.tsx:
+
+date range filter (from / to) using createdAt
+
+customer filter from unique customer names
+
+quote type filter dropdown
+
+Keep tabs as primary organization
+
+Estimator filter:
+
+only implement if real estimator display data exists
+
+otherwise defer and document as pending user/identity support
+
+Acceptance:
+
+date range, customer, and quote type filters work
+
+no dead estimator UI shipped without data
+
+T006: Automated Regression Tests — Archive vs Delete Semantics
+
+Blocked By: [T003, T004, T005]
+
+Details:
+Add/update actual automated tests proving:
+
+archive estimate + archive quotes:
+
+estimate appears in Archived tab
+
+linked quotes archived
+
+linked quotes not orphaned
+
+delete estimate + archive quotes:
+
+estimate removed
+
+linked quotes archived
+
+linked quotes orphaned
+
+delete estimate + keep quotes:
+
+estimate removed
+
+linked quotes keep prior state
+
+linked quotes orphaned
+
+unarchive estimate:
+
+estimate returns to Active
+
+linked quote state unchanged
+
+quote page filters:
+
+date range works
+
+customer filter works
+
+quote type filter works
+
+Acceptance:
+
+automated tests pass for all scenarios
+
+T007: Update replit.md
+
+Blocked By: [T006]
+
+Details:
+Update replit.md with:
+
+current milestone name
+
+estimate lifecycle rules:
+
+archive keeps estimate
+
+delete removes estimate
+
+quote lifecycle rules
+
+orphan detection rule:
+
+only deleted/missing estimates cause orphaned quotes
+
+quotes page filters now supported
+
+Acceptance:
+
+replit.md reflects actual system behavior

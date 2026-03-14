@@ -1,0 +1,102 @@
+Minor hardening changes I still recommend
+1. Rename getQuotesByEstimateId(jobId) for clarity
+
+In H003 you have:
+
+getQuotesByEstimateId(jobId)
+
+That is slightly mixed language.
+
+Use one of these consistently:
+
+getQuotesByLinkedRecordId(jobId) if codebase naming must stay generic
+
+getQuotesByJobId(jobId) if the backend entity is actually job
+
+getQuotesByEstimateId(estimateId) if the backend entity has already been renamed
+
+Because H001 explicitly says to discover real naming first, the task text should not mix method name and parameter semantics.
+
+2. Be careful with projectName and estimatorName
+
+These are fine as nullable helper columns, but only add them if they are not already derivable from linked records or current quote payloads.
+
+I would add one sentence:
+
+Prefer deriving these from related records or existing quote metadata before denormalizing into quote storage.
+
+That avoids unnecessary schema bloat.
+
+3. Clarify archive truth precedence
+
+You wrote:
+
+Archived: archivedAt != null
+
+align with existing status="archived" convention — set both together
+
+That is workable, but I’d make the precedence explicit:
+
+Canonical archive truth is archivedAt != null; status="archived" is maintained for compatibility/UI semantics and must always be set together by lifecycle operations.
+
+That removes ambiguity later.
+
+4. Add revision-preservation note for future quote versioning
+
+You already preserved multiple quotes per linked estimate, which is excellent.
+
+I would add one brief note under H002 or H003:
+
+Do not introduce any constraint or cleanup behavior that assumes one quote per estimate or that deletes historical quote variants unless explicitly requested.
+
+That will protect future quote revision/version support.
+
+5. Tighten hard delete wording on the quote endpoint
+
+This line is good:
+
+DELETE /api/quotes/:id — hard-delete, explicitly destructive, requires confirmation parameter
+
+I would make it slightly stricter:
+
+Requires explicit confirmation parameter and must reject the request otherwise.
+
+That prevents accidental destructive calls from the frontend.
+
+6. H008 wording needs one correction
+
+This line currently says:
+
+“Delete an estimate with cascade archive — quote shows Estimate Removed badge”
+
+That is not correct as written.
+
+If the estimate is deleted and cascade is archive, then the quote should normally be:
+
+archived
+
+orphaned / estimate removed
+
+So the expected result should say:
+
+Delete an estimate with cascade archive — quote appears in Archived with Estimate Removed badge.
+
+Otherwise the verification target is ambiguous.
+
+One small product note
+
+For H006, your Archived tab rule is:
+
+status == "archived"
+
+That is okay if lifecycle operations always set both, but to align with your canonical rule, the safer filtering rule is:
+
+archivedAt != null AND deletedAt == null
+
+That keeps the UI aligned with lifecycle truth even if legacy records exist.
+
+Same idea for Active:
+
+deletedAt == null AND archivedAt == null
+
+That is more robust than relying on status alone.

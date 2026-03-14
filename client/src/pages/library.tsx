@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation, useSearch } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,17 +18,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
   ConfigurationAccessory, ConfigurationLabor,
 } from "@shared/schema";
 import { IGU_INFO } from "@shared/glass-library";
-import { HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
+import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Standard Window" },
@@ -41,22 +43,119 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "handles" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery";
 
-function useLibraryEntries(type: string) {
+const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
+type DivisionCode = typeof DIVISION_CODES[number];
+
+function useLibraryEntries(type: string, divisionCode?: string | null) {
   return useQuery<LibraryEntry[]>({
-    queryKey: ["/api/library", type],
+    queryKey: ["/api/library", type, divisionCode ?? "all"],
     queryFn: async () => {
-      const res = await fetch(`/api/library?type=${type}`);
+      let url = `/api/library?type=${encodeURIComponent(type)}`;
+      if (divisionCode) url += `&divisionCode=${encodeURIComponent(divisionCode)}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
 }
 
+function ScopeBadge({ entry }: { entry: LibraryEntry }) {
+  const scope = entry.divisionScope;
+  return (
+    <Badge
+      variant={scope ? "outline" : "secondary"}
+      className="text-[10px]"
+      data-testid={`badge-scope-${entry.id}`}
+    >
+      {scope || "Shared"}
+    </Badge>
+  );
+}
+
+function DivisionScopeSelector({ divisionCode, onChange }: { divisionCode: string | null; onChange: (code: string | null) => void }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap" data-testid="division-scope-selector">
+      <Filter className="w-4 h-4 text-muted-foreground" />
+      <span className="text-sm font-medium text-muted-foreground">Division Scope:</span>
+      <div className="flex gap-1 flex-wrap">
+        <Button
+          size="sm"
+          variant={divisionCode === null ? "default" : "outline"}
+          className="h-7 px-3 text-xs"
+          onClick={() => onChange(null)}
+          data-testid="button-scope-all"
+        >
+          All
+        </Button>
+        {DIVISION_CODES.map((code) => (
+          <Button
+            key={code}
+            size="sm"
+            variant={divisionCode === code ? "default" : "outline"}
+            className="h-7 px-3 text-xs"
+            onClick={() => onChange(code)}
+            data-testid={`button-scope-${code}`}
+          >
+            {code}
+          </Button>
+        ))}
+      </div>
+      {divisionCode && (
+        <Badge variant="secondary" className="text-xs" data-testid="badge-active-scope">
+          Showing: {divisionCode} + Shared
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+function DivisionScopeField({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  return (
+    <div>
+      <Label>Division Scope</Label>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger data-testid="select-entry-scope">
+          <SelectValue placeholder="Shared (all divisions)" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__shared__">Shared (all divisions)</SelectItem>
+          {DIVISION_CODES.map((code) => (
+            <SelectItem key={code} value={code}>{code}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {disabled && <p className="text-xs text-muted-foreground mt-1">Scope is set on creation for this entry type</p>}
+    </div>
+  );
+}
+
 export default function Library() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const searchString = useSearch();
   const [activeTab, setActiveTab] = useState<LibraryTab>("direct_materials");
+
+  const parsedDivision = new URLSearchParams(searchString).get("division");
+  const validDivision = parsedDivision && (DIVISION_CODES as readonly string[]).includes(parsedDivision) ? parsedDivision : null;
+  const [selectedDivision, setSelectedDivision] = useState<string | null>(validDivision);
+
+  useEffect(() => {
+    setSelectedDivision(validDivision);
+  }, [validDivision]);
+
+  function setDivisionAndUrl(code: string | null) {
+    setSelectedDivision(code);
+    const params = new URLSearchParams(searchString);
+    if (code) {
+      params.set("division", code);
+    } else {
+      params.delete("division");
+    }
+    const qs = params.toString();
+    navigate(`/library${qs ? `?${qs}` : ""}`, { replace: true });
+  }
 
   const seedMutation = useMutation({
     mutationFn: async () => {
@@ -82,16 +181,16 @@ export default function Library() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="library-page">
-      <header className="border-b px-6 py-3 flex items-center justify-between gap-4 bg-card shrink-0">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4 bg-card shrink-0 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary">
+          <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary shrink-0">
             <BookOpen className="w-5 h-5 text-primary-foreground" />
           </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight" data-testid="text-library-title">
               Item Library
             </h1>
-            <p className="text-xs text-muted-foreground">Manage reference data for quotes</p>
+            <p className="text-xs text-muted-foreground hidden sm:block">Manage reference data for quotes</p>
           </div>
         </div>
         <Button
@@ -106,50 +205,58 @@ export default function Library() {
         </Button>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <div className="mb-4">
+          <DivisionScopeSelector divisionCode={selectedDivision} onChange={setDivisionAndUrl} />
+        </div>
+
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LibraryTab)}>
-          <TabsList className="mb-4" data-testid="library-tabs">
+          <TabsList className="mb-4 overflow-x-auto flex-wrap" data-testid="library-tabs">
             <TabsTrigger value="direct_materials" data-testid="tab-direct-materials">Direct Materials</TabsTrigger>
             <TabsTrigger value="manufacturing_labour" data-testid="tab-manufacturing-labour">Manufacturing Labour</TabsTrigger>
             <TabsTrigger value="glass" data-testid="tab-glass">Glass</TabsTrigger>
             <TabsTrigger value="frame_type" data-testid="tab-frame-types">Frame Types</TabsTrigger>
             <TabsTrigger value="frame_color" data-testid="tab-frame-colors">Frame Colors</TabsTrigger>
-            <TabsTrigger value="handles" data-testid="tab-handles">Handles</TabsTrigger>
+            <TabsTrigger value="hardware" data-testid="tab-hardware">Hardware</TabsTrigger>
             <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
             <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
             <TabsTrigger value="installation" data-testid="tab-installation">Installation</TabsTrigger>
             <TabsTrigger value="delivery" data-testid="tab-delivery">Delivery</TabsTrigger>
+            <TabsTrigger value="profile_roles" data-testid="tab-profile-roles">Profile Roles</TabsTrigger>
           </TabsList>
 
           <TabsContent value="glass">
-            <GlassSection />
+            <GlassSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="frame_type">
-            <FrameTypeSection />
+            <FrameTypeSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="frame_color">
-            <SimpleSection type="frame_color" title="Frame Colors" fields={["value", "label", "supplierCode", "priceProvision"]} />
+            <SimpleSection type="frame_color" title="Frame Colors" fields={["value", "label", "supplierCode", "priceProvision"]} divisionCode={selectedDivision} />
           </TabsContent>
-          <TabsContent value="handles">
-            <HandlesSection />
+          <TabsContent value="hardware">
+            <HardwareSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="liner_type">
-            <LinerTypeSection />
+            <LinerTypeSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="wanz_bar">
-            <WanzBarSection />
+            <WanzBarSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="direct_materials">
-            <DirectMaterialsSection />
+            <DirectMaterialsSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="manufacturing_labour">
-            <ManufacturingLabourSection />
+            <ManufacturingLabourSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="installation">
-            <InstallationSection />
+            <InstallationSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="delivery">
-            <DeliverySection />
+            <DeliverySection divisionCode={selectedDivision} />
+          </TabsContent>
+          <TabsContent value="profile_roles">
+            <ProfileRoleDictionarySection />
           </TabsContent>
         </Tabs>
       </div>
@@ -193,6 +300,7 @@ function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
                     <TableHead className="text-right">6/5</TableHead>
                     <TableHead className="text-right">6/6</TableHead>
                     <TableHead className="text-right">8/8</TableHead>
+                    <TableHead>Scope</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -207,6 +315,7 @@ function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
                             {d.prices[t] != null ? `$${d.prices[t].toFixed(2)}` : "—"}
                           </TableCell>
                         ))}
+                        <TableCell><ScopeBadge entry={entry} /></TableCell>
                         <TableCell>
                           <div className="flex gap-1">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(entry)} data-testid={`button-edit-glass-${entry.id}`}>
@@ -230,9 +339,9 @@ function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
   );
 }
 
-function GlassSection() {
+function GlassSection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: entries = [], isLoading } = useLibraryEntries("glass");
+  const { data: entries = [], isLoading } = useLibraryEntries("glass", divisionCode);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -242,7 +351,7 @@ function GlassSection() {
       await apiRequest("DELETE", `/api/library/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "glass"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: "Glass entry deleted" });
       setDeleteId(null);
     },
@@ -279,6 +388,7 @@ function GlassSection() {
       {(showAdd || editEntry) && (
         <GlassDialog
           entry={editEntry}
+          divisionCode={divisionCode}
           onClose={() => { setShowAdd(false); setEditEntry(null); }}
         />
       )}
@@ -293,11 +403,12 @@ function GlassSection() {
   );
 }
 
-function GlassDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function GlassDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const d = entry ? (entry.data as any) : {};
   const [iguType, setIguType] = useState(d.iguType || "EnergySaver");
   const [combo, setCombo] = useState(d.combo || "");
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
   const [prices, setPrices] = useState<Record<string, string>>({
     "4/4": d.prices?.["4/4"]?.toString() || "",
     "5/4": d.prices?.["5/4"]?.toString() || "",
@@ -314,14 +425,15 @@ function GlassDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: 
         if (v.trim()) priceObj[k] = parseFloat(v);
       }
       const data = { iguType, combo, prices: priceObj };
+      const divisionScope = scopeValue === "__shared__" ? null : scopeValue;
       if (entry) {
-        await apiRequest("PATCH", `/api/library/${entry.id}`, { data });
+        await apiRequest("PATCH", `/api/library/${entry.id}`, { data, divisionScope });
       } else {
-        await apiRequest("POST", "/api/library", { type: "glass", data, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "glass", data, sortOrder: 0, divisionScope });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "glass"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: entry ? "Glass entry updated" : "Glass entry added" });
       onClose();
     },
@@ -374,6 +486,7 @@ function GlassDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: 
               ))}
             </div>
           </div>
+          <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -405,9 +518,9 @@ const DEFAULT_LABOR_TASK_NAMES = [
   "cutting", "milling", "drilling", "assembly-crimped", "assembly-screwed", "glazing",
 ];
 
-function FrameTypeSection() {
+function FrameTypeSection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: entries = [], isLoading } = useLibraryEntries("frame_type");
+  const { data: entries = [], isLoading } = useLibraryEntries("frame_type", divisionCode);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -418,7 +531,7 @@ function FrameTypeSection() {
       await apiRequest("DELETE", `/api/library/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "frame_type"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: "Frame type deleted" });
       setDeleteId(null);
     },
@@ -455,6 +568,7 @@ function FrameTypeSection() {
                           {(d.categories || []).map((c: string) => (
                             <Badge key={c} variant="outline" className="text-xs">{c}</Badge>
                           ))}
+                          <ScopeBadge entry={entry} />
                         </div>
                       </div>
                     </div>
@@ -484,7 +598,7 @@ function FrameTypeSection() {
       )}
 
       {(showAdd || editEntry) && (
-        <FrameTypeDialog entry={editEntry} onClose={() => { setShowAdd(false); setEditEntry(null); }} />
+        <FrameTypeDialog entry={editEntry} divisionCode={divisionCode} onClose={() => { setShowAdd(false); setEditEntry(null); }} />
       )}
       <DeleteConfirmDialog
         open={!!deleteId}
@@ -722,6 +836,9 @@ function ProfilesPanel({ configurationId }: { configurationId: string }) {
 
 function ProfileDialog({ configurationId, profile, onClose }: { configurationId: string; profile: ConfigurationProfile | null; onClose: () => void }) {
   const { toast } = useToast();
+  const { data: roleEntries = [] } = useLibraryEntries("profile_role");
+  const managedRoles = roleEntries.map((e) => (e.data as any).name as string).filter(Boolean);
+  const roleOptions = managedRoles.length > 0 ? managedRoles : PROFILE_ROLES;
   const [mouldNumber, setMouldNumber] = useState(profile?.mouldNumber || "");
   const [role, setRole] = useState(profile?.role || "outer-frame");
   const [kgPerMetre, setKgPerMetre] = useState(profile?.kgPerMetre || "");
@@ -761,7 +878,7 @@ function ProfileDialog({ configurationId, profile, onClose }: { configurationId:
             <Select value={role} onValueChange={setRole}>
               <SelectTrigger data-testid="select-profile-role"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {PROFILE_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                {roleOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -1103,13 +1220,14 @@ function LaborDialog({ configurationId, labor, onClose }: { configurationId: str
   );
 }
 
-function FrameTypeDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function FrameTypeDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const d = entry ? (entry.data as any) : {};
   const [value, setValue] = useState(d.value || "");
   const [label, setLabel] = useState(d.label || "");
   const [categories, setCategories] = useState<string[]>(d.categories || []);
   const [pricePerKg, setPricePerKg] = useState(d.pricePerKg?.toString() || "");
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1117,14 +1235,15 @@ function FrameTypeDialog({ entry, onClose }: { entry: LibraryEntry | null; onClo
         value, label, categories,
         pricePerKg: pricePerKg.trim() ? parseFloat(pricePerKg) : null,
       };
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (entry) {
-        await apiRequest("PATCH", `/api/library/${entry.id}`, { data });
+        await apiRequest("PATCH", `/api/library/${entry.id}`, { data, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type: "frame_type", data, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "frame_type", data, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "frame_type"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: entry ? "Frame type updated" : "Frame type added" });
       onClose();
     },
@@ -1170,6 +1289,7 @@ function FrameTypeDialog({ entry, onClose }: { entry: LibraryEntry | null; onClo
             <Label>Price per kg (optional)</Label>
             <Input type="number" step="0.01" value={pricePerKg} onChange={(e) => setPricePerKg(e.target.value)} placeholder="Leave empty if not set" data-testid="input-ft-price" />
           </div>
+          <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -1182,8 +1302,8 @@ function FrameTypeDialog({ entry, onClose }: { entry: LibraryEntry | null; onClo
   );
 }
 
-function LinerTypeSection() {
-  const { data: frameTypes = [] } = useLibraryEntries("frame_type");
+function LinerTypeSection({ divisionCode }: { divisionCode?: string | null }) {
+  const { data: frameTypes = [] } = useLibraryEntries("frame_type", divisionCode);
   const allFrameTypeLabels = frameTypes.map((ft) => (ft.data as any).label as string).filter(Boolean);
   return (
     <SimpleSection
@@ -1192,14 +1312,15 @@ function LinerTypeSection() {
       fields={["value", "label", "priceProvision"]}
       priceUnit="/lin.m"
       allFrameTypeLabels={allFrameTypeLabels}
+      divisionCode={divisionCode}
     />
   );
 }
 
-function WanzBarSection() {
+function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: entries = [], isLoading } = useLibraryEntries("wanz_bar");
-  const { data: frameTypes = [] } = useLibraryEntries("frame_type");
+  const { data: entries = [], isLoading } = useLibraryEntries("wanz_bar", divisionCode);
+  const { data: frameTypes = [] } = useLibraryEntries("frame_type", divisionCode);
   const allFrameTypeLabels = frameTypes.map((ft) => (ft.data as any).label as string).filter(Boolean);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -1208,7 +1329,7 @@ function WanzBarSection() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "wanz_bar"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: "Wanz Bar entry deleted" });
       setDeleteId(null);
     },
@@ -1222,7 +1343,7 @@ function WanzBarSection() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "wanz_bar"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: "Wanz Bar entries reset to defaults" });
     },
   });
@@ -1247,7 +1368,7 @@ function WanzBarSection() {
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1257,6 +1378,7 @@ function WanzBarSection() {
                 <TableHead className="text-right">Price USD/kg</TableHead>
                 <TableHead className="text-right">Price NZD/lin.m</TableHead>
                 <TableHead>Allocation</TableHead>
+                <TableHead>Scope</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -1271,6 +1393,7 @@ function WanzBarSection() {
                     <TableCell className="text-right font-mono">{d.pricePerKgUsd ? `$${d.pricePerKgUsd}` : "—"}</TableCell>
                     <TableCell className="text-right font-mono">{d.priceNzdPerLinM ? `$${d.priceNzdPerLinM}` : "—"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{Array.isArray(d.allocations) && d.allocations.length > 0 ? d.allocations.join(", ") : "All Windows"}</TableCell>
+                    <TableCell><ScopeBadge entry={entry} /></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditEntry(entry)}>
@@ -1285,7 +1408,7 @@ function WanzBarSection() {
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1293,7 +1416,7 @@ function WanzBarSection() {
       </Card>
 
       {(showAdd || editEntry) && (
-        <WanzBarDialog entry={editEntry} allFrameTypeLabels={allFrameTypeLabels} onClose={() => { setShowAdd(false); setEditEntry(null); }} />
+        <WanzBarDialog entry={editEntry} allFrameTypeLabels={allFrameTypeLabels} divisionCode={divisionCode} onClose={() => { setShowAdd(false); setEditEntry(null); }} />
       )}
       <DeleteConfirmDialog
         open={!!deleteId}
@@ -1305,9 +1428,10 @@ function WanzBarSection() {
   );
 }
 
-function WanzBarDialog({ entry, allFrameTypeLabels, onClose }: { entry: LibraryEntry | null; allFrameTypeLabels: string[]; onClose: () => void }) {
+function WanzBarDialog({ entry, allFrameTypeLabels, divisionCode, onClose }: { entry: LibraryEntry | null; allFrameTypeLabels: string[]; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const d = entry ? (entry.data as any) : {};
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
   const [values, setValues] = useState({
     value: d.value?.toString() || "",
     label: d.label?.toString() || "",
@@ -1337,14 +1461,15 @@ function WanzBarDialog({ entry, allFrameTypeLabels, onClose }: { entry: LibraryE
         priceNzdPerLinM: parseFloat(values.priceNzdPerLinM) || 0,
         allocations: selectedAllocations,
       };
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (entry) {
-        await apiRequest("PATCH", `/api/library/${entry.id}`, { data });
+        await apiRequest("PATCH", `/api/library/${entry.id}`, { data, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type: "wanz_bar", data, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "wanz_bar", data, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "wanz_bar"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: entry ? "Wanz Bar entry updated" : "Wanz Bar entry added" });
       onClose();
     },
@@ -1403,6 +1528,7 @@ function WanzBarDialog({ entry, allFrameTypeLabels, onClose }: { entry: LibraryE
               )}
             </div>
           )}
+          <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -1415,24 +1541,63 @@ function WanzBarDialog({ entry, allFrameTypeLabels, onClose }: { entry: LibraryE
   );
 }
 
-function HandlesSection() {
+function HardwareSection({ divisionCode }: { divisionCode?: string | null }) {
   return (
-    <div className="space-y-4" data-testid="section-handles">
-      <div>
-        <h2 className="text-base font-semibold">Handles by Category</h2>
-        <p className="text-sm text-muted-foreground">{HANDLE_CATEGORIES.length} handle categories</p>
+    <div className="space-y-6" data-testid="section-hardware">
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Handles by Category</h2>
+          <p className="text-sm text-muted-foreground">{HANDLE_CATEGORIES.length} handle categories</p>
+        </div>
+        {HANDLE_CATEGORIES.map((hc) => (
+          <HandleCategoryCollapsible key={hc.type} handleCat={hc} divisionCode={divisionCode} />
+        ))}
       </div>
-      {HANDLE_CATEGORIES.map((hc) => (
-        <HandleCategoryCollapsible key={hc.type} handleCat={hc} />
-      ))}
+
+      <Separator />
+
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Locks by Category</h2>
+          <p className="text-sm text-muted-foreground">{LOCK_CATEGORIES.length} lock categories (door products)</p>
+        </div>
+        {LOCK_CATEGORIES.map((lc) => (
+          <LockCategoryCollapsible key={lc.type} lockCat={lc} divisionCode={divisionCode} />
+        ))}
+      </div>
     </div>
   );
 }
 
-function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CATEGORIES[number] }) {
+function LockCategoryCollapsible({ lockCat, divisionCode }: { lockCat: typeof LOCK_CATEGORIES[number]; divisionCode?: string | null }) {
   const [open, setOpen] = useState(false);
-  const { data: entries = [] } = useLibraryEntries(handleCat.type);
-  const { data: frameTypes = [] } = useLibraryEntries("frame_type");
+  const { data: entries = [] } = useLibraryEntries(lockCat.type, divisionCode);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="py-3 cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              {lockCat.label}
+              <Badge variant="secondary" className="text-[10px]">{entries.length} locks</Badge>
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0">
+            <SimpleSection type={lockCat.type} title={lockCat.label} fields={["value", "label", "priceProvision"]} divisionCode={divisionCode} />
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+  );
+}
+
+function HandleCategoryCollapsible({ handleCat, divisionCode }: { handleCat: typeof HANDLE_CATEGORIES[number]; divisionCode?: string | null }) {
+  const [open, setOpen] = useState(false);
+  const { data: entries = [] } = useLibraryEntries(handleCat.type, divisionCode);
+  const { data: frameTypes = [] } = useLibraryEntries("frame_type", divisionCode);
   const matchingFt = frameTypes.find((ft) => {
     const cats = (ft.data as any).categories;
     return Array.isArray(cats) && cats.includes(handleCat.categoryMatch);
@@ -1453,7 +1618,7 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
         </CollapsibleTrigger>
         <CollapsibleContent>
           <CardContent className="pt-0">
-            <SimpleSection type={handleCat.type} title={handleCat.label} fields={["value", "label", "priceProvision"]} defaultAllocation={defaultAllocation} allFrameTypeLabels={allFrameTypeLabels} />
+            <SimpleSection type={handleCat.type} title={handleCat.label} fields={["value", "label", "priceProvision"]} defaultAllocation={defaultAllocation} allFrameTypeLabels={allFrameTypeLabels} divisionCode={divisionCode} />
           </CardContent>
         </CollapsibleContent>
       </Card>
@@ -1461,9 +1626,9 @@ function HandleCategoryCollapsible({ handleCat }: { handleCat: typeof HANDLE_CAT
   );
 }
 
-function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allFrameTypeLabels }: { type: string; title: string; fields: string[]; priceUnit?: string; defaultAllocation?: string; allFrameTypeLabels?: string[] }) {
+function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allFrameTypeLabels, divisionCode }: { type: string; title: string; fields: string[]; priceUnit?: string; defaultAllocation?: string; allFrameTypeLabels?: string[]; divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: entries = [], isLoading } = useLibraryEntries(type);
+  const { data: entries = [], isLoading } = useLibraryEntries(type, divisionCode);
   const [editEntry, setEditEntry] = useState<LibraryEntry | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -1474,7 +1639,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
       await apiRequest("DELETE", `/api/library/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", type] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: `${title} entry deleted` });
       setDeleteId(null);
     },
@@ -1510,7 +1675,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1520,6 +1685,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
                   </TableHead>
                 ))}
                 {hasAllocation && <TableHead>Allocation</TableHead>}
+                <TableHead>Scope</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -1538,6 +1704,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
                     {hasAllocation && (
                       <TableCell className="text-sm text-muted-foreground" data-testid={`text-allocation-${entry.id}`}>{getEntryAllocations(entry)}</TableCell>
                     )}
+                    <TableCell><ScopeBadge entry={entry} /></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditEntry(entry)}>
@@ -1552,7 +1719,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={fields.length + (hasAllocation ? 2 : 1)} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={fields.length + (hasAllocation ? 3 : 2)} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1568,6 +1735,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
           entry={editEntry}
           defaultAllocation={defaultAllocation}
           allFrameTypeLabels={allFrameTypeLabels}
+          divisionCode={divisionCode}
           onClose={() => { setShowAdd(false); setEditEntry(null); }}
         />
       )}
@@ -1581,7 +1749,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
   );
 }
 
-function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocation, allFrameTypeLabels, onClose }: {
+function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocation, allFrameTypeLabels, divisionCode, onClose }: {
   type: string;
   title: string;
   fields: string[];
@@ -1589,6 +1757,7 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocati
   entry: LibraryEntry | null;
   defaultAllocation?: string;
   allFrameTypeLabels?: string[];
+  divisionCode?: string | null;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -1596,6 +1765,7 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocati
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(fields.map((f) => [f, d[f]?.toString() || ""]))
   );
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
 
   const initialAllocations: string[] = Array.isArray(d.allocations) && d.allocations.length > 0
     ? d.allocations
@@ -1623,14 +1793,15 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocati
       if (hasAllocationSelector) {
         data.allocations = selectedAllocations;
       }
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (entry) {
-        await apiRequest("PATCH", `/api/library/${entry.id}`, { data });
+        await apiRequest("PATCH", `/api/library/${entry.id}`, { data, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type, data, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type, data, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", type] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: entry ? `${title} entry updated` : `${title} entry added` });
       onClose();
     },
@@ -1680,6 +1851,7 @@ function SimpleDialog({ type, title, fields, fieldLabels, entry, defaultAllocati
               )}
             </div>
           )}
+          <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -1720,12 +1892,191 @@ function DeleteConfirmDialog({ open, onClose, onConfirm, isPending }: {
   );
 }
 
+function ProfileRoleDictionarySection() {
+  const { toast } = useToast();
+  const { data: entries = [], isLoading } = useLibraryEntries("profile_role");
+  const [newRoleName, setNewRoleName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+
+  const addMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/library", { type: "profile_role", data: { name: name.trim() }, sortOrder: entries.length });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "profile_role"] });
+      setNewRoleName("");
+      toast({ title: "Role added" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await apiRequest("PATCH", `/api/library/${id}`, { data: { name: name.trim() } });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "profile_role"] });
+      setEditingId(null);
+      setEditingName("");
+      toast({ title: "Role updated" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/library/profile-roles/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library", "profile_role"] });
+      toast({ title: "Role removed" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Cannot delete role", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const startEdit = (entry: LibraryEntry) => {
+    setEditingId(entry.id);
+    setEditingName((entry.data as any).name || "");
+  };
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="profile-role-dictionary-section">
+      <div className="flex items-center gap-2">
+        <List className="w-4 h-4 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Profile Role Dictionary</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Manage the controlled list of role values available when assigning aluminium profiles. Roles in use by existing profiles cannot be deleted.
+      </p>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Role Name</TableHead>
+                <TableHead className="w-28"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry) => {
+                const roleName = (entry.data as any).name as string;
+                const isEditing = editingId === entry.id;
+                return (
+                  <TableRow key={entry.id} data-testid={`row-role-${entry.id}`}>
+                    <TableCell>
+                      {isEditing ? (
+                        <Input
+                          className="h-7 text-sm"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          autoFocus
+                          data-testid={`input-edit-role-${entry.id}`}
+                        />
+                      ) : (
+                        <span className="font-mono text-sm">{roleName}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 justify-end">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={!editingName.trim() || updateMutation.isPending}
+                              onClick={() => updateMutation.mutate({ id: entry.id, name: editingName })}
+                              data-testid={`button-save-role-${entry.id}`}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => { setEditingId(null); setEditingName(""); }}
+                              data-testid={`button-cancel-role-${entry.id}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => startEdit(entry)}
+                              data-testid={`button-edit-role-${entry.id}`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive"
+                              disabled={deleteMutation.isPending}
+                              onClick={() => deleteMutation.mutate(entry.id)}
+                              data-testid={`button-delete-role-${entry.id}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {entries.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-muted-foreground py-6">
+                    No roles defined yet. Add one below.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <div className="flex gap-2 items-center">
+        <Input
+          placeholder="New role name (e.g. transom-cap)"
+          className="max-w-xs"
+          value={newRoleName}
+          onChange={(e) => setNewRoleName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && newRoleName.trim()) addMutation.mutate(newRoleName); }}
+          data-testid="input-new-role-name"
+        />
+        <Button
+          size="sm"
+          disabled={!newRoleName.trim() || addMutation.isPending}
+          onClick={() => addMutation.mutate(newRoleName)}
+          data-testid="button-add-role"
+        >
+          <Plus className="w-4 h-4 mr-1" /> Add Role
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const FAMILY_GROUPS = ["ES52 Window", "ES52 Hinge Door", "ES127 Sliding Door"];
 
-function DirectMaterialsSection() {
+function DirectMaterialsSection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: profiles = [], isLoading: pLoading } = useLibraryEntries("direct_profile");
-  const { data: accessories = [], isLoading: aLoading } = useLibraryEntries("direct_accessory");
+  const { data: profiles = [], isLoading: pLoading } = useLibraryEntries("direct_profile", divisionCode);
+  const { data: accessories = [], isLoading: aLoading } = useLibraryEntries("direct_accessory", divisionCode);
   const [editProfile, setEditProfile] = useState<LibraryEntry | null>(null);
   const [editAccessory, setEditAccessory] = useState<LibraryEntry | null>(null);
   const [addingProfile, setAddingProfile] = useState(false);
@@ -1806,12 +2157,14 @@ function DirectMaterialsSection() {
       {(editProfile || addingProfile) && (
         <DirectProfileDialog
           entry={editProfile}
+          divisionCode={divisionCode}
           onClose={() => { setEditProfile(null); setAddingProfile(false); }}
         />
       )}
       {(editAccessory || addingAccessory) && (
         <DirectAccessoryDialog
           entry={editAccessory}
+          divisionCode={divisionCode}
           onClose={() => { setEditAccessory(null); setAddingAccessory(false); }}
         />
       )}
@@ -1853,14 +2206,17 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                 Aluminium Profiles ({profiles.length})
               </CollapsibleTrigger>
               <CollapsibleContent>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10"></TableHead>
                       <TableHead>Mould #</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>kg/m</TableHead>
                       <TableHead>$/kg USD</TableHead>
                       <TableHead>Length</TableHead>
+                      <TableHead>Scope</TableHead>
                       <TableHead className="w-20"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1869,11 +2225,23 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       const d = p.data as any;
                       return (
                         <TableRow key={p.id} data-testid={`row-profile-${p.id}`}>
+                          <TableCell className="p-1">
+                            {d.imageKey ? (
+                              <div className="w-8 h-8 rounded overflow-hidden border bg-muted flex-shrink-0 cursor-pointer" title="View reference image" onClick={() => window.open(`/api/item-photos/${d.imageKey}`, "_blank")} data-testid={`img-profile-thumb-${p.id}`}>
+                                <img src={`/api/item-photos/${d.imageKey}`} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded border border-dashed bg-muted/30 flex items-center justify-center" title="No reference image">
+                                <ImageIcon className="w-3 h-3 text-muted-foreground/40" />
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell className="font-mono text-xs">{d.mouldNumber}</TableCell>
                           <TableCell><Badge variant="outline">{d.role}</Badge></TableCell>
                           <TableCell>{d.kgPerMetre}</TableCell>
                           <TableCell>${d.pricePerKgUsd}</TableCell>
                           <TableCell>{d.lengthFormula}</TableCell>
+                          <TableCell><ScopeBadge entry={p} /></TableCell>
                           <TableCell>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditProfile(p)} data-testid={`button-edit-profile-${p.id}`}>
@@ -1888,10 +2256,11 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       );
                     })}
                     {profiles.length === 0 && (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No profiles</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-4">No profiles</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </CollapsibleContent>
             </Collapsible>
 
@@ -1901,6 +2270,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                 Accessories ({accessories.length})
               </CollapsibleTrigger>
               <CollapsibleContent>
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1909,6 +2279,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       <TableHead>Colour</TableHead>
                       <TableHead>$/USD</TableHead>
                       <TableHead>Scaling</TableHead>
+                      <TableHead>Scope</TableHead>
                       <TableHead className="w-20"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1922,6 +2293,7 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                           <TableCell className="text-xs">{d.colour}</TableCell>
                           <TableCell>${d.priceUsd}</TableCell>
                           <TableCell><Badge variant="outline" className="text-xs">{d.scalingType === "per-linear-metre" ? "Per m" : "Fixed"}</Badge></TableCell>
+                          <TableCell><ScopeBadge entry={a} /></TableCell>
                           <TableCell>
                             <div className="flex gap-1">
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditAccessory(a)} data-testid={`button-edit-accessory-${a.id}`}>
@@ -1936,10 +2308,11 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
                       );
                     })}
                     {accessories.length === 0 && (
-                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No accessories</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No accessories</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </CollapsibleContent>
             </Collapsible>
           </CardContent>
@@ -1949,10 +2322,11 @@ function DirectMaterialsFamilyGroup({ family, profiles, accessories, onEditProfi
   );
 }
 
-function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function DirectProfileDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const isEdit = !!entry;
   const d = entry ? (entry.data as any) : {};
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
   const [values, setValues] = useState({
     mouldNumber: d.mouldNumber || "",
     role: d.role || "spacer",
@@ -1961,14 +2335,39 @@ function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; o
     lengthFormula: d.lengthFormula || "perimeter",
     familyGroup: d.familyGroup || ["ES52 Window"],
     description: d.description || "",
+    imageKey: d.imageKey || "",
   });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const { data: roleEntries = [] } = useLibraryEntries("profile_role");
+  const managedRoles = roleEntries.map((e) => (e.data as any).name as string).filter(Boolean);
+  const roleOptions = managedRoles.length > 0 ? managedRoles : PROFILE_ROLES;
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/item-photos", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { key } = await res.json();
+      setValues((v) => ({ ...v, imageKey: key }));
+      toast({ title: "Image uploaded" });
+    } catch {
+      toast({ title: "Image upload failed", variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (isEdit) {
         await apiRequest("PATCH", `/api/library/direct-profiles/${entry!.id}`, { data: values });
       } else {
-        await apiRequest("POST", "/api/library", { type: "direct_profile", data: values, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "direct_profile", data: values, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
@@ -1980,7 +2379,7 @@ function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; o
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent data-testid="dialog-direct-profile">
+      <DialogContent className="max-w-lg" data-testid="dialog-direct-profile">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Profile" : "Add Profile"}</DialogTitle>
           <DialogDescription>{isEdit ? "Changes will sync to all configurations using this mould number." : "Add a new master profile."}</DialogDescription>
@@ -1995,7 +2394,7 @@ function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; o
             <Select value={values.role} onValueChange={(v) => setValues({ ...values, role: v })}>
               <SelectTrigger data-testid="select-role"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {PROFILE_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                {roleOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -2035,6 +2434,53 @@ function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; o
               ))}
             </div>
           </div>
+          <div className="col-span-2">
+            <Label>Reference Image</Label>
+            <div className="mt-1 flex items-start gap-3">
+              {values.imageKey ? (
+                <div className="relative w-20 h-20 rounded border overflow-hidden bg-muted flex-shrink-0">
+                  <img src={`/api/item-photos/${values.imageKey}`} alt="Profile reference" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white hover:bg-black/80"
+                    onClick={() => setValues((v) => ({ ...v, imageKey: "" }))}
+                    data-testid="button-remove-profile-image"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded border border-dashed bg-muted flex items-center justify-center flex-shrink-0">
+                  <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingImage}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-upload-profile-image"
+                >
+                  <Camera className="w-4 h-4 mr-1.5" />
+                  {uploadingImage ? "Uploading..." : values.imageKey ? "Replace Image" : "Upload Image"}
+                </Button>
+                <p className="text-xs text-muted-foreground">JPEG, up to 10MB. Used in library view and manufacturing reports.</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
+                  data-testid="input-profile-image-file"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="col-span-2">
+            <DivisionScopeField value={scopeValue} onChange={setScopeValue} disabled={isEdit} />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -2047,10 +2493,11 @@ function DirectProfileDialog({ entry, onClose }: { entry: LibraryEntry | null; o
   );
 }
 
-function DirectAccessoryDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function DirectAccessoryDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const isEdit = !!entry;
   const d = entry ? (entry.data as any) : {};
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
   const [values, setValues] = useState({
     name: d.name || "",
     code: d.code || "",
@@ -2063,10 +2510,11 @@ function DirectAccessoryDialog({ entry, onClose }: { entry: LibraryEntry | null;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (isEdit) {
         await apiRequest("PATCH", `/api/library/direct-accessories/${entry!.id}`, { data: values });
       } else {
-        await apiRequest("POST", "/api/library", { type: "direct_accessory", data: values, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "direct_accessory", data: values, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
@@ -2129,6 +2577,9 @@ function DirectAccessoryDialog({ entry, onClose }: { entry: LibraryEntry | null;
               ))}
             </div>
           </div>
+          <div className="col-span-2">
+            <DivisionScopeField value={scopeValue} onChange={setScopeValue} disabled={isEdit} />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -2141,9 +2592,9 @@ function DirectAccessoryDialog({ entry, onClose }: { entry: LibraryEntry | null;
   );
 }
 
-function ManufacturingLabourSection() {
+function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: operations = [], isLoading } = useLibraryEntries("labour_operation");
+  const { data: operations = [], isLoading } = useLibraryEntries("labour_operation", divisionCode);
   const [editOp, setEditOp] = useState<LibraryEntry | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -2151,7 +2602,7 @@ function ManufacturingLabourSection() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "labour_operation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       setDeleteId(null);
       toast({ title: "Operation deleted" });
     },
@@ -2175,7 +2626,7 @@ function ManufacturingLabourSection() {
       <LabourCategoryGroup title="CNC Processes" operations={cnc} onEdit={setEditOp} onDelete={setDeleteId} />
 
       {(editOp || adding) && (
-        <LabourOperationDialog entry={editOp} onClose={() => { setEditOp(null); setAdding(false); }} />
+        <LabourOperationDialog entry={editOp} divisionCode={divisionCode} onClose={() => { setEditOp(null); setAdding(false); }} />
       )}
       <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
     </div>
@@ -2203,7 +2654,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
           </CardHeader>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -2211,6 +2662,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
                   <TableHead>Time (min)</TableHead>
                   <TableHead>Rate ($/hr)</TableHead>
                   <TableHead>Cost/Unit ($)</TableHead>
+                  <TableHead>Scope</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -2224,6 +2676,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
                       <TableCell>{d.timeMinutes}</TableCell>
                       <TableCell>${d.ratePerHour}</TableCell>
                       <TableCell className="font-semibold">${cost.toFixed(2)}</TableCell>
+                      <TableCell><ScopeBadge entry={o} /></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(o)} data-testid={`button-edit-labour-${o.id}`}>
@@ -2238,7 +2691,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
                   );
                 })}
                 {operations.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No operations</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No operations</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -2249,10 +2702,11 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
   );
 }
 
-function LabourOperationDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const isEdit = !!entry;
   const d = entry ? (entry.data as any) : {};
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
   const [values, setValues] = useState({
     name: d.name || "",
     category: d.category || "manual",
@@ -2263,14 +2717,15 @@ function LabourOperationDialog({ entry, onClose }: { entry: LibraryEntry | null;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (isEdit) {
-        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values });
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type: "labour_operation", data: values, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "labour_operation", data: values, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "labour_operation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: isEdit ? "Operation updated" : "Operation added" });
       onClose();
     },
@@ -2311,6 +2766,9 @@ function LabourOperationDialog({ entry, onClose }: { entry: LibraryEntry | null;
           <div className="col-span-2 text-sm text-muted-foreground">
             Calculated cost per unit: <span className="font-semibold text-foreground">${cost.toFixed(2)}</span>
           </div>
+          <div className="col-span-2">
+            <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -2323,9 +2781,9 @@ function LabourOperationDialog({ entry, onClose }: { entry: LibraryEntry | null;
   );
 }
 
-function InstallationSection() {
+function InstallationSection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: rates = [], isLoading } = useLibraryEntries("installation_rate");
+  const { data: rates = [], isLoading } = useLibraryEntries("installation_rate", divisionCode);
   const [editRate, setEditRate] = useState<LibraryEntry | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -2333,7 +2791,7 @@ function InstallationSection() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "installation_rate"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       setDeleteId(null);
       toast({ title: "Rate deleted" });
     },
@@ -2358,7 +2816,7 @@ function InstallationSection() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">{title}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -2367,6 +2825,7 @@ function InstallationSection() {
                   <TableHead>Max m²</TableHead>
                   <TableHead>Cost/Unit ($)</TableHead>
                   <TableHead>Sell/Unit ($)</TableHead>
+                  <TableHead>Scope</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -2380,6 +2839,7 @@ function InstallationSection() {
                       <TableCell>{d.maxSqm >= 999 ? "∞" : d.maxSqm}</TableCell>
                       <TableCell className="font-medium">${d.costPerUnit ?? d.pricePerUnit}</TableCell>
                       <TableCell className="font-semibold">${d.sellPerUnit ?? d.pricePerUnit}</TableCell>
+                      <TableCell><ScopeBadge entry={r} /></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditRate(r)} data-testid={`button-edit-installation-${r.id}`}>
@@ -2400,17 +2860,18 @@ function InstallationSection() {
       ))}
 
       {(editRate || adding) && (
-        <InstallationRateDialog entry={editRate} onClose={() => { setEditRate(null); setAdding(false); }} />
+        <InstallationRateDialog entry={editRate} divisionCode={divisionCode} onClose={() => { setEditRate(null); setAdding(false); }} />
       )}
       <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
     </div>
   );
 }
 
-function InstallationRateDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function InstallationRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const isEdit = !!entry;
   const d = entry ? (entry.data as any) : {};
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
   const [values, setValues] = useState({
     name: d.name || "",
     category: d.category || "window",
@@ -2423,14 +2884,15 @@ function InstallationRateDialog({ entry, onClose }: { entry: LibraryEntry | null
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (isEdit) {
-        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values });
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type: "installation_rate", data: values, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "installation_rate", data: values, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "installation_rate"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: isEdit ? "Rate updated" : "Rate added" });
       onClose();
     },
@@ -2474,6 +2936,9 @@ function InstallationRateDialog({ entry, onClose }: { entry: LibraryEntry | null
             <Label>Sell per Unit ($)</Label>
             <Input type="number" value={values.sellPerUnit} onChange={(e) => setValues({ ...values, sellPerUnit: parseFloat(e.target.value) || 0 })} data-testid="input-installation-sell" />
           </div>
+          <div className="col-span-2">
+            <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -2486,9 +2951,9 @@ function InstallationRateDialog({ entry, onClose }: { entry: LibraryEntry | null
   );
 }
 
-function DeliverySection() {
+function DeliverySection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
-  const { data: rates = [], isLoading } = useLibraryEntries("delivery_rate");
+  const { data: rates = [], isLoading } = useLibraryEntries("delivery_rate", divisionCode);
   const [editRate, setEditRate] = useState<LibraryEntry | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -2496,7 +2961,7 @@ function DeliverySection() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "delivery_rate"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       setDeleteId(null);
       toast({ title: "Rate deleted" });
     },
@@ -2514,7 +2979,7 @@ function DeliverySection() {
       </div>
 
       <Card>
-        <CardContent className="pt-4">
+        <CardContent className="pt-4 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -2522,6 +2987,7 @@ function DeliverySection() {
                 <TableHead>Cost ($ NZD)</TableHead>
                 <TableHead>Sell ($ NZD)</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Scope</TableHead>
                 <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
@@ -2534,6 +3000,7 @@ function DeliverySection() {
                     <TableCell className="font-medium">{(d.costNzd ?? d.rateNzd) > 0 ? `$${d.costNzd ?? d.rateNzd}` : "Custom"}</TableCell>
                     <TableCell className="font-semibold">{(d.sellNzd ?? d.rateNzd) > 0 ? `$${d.sellNzd ?? d.rateNzd}` : "Custom"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{d.description}</TableCell>
+                    <TableCell><ScopeBadge entry={r} /></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditRate(r)} data-testid={`button-edit-delivery-${r.id}`}>
@@ -2548,7 +3015,7 @@ function DeliverySection() {
                 );
               })}
               {rates.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No delivery rates</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No delivery rates</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -2556,17 +3023,18 @@ function DeliverySection() {
       </Card>
 
       {(editRate || adding) && (
-        <DeliveryRateDialog entry={editRate} onClose={() => { setEditRate(null); setAdding(false); }} />
+        <DeliveryRateDialog entry={editRate} divisionCode={divisionCode} onClose={() => { setEditRate(null); setAdding(false); }} />
       )}
       <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
     </div>
   );
 }
 
-function DeliveryRateDialog({ entry, onClose }: { entry: LibraryEntry | null; onClose: () => void }) {
+function DeliveryRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const isEdit = !!entry;
   const d = entry ? (entry.data as any) : {};
+  const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
   const [values, setValues] = useState({
     name: d.name || "",
     vehicle: d.vehicle || "",
@@ -2577,14 +3045,15 @@ function DeliveryRateDialog({ entry, onClose }: { entry: LibraryEntry | null; on
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (isEdit) {
-        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values });
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type: "delivery_rate", data: values, sortOrder: 0 });
+        await apiRequest("POST", "/api/library", { type: "delivery_rate", data: values, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "delivery_rate"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
       toast({ title: isEdit ? "Rate updated" : "Rate added" });
       onClose();
     },
@@ -2613,6 +3082,9 @@ function DeliveryRateDialog({ entry, onClose }: { entry: LibraryEntry | null; on
           <div className="col-span-2">
             <Label>Description</Label>
             <Input value={values.description} onChange={(e) => setValues({ ...values, description: e.target.value })} data-testid="input-delivery-description" />
+          </div>
+          <div className="col-span-2">
+            <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
           </div>
         </div>
         <DialogFooter>

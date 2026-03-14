@@ -1,0 +1,194 @@
+T012 — IMPLEMENT NOW (Library Division Scope Navigation)
+
+Objective
+Add a division scope filter to the unified /library page with URL-persisted selection, scoped library queries, scope badges, and division-aware entry creation. Use existing library_entries.division_scope and existing server support for GET /api/library?divisionCode=.
+
+Constraints (must follow)
+- DO NOT change database schema
+- DO NOT add new API routes
+- DO NOT modify any files under shared/
+- Keep existing library tabs/sections intact (no redesign)
+- Change ONLY: client/src/pages/library.tsx
+- URL param for UI: ?division= (All/LJ/LE/LL)
+- API param: ?divisionCode= (server expects this)
+
+Implement in 4 steps (T012A–T012D)
+
+────────────────────────────────────────────────────────
+T012A — Imports + useLibraryEntries update + division state + URL persistence + selector UI
+────────────────────────────────────────────────────────
+1) Update imports at top of library.tsx
+- Change: import { useState } from "react";
+  To:     import { useEffect, useState } from "react";
+- Add:    import { useLocation, useSearch } from "wouter";
+
+2) Update hook useLibraryEntries
+- Change signature:
+  function useLibraryEntries(type: string, divisionCode?: string | null)
+- Query key must include division code for caching:
+  queryKey: ["/api/library", type, divisionCode ?? "all"]
+- Query URL:
+  const url = `/api/library?type=${encodeURIComponent(type)}${divisionCode ? `&divisionCode=${encodeURIComponent(divisionCode)}` : ""}`;
+  fetch(url)
+
+3) Add division scope state in Library()
+- Get search string: const search = useSearch();
+- Parse UI param:
+  const params = new URLSearchParams(search);
+  const divisionFromUrl = params.get("division");
+- Validate against allowed codes:
+  const validDivision = divisionFromUrl === "LJ" || divisionFromUrl === "LE" || divisionFromUrl === "LL" ? divisionFromUrl : null;
+- State:
+  const [selectedDivision, setSelectedDivision] = useState<string | null>(validDivision);
+- Add location:
+  const [, navigate] = useLocation();
+
+4) Sync state when URL changes (back/forward)
+- useEffect(() => { ... }, [search])
+- Re-parse division, validate; if different from current state, update selectedDivision.
+- If invalid division in URL, set selectedDivision to null (All).
+
+5) Add helper to update both state + URL
+- function setDivisionAndUrl(div: string | null) { setSelectedDivision(div); navigate(`/library${div ? `?division=${div}` : ""}`); }
+
+6) Add scope selector UI above <Tabs> in Library() render (inside <div className="flex-1 overflow-auto p-6">, before <Tabs>)
+- Render:
+  Label: "Division Scope"
+  Buttons: All, LJ, LE, LL (shadcn Button, size="sm")
+  Active button uses variant="default", inactive uses variant="outline"
+- data-testids:
+  button-scope-all
+  button-scope-LJ
+  button-scope-LE
+  button-scope-LL
+- Add small info Badge showing current scope:
+  text = selectedDivision ?? "All (Shared + Division)"
+  (simple, no complex tooltip needed)
+
+────────────────────────────────────────────────────────
+T012B — Pass selectedDivision to all useLibraryEntries call sites
+────────────────────────────────────────────────────────
+7) Add prop: divisionCode?: string | null to every section/component that calls useLibraryEntries:
+- GlassSection
+- FrameTypeSection
+- WanzBarSection
+- DirectMaterialsSection
+- ManufacturingLabourSection
+- InstallationSection
+- DeliverySection
+- HandlesSection
+- HandleCategoryCollapsible
+- SimpleSection
+- LinerTypeSection
+
+8) Update all useLibraryEntries calls:
+- useLibraryEntries("glass") -> useLibraryEntries("glass", divisionCode)
+- Same for each library type
+
+9) Pass selectedDivision into each <TabsContent> section render inside Library():
+Example:
+<TabsContent value="glass">
+  <GlassSection divisionCode={selectedDivision} />
+</TabsContent>
+Apply to all sections.
+
+Important:
+- Only scope library_entries queries.
+- Non-library queries like frame-type configurations (e.g. /api/frame-types/:id/configurations) remain unchanged.
+
+────────────────────────────────────────────────────────
+T012C — Add scope badge to common row renderers
+────────────────────────────────────────────────────────
+10) Define a small helper (local function) in library.tsx (near top or near components):
+- function renderScopeBadge(entry: { divisionScope?: string | null; id: string }) { ... }
+- Display text: entry.divisionScope ?? "Shared"
+- Badge variant:
+  - "secondary" when Shared
+  - "outline" when division code exists
+- data-testid: badge-scope-${entry.id}
+
+11) Add Scope column/badge in these places:
+A) SimpleSection table:
+- Add <TableHead>Scope</TableHead> before Allocation/Actions
+- Add <TableCell> {renderScopeBadge(entry)} </TableCell>
+
+B) GlassTypeCollapsible table:
+- Add Scope header + cell using renderScopeBadge(entry)
+
+C) FrameTypeSection cards:
+- In the header where category badges show, add the scope badge for the frame type LibraryEntry.
+
+D) DirectMaterialsFamilyGroup profile/accessory tables:
+- Add a Scope column and cell badge for each entry row (profiles and accessories)
+
+(Keep this minimal—do not add scope columns everywhere in the file; only in these key/common renderers.)
+
+────────────────────────────────────────────────────────
+T012D — Default divisionScope on new entries + dropdown override in dialogs
+────────────────────────────────────────────────────────
+12) For creation (POST) of library entries: include divisionScope defaulting to current selected division
+- Pass divisionCode into Add/Edit dialogs as a prop from their parent sections.
+- In each dialog, add state:
+  const [divisionScope, setDivisionScope] = useState<string>(entry?.divisionScope ?? divisionCode ?? "");
+  where "" means Shared.
+
+13) Add a dropdown in dialogs:
+- Label: "Division Scope"
+- Use shadcn Select
+- Options:
+  - Shared (value="")
+  - LJ, LE, LL
+- data-testid="select-entry-scope"
+
+14) On POST to /api/library:
+- Include divisionScope: divisionScope === "" ? null : divisionScope
+
+15) On PATCH to /api/library/:id:
+- Include divisionScope the same way (null for shared)
+
+Apply this to these dialogs:
+- SimpleDialog (generic library editor)
+- GlassDialog
+- FrameTypeDialog
+- WanzBarDialog
+- LabourOperationDialog
+- InstallationRateDialog
+- DeliveryRateDialog
+- DirectProfileDialog / DirectAccessoryDialog:
+  - DO NOT add divisionScope to their specialized PATCH routes unless you can verify the endpoint accepts it.
+  - For these, do:
+    - Include divisionScope on POST (new entry) only.
+    - In edit mode, either hide scope selector OR show it disabled with helper text:
+      "Scope can be set on creation; editing scope uses generic library edit."
+    Keep it simple: hide it in edit mode is acceptable.
+
+16) Query invalidation (important)
+- After any save/delete/create in any section, use broad invalidation:
+  queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+This avoids stale caches across scopes.
+
+────────────────────────────────────────────────────────
+Acceptance Checklist (must verify)
+────────────────────────────────────────────────────────
+A) /library shows a Division Scope selector above tabs with All/LJ/LE/LL buttons.
+B) Clicking a scope updates URL:
+- All => /library
+- LJ => /library?division=LJ (same for LE/LL)
+C) Refresh on /library?division=LJ preserves selection.
+D) Back/forward browser navigation updates selection (useEffect sync).
+E) Library data is scoped:
+- When division selected, entries include Shared + that division (server behavior).
+F) Tables show a Scope badge (Shared or LJ/LE/LL) in:
+- SimpleSection
+- Glass table
+- Frame type cards
+- Direct materials profile/accessory rows
+G) Creating a new entry while scope is LJ defaults divisionScope to LJ (can override to Shared via dropdown).
+H) No server/schema/shared changes. Build passes and library UI still works normally.
+
+Notes
+- UI param is ?division=, API param is ?divisionCode=
+- Use encodeURIComponent for both type and divisionCode in fetch URL.
+- Keep changes precise; file is large.
+
+Proceed to implement now in client/src/pages/library.tsx only.

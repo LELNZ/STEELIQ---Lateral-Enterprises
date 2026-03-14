@@ -1,0 +1,46 @@
+You are working in the STEELIQ repo (Replit, Node/Express/React/TS, Drizzle/Postgres). The previous multi-division + spec-driven builder work is already implemented. The old “duplicate item” issue is fixed. A NEW bug exists:
+
+BUG: Creating a new item in the quote builder and saving the job fails with:
+400 invalid_type: Expected string, received undefined at path ["config","id"].
+Updating an existing item may work, but creating a new item triggers the error.
+
+Goal: Fix the save failure WITHOUT breaking:
+- existing estimator costing logic
+- Quote Manager + revisions flow
+- existing DB/API route shapes
+- the new uiId-based React key solution
+
+Diagnosis requirements:
+1) Reproduce in UI: open a job, click “Add to Quote” with a new item, observe “Failed to save job”.
+2) Inspect the network request payload and confirm at least one new item has config.id undefined (or item.config.id missing).
+3) Locate the backend validation/schema that requires config.id (likely Zod schema for job items or config object). Confirm it expects string.
+
+Fix requirements (preferred approach):
+A) Do NOT remove the uiId solution.
+B) Ensure config.id is ALWAYS a string for every item being sent to save/update job.
+   - When creating a new item (onSubmit / Add to Quote), set config.id if missing.
+     Use: config.id ?? crypto.randomUUID()
+   - When duplicating items, ensure the duplicated config retains/gets a config.id (must not be undefined).
+   - When loading items from existingJob.items, normalize: if config.id missing, generate one (do not overwrite if present).
+C) Keep config.id semantics intact as much as possible. Only generate if missing/undefined.
+D) Keep save API payload unchanged except making sure required fields exist.
+
+Implementation guidance:
+- In client/src/pages/quote-builder.tsx:
+  - Identify where new items are constructed for “Add to Quote”.
+  - Add a small helper, e.g. ensureConfigId(config): returns { ...config, id: config.id ?? crypto.randomUUID() }.
+  - Apply it consistently in:
+    - load/normalize existing job items
+    - add new item
+    - duplicate item (if feature exists)
+- Confirm that React list keys remain based on uiId (not config.id) to avoid reintroducing duplicates.
+
+Verification:
+- Create a new item -> Save Job succeeds (no toast error).
+- Update existing item -> Save Job still succeeds.
+- Add multiple items from same config/template -> no duplication in UI, no React key warnings.
+- Ensure the payload sent to the job save endpoint always includes config.id for every item.
+
+Deliverables:
+- Commit-ready changes with minimal diff, comment explaining why config.id is required by backend.
+- Short summary of root cause and fix.

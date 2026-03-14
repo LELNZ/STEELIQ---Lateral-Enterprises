@@ -10,12 +10,25 @@ import {
   type Quote, type InsertQuote,
   type QuoteRevision, type InsertQuoteRevision,
   type AuditLog, type InsertAuditLog,
+  type OrgSettings, type InsertOrgSettings,
+  type DivisionSettings, type InsertDivisionSettings,
+  type SpecDictionaryEntry, type InsertSpecDictionary,
+  type ItemPhoto,
+  type UserSession,
+  type Customer, type InsertCustomer,
+  type CustomerContact, type InsertCustomerContact,
+  type Project, type InsertProject,
+  type Invoice, type InsertInvoice,
+  type OpJob, type InsertOpJob,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
+  orgSettings, divisionSettings, specDictionary,
+  itemPhotos,
+  userSessions, customers, customerContacts, projects, invoices, opJobs,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, asc, desc, and, sql } from "drizzle-orm";
+import { eq, asc, desc, and, sql, isNull, isNotNull, inArray } from "drizzle-orm";
 import pg from "pg";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL! });
@@ -26,10 +39,20 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
+
+  createUserSession(userId: string, token: string, expiresAt: Date): Promise<UserSession>;
+  getUserSessionByToken(token: string): Promise<UserSession | undefined>;
+  deleteUserSession(token: string): Promise<void>;
+  deleteExpiredSessions(): Promise<void>;
 
   createJob(job: InsertJob): Promise<Job>;
   getJob(id: string): Promise<Job | undefined>;
   getAllJobs(): Promise<Job[]>;
+  getArchivedJobs(): Promise<Job[]>;
+  archiveJob(id: string): Promise<Job | undefined>;
+  unarchiveJob(id: string): Promise<Job | undefined>;
   updateJob(id: string, data: Partial<InsertJob>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<void>;
 
@@ -75,15 +98,74 @@ export interface IStorage {
   createQuote(data: InsertQuote): Promise<Quote>;
   getQuote(id: string): Promise<Quote | undefined>;
   getQuoteByJobId(jobId: string): Promise<Quote | undefined>;
+  getQuotesByJobId(jobId: string): Promise<Quote[]>;
   getAllQuotes(): Promise<Quote[]>;
+  updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined>;
   updateQuoteStatus(id: string, status: string): Promise<Quote | undefined>;
   updateQuoteCurrentRevision(id: string, revisionId: string): Promise<Quote | undefined>;
+  acceptQuote(id: string, data: { acceptedAt: Date; acceptedByUserId: string | null; acceptedValue: number; acceptedRevisionId: string }): Promise<Quote | undefined>;
+  deleteQuoteAndRevisions(id: string): Promise<void>;
+  deleteAllQuotesAndRevisions(): Promise<number>;
 
   createQuoteRevision(data: InsertQuoteRevision): Promise<QuoteRevision>;
   getQuoteRevisions(quoteId: string): Promise<QuoteRevision[]>;
 
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(entityType: string, entityId: string): Promise<AuditLog[]>;
+
+  getOrgSettings(): Promise<OrgSettings | undefined>;
+  upsertOrgSettings(data: Partial<InsertOrgSettings>): Promise<OrgSettings>;
+
+  getDivisionSettings(code: string): Promise<DivisionSettings | undefined>;
+  getAllDivisionSettings(): Promise<DivisionSettings[]>;
+  upsertDivisionSettings(code: string, data: Partial<InsertDivisionSettings>): Promise<DivisionSettings>;
+
+  getSpecDictionary(divisionScope?: string): Promise<SpecDictionaryEntry[]>;
+  getAllSpecEntries(): Promise<SpecDictionaryEntry[]>;
+
+  getLibraryEntriesWithScope(type?: string, divisionCode?: string): Promise<LibraryEntry[]>;
+
+  saveItemPhoto(key: string, data: Buffer, mimeType: string): Promise<void>;
+  getItemPhoto(key: string): Promise<{ data: Buffer; mimeType: string } | undefined>;
+  deleteItemPhoto(key: string): Promise<void>;
+  deleteItemPhotos(keys: string[]): Promise<void>;
+
+  getAllCustomers(): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  createCustomer(data: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
+  archiveCustomer(id: string): Promise<Customer | undefined>;
+
+  getCustomerContacts(customerId: string): Promise<CustomerContact[]>;
+  createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact>;
+  updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined>;
+  deleteCustomerContact(id: string): Promise<void>;
+
+  getAllProjects(): Promise<Project[]>;
+  getProjectsByCustomer(customerId: string): Promise<Project[]>;
+  getProject(id: string): Promise<Project | undefined>;
+  createProject(data: InsertProject): Promise<Project>;
+  updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined>;
+  archiveProject(id: string): Promise<Project | undefined>;
+
+  getNextInvoiceNumber(): Promise<string>;
+  createInvoice(data: InsertInvoice): Promise<Invoice>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  getInvoicesByQuote(quoteId: string): Promise<Invoice[]>;
+  getAllInvoices(): Promise<Invoice[]>;
+  updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+
+  getNextJobNumber(): Promise<string>;
+  createOpJob(data: InsertOpJob): Promise<OpJob>;
+  getOpJob(id: string): Promise<OpJob | undefined>;
+  getAllOpJobs(): Promise<OpJob[]>;
+  getArchivedOpJobs(): Promise<OpJob[]>;
+  archiveOpJob(id: string): Promise<OpJob | undefined>;
+  unarchiveOpJob(id: string): Promise<OpJob | undefined>;
+  updateOpJob(id: string, data: Partial<InsertOpJob>): Promise<OpJob | undefined>;
+  getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined>;
+  getDemoQuotes(): Promise<Quote[]>;
+  getDemoOpJobs(): Promise<OpJob[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -98,8 +180,35 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db.insert(users).values(insertUser as any).returning();
     return user;
+  }
+
+  async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
+    const [updated] = await db.update(users).set(data as any).where(eq(users.id, id)).returning();
+    return updated;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(asc(users.displayName));
+  }
+
+  async createUserSession(userId: string, token: string, expiresAt: Date): Promise<UserSession> {
+    const [session] = await db.insert(userSessions).values({ userId, token, expiresAt }).returning();
+    return session;
+  }
+
+  async getUserSessionByToken(token: string): Promise<UserSession | undefined> {
+    const [session] = await db.select().from(userSessions).where(eq(userSessions.token, token));
+    return session;
+  }
+
+  async deleteUserSession(token: string): Promise<void> {
+    await db.delete(userSessions).where(eq(userSessions.token, token));
+  }
+
+  async deleteExpiredSessions(): Promise<void> {
+    await db.delete(userSessions).where(sql`${userSessions.expiresAt} < NOW()`);
   }
 
   async createJob(job: InsertJob): Promise<Job> {
@@ -113,7 +222,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllJobs(): Promise<Job[]> {
-    return db.select().from(jobs);
+    return db.select().from(jobs).where(isNull(jobs.archivedAt));
+  }
+
+  async getArchivedJobs(): Promise<Job[]> {
+    return db.select().from(jobs).where(isNotNull(jobs.archivedAt));
+  }
+
+  async archiveJob(id: string): Promise<Job | undefined> {
+    const job = await this.getJob(id);
+    if (!job) return undefined;
+    if (job.archivedAt) return undefined;
+    const [updated] = await db.update(jobs).set({ archivedAt: new Date() } as any).where(eq(jobs.id, id)).returning();
+    return updated;
+  }
+
+  async unarchiveJob(id: string): Promise<Job | undefined> {
+    const job = await this.getJob(id);
+    if (!job) return undefined;
+    if (!job.archivedAt) return undefined;
+    const [updated] = await db.update(jobs).set({ archivedAt: null } as any).where(eq(jobs.id, id)).returning();
+    return updated;
   }
 
   async updateJob(id: string, data: Partial<InsertJob>): Promise<Job | undefined> {
@@ -290,8 +419,24 @@ export class DatabaseStorage implements IStorage {
     return quote;
   }
 
+  async getQuotesByJobId(jobId: string): Promise<Quote[]> {
+    return db.select().from(quotes)
+      .where(and(eq(quotes.sourceJobId, jobId), isNull(quotes.deletedAt)))
+      .orderBy(desc(quotes.createdAt));
+  }
+
   async getAllQuotes(): Promise<Quote[]> {
-    return db.select().from(quotes).orderBy(desc(quotes.createdAt));
+    return db.select().from(quotes)
+      .where(isNull(quotes.deletedAt))
+      .orderBy(desc(quotes.createdAt));
+  }
+
+  async updateQuote(id: string, data: Partial<InsertQuote>): Promise<Quote | undefined> {
+    const [updated] = await db.update(quotes)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(quotes.id, id))
+      .returning();
+    return updated;
   }
 
   async updateQuoteStatus(id: string, status: string): Promise<Quote | undefined> {
@@ -300,6 +445,36 @@ export class DatabaseStorage implements IStorage {
       .where(eq(quotes.id, id))
       .returning();
     return updated;
+  }
+
+  async acceptQuote(id: string, data: { acceptedAt: Date; acceptedByUserId: string | null; acceptedValue: number; acceptedRevisionId: string }): Promise<Quote | undefined> {
+    const [updated] = await db.update(quotes)
+      .set({
+        status: "accepted",
+        acceptedAt: data.acceptedAt,
+        acceptedByUserId: data.acceptedByUserId,
+        acceptedValue: data.acceptedValue,
+        acceptedRevisionId: data.acceptedRevisionId,
+        updatedAt: new Date(),
+      } as any)
+      .where(eq(quotes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteQuoteAndRevisions(id: string): Promise<void> {
+    await db.delete(quoteRevisions).where(eq(quoteRevisions.quoteId, id));
+    await db.delete(quotes).where(eq(quotes.id, id));
+  }
+
+  async deleteAllQuotesAndRevisions(): Promise<number> {
+    const allQuotes = await db.select({ id: quotes.id }).from(quotes);
+    const count = allQuotes.length;
+    if (count > 0) {
+      await db.delete(quoteRevisions);
+      await db.delete(quotes);
+    }
+    return count;
   }
 
   async updateQuoteCurrentRevision(id: string, revisionId: string): Promise<Quote | undefined> {
@@ -330,6 +505,270 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(auditLogs)
       .where(and(eq(auditLogs.entityType, entityType), eq(auditLogs.entityId, entityId)))
       .orderBy(desc(auditLogs.createdAt));
+  }
+
+  async getOrgSettings(): Promise<OrgSettings | undefined> {
+    const [row] = await db.select().from(orgSettings).where(eq(orgSettings.id, "default"));
+    return row;
+  }
+
+  async upsertOrgSettings(data: Partial<InsertOrgSettings>): Promise<OrgSettings> {
+    const existing = await this.getOrgSettings();
+    if (existing) {
+      const [updated] = await db.update(orgSettings).set(data).where(eq(orgSettings.id, "default")).returning();
+      return updated;
+    }
+    const [created] = await db.insert(orgSettings).values({ ...data, id: "default" } as any).returning();
+    return created;
+  }
+
+  async getDivisionSettings(code: string): Promise<DivisionSettings | undefined> {
+    const [row] = await db.select().from(divisionSettings).where(eq(divisionSettings.divisionCode, code));
+    return row;
+  }
+
+  async getAllDivisionSettings(): Promise<DivisionSettings[]> {
+    return db.select().from(divisionSettings);
+  }
+
+  async upsertDivisionSettings(code: string, data: Partial<InsertDivisionSettings>): Promise<DivisionSettings> {
+    const existing = await this.getDivisionSettings(code);
+    if (existing) {
+      const [updated] = await db.update(divisionSettings).set(data).where(eq(divisionSettings.divisionCode, code)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(divisionSettings).values({ ...data, divisionCode: code } as any).returning();
+    return created;
+  }
+
+  async getSpecDictionary(divisionScope?: string): Promise<SpecDictionaryEntry[]> {
+    if (divisionScope) {
+      return db.select().from(specDictionary)
+        .where(sql`${specDictionary.divisionScope} IS NULL OR ${specDictionary.divisionScope} = ${divisionScope}`)
+        .orderBy(asc(specDictionary.sortOrder));
+    }
+    return db.select().from(specDictionary).orderBy(asc(specDictionary.sortOrder));
+  }
+
+  async getAllSpecEntries(): Promise<SpecDictionaryEntry[]> {
+    return db.select().from(specDictionary).orderBy(asc(specDictionary.sortOrder));
+  }
+
+  async getLibraryEntriesWithScope(type?: string, divisionCode?: string): Promise<LibraryEntry[]> {
+    if (type && divisionCode) {
+      return db.select().from(libraryEntries)
+        .where(and(
+          eq(libraryEntries.type, type),
+          sql`(${libraryEntries.divisionScope} IS NULL OR ${libraryEntries.divisionScope} = ${divisionCode})`
+        ))
+        .orderBy(asc(libraryEntries.sortOrder));
+    }
+    if (type) {
+      return db.select().from(libraryEntries).where(eq(libraryEntries.type, type)).orderBy(asc(libraryEntries.sortOrder));
+    }
+    if (divisionCode) {
+      return db.select().from(libraryEntries)
+        .where(sql`(${libraryEntries.divisionScope} IS NULL OR ${libraryEntries.divisionScope} = ${divisionCode})`)
+        .orderBy(asc(libraryEntries.sortOrder));
+    }
+    return db.select().from(libraryEntries).orderBy(asc(libraryEntries.sortOrder));
+  }
+
+  async saveItemPhoto(key: string, data: Buffer, mimeType: string): Promise<void> {
+    await db.insert(itemPhotos).values({
+      key,
+      data,
+      mimeType,
+      sizeBytes: data.length,
+    }).onConflictDoUpdate({
+      target: itemPhotos.key,
+      set: { data, mimeType, sizeBytes: data.length },
+    });
+  }
+
+  async getItemPhoto(key: string): Promise<{ data: Buffer; mimeType: string } | undefined> {
+    const [row] = await db.select({ data: itemPhotos.data, mimeType: itemPhotos.mimeType })
+      .from(itemPhotos)
+      .where(eq(itemPhotos.key, key));
+    if (!row) return undefined;
+    return { data: Buffer.from(row.data), mimeType: row.mimeType };
+  }
+
+  async deleteItemPhoto(key: string): Promise<void> {
+    await db.delete(itemPhotos).where(eq(itemPhotos.key, key));
+  }
+
+  async deleteItemPhotos(keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+    await db.delete(itemPhotos).where(inArray(itemPhotos.key, keys));
+  }
+
+  async getAllCustomers(): Promise<Customer[]> {
+    return db.select().from(customers).where(isNull(customers.archivedAt)).orderBy(asc(customers.name));
+  }
+
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    const [row] = await db.select().from(customers).where(eq(customers.id, id));
+    return row;
+  }
+
+  async createCustomer(data: InsertCustomer): Promise<Customer> {
+    const [created] = await db.insert(customers).values(data).returning();
+    return created;
+  }
+
+  async updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined> {
+    const [updated] = await db.update(customers).set(data).where(eq(customers.id, id)).returning();
+    return updated;
+  }
+
+  async archiveCustomer(id: string): Promise<Customer | undefined> {
+    const [updated] = await db.update(customers).set({ archivedAt: new Date() } as any).where(eq(customers.id, id)).returning();
+    return updated;
+  }
+
+  async getCustomerContacts(customerId: string): Promise<CustomerContact[]> {
+    return db.select().from(customerContacts).where(eq(customerContacts.customerId, customerId)).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+  }
+
+  async createCustomerContact(data: InsertCustomerContact): Promise<CustomerContact> {
+    const [created] = await db.insert(customerContacts).values(data).returning();
+    return created;
+  }
+
+  async updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined> {
+    const [updated] = await db.update(customerContacts).set(data).where(eq(customerContacts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCustomerContact(id: string): Promise<void> {
+    await db.delete(customerContacts).where(eq(customerContacts.id, id));
+  }
+
+  async getAllProjects(): Promise<Project[]> {
+    return db.select().from(projects).where(isNull(projects.archivedAt)).orderBy(desc(projects.createdAt));
+  }
+
+  async getProjectsByCustomer(customerId: string): Promise<Project[]> {
+    return db.select().from(projects).where(and(eq(projects.customerId, customerId), isNull(projects.archivedAt))).orderBy(desc(projects.createdAt));
+  }
+
+  async getProject(id: string): Promise<Project | undefined> {
+    const [row] = await db.select().from(projects).where(eq(projects.id, id));
+    return row;
+  }
+
+  async createProject(data: InsertProject): Promise<Project> {
+    const [created] = await db.insert(projects).values(data).returning();
+    return created;
+  }
+
+  async updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set(data).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+
+  async archiveProject(id: string): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set({ archivedAt: new Date() } as any).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+
+  async getNextInvoiceNumber(): Promise<string> {
+    await db.insert(numberSequences).values({ id: "invoice", currentValue: 0 }).onConflictDoNothing();
+    const [row] = await db.update(numberSequences)
+      .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
+      .where(eq(numberSequences.id, "invoice"))
+      .returning();
+    return `INV-${String(row.currentValue).padStart(4, "0")}`;
+  }
+
+  async createInvoice(data: InsertInvoice): Promise<Invoice> {
+    const [created] = await db.insert(invoices).values(data as any).returning();
+    return created;
+  }
+
+  async getInvoice(id: string): Promise<Invoice | undefined> {
+    const [row] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return row;
+  }
+
+  async getInvoicesByQuote(quoteId: string): Promise<Invoice[]> {
+    return db.select().from(invoices).where(eq(invoices.quoteId, quoteId)).orderBy(desc(invoices.createdAt));
+  }
+
+  async getAllInvoices(): Promise<Invoice[]> {
+    return db.select().from(invoices).orderBy(desc(invoices.createdAt));
+  }
+
+  async updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined> {
+    const [updated] = await db.update(invoices)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(invoices.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getNextJobNumber(): Promise<string> {
+    await db.insert(numberSequences).values({ id: "op_job", currentValue: 0 }).onConflictDoNothing();
+    const [row] = await db.update(numberSequences)
+      .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
+      .where(eq(numberSequences.id, "op_job"))
+      .returning();
+    return `J-${String(row.currentValue).padStart(4, "0")}`;
+  }
+
+  async createOpJob(data: InsertOpJob): Promise<OpJob> {
+    const [created] = await db.insert(opJobs).values(data as any).returning();
+    return created;
+  }
+
+  async getOpJob(id: string): Promise<OpJob | undefined> {
+    const [row] = await db.select().from(opJobs).where(eq(opJobs.id, id));
+    return row;
+  }
+
+  async getAllOpJobs(): Promise<OpJob[]> {
+    return db.select().from(opJobs).where(isNull(opJobs.archivedAt)).orderBy(desc(opJobs.createdAt));
+  }
+
+  async getArchivedOpJobs(): Promise<OpJob[]> {
+    return db.select().from(opJobs).where(isNotNull(opJobs.archivedAt)).orderBy(desc(opJobs.createdAt));
+  }
+
+  async archiveOpJob(id: string): Promise<OpJob | undefined> {
+    const job = await this.getOpJob(id);
+    if (!job || job.archivedAt) return undefined;
+    const [updated] = await db.update(opJobs).set({ archivedAt: new Date() } as any).where(eq(opJobs.id, id)).returning();
+    return updated;
+  }
+
+  async unarchiveOpJob(id: string): Promise<OpJob | undefined> {
+    const job = await this.getOpJob(id);
+    if (!job || !job.archivedAt) return undefined;
+    const [updated] = await db.update(opJobs).set({ archivedAt: null } as any).where(eq(opJobs.id, id)).returning();
+    return updated;
+  }
+
+  async updateOpJob(id: string, data: Partial<InsertOpJob>): Promise<OpJob | undefined> {
+    const [updated] = await db.update(opJobs)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(opJobs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined> {
+    const [row] = await db.select().from(opJobs).where(eq(opJobs.sourceQuoteId, quoteId));
+    return row;
+  }
+
+  async getDemoQuotes(): Promise<Quote[]> {
+    return db.select().from(quotes)
+      .where(and(eq(quotes.isDemoRecord, true), isNull(quotes.deletedAt)));
+  }
+
+  async getDemoOpJobs(): Promise<OpJob[]> {
+    return db.select().from(opJobs).where(eq(opJobs.isDemoRecord, true));
   }
 }
 

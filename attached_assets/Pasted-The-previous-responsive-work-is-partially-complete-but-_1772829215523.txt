@@ -1,0 +1,158 @@
+The previous responsive work is partially complete, but the mobile Quote Builder is still not functioning as a true 3-view mobile workflow.
+
+Current issue:
+On mobile, the page has both a main page scroll and an inner Drawing Config scroll. I can see the Config form, but I cannot properly reach or view the drawing or the quote items list. The tabs appear visually, but they are not behaving like full active workspace views.
+
+We need to FIX the mobile Quote Builder layout first, then add Site Visit Mode enhancements.
+
+Goal:
+Make Quote Builder mobile (< lg) behave as a true enterprise field-app workflow:
+- Config tab = only config/form workspace
+- Preview tab = only drawing workspace
+- Items tab = only items workspace
+Each tab should occupy the mobile content area properly and be independently usable.
+
+Constraints:
+- No backend changes
+- No pricing changes
+- No snapshot/revision changes
+- No API or schema changes
+- Desktop layout must remain unchanged at lg+
+- Do not duplicate-mount full mobile and desktop builder trees
+- Preserve all photo upload/gallery functionality
+- Preserve save, summary, exec summary, and download functionality
+
+Files:
+- primary: client/src/pages/quote-builder.tsx
+- only touch App.tsx if absolutely necessary for a proven shell scroll fix
+
+Tasks:
+
+1. Fix mobile Quote Builder tab architecture
+- On screens below lg, render a true mobile-only layout branch.
+- Use JS breakpoint at the top-level layout branch if needed to prevent duplicate mounting.
+- Mobile must show 3 tabs:
+  - Config
+  - Preview
+  - Items
+- These tabs must switch the main active workspace, not just reveal nested sections.
+
+2. Fix scroll behavior
+- On mobile, there should be only one primary scroll container for the active tab content.
+- Remove the broken combination of:
+  - page scroll
+  - inner config scroll
+that currently prevents reaching Preview and Items properly.
+- Config tab may scroll vertically for form content.
+- Preview tab should scroll only if needed, but drawing must be visible immediately.
+- Items tab should scroll vertically through item cards.
+
+3. Config tab behavior
+- Show:
+  - job name
+  - address
+  - date
+  - existing Drawing Config / Item Specifics form content
+- Keep these in a clean vertical mobile layout.
+- Avoid nested scroll regions inside the form unless absolutely necessary.
+- If there is an inner ScrollArea for the left form panel, remove or flatten it for the mobile layout branch.
+
+4. Preview tab behavior
+- Preview tab must show the generated drawing prominently and immediately.
+- Do not hide the drawing below the form.
+- Do not require horizontal scrolling to find it.
+- Drawing should be centered and occupy the main visible area.
+
+5. Items tab behavior
+- Items tab must show quote items as stacked compact cards on mobile.
+- Do not use the desktop bottom sheet / right-side items panel on mobile.
+- Do not render the redundant bottom items panel on mobile at all.
+- Each card should show:
+  - item name
+  - category
+  - dimensions
+  - qty
+  - m²
+  - price
+  - photo count if available
+  - actions: edit, duplicate, delete, photo
+
+6. Preserve all existing quote builder functions
+Must still work:
+- add/edit/delete/duplicate item
+- photo capture/upload/gallery modal
+- save job
+- open summary
+- open exec summary
+- drawing preview
+- download actions (PNG/PDF)
+
+7. After mobile layout fix, add Site Visit Mode enhancements
+Once the mobile layout is working correctly, add estimate-level workflow preset selection in Quote Builder:
+- Renovation
+- New Build
+
+Requirements:
+- selected once per estimate/job
+- affects future new items only
+- does not change existing items
+- defaults only, never lock fields
+- user can override any field
+
+8. Site Visit preset implementation (Phase 1)
+Implement locally in quote-builder.tsx for now (no backend/settings UI yet unless trivial).
+
+Add an estimate-level selector in the job header/details area:
+- Site Type / Workflow Preset
+  - renovation
+  - new_build
+
+Renovation preset should prefill new items with sensible defaults:
+- frameType = appropriate ES52 default already used in app if available
+- glassIguType = EnergySaver
+- glassType = Clear // EnergySaver - Toughened any one side
+- glassThickness = 4/4
+- linerType = 19mm mitercut grooved
+- handleType = venting double tongue
+- wallThickness = sensible default
+- windZone should auto-fill from frameType suggestion, but remain editable
+
+New Build preset:
+- use current standard/default builder values for now if exact defaults are not yet defined
+- structure code so these can be refined later
+
+9. Wind zone rule
+- Auto-fill wind zone from frame type suggestion
+- Keep editable
+- For now, implement simple local rule:
+  - ES52 windows/doors => Extra High
+- Keep implementation simple and local
+
+10. Height-from-floor warning
+- heightFromFloor remains user-entered / editable onsite
+- Add non-blocking warning when:
+  - heightFromFloor < 800
+- Warning should indicate safety glazing / toughening may need checking
+- Do NOT auto-change glass selection yet
+
+Acceptance criteria:
+- On mobile, Config / Preview / Items are true full workspace tabs
+- I can clearly see the drawing in Preview
+- I can clearly see the item list in Items
+- No broken nested scroll trapping
+- Desktop layout unchanged
+- Site Type preset selector exists
+- New items are prefilled from preset
+- Existing items are untouched
+- Wind zone auto-fills but is editable
+- Height-from-floor warning appears under 800mm
+- Photos still work correctly from mobile item cards
+My recommendation
+
+Ask Replit to do this as one controlled pass:
+
+fix mobile tab/workspace behavior
+
+then add the preset/site-visit enhancements
+
+That avoids layering new features onto a broken mobile shell.

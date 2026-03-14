@@ -1,70 +1,54 @@
-# Pro-Quote CAD Generator
+# SteelIQ – Lateral Enterprises
 
 ## Overview
-The Pro-Quote CAD Generator is a professional quotation tool designed for the window and door industry. It enables users to configure window and door items, generate live SVG technical drawings with dimensions and opening indicators, and manage these items within "Jobs." The system aims to streamline the quotation process, from configuration and visualization to pricing and export. Key capabilities include real-time drawing previews, comprehensive job management, photo capture for items, and detailed pricing breakdowns. The project's ambition is to provide a robust, user-friendly platform for generating accurate and visually rich quotes, enhancing efficiency for businesses in the window and door market.
+SteelIQ is a professional quotation and estimating platform designed for the window and door industry. It provides a robust, user-friendly system for configuring window and door items, generating live SVG technical drawings, and managing estimates and quotes. The platform streamlines the entire quotation process from configuration and visualization to pricing and export, ensuring accurate and visually rich outputs. Key capabilities include real-time drawing previews, comprehensive estimate and quote lifecycle management, item photo capture, detailed pricing breakdowns, and a template-driven PDF engine for professional document generation.
 
 ## User Preferences
 I want iterative development.
 Ask before making major changes.
 I prefer detailed explanations.
-Do not make changes to the folder `shared`.
+Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/estimate-snapshot.ts (approved).
+
+## Completed Milestones
+- **Stabilisation Phase** (current): Part 1 — Revert-to-draft now allows revert when linked op-job has `status="cancelled"` (active jobs still block; audit log entries added on both quote and job). UI copy in quote-detail updated to explain cancellation requirement. Part 2 — System Mode (`development|demo|production`) stored in `org_settings.systemMode`. `getSystemMode()` + `requireNonProductionMode()` helpers in routes. `GET/PATCH /api/settings/system-mode` routes (admin/owner only). Settings page has new "System" tab (`SystemModeTab`) with mode select, help text per mode, production warning, and save via PATCH. `useSystemMode` hook (`client/src/hooks/use-system-mode.ts`) with `staleTime:0` + `refetchOnMount:true` for reliable cross-page freshness. Part 3 — All demo/test/reset admin routes (cleanup-demo, reset-demo-environment, demo-flag PATCH for quotes+op-jobs, demo-stats) are gated by `requireNonProductionMode()` in the backend. Frontend gates: demo cleanup + reset sections hidden in production (users.tsx); demo-flag sections hidden in production (quote-detail, op-job-detail) using null-safe `showDemoTools` computed from loaded mode. Part 4 — `POST /api/admin/reset-demo-environment`: preserves Q-0135 (and its linked estimate/customer/project), archives all other quotes/op-jobs/estimates/customers/projects, adds audit log, mode-gated. UI in users.tsx: "Reset Demo Environment" section with confirmation dialog (lists what is preserved/archived). `archiveProject(id)` added to `IStorage` and `DatabaseStorage`. Part 5 — Division-aware filtering enforced on all op-job routes: list (active+archived), detail GET, PATCH, archive, unarchive — non-admin/owner users filtered to their `divisionCode`. Part 6 — `.strict()` removed from `presetDefaultsSchema`+`jobTypePresetsSchema` (settings save fix). TypeScript clean (exit 0), E2E 4/4 passed.
+- **Archive/Unarchive + Demo Cleanup** (current): `cancelled→archived` added to `VALID_STATUS_TRANSITIONS`. `isDemoRecord` boolean on `quotes` and `op_jobs`. `archivedAt` + `isDemoRecord` on `op_jobs`. Storage: `getArchivedOpJobs`, `archiveOpJob`, `unarchiveOpJob`, `getDemoQuotes`, `getDemoOpJobs`. `unarchiveQuote` in `quote-lifecycle.ts`. Routes: quote unarchive (`PATCH /api/quotes/:id/unarchive`), op-job archive/unarchive (`PATCH /api/op-jobs/:id/archive|unarchive`), demo-flag PATCH for both entities, `GET /api/admin/demo-stats`, `POST /api/admin/cleanup-demo`. UI: quotes-list Archived tab + unarchive row actions; quote-detail archived banner + unarchive button + demo-flag admin section; op-jobs-list Active/Archived tabs with per-row unarchive; op-job-detail archive button in header + archived banner with inline restore + demo-flag admin section; users.tsx demo cleanup panel (load stats → archive all demo records confirmation). TypeScript clean, E2E passed (4/4 scenarios).
+- **Lifecycle Safety Controls**: `cancelled` status added to `QUOTE_STATUSES` and `VALID_STATUS_TRANSITIONS` (from `review` and `sent`). `DELETE /api/quotes/:id` tightened to draft-only with `?confirm=permanent` param. `POST /api/quotes/:id/revert-to-draft` (accepted + no invoices + no job). Estimate delete guard blocks if active quotes exist (unless `force:true`). UI: Delete button in quote-detail header (draft only) + confirmation dialog; Cancel Quote transition button in quote-detail (review/sent); Revert to Draft section on accepted quotes; Delete icon per-row in quotes-list (draft only); Cancel Job button in op-job-detail with confirmation dialog. STATUS_LABELS/STATUS_VARIANT/TRANSITION_LABELS updated for `cancelled` across quote-detail and quotes-list. PDF email workflow: `sentAt`/`sentToEmail` on quotes table, `server/email.ts` Resend integration, `POST /api/quotes/:id/send`, `SendQuoteDialog`.
+- **Customers+Projects+Jobs Phase**: Customer/project linking in quote workflow (`PATCH /api/quotes/:id/link`). Projects added to Customers page (expandable per-customer list with "Add Project" dialog). Quote → Job conversion: accepted quotes show "Convert to Job" action, creates `op_jobs` record (job number `J-XXXX`, title, division, customer, project, source quote, accepted revision). Job shell detail page at `/op-jobs/:id` shows all source relationships + accepted revision snapshot (read-only). Jobs list page at `/op-jobs`. "Jobs" sidebar entry added. `op_jobs` table + sequence in DB. Conversion is idempotent (409 if already converted). Accepted quote history never mutated.
+- **Auth Phase 3**: `mustChangePassword` boolean on users. Creating/resetting a user sets it `true`. `POST /api/auth/change-password` endpoint clears flag. `AppShell` shows `ChangePasswordScreen` if flag is true (forced password change on first login). Users page updated: role descriptions collapsible "Role Guide", post-create `OnboardingDialog` (login URL, username, step-by-step instructions, copy button), `mustChangePassword` indicator in table. Division-scoped filtering on `GET /api/invoices` and `GET /api/quotes/:id/invoices`. Admin reset-password also sets `mustChangePassword=true`.
+- **Auth System Phase 2**: Users admin page at `/users` (admin/owner-only). Full CRUD for users: list, create dialog, edit dialog (displayName/email/role/division/isActive), password reset dialog. New API: `PATCH /api/auth/users/:id`, `POST /api/auth/users/:id/reset-password`. Global `apiAuthGuard` middleware in `server/index.ts` — all `/api/*` routes protected except login/logout/me. Sidebar "Users" entry visible to admin/owner only. Test mode (NODE_ENV=test) preserved: mock admin injected without session.
+- **Auth System Phase 1 + Commercial Foundations**: Full auth (`crypto.scrypt`, 7-day cookie sessions), login/logout/me endpoints, `AuthContext`+`useAuth`, login page, `AppShell` auth guard. Customers page at `/customers` with expandable contacts. Quote accept endpoint (`POST /api/quotes/:id/accept`) locks commercial state. Invoice foundations with deposit dialog, Xero warning passthrough. DB tables: `users` (expanded), `user_sessions`, `customers`, `customer_contacts`, `projects`, `invoices`. Default admin seeded on first startup (`admin` / `SteelIQ2025!`).
+- **Rich-Text Content Blocks**: `rich-text-parser.ts`, `RichTextEditor`, `RichTextRenderer`, `renderRichTextPdf`; all settings textareas use rich text; disclaimer section upgraded.
+- **Quote Template Engine**: Multi-page PDF with smart pagination, company master template v2, template builder with granular controls (logo, header, schedule density, photo size). Division settings with editable job-type presets backed by library options. Spec dictionary system, profile role dictionary, reference images.
 
 ## System Architecture
-**Frontend**: React with TypeScript and Shadcn UI components.
-**Backend**: Express.js with PostgreSQL, utilizing Drizzle ORM and a node-postgres adapter.
-**Drawing Engine**: SVG-based rendering within `client/src/components/drawing-canvas.tsx`, supporting PNG export.
-**State Management**: Client-side React state is used for UI, complemented by TanStack Query for API data fetching and caching.
-**Global Settings**: Managed via a React Context (`client/src/lib/settings-context.tsx`) with localStorage for persistence.
-**Navigation**: A collapsible sidebar facilitates navigation between Jobs, Library, and Settings.
-**Routing**: Wouter is used for client-side routing, defining paths for job management, library access, and settings.
-**Export Capabilities**: Supports client-side SVG to PNG conversion (at 3x resolution) and multi-page PDF generation via jsPDF.
-**Photo Storage**: Photos are captured as Base64 JPEG data URLs, compressed client-side, and stored in the database.
-**UI/UX Decisions**:
-- **Color Schemes**: Based on Shadcn UI defaults.
-- **Templates**: Various pre-defined categories for windows (Standard, Sliding, Bay), and doors (Sliding, Entrance, Hinge, French, Bi-folding, Stacker).
-- **Design Approaches**: Responsive design with a focus on intuitive configuration forms and clear visual feedback.
-- **Custom Grid Layout**: A column-based system supports flexible design for most window/door categories.
-- **Drawing Legend**: A toggleable legend displays frame size and item type, positioned to the left of the height dimension.
-**Technical Implementations**:
-- **Configuration & Pricing System**: Utilizes dedicated tables for frame configurations, profiles, accessories, and labor. A `pricing.ts` utility calculates comprehensive costs, including material, labor, glass, liner, and handle expenses, yielding net cost, sale price, and margin.
-- **Config Signature**: `deriveConfigSignature` analyzes drawing layouts to generate a unique signature, enabling auto-detection and matching of configurations.
-- **Auto-generation**: When no matching configuration is found, the system can auto-generate a new one based on the detected layout.
-- **Master Library Systems**: Centralized libraries for direct materials (profiles, accessories), manufacturing labor, installation labor (tiered rates with cost/sell split), and delivery methods (with cost/sell split). These master libraries ensure consistency and propagate changes across configurations.
-- **Financial Model**: Full cost/sell separation for installation and delivery. Installation tiers and delivery methods have independent cost and sell dollar amounts in the library. Subcontractor/custom overrides use a cost input + markup percentage (default 15%) to compute sell. GST rate is configurable in settings (default 15% NZ). Grand Total Cost (COGS) = Manuf + Install Cost + Delivery Cost. Gross Profit = Sale ex GST − COGS. Gross Margin = Gross Profit / Sale ex GST × 100. Gross Profit/hr = Gross Profit / Total Manufacturing Labour Hours. Labor hours tracked via `laborHours` in PricingBreakdown.
-- **Delivery Toggle**: On/off toggle like installation. When off, delivery is "Supply Only — Customer to Collect" and excluded from totals.
-- **Financial Summary Layout**: Grouped table format — Manufacturing (Materials/Labour/Total), Installation (Cost/Sell), Delivery (Cost/Sell or Supply Only), Grand Total Cost, then Sale totals (ex/inc GST), unit metrics, and profitability row (Gross Profit / Gross Margin / Gross Profit per hour).
-- **Customer-Facing Quote Summary**: Shows Items Subtotal, Installation (sell), Delivery (sell or "Supply Only" note), Subtotal excl. GST, GST line, Total incl. GST. No cost data shown. Items table includes Weight column (computed live from config profiles, always visible). Stats cards: Total Items, Total m², Total Weight (always visible) + Avg $/m² (togglable). Unified pricing toggle (`showPricingOnQuote`, default false) controls $/m² column, Price column, and Avg $/m² card together — hidden by default for customer-facing view.
-- **Frame Colors**: Each entry has `value`, `label`, `priceProvision`, and `supplierCode` (direct supplier equivalent code, e.g., HYX87838 for Dulux Iron Sand, JL3600 for Dulux Flax Pod). Supplier codes backfilled on app startup for existing entries.
-- **Surface Column Removed**: The "Surface" field was removed from Direct Materials profiles library, configuration profiles table/dialog, and auto-generation logic. Surface finish is now tracked via the Frame Color's `supplierCode` field instead. The `surface` column remains in the DB schema but is no longer used in the UI.
-**Feature Specifications**:
-- **Job Management**: Full CRUD operations for jobs, including item photo capture, duplication, and deletion.
-- **Download/Export**: Options to download current drawings, all items as individual PNGs, or all items as a single PDF.
-- **Pricing**: Live calculation of square meters and pricing with customizable $/m² rates and a detailed quote summary page.
-- **Settings**: User-configurable global settings for legend visibility and quote list position.
-- **Auto-save**: Automatic saving of existing jobs after item changes.
-- **Quote Manager**: Full quote lifecycle (Draft→Review→Sent→Accepted/Declined→Archived) with:
-    - Atomic sequential numbering via `number_sequences` table (format Q-XXXX)
-    - Revision history — immutable `snapshot_json` stored per revision; new revision created instead of updating
-    - Duplicate job prevention — if quote already exists for a `source_job_id`, creates a new revision on that quote
-    - Status transitions enforced server-side via `VALID_STATUS_TRANSITIONS` map
-    - Audit logging for all quote actions (creation, revision, status changes)
-    - EstimateSnapshot contract in `shared/estimate-snapshot.ts` (Zod schema + TypeScript type)
-    - Tables: `number_sequences`, `quotes`, `quote_revisions`, `audit_logs`
-    - Frontend pages: `/quotes` (list), `/quote/:id` (detail with revisions, status actions, audit trail)
-    - "Generate Quote" button on Executive Summary page builds snapshot from current pricing data
-    - Future-proofed for RBAC, multi-tenancy, Xero integration, and procurement (nullable fields)
-- **Business Rules**:
-    - Frame sizes are standardized: 52mm for standard windows/doors, 70mm for bi-folding, and 127mm for sliding/stacker/sliding doors.
-    - Opening indicators reflect hinge locations; awning indicators are always solid.
-    - JSON body size limit for uploads is 10MB.
+**Frontend**: React with TypeScript and Shadcn UI components, emphasizing a responsive mobile-first design.
+**Backend**: Express.js with PostgreSQL, Drizzle ORM, and node-postgres.
+**Drawing Engine**: SVG-based rendering with PNG export capabilities, integrated with real-time drawing previews.
+**State Management**: React state for UI components and TanStack Query for API data fetching and caching.
+**Global Settings**: Managed via React Context and persisted in localStorage.
+**Routing**: Wouter for client-side navigation.
+**Export Capabilities**: SVG to PNG conversion and multi-page, vector-text selectable PDF generation using jsPDF.
+**Storage**: Item photos are stored in PostgreSQL (`bytea` column) with an in-memory cache. Drawing PNGs are stored on the filesystem.
+**Multi-Division Architecture**: Supports organizational and division-specific settings, including `division_scope` for library entries.
+**Spec Dictionary System**: Configurable `spec_dictionary` entries for dynamic specification display and override functionality.
+**Quote Management**: Features a comprehensive lifecycle (Draft, Review, Sent, Accepted/Declined, Archived), atomic sequential numbering, immutable revision history, and server-side status transition enforcement. Quotes include an `EstimateSnapshot` for immutable revision data.
+**Pricing System**: A utility calculates material, labor, glass, liner, and handle costs, providing net cost, sale price, and margin, including configurable GST.
+**Configuration & Drawing**: Utilizes dedicated tables for frame configurations, profiles, accessories, and labor, with features like auto-detection of configurations, standard frame sizes, and dynamic opening indicators.
+**Master Library Systems**: Centralized libraries for direct materials, manufacturing labor, installation labor, and delivery methods.
+**Site Visit Mode**: Client-only `siteType` state for jobs, enabling preset defaults for "renovation" and "new_build" contexts.
+**Mobile Architecture**: Optimized for mobile with `native-scroll`, sticky action bars, enhanced item cards, and a collapsible header.
+**Quote Document Model**: Defines `PreviewData` (API response shape), `QuoteDocumentModel` (normalized rendering contract), and `buildQuoteDocumentModel()` (mapper).
+**Quote Renderer**: Defines `QuoteRenderModel` (presentation-ready structure) and `buildQuoteRenderModel()` (pure mapper from `QuoteDocumentModel`). The preview page renders from `QuoteRenderModel` via decomposed section components.
+**Lifecycle Service**: Centralized handling for archive, soft-delete, hard-delete, cascade operations, orphan detection, and development cleanup routines.
 
 ## External Dependencies
-- **PostgreSQL**: Primary database for storing job data, items, and library entries.
-- **Drizzle ORM**: Used for interacting with the PostgreSQL database from the backend.
-- **node-postgres**: PostgreSQL client for Node.js, used by Drizzle ORM.
+- **PostgreSQL**: Primary database.
+- **Drizzle ORM**: Object-Relational Mapper for PostgreSQL.
+- **node-postgres**: PostgreSQL client for Node.js.
 - **React**: Frontend UI library.
-- **TypeScript**: Adds static typing to JavaScript for enhanced code quality.
-- **Shadcn UI**: Component library for building the user interface.
-- **TanStack Query**: For efficient data fetching, caching, and state management of API data.
-- **Wouter**: A minimalist React router for client-side navigation.
-- **jsPDF**: Library for generating multi-page PDF documents on the client-side.
+- **TypeScript**: Superset of JavaScript for static typing.
+- **Shadcn UI**: Component library for React.
+- **TanStack Query**: Data fetching and caching library.
+- **Wouter**: Client-side routing library.
+- **jsPDF**: JavaScript library for generating PDFs.
+- **multer**: Middleware for handling `multipart/form-data` for file uploads.

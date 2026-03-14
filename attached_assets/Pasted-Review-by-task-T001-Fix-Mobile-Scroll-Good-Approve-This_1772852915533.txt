@@ -1,0 +1,273 @@
+Review by task
+T001 — Fix Mobile Scroll
+
+Good. Approve.
+
+This is the most important fix.
+
+The diagnosis makes sense:
+
+Radix ScrollArea on mobile can absolutely feel worse than native scrolling
+
+replacing it with native overflow-y-auto on mobile is the right move
+
+I agree with:
+
+mobile = native scroll
+
+desktop = keep ScrollArea
+
+Small note to add
+
+Ask Replit to verify there is still only one vertical scroll container after the change.
+
+Suggested addition:
+
+Also verify that no parent wrapper is still introducing a second competing scroll region on mobile.
+
+T002 — Remove Duplicate Add to Quote Button
+
+Good. Approve.
+
+This is clearly correct from your screenshots.
+
+Mobile should only show:
+
+sticky bar button
+
+Desktop can keep:
+
+inline button
+
+No issue here.
+
+T003 — Add “Add to Quote” in Preview Tab
+
+Good. Approve.
+
+You were completely right about this.
+
+The only thing I’d add is:
+
+if the form is invalid/incomplete, Preview should either disable the button or reuse the same submit validation behavior as Config
+
+Suggested addition:
+
+Reuse the exact same submit path and validation behavior as the Config tab. Do not create a separate save path for Preview.
+
+T004 — Unsaved Changes Warning — Already Implemented
+
+I would NOT approve this as-is.
+
+Reason:
+Your real-world report was:
+
+my quote did not save when i exit the window, there was no warning so all data lost.
+
+So even if code exists, the plan should not assume it is working correctly.
+
+This task should be reframed as:
+
+Revised T004
+
+Verify and fix unsaved-changes warning behavior
+
+Tasks:
+
+verify beforeunload actually fires on mobile browser behavior
+
+verify hasUnsavedChanges is correctly set when:
+
+header fields are changed
+
+item form values are changed
+
+a new item is being built but not added
+
+verify in-app navigation confirmation actually appears
+
+if current logic is incomplete, fix it
+
+Why this matters
+
+The existence of a handler is not enough.
+What matters is whether:
+
+dirty state is being tracked properly
+
+mobile browser actually shows a leave warning
+
+users are protected against accidental loss
+
+Recommendation
+
+Change T004 from:
+
+“already implemented, no changes needed”
+
+to:
+
+“verify thoroughly and patch if not functioning end-to-end”
+
+This is important.
+
+T005 — Improve First-Item Speed — Eager Job Creation
+
+Good idea, but high risk. Needs more caution.
+
+This is the one task I would soften.
+
+Your hypothesis is probably correct:
+
+first item delay likely includes job creation
+
+But the proposed fix:
+
+auto-create a job after 1 second when job name is entered
+
+can create side effects:
+
+lots of accidental draft jobs
+
+half-created records
+
+unexpected autosaves
+
+confusing state if the user changes the job name or backs out
+
+Safer alternative
+
+I’d recommend this instead:
+
+Revised T005
+
+Investigate first-item delay first, then implement the lowest-risk performance fix.
+
+Prefer this order:
+
+confirm the actual cause of the 6–8 second delay
+
+if job creation is the bottleneck, pre-create only when minimum required estimate fields are present, such as:
+
+jobName
+
+address or siteType
+
+only create once
+
+keep it clearly in draft state
+
+do not create empty or near-empty jobs
+
+Better trigger than only jobName
+
+Just job name alone is too early.
+
+A safer trigger is something like:
+
+job name non-empty
+
+site type selected
+
+user has interacted with item creation flow
+
+Or:
+
+create the job when user first enters Config meaningfully / first interacts with item setup
+
+Recommendation
+
+Approve the idea, but ask Replit to measure before implementing, and avoid creating drafts too aggressively.
+
+T006 — Collapsible Mobile Header
+
+Good. Approve with one safeguard.
+
+This is definitely the right fix.
+
+Add one rule
+
+Do not auto-collapse if the user is actively editing one of those fields.
+
+Suggested addition:
+
+Only auto-collapse after first item is added and when the header fields are not currently focused/being edited.
+
+Otherwise it could feel jumpy.
+
+Also:
+
+keep manual expand/collapse
+
+remember last user choice during the session if practical
+
+T007 — Executive Summary Layout Polish
+
+Good. Approve.
+
+This is a reasonable lightweight polish pass.
+
+I like that it is explicitly:
+
+layout only
+
+not data logic
+
+No issue here.
+
+What I would change before approval
+Change 1 — Rewrite T004
+
+Replace:
+
+Unsaved Changes Warning — Already Implemented / No code changes needed
+
+With:
+
+Verify and fix unsaved changes warning behavior end-to-end
+
+Because your real test showed it did not protect you.
+
+Change 2 — Soften T005
+
+Replace:
+
+Add a useEffect that auto-creates the job record as soon as jobName has a non-empty value
+
+With something closer to:
+
+First confirm the cause of the first-item delay. If eager job creation is the right fix, trigger it only after minimum meaningful estimate details are present, and ensure draft jobs are not created too aggressively.
+
+Change 3 — Add a focus safeguard to T006
+
+Add:
+
+Do not auto-collapse the header while the user is actively editing header fields.
+
+Recommended message back to Replit
+
+Send this:
+
+This plan is close, but make these adjustments before proceeding:
+
+1. T004:
+Do not mark unsaved changes warning as complete yet. We had a real dry-run where data was lost without warning. Treat this as:
+"Verify and fix unsaved changes protection end-to-end."
+Confirm that dirty state is correctly tracked for header fields, item form changes, new unsaved items, in-app navigation, and browser/window exit on mobile.
+
+2. T005:
+Do not immediately implement eager job creation based only on jobName. First confirm the actual cause of the 6–8 second first-item delay. If eager creation is the right fix, only create a draft job after minimum meaningful details are present, and avoid creating accidental empty/near-empty jobs.
+
+3. T006:
+Add a safeguard so the header does not auto-collapse while the user is actively editing/focused in the header fields.
+
+4. T001:
+Also verify there is only one effective vertical scroll container on mobile after the ScrollArea change.
+
+5. T003:
+Reuse the exact same Add/Update submit path and validation behavior from the Config tab for the Preview tab button.
+
+With those adjustments, proceed.
+Bottom line
+
+This is a good plan, but T004 and T005 need tightening before I’d call it safe.

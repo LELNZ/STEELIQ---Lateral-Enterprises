@@ -1,0 +1,152 @@
+We completed a real mobile dry-run of SteelIQ Pro-Quote and found several usability issues that must be fixed before further testing.
+
+Do NOT modify pricing, library logic, configuration derivation, or backend schema.
+
+Focus only on mobile UX improvements.
+
+--------------------------------
+
+ISSUE 1 — Mobile scroll behaviour is jagged
+
+Scrolling on mobile is not smooth. It moves very small increments and requires many swipe gestures.
+
+This suggests nested scroll containers.
+
+Fix:
+
+• Audit the Quote Builder layout
+• Remove nested scroll areas on mobile
+• Prefer native page scroll
+• Avoid ScrollArea components for mobile if they interfere with touch scrolling
+• Ensure only one vertical scroll container exists
+
+Acceptance:
+
+Mobile scrolling should feel natural and smooth.
+
+--------------------------------
+
+ISSUE 2 — Duplicate "Add to Quote" buttons
+
+On the Config tab there are currently two buttons:
+
+1. Inline form button
+2. Sticky mobile action bar button
+
+Fix:
+
+• Keep the sticky mobile action bar
+• Hide the inline form button on mobile (!isLargeScreen)
+
+Acceptance:
+
+Only one Add/Update action should exist on mobile.
+
+--------------------------------
+
+ISSUE 3 — Preview tab missing "Add to Quote"
+
+Currently the Preview tab only shows:
+
++ Add Next Item
+
+This is dangerous because the user can lose the current item.
+
+Fix:
+
+Add a primary button in Preview tab:
+
+Add to Quote
+
+The Preview tab should allow:
+
+Add to Quote
+Add Next Item
+
+Acceptance:
+
+User can finalize the current item directly from Preview.
+
+--------------------------------
+
+ISSUE 4 — Unsaved changes warning
+
+Currently if the user closes the browser or navigates away, the quote is lost.
+
+Implement:
+
+beforeunload warning when unsaved items exist.
+
+Example:
+
+"You have unsaved changes. Are you sure you want to leave?"
+
+Acceptance:
+
+Leaving the page warns the user if there are unsaved items.
+
+--------------------------------
+
+ISSUE 5 — First item takes 6–8 seconds
+
+Adding the first item is slow.
+
+Investigate why.
+
+Most likely cause:
+Estimate record is created only when the first item is added.
+
+Improve performance by:
+
+• Creating the estimate earlier (after Job Name / Address / Site Type are filled)
+• Or pre-creating estimate on first interaction
+
+Acceptance:
+
+First item creation should feel immediate.
+
+--------------------------------
+
+ISSUE 6 — Header takes too much vertical space
+
+The Job Name / Address / Date / Site Type block consumes too much screen space.
+
+Implement a collapsible header:
+
+Initial state:
+Full editable fields.
+
+After first item added:
+Show compact summary header.
+
+Example:
+
+Dry run test house
+Test house street
+Renovation | 4 items
+[Edit]
+
+Tapping Edit expands the fields again.
+
+Acceptance:
+
+Mobile screen real estate improves significantly.
+
+--------------------------------
+
+ISSUE 7 — Executive summary layout
+
+The executive summary page has poor spacing and long lines.
+
+Improve layout:
+
+• Limit max width
+• Improve section spacing
+• Ensure text wraps correctly
+• Improve readability on mobile
+
+Do not change data or logic — only layout.
+
+--------------------------------
+
+Work carefully and test mobile behaviour after changes.

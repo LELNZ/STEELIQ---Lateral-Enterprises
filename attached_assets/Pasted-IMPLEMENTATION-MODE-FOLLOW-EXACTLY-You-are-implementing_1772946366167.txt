@@ -1,0 +1,380 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Preserve the current system direction:
+
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT collapse quote vs revision semantics.
+Do NOT move photo/media controls into Visible Specs.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add new endpoints unless explicitly instructed.
+Do NOT change snapshot schema except where stated.
+
+IMPLEMENTATION BEHAVIOR
+Implement the tasks exactly as written.
+Use existing patterns and components.
+Make the smallest safe changes needed.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any risks or limitations remaining
+5. Confirmation architecture guards were preserved
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+--------------------------------------------------
+OBJECTIVE
+--------------------------------------------------
+
+Pre-T018 UX / workflow improvements to clarify quote vs revision behavior, improve media inclusion workflow, improve media usability, improve preview layout for print, and reduce intermittent builder lag.
+
+Do NOT change renderer architecture.
+Do NOT modify QuoteDocument behavior beyond UI usage.
+
+--------------------------------------------------
+T001 — Improve Quote vs Revision Action Labels
+--------------------------------------------------
+
+Location:
+client/src/pages/exec-summary.tsx
+
+Current labels are confusing and reference "Estimate" instead of "Quote".
+
+Replace labels with:
+
+If existing quote exists:
+
+Button 1:
+"Update Existing Quote"
+Subtext:
+"Creates a new revision on the selected quote"
+
+Button 2:
+"Create New Quote"
+Subtext:
+"Creates a separate quote under this estimate"
+
+If no existing quote exists:
+
+Primary button:
+"Generate Quote"
+Subtext:
+"Creates the first quote for this estimate"
+
+Update toast messages to match the new terminology.
+
+Example:
+"Revision 3 added to Q-0042"
+
+Acceptance:
+Users clearly understand revision vs new quote behavior.
+
+--------------------------------------------------
+T002 — Show Source Estimate and Related Quotes
+--------------------------------------------------
+
+Goal:
+Make quote families visible.
+
+Changes required:
+
+1) Quotes List
+
+File:
+client/src/pages/quotes-list.tsx
+
+Add a column/field:
+"Source Estimate"
+
+Populate using the linked estimate/job name from sourceJobId.
+
+Requires API enrichment.
+
+2) API Update
+
+File:
+server/routes.ts
+
+Enhance GET /api/quotes so it includes:
+
+sourceEstimateName
+or equivalent field derived from job table.
+
+Use existing join pattern if present.
+
+Do NOT create new endpoints if existing endpoint can be extended safely.
+
+3) Quote Detail Page
+
+File:
+client/src/pages/quote-detail.tsx
+
+Add section:
+
+"Related Quotes"
+
+Display other quotes sharing the same sourceJobId excluding the current quote.
+
+Show:
+- Quote Number
+- Current Revision
+- Status
+- Updated Date
+
+Use existing quotes API with filter if possible.
+
+4) Exec Summary
+
+File:
+client/src/pages/exec-summary.tsx
+
+Add section:
+
+"Quote History"
+
+Show existing quotes for this estimate:
+
+- Quote Number
+- Current Revision
+- Status
+- Updated Date
+
+Acceptance:
+Users can see which quotes belong to the same estimate and understand quote history.
+
+--------------------------------------------------
+T003 — Add Photo Inclusion Controls to Exec Summary
+--------------------------------------------------
+
+Goal:
+Make photo inclusion easier to manage during quote composition.
+
+IMPORTANT:
+Do NOT add a drawing toggle.
+Drawings remain included automatically when drawingImageKey exists.
+
+Photos only.
+
+Location:
+client/src/pages/exec-summary.tsx
+
+Add per-item section:
+
+"Media for Customer Quote"
+
+Display:
+
+- photo thumbnails
+- checkbox per photo:
+  "Include in Customer Quote"
+
+Bind to existing field:
+
+includeInCustomerPdf
+
+Show a count:
+
+"2 photos included"
+
+Do NOT move photo controls into Visible Specs.
+
+Do NOT change snapshot schema.
+
+Snapshot generation should continue to capture includeInCustomerPdf flags as it currently does.
+
+Acceptance:
+Users can control which photos appear in the quote without returning to the builder gallery.
+
+--------------------------------------------------
+T004 — Build Media Viewer / Lightbox
+--------------------------------------------------
+
+Create reusable component.
+
+File:
+client/src/components/media-viewer.tsx
+
+Features:
+
+Large viewport image display
+Download button
+Close button
+Close on Escape
+Close on outside click
+
+Download should use existing utilities if available.
+
+Use existing Shadcn Dialog component.
+
+Wire into:
+
+quote-preview.tsx
+quote-builder.tsx
+
+Behavior:
+
+Clicking drawing or photo opens viewer.
+User can download the image.
+
+Optional but acceptable if easy:
+zoom controls.
+
+Acceptance:
+Images can be enlarged and downloaded.
+
+--------------------------------------------------
+T005 — Improve Quote Preview Layout for Print
+--------------------------------------------------
+
+File:
+client/src/pages/quote-preview.tsx
+
+Goals:
+
+Remove dependence on interactive collapse for printable output.
+
+Changes:
+
+In print mode:
+
+@media print
+
+Ensure:
+
+All specs expanded
+No collapse/chevrons
+
+Add CSS:
+
+overflow-wrap: break-word
+
+For spec value cells.
+
+Limit spec label width:
+
+max-w-[140px]
+
+When items contain many specs (>14):
+
+Use a two-column spec layout for print mode instead of collapse.
+
+Ensure:
+
+interactive controls have print:hidden.
+
+Keep layout structure:
+
+Top section:
+Drawing | Specs
+
+Below:
+Site Photos block
+
+Acceptance:
+
+Print output shows full specs and clean layout without interactive controls.
+
+--------------------------------------------------
+T006 — Focused Builder Performance Improvements
+--------------------------------------------------
+
+Location:
+client/src/pages/quote-builder.tsx
+
+Goal:
+Reduce intermittent lag without major refactor.
+
+Apply low-risk improvements only.
+
+Steps:
+
+1) Memoize expensive calculations
+
+Use useMemo for:
+
+currentPricing
+totalPrice
+totalSqm
+
+2) Memoize heavy library filtering
+
+Examples:
+
+libFrameTypesForCategory
+specGroups
+
+3) Reduce unnecessary form watchers
+
+Replace watching entire form with useWatch on specific fields where possible.
+
+4) Ensure hidden helper components are not permanently mounted
+
+Offscreen DrawingCanvas should not be mounted unless exporting or needed.
+
+5) Extract heavy components ONLY if necessary
+
+Examples:
+
+ItemsTable
+PricingBreakdown
+
+Wrap extracted components with React.memo.
+
+Avoid large structural refactors.
+
+Acceptance:
+
+Builder editing and scrolling feel more responsive on mobile.
+
+--------------------------------------------------
+T007 — Regression Testing
+--------------------------------------------------
+
+Run existing tests:
+
+lifecycle regression tests
+quote media e2e tests
+
+Add browser test covering:
+
+1) quote creation from exec summary using new labels
+2) media viewer opens and shows download button
+3) photo inclusion controls in exec summary affect preview
+4) print preview renders all specs expanded
+
+Confirm no regressions.
+
+--------------------------------------------------
+
+END OF TASKS

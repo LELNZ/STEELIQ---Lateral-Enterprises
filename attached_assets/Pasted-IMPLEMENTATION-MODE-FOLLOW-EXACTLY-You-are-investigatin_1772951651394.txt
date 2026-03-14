@@ -1,0 +1,80 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are investigating a scoped data/state issue in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT redesign architecture.
+2. Do NOT add schema fields, endpoints, or storage systems unless explicitly instructed.
+3. Do NOT rewrite preview rendering unless a verified bug is found there.
+4. Focus on tracing the exact data/state path for one failing photo case.
+5. Preserve Quote/Revision/Snapshot semantics.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Exact test item / quote / revision inspected
+2. Whether source item currently has a photo
+3. Whether includeInCustomerPdf is true or false
+4. Whether the current revision snapshot contains the photo metadata
+5. Whether the referenced photo file exists in storage
+6. Whether the issue is:
+   - settings/include flag
+   - snapshot timing
+   - missing file
+   - mapping bug
+7. Files inspected
+8. Confirmation architecture guards were preserved
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+Objective:
+Determine why a drawing renders in quote preview but the corresponding photo does not, for a specific current test case.
+
+Required tasks:
+1. Inspect the exact quote item shown in the current failing preview case.
+2. Trace the item photo from:
+   - source item state
+   - includeInCustomerPdf flag
+   - revision snapshot_json
+   - QuoteDocumentModel
+   - QuoteRenderer output
+   - final resolved preview src
+3. Confirm whether the photo is absent because:
+   - it is excluded by settings
+   - it was added after the snapshot
+   - the file is missing
+   - or there is still a mapping/render bug
+4. Do not change code unless a concrete bug is proven.
+5. If no bug is found, explain the exact operational action required by the user, such as:
+   - enable includeInCustomerPdf
+   - regenerate quote revision
+   - re-upload missing image
+
+Acceptance criteria:
+- clear root cause for the specific failing photo case
+- no speculative fixes
+- no schema/storage redesign
+
+At the end provide:
+1. Exact test item / quote / revision inspected
+2. Whether source item currently has a photo
+3. Whether includeInCustomerPdf is true or false
+4. Whether the current revision snapshot contains the photo metadata
+5. Whether the referenced photo file exists in storage
+6. Whether the issue is settings/include flag, snapshot timing, missing file, or mapping bug
+7. Files inspected
+8. Confirmation architecture guards were preserved

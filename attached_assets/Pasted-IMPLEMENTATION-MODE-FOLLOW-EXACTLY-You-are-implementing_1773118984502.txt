@@ -1,0 +1,223 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused company-template calibration pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, or snapshot flow.
+3. Do NOT add drag-and-drop editing, freeform template editing, or raw HTML/CSS editing.
+4. Do NOT add unrelated schema fields, endpoints, or systems.
+5. Do NOT bypass QuoteDocument, QuoteRenderModel, Preview, or PDF engine.
+6. Do NOT create separate unrelated template models for preview and PDF.
+7. Preserve Preview / PDF parity as the default expectation.
+8. Focus only on:
+   - auditing saved company template config
+   - confirming whether saved config overrides tuned defaults
+   - calibrating the actual persisted company template values
+   - validating the calibrated template on a real quote
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderModel
+→ Preview
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless absolutely necessary.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Exact saved company template values found before changes
+5. Exact calibrated company template values saved after changes
+6. Any risks or limitations remaining
+7. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Audit and calibrate the actual saved company template configuration.
+
+Current problem:
+The code defaults have been improved, but existing saved company template config in the database may still override those defaults.
+This means the quote may not visibly change even though default values were tuned in code.
+
+This pass is to:
+- inspect the real saved template config
+- confirm override behavior
+- deliberately set the company template to the intended baseline
+- validate that Preview and PDF use that baseline
+
+
+--------------------------------------------------
+T096 — Audit the current saved company template configuration
+--------------------------------------------------
+
+Problem:
+Saved template config may be overriding the tuned hardcoded defaults.
+
+Required implementation:
+
+1. Inspect the current value stored in:
+   - org_settings.template_config_json
+
+2. Report exactly:
+   - whether a saved company template config exists
+   - which values are currently saved
+   - which of those values override the new hardcoded defaults
+
+3. Confirm how the resolution path currently behaves:
+   - hardcoded defaults
+   - saved company config
+   - division overrides
+
+4. Do NOT guess. Inspect the actual DB-backed config and the actual resolution logic.
+
+Acceptance criteria:
+- exact saved template values are identified
+- it is clear whether saved values are overriding the tuned defaults
+
+
+--------------------------------------------------
+T097 — Calibrate the actual saved company template to the intended baseline
+--------------------------------------------------
+
+Problem:
+The system now needs the real persisted company template values to match the intended company baseline, not just the code defaults.
+
+Required implementation:
+
+Set and save a calibrated company template baseline using the existing template config system.
+
+Use this as the starting baseline unless the live representative quote proves a slightly better value is needed:
+
+HEADER
+- showCompanyNameText = false
+- legalLinePlacement = under_logo
+- contactBlockAlignment = compact_right
+- logoWidthMm = 70
+- logoMaxHeightMm = 26
+- headerBottomSpacingMm = 5
+
+SCHEDULE
+- densityPreset = standard
+- drawingMaxHeightMm = 40
+- photoMaxHeightMm = 20
+- specRowHeightMm = 3.3
+- itemCardPadding = 2.8
+- itemCardGap = 2.8
+
+GENERAL VISUAL DIRECTION
+- logo-led header
+- legal line subdued under logo
+- drawings primary
+- site photos secondary
+- schedule denser but still readable
+
+Rules:
+1. Save these as the actual company template config, not just as hardcoded defaults.
+2. Use the existing settings/template path if practical.
+3. Keep the builder UI in sync with the saved values.
+
+Acceptance criteria:
+- company template is actually saved with the intended baseline
+- builder loads and shows the calibrated values correctly
+- Preview and PDF reflect the calibrated saved config
+
+
+--------------------------------------------------
+T098 — Validate the calibrated template on one representative real quote
+--------------------------------------------------
+
+Problem:
+The saved company template must be tested on a realistic quote, not just in settings.
+
+Required implementation:
+
+1. Use one representative quote with:
+   - multiple schedule items
+   - drawings
+   - site photos if available
+   - enough content for multiple PDF pages
+
+2. Validate:
+   - Preview
+   - PDF export
+
+3. Confirm that the calibrated saved template produces a visibly improved result without needing manual tweaking every time.
+
+4. If one small adjustment is clearly needed after testing, make that one adjustment and document it.
+
+Acceptance criteria:
+- one real quote proves the calibrated company template works
+- Preview and PDF both reflect the saved company config
+- the quote looks materially closer to the intended company standard
+
+
+--------------------------------------------------
+T099 — Keep builder state and saved config behavior trustworthy
+--------------------------------------------------
+
+Problem:
+If the builder shows one thing but saved config or render output uses another, trust is broken.
+
+Required implementation:
+
+1. Ensure the builder UI shows the true current saved config values.
+2. Ensure saving from the builder updates the real persisted company template config.
+3. Ensure Preview and PDF both resolve from that same saved config.
+4. Do NOT leave hidden fallback/default behavior that makes the UI misleading.
+
+Acceptance criteria:
+- builder, saved config, Preview, and PDF all agree
+- template controls feel trustworthy and predictable
+
+
+--------------------------------------------------
+T100 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- add new template systems
+- add drag-and-drop editing
+- add section reordering
+- redesign quote lifecycle
+- add customer portal/email logic
+- add new unrelated builder controls
+- rebuild the renderer stack
+
+This is a saved company-template calibration and trust pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. We know exactly what saved company template config existed before.
+2. We know whether it was overriding the tuned defaults.
+3. The actual saved company template has been calibrated to the intended baseline.
+4. The builder shows the true persisted values.
+5. Preview and PDF both reflect the same saved company template config.
+6. The system becomes predictable: code defaults, saved config, and rendered output no longer feel disconnected.
+
+
+END OF IMPLEMENTATION

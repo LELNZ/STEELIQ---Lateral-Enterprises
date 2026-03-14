@@ -1,0 +1,171 @@
+STEELIQ BUILD PHASE
+LIFECYCLE SAFETY CONTROLS
+
+Follow existing architecture rules.
+
+Do NOT:
+- change QuoteDocument → QuoteRenderModel → Preview/PDF
+- modify snapshot behaviour
+- redesign jobs/customers modules
+- introduce unrelated schema changes
+
+CONTEXT
+
+SteelIQ now supports:
+
+Estimates
+Quotes
+PDF generation
+Email sending
+Quote acceptance
+Deposit invoices
+Quote → Job conversion
+Jobs module
+
+However lifecycle safety controls are incomplete.
+
+Currently:
+
+Quotes cannot be deleted properly
+Jobs cannot be cancelled
+Accepted quotes cannot be reverted safely
+Estimate deletion behaviour is inconsistent
+
+This phase stabilises lifecycle rules.
+
+OBJECTIVES
+
+Implement proper lifecycle controls for:
+
+Quotes
+Jobs
+Estimates
+
+IMPLEMENTATION
+
+1. QUOTE DELETE RULES
+
+Allow deletion ONLY when:
+
+quote.status = draft
+
+Delete action should appear in:
+
+Quote detail
+Quote list
+
+If quote status is not draft:
+
+Hide delete option.
+
+2. QUOTE CANCEL
+
+Add new status:
+
+cancelled
+
+Add "Cancel Quote" action.
+
+Rules:
+
+Allowed when quote is:
+
+sent
+review
+
+Not allowed when:
+
+accepted
+
+Cancelled quotes remain visible but marked.
+
+3. REVERT ACCEPTED QUOTE
+
+Add action:
+
+Revert to Draft
+
+Allow only when:
+
+quote.status = accepted
+AND no invoices exist
+AND quote has not been converted to job
+
+If conditions fail:
+
+Show message:
+
+"This quote cannot be reverted because invoices or jobs exist."
+
+If successful:
+
+status → draft
+accepted metadata cleared
+
+4. JOB CANCELLATION
+
+Add job status:
+
+cancelled
+
+Add "Cancel Job" action on job detail page.
+
+Jobs cannot be deleted.
+
+Cancelled jobs remain visible.
+
+5. ESTIMATE DELETE FIX
+
+Ensure estimate deletion:
+
+only deletes draft estimates
+
+If estimates contain quotes:
+
+warn user and prevent deletion.
+
+6. UI
+
+Add lifecycle actions:
+
+Quote page:
+
+Delete Quote (draft only)
+Cancel Quote
+Revert to Draft (conditional)
+
+Job page:
+
+Cancel Job
+
+7. NON-GOALS
+
+Do NOT implement:
+
+Xero integration
+Invoice lifecycle changes
+Customer portal
+Cost tracking
+
+This phase is strictly lifecycle safety.
+
+MANDATORY HANDOVER
+
+Provide:
+
+Files changed
+Schema updates
+API routes
+UI changes
+Lifecycle logic
+Regression checks
+
+Regression must confirm:
+
+Quotes still create correctly
+PDF still generates
+Email sending still works
+Quote acceptance still works
+Job conversion still works
+Deposit invoice flow still works
+Lifecycle actions behave correctly

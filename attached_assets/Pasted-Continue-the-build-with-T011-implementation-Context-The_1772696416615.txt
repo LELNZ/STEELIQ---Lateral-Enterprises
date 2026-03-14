@@ -1,0 +1,113 @@
+Continue the build with T011 implementation.
+
+Context:
+The system already completed T010 (Settings UI). We are now implementing T011.
+
+Constraints (important):
+- DO NOT modify database schema
+- DO NOT add new API routes
+- DO NOT implement jsPDF quote PDF generation
+- DO NOT change files inside shared/ except approved files (none required here)
+- DO NOT break existing quote preview functionality
+- Use existing preview page rendering and print CSS
+
+Objective:
+Add safe interim UX for PDF export on the Quote Detail page.
+
+Since no server-side PDF engine exists yet, the solution is:
+1) Provide a "Print / Save as PDF" button that opens the preview page in a new tab
+2) Provide a disabled "Generate PDF" button that shows a tooltip explaining the engine is not configured
+
+Future PDF generation will use:
+- revision.templateKey
+- snapshot_json from quote_revisions
+- preview-data API
+
+Tasks
+-----
+
+T011A — Add Quote Detail Buttons
+
+File:
+client/src/pages/quote-detail.tsx
+
+In the header actions area (next to "Preview Customer Quote"), add two buttons:
+
+Button 1
+Label: "Print / Save as PDF"
+Icon: Printer
+Variant: outline
+Size: sm
+
+Behavior:
+window.open(`/quote/${quoteId}/preview`, "_blank", "noreferrer")
+
+data-testid="button-print-quote"
+
+Button 2
+Label: "Generate PDF"
+Icon: FileDown
+Variant: outline
+Size: sm
+Disabled: true
+
+Wrap this button in a Tooltip.
+
+Tooltip text:
+"PDF engine not configured yet — use Print / Save as PDF"
+
+data-testid="button-generate-pdf"
+
+Required imports:
+
+from lucide-react
+- Printer
+- FileDown
+
+from "@/components/ui/tooltip"
+- Tooltip
+- TooltipContent
+- TooltipProvider
+- TooltipTrigger
+
+Important:
+Disabled buttons do not trigger hover events, so wrap the button inside a span when used with TooltipTrigger.
+
+Example pattern:
+
+<TooltipProvider>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span>
+        <Button disabled>...</Button>
+      </span>
+    </TooltipTrigger>
+    <TooltipContent>...</TooltipContent>
+  </Tooltip>
+</TooltipProvider>
+
+
+Acceptance Criteria
+-------------------
+
+Quote Detail header shows 3 actions:
+
+1) Print / Save as PDF
+2) Generate PDF (disabled)
+3) Preview Customer Quote (existing)
+
+Print / Save as PDF:
+- opens `/quote/{id}/preview` in a new tab
+- preview page uses existing print CSS
+
+Generate PDF:
+- disabled
+- tooltip visible on hover
+- no API calls
+
+No other files should be modified.
+
+After implementation:
+Return the full diff for
+
+client/src/pages/quote-detail.tsx

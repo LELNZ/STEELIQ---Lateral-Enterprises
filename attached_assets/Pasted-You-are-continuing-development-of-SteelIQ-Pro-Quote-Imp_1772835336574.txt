@@ -1,0 +1,266 @@
+You are continuing development of SteelIQ Pro-Quote.
+
+Important clarification before making changes:
+
+The system’s current create/config behavior is CONDITIONAL.
+
+The Quote Builder already has enough information to populate pricing and configuration behavior when the selected item/configuration already exists in the current library/model.
+
+Example:
+- if a configuration like 1 awning + 1 fixed already exists in the library, the Quote Builder should use that existing model
+- in that case, DO NOT force auto-create of a new configuration record/model
+
+Only when the estimator creates a configuration that is NOT already represented in the current library/model should the existing auto-create/new-config behavior occur.
+
+This means:
+- preserve the current conditional logic
+- do not introduce blanket auto-create behavior
+- do not break pricing, drawing, or quote behavior that already works from library-backed configurations
+
+The goal is Monday field readiness only.
+Do NOT do architecture refactors.
+Do NOT change backend/schema/API/pricing/snapshot logic.
+Do NOT redesign desktop.
+Focus only on UI/workflow polish and end-to-end usability.
+
+-----------------------------------
+PRIMARY PRODUCT DECISION
+-----------------------------------
+
+For Monday, the customer-facing field document should be treated as a:
+
+PRELIMINARY ESTIMATE
+
+not a final office-approved quote.
+
+Use wording in the UI that supports this practical workflow:
+- Field user can review pricing and generate a professional document
+- Office can still refine later if needed
+- Do not change pricing logic or database structures to support this
+
+Where appropriate in the existing UI, improve wording toward:
+- Review Estimate
+- Generate Preliminary Estimate
+- Preview Customer Document
+- Print / Save PDF
+- Save for Office Review
+
+Do not do a terminology rewrite across the whole app unless needed for visible Monday workflow CTAs.
+
+-----------------------------------
+PRIORITY 1 — ITEM CAPTURE WORKFLOW
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Preserve the current conditional config/create behavior:
+   - if the selected configuration already exists in the current library/model, continue using it
+   - do not force creation of a new config/model
+   - if the current behavior already supports unmatched configurations via auto-create/new-config flow, keep that intact
+2. Make “Add Item” on mobile feel fast and obvious:
+   - From Items tab and Preview tab, provide a clear action to start the next item
+   - It should preserve the existing item/configuration flow and existing pricing behavior
+   - After starting a new item, switch into Config tab and place the user into the edit flow
+3. When editing from an item card:
+   - Switch to Config tab automatically
+   - Scroll form to the top
+   - Preserve existing form state/update logic
+
+Acceptance criteria:
+- User can rapidly move item-to-item during a site visit
+- Existing library-backed configurations continue pricing correctly without unnecessary new config creation
+- Unmatched configurations still follow the existing create/new-config behavior if already implemented
+
+-----------------------------------
+PRIORITY 2 — CONFIG SCREEN SHOULD FEEL LIKE A WORKING FIELD TOOL
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Add a mobile sticky action bar for item editing:
+   - Save / Update Item
+   - Cancel edit if already editing
+   - Quick switch to Preview
+   - Optional quick return to Items
+2. Reuse existing submit/update handlers
+3. Do not duplicate pricing or item-save logic
+
+Acceptance criteria:
+- User does not need to scroll to the bottom of a long form just to save
+- The Config tab feels like the main working screen for a field estimator
+
+-----------------------------------
+PRIORITY 3 — ITEM CARDS SHOULD SUPPORT FAST FIELD REVIEW
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Improve mobile item cards to show clearly:
+   - item number / name
+   - category or type
+   - dimensions prominently
+   - frame type
+   - glass / IGU summary
+   - photo count
+2. Keep actions:
+   - Edit
+   - Duplicate
+   - Photos
+   - Delete
+3. Keep desktop item layout effectively unchanged
+
+Acceptance criteria:
+- Estimator can review a whole house worth of openings quickly from the Items tab
+
+-----------------------------------
+PRIORITY 4 — PHOTO FLOW SHOULD SUPPORT SITE CAPTURE
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Keep the current camera/upload/photo modal logic
+2. Improve mobile usability:
+   - Clear Photo / Photos action on item card
+   - Clear empty state when item has no photos
+   - Immediate refresh of photo count after upload/capture
+   - Success toast after attach
+3. Make sure gallery modal remains readable on mobile
+
+Acceptance criteria:
+- User can attach photos quickly without losing place in workflow
+
+-----------------------------------
+PRIORITY 5 — ESTIMATE HEADER SHOULD SUPPORT ON-SITE CONFIDENCE
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Tighten the top estimate context on mobile
+2. Make sure the user can clearly see:
+   - estimate/job name
+   - address
+   - site type
+   - item count if helpful
+3. Keep it compact and do not bloat the top of the screen
+4. Desktop should remain effectively unchanged
+
+Acceptance criteria:
+- User can confirm they are working on the correct property/job immediately
+
+-----------------------------------
+PRIORITY 6 — REVIEW / OUTPUT FLOW SHOULD MATCH FIELD BEST PRACTICE
+-----------------------------------
+
+Files:
+- client/src/pages/quote-builder.tsx
+- client/src/pages/exec-summary.tsx
+- client/src/pages/quote-detail.tsx
+- client/src/pages/quote-preview.tsx
+
+Tasks:
+1. Make the next step after item capture obvious:
+   - Add a clear CTA when there are saved items:
+     - Review & Generate Estimate
+   - Route to the existing exec summary flow
+2. In visible CTA labels, prefer practical field wording where appropriate:
+   - Review Estimate
+   - Generate Preliminary Estimate
+   - Preview Customer Document
+   - Print / Save PDF
+3. Do not change the underlying quote generation logic or backend routes
+4. Ensure the user can reach preview and print/save without confusion
+
+Acceptance criteria:
+- A field estimator can confidently move from builder to customer-ready document
+
+-----------------------------------
+PRIORITY 7 — LIGHT CUSTOMER-DOCUMENT POLISH
+-----------------------------------
+
+File:
+- client/src/pages/quote-preview.tsx
+
+Tasks:
+1. Keep the existing preview structure
+2. Improve professionalism with light polish only:
+   - customer/job info block
+   - quote metadata
+   - totals clarity
+   - item schedule readability
+   - print spacing
+3. If appropriate and low-risk, add a small visible note indicating the document is preliminary, for example:
+   - Preliminary Estimate
+   - Subject to final measure and confirmation
+4. Do not redesign the page or change snapshot/pricing logic
+
+Acceptance criteria:
+- The document looks professional enough to show a customer on-site or send as a preliminary estimate PDF
+
+-----------------------------------
+PRIORITY 8 — MONDAY FIELD QA PASS
+-----------------------------------
+
+After implementation, manually test this flow and fix blockers found:
+
+1. Open Estimates
+2. Create new estimate
+3. Choose Renovation
+4. Add item
+5. Confirm existing library-backed configurations price correctly without unnecessary auto-create/new-config behavior
+6. Confirm unmatched configurations still behave correctly under the current create/new-config flow
+7. Enter dimensions/specs
+8. Switch to Preview and verify drawing is visible
+9. Add photos to at least one item
+10. Review items in Items tab
+11. Go to Review / Generate Estimate
+12. Open preview/customer document
+13. Print / Save as PDF
+
+Look specifically for:
+- regressions in library-backed configuration pricing
+- broken conditional auto-create/new-config logic
+- lost form state
+- mobile scroll regressions
+- poor mobile save/update ergonomics
+- photo workflow regressions
+- unclear output CTAs
+- console errors
+
+-----------------------------------
+CONSTRAINTS
+-----------------------------------
+
+Do not change:
+- database schema
+- API routes
+- pricing logic
+- quote snapshot logic
+- backend services
+- shared schema unless needed for compile-only fixes
+
+Prefer changes in:
+- client/src/pages/quote-builder.tsx
+- client/src/pages/exec-summary.tsx
+- client/src/pages/quote-detail.tsx
+- client/src/pages/quote-preview.tsx
+
+-----------------------------------
+DELIVERABLE
+-----------------------------------
+
+When finished, provide:
+1. concise summary of changes
+2. files changed
+3. any remaining Monday blockers
+4. results of the QA flow above
+5. confirmation that existing library-backed configurations were not broken

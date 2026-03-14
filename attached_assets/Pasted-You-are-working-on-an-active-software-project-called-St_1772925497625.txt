@@ -1,0 +1,322 @@
+You are working on an active software project called:
+
+SteelIQ – Lateral Enterprises
+
+This is an enterprise-grade multi-division SaaS platform currently in development.
+
+IMPORTANT:
+Do not redesign the system.
+Do not replace existing architecture.
+Do not bypass the QuoteDocument pipeline.
+Work only within the documented architecture and current milestone.
+
+==================================================
+PROJECT CONTEXT
+==================================================
+
+Tenant:
+Lateral Enterprises
+
+Divisions:
+- LJ — Lateral Joinery
+- LE — Lateral Engineering
+- LL — Lateral Laser Cutting
+
+Current development focus:
+Lateral Joinery mobile site-visit quoting workflow.
+
+The current milestone already achieved:
+- mobile-first joinery quoting workflow
+- real-device field testing completed
+- mobile UX stabilized
+- estimator can create estimate, add items, enter dimensions, capture photos, review preview, and review financial summary on phone
+
+The next system phase is the customer-facing Quote Engine, including:
+- QuoteDocument integration
+- QuoteRenderer
+- branded quote presentation
+- improved quote preview
+- PDF export
+
+Current architecture direction is confirmed in project docs:
+- Quote Builder must NOT render quotes directly
+- Quote rendering flow must be:
+
+Quote Builder
+-> QuoteDocument
+-> Quote Renderer
+-> Quote Preview
+-> PDF Export
+
+The current preview is basic and QuoteDocument integration is still upcoming, so this task must not shortcut that planned architecture.
+
+==================================================
+ARCHITECTURE RULES (MANDATORY)
+==================================================
+
+1. Do NOT redesign the app structure.
+2. Do NOT make Quote Builder render customer quotes directly.
+3. Do NOT introduce a separate quote-generation path outside the QuoteDocument model.
+4. All quote lifecycle work must be compatible with the future rendering pipeline:
+   Quote Builder -> QuoteDocument -> Quote Renderer -> Quote Preview -> PDF Export
+5. Renovation quotes use homeowner-style presentation.
+6. New build quotes use schedule-style presentation grouped by SED identifiers.
+7. Site presets must remain editable and must never lock fields or mutate existing items.
+8. Prefer archive over hard delete for business records unless explicit permanent deletion is chosen.
+
+==================================================
+TASKS TO COMPLETE NOW
+==================================================
+
+This job has 3 parts:
+
+PART 1 — CLEAN UP ALL CURRENT QUOTES
+PART 2 — IMPLEMENT T024 Quote Lifecycle Management
+PART 3 — IMPLEMENT T025 Quotes Page Organisation
+
+==================================================
+PART 1 — CLEAN UP ALL CURRENT QUOTES
+==================================================
+
+Goal:
+Remove all current quote records because the related test estimates were already deleted manually and we want a clean restart for new testing.
+
+Requirements:
+- Remove all current quote records from the quote store/data source
+- This is a one-time cleanup of test data
+- Do not affect estimates beyond what has already been deleted by the user
+- After cleanup, the Quotes page should show an empty-state message
+
+Required empty-state UX:
+- "No quotes yet"
+- "Create your first quote from an estimate preview"
+
+Also add a simple safe internal utility or admin-only dev method so test quotes can be cleared in development if needed again.
+This utility must be clearly dev-only and must not be exposed as a normal end-user feature unless already appropriate in the project.
+
+==================================================
+PART 2 — T024 QUOTE LIFECYCLE MANAGEMENT
+==================================================
+
+Goal:
+Add a proper quote lifecycle so quotes are linked to estimates and can be archived/deleted safely.
+
+Business problem:
+The user deleted test estimates and the old quotes were left behind.
+We need proper relationship handling and user prompts.
+
+Required quote lifecycle model:
+Each quote should support lifecycle state fields such as:
+
+- quoteId
+- estimateId
+- tenantId
+- divisionId
+- quoteType
+- status
+- createdAt
+- updatedAt
+- archivedAt
+- deletedAt
+
+Status values:
+- draft
+- generated
+- archived
+- deleted
+
+If the codebase already has similar fields/types, extend them carefully instead of duplicating concepts.
+
+Required relationship rule:
+Quotes should be treated as linked/derived documents from an estimate, not as disposable temporary UI artifacts.
+
+Implement cascade handling:
+
+A. When an estimate is archived:
+Prompt the user:
+- Archive estimate only
+- Archive estimate + linked quotes
+
+Default action:
+- Archive estimate + linked quotes
+
+B. When an estimate is deleted:
+If linked quotes exist, prompt the user:
+- Delete estimate only
+- Delete estimate + archive linked quotes
+- Delete estimate + permanently delete linked quotes
+
+Default action:
+- Delete estimate + archive linked quotes
+
+C. If a quote is intentionally kept after estimate deletion:
+Keep the quote, but mark it clearly as orphaned:
+- "Estimate removed"
+or equivalent badge/text
+
+Important:
+- Do NOT silently hard-delete linked quotes by default
+- Default to archive when possible
+- Hard delete must be explicit
+
+Implementation notes:
+- Add or update quote data model/types
+- Add service/helper functions for:
+  - getQuotesByEstimateId
+  - archiveQuote
+  - deleteQuote
+  - archiveQuotesByEstimateId
+  - deleteQuotesByEstimateId
+  - detectOrphanedQuotes
+- Add UI confirmation modal/dialog logic where estimate archive/delete actions occur
+- Keep implementation modular so it remains compatible with future QuoteDocument/Renderer work
+- If there is no audit/event log yet, structure code cleanly so logging can be added later
+
+==================================================
+PART 3 — T025 QUOTES PAGE ORGANISATION
+==================================================
+
+Goal:
+Improve the Quotes page so it scales properly and is organized by workflow, not just raw chronology.
+
+Best-practice organisation required:
+
+Primary organisation:
+- Active
+- Renovations
+- New Builds
+- Tenders
+- Archived
+
+Do NOT make "month" the primary organiser.
+
+Month/date should be implemented as a filter or sort option, not the main information architecture.
+
+Recommended top-level page capabilities:
+- Search
+- Status filter
+- Quote type filter
+- Division filter
+- Date range filter
+- Sort options
+
+Required filters:
+- Search
+- Division
+- Date range
+- Customer
+- Estimator
+- Quote type
+
+Required sort options:
+- Last updated
+- Created date
+- Customer name
+- Quote value
+- Quote number
+
+Each quote row/card should display:
+- Quote number
+- Customer / project name
+- Quote type
+- Division
+- Total value
+- Last updated
+- Status
+
+Recommended badges:
+- Archived
+- Estimate Deleted
+- Tender
+
+If some of these values do not yet exist in the current data model, implement graceful fallback display rather than breaking the UI.
+
+==================================================
+NON-GOALS
+==================================================
+
+Do NOT:
+- implement QuoteRenderer in this task
+- redesign QuoteDocument
+- build PDF export here
+- rewrite estimate builder architecture
+- invent a new document system
+- force quotes to disappear automatically without user choice
+
+==================================================
+EXPECTED DELIVERABLES
+==================================================
+
+1. Code changes implementing quote cleanup support
+2. Quote lifecycle model/state updates
+3. Estimate-delete/archive cascade handling for linked quotes
+4. Orphaned-quote identification
+5. Improved Quotes page organization and filters
+6. Empty-state handling for no quotes
+7. Any needed migrations / compatibility handling for existing stored quote data
+8. A short implementation summary at the end
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+The work is only complete if all of the following are true:
+
+A. Cleanup
+- All existing test quotes can be removed safely
+- Quotes page correctly shows empty state after cleanup
+
+B. Lifecycle
+- Quotes can be archived
+- Quotes can be permanently deleted only through explicit action
+- Deleting or archiving an estimate prompts user about linked quotes
+- Default action archives linked quotes rather than hard deleting them
+- Quotes retained after estimate deletion are visibly marked as orphaned / estimate removed
+
+C. Quotes Page
+- Quotes page is grouped/filterable by workflow and quote type
+- Renovations, New Builds, Tenders, and Archived are easy to access
+- Month/date is available as a filter/sort, not the main organisation method
+- Search and sort behave sensibly
+- Empty states do not look broken
+
+D. Architecture safety
+- No direct quote rendering from Quote Builder was introduced
+- Quote lifecycle changes remain compatible with future QuoteDocument -> QuoteRenderer -> Preview -> PDF pipeline
+
+==================================================
+IMPLEMENTATION APPROACH
+==================================================
+
+Please first inspect the codebase and identify:
+- where quotes are currently stored
+- how estimates and quotes are linked today
+- where estimate delete/archive actions live
+- where the Quotes page UI is rendered
+- whether quote status/type fields already exist
+- any existing modal/confirmation patterns to reuse
+
+Then implement the required changes in the safest minimal-architecture way.
+
+Use existing project conventions and component patterns.
+Prefer incremental refactoring over large rewrites.
+
+At the end, provide:
+1. Summary of files changed
+2. Summary of data model changes
+3. Summary of lifecycle behavior added
+4. Any migration/manual step needed
+5. Any risks or follow-up items
+
+==================================================
+REFERENCE PROJECT MEMORY (DO NOT CONTRADICT)
+==================================================
+
+Project docs confirm:
+- mobile field-tested quoting workflow is already stabilized
+- next phase is customer-facing Quote Engine
+- QuoteDocument integration and QuoteRenderer are still upcoming
+- current preview is basic and not yet the final rendered quote system
+- quote engine roadmap includes branded output, item drawings, optional photos, cover page, and PDF export
+
+Preserve that direction.

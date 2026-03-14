@@ -1,0 +1,252 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create separate unrelated content models for preview and PDF.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/storage/config support strictly required for:
+- DB-backed photo serving parity
+- actual master-template visual application
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/storage/config changes made
+4. Any migration/backfill actions performed
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Do a focused two-part pass:
+
+PART A:
+Fix the remaining photo issue so DB-backed site photos that appear in Customer Quote Preview also appear correctly in exported PDFs.
+
+PART B:
+Make the company master template visibly apply to both Customer Quote Preview and PDF, so the preview looks materially more like the exported document and not just the old/default layout.
+
+This is NOT a template builder.
+This is a photo-parity + applied-master-template pass only.
+
+
+--------------------------------------------------
+PART A — PHOTO PARITY BETWEEN PREVIEW AND PDF
+--------------------------------------------------
+
+T043 — Find and fix why preview shows site photos but exported PDF does not
+
+Problem:
+A newly created estimate with photos shows the site photos correctly in Customer Quote Preview, but the exported PDF for Q-0130 shows only the "SITE PHOTOS" headings with no actual photo images.
+
+Evidence:
+- Customer Quote Preview visibly shows the site photos
+- Exported PDF page 3 shows item cards and the "SITE PHOTOS" label, but no photos are embedded
+- This means preview/PDF photo resolution is not currently equivalent
+
+Required implementation:
+
+1. Inspect one current quote where:
+   - preview shows photos
+   - exported PDF does not show those photos
+
+2. Trace photo resolution through:
+   - item/source metadata
+   - revision snapshot/photo keys
+   - DB-backed photo storage
+   - preview image resolution path
+   - PDF image fetch/embedding path
+
+3. Identify the exact failure point.
+   Acceptable categories:
+   - PDF engine using wrong image URL/path
+   - DB photo route not accessible from PDF fetch layer
+   - binary/dataURL conversion bug
+   - async image loading/embedding race
+   - MIME/content-type issue
+   - other
+
+4. Fix the problem with the smallest safe change.
+
+Acceptance criteria:
+- A newly uploaded DB-backed site photo that appears in preview also appears in exported PDF
+- PDF and preview use equivalent photo resolution logic where practical
+- no regression to drawings, logos, or other PDF images
+
+
+T044 — Verify DB-backed photo persistence for new uploads end-to-end
+
+Problem:
+There is still uncertainty about whether newly uploaded photos are fully using the DB-backed storage path in all cases.
+
+Required implementation:
+
+1. Verify the actual current upload path for new photos:
+   - does it always write to PostgreSQL-backed storage?
+   - does it still depend on filesystem in any branch?
+
+2. Verify the actual current serve path for new photos:
+   - is DB the primary source of truth?
+   - is filesystem only legacy fallback?
+
+3. Fix any incomplete branch/path so all new photo uploads use persistent DB-backed storage consistently.
+
+4. Do NOT attempt to magically restore already-lost historical photo files.
+   Focus on making new uploads reliable going forward.
+
+Acceptance criteria:
+- new uploads persist in DB-backed storage consistently
+- preview survives refresh/reopen
+- exported PDF can embed newly uploaded photos consistently
+
+
+--------------------------------------------------
+PART B — ACTUALLY APPLY THE MASTER TEMPLATE VISUALLY
+--------------------------------------------------
+
+T045 — Move from template threading to visible master-template application
+
+Problem:
+The master template is now threaded through preview and PDF, but the customer quote still largely looks like the old/default layout.
+The template exists, but it is not yet materially changing the visible presentation enough.
+
+Required implementation:
+
+1. Audit which template properties are currently:
+   - merely threaded
+   - versus actually applied to rendering
+
+2. Apply the company master template visually to both Preview and PDF in the most important areas:
+   - document content width / layout frame
+   - section spacing rhythm
+   - heading styles
+   - muted/supporting text styles
+   - totals block treatment
+   - legal block styling
+   - schedule item card styling
+   - photo block styling
+   - acceptance block styling
+
+3. Use the existing locked master template as the source of truth.
+   Do NOT create a user-facing builder.
+
+Acceptance criteria:
+- preview visibly changes to reflect the master template
+- PDF continues to reflect the same master template
+- preview and PDF feel like the same document family
+
+
+T046 — Apply schedule and totals layout variants where already wired
+
+Problem:
+Replit previously noted that scheduleLayoutVariant and totalsLayoutVariant were threaded structurally but not functionally applied.
+
+Required implementation:
+
+1. Implement the currently declared layout variants if they already exist in settings/config shape and can be applied safely.
+2. At minimum, make the configured schedule/totals layout choices actually affect rendering where they are already exposed in settings.
+3. If only one company-approved layout variant is currently appropriate, apply that cleanly and document any deferred variants honestly.
+
+Acceptance criteria:
+- layout settings that are exposed now have real visible effect, OR
+- clearly document which are intentionally still deferred and remove misleading inactive controls if needed
+
+
+T047 — Align preview and PDF visually without forcing identical rendering code
+
+Problem:
+Preview is a screen document and PDF is a paginated document, so they do not need identical implementation, but they should look materially aligned.
+
+Required implementation:
+
+1. Keep preview and PDF on the same:
+   - QuoteDocumentModel
+   - QuoteRenderModel
+   - resolved master template
+   - division override layer
+
+2. Align them visually in:
+   - hierarchy
+   - spacing
+   - card structure
+   - photo placement intent
+   - totals block treatment
+   - legal/acceptance treatment
+
+3. Keep PDF-specific pagination logic where needed, but do not let it drift into a completely different visual language.
+
+Acceptance criteria:
+- preview and PDF look materially closer
+- preview no longer feels like the old default while PDF feels like a different document
+
+
+--------------------------------------------------
+PART C — KEEP THIS PASS TIGHTLY SCOPED
+--------------------------------------------------
+
+T048 — Keep scope controlled
+
+Do NOT:
+- build a user-editable template builder
+- add drag/drop editing
+- add many template variants
+- redesign lifecycle
+- add customer portal/email logic
+- add speculative future theme systems
+- redesign quote type / estimate type models
+- rebuild the full renderer stack from scratch
+
+This is a focused photo-parity + applied-master-template pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Newly uploaded site photos that appear in Customer Quote Preview also appear in exported PDFs.
+2. New photo uploads consistently use DB-backed persistent storage.
+3. The company master template is no longer just threaded — it is visibly applied.
+4. Customer Quote Preview looks materially closer to the exported PDF.
+5. Preview and PDF both continue to use:
+   QuoteDocument → QuoteRenderer → resolved master template → output target
+
+
+END OF IMPLEMENTATION

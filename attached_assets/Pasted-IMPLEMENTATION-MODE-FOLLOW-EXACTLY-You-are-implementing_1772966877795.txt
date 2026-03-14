@@ -1,0 +1,238 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create a second competing quote rendering pipeline if the existing QuoteDocument / QuoteRenderer path can be reused.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless explicitly instructed.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any PDF/export pipeline changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Build the first controlled PDF export path for customer quotes so Monday output no longer depends on inconsistent browser print behavior.
+
+This is the next planned milestone:
+T014 — PDF Export
+
+Current problem:
+- browser print is still inconsistent
+- on-screen preview does not reliably match printed output
+- customer-facing output needs stable A4 pagination and better control
+- there are confusing duplicate print controls in the UI
+
+This pass should make PDF export the primary customer-document output path.
+
+
+--------------------------------------------------
+T020 — Make PDF export the primary customer output path
+--------------------------------------------------
+
+Problem:
+Current customer output relies too heavily on browser print.
+
+Required implementation:
+
+1. Introduce a dedicated PDF export flow for quotes.
+
+2. The PDF export must use the existing quote architecture:
+   - quote revision snapshot
+   - QuoteDocumentModel
+   - QuoteRenderer / structured render output
+   - then PDF export
+
+3. Do NOT build the PDF from raw page HTML if the existing QuoteDocument / QuoteRenderer path can be reused cleanly.
+
+4. Browser print may remain temporarily as a fallback, but PDF export should become the preferred customer-facing output.
+
+Acceptance criteria:
+- quotes can be exported as a controlled PDF
+- export is no longer dependent on browser print quirks as the main output path
+
+
+--------------------------------------------------
+T021 — Clean up confusing print/export controls
+--------------------------------------------------
+
+Problem:
+There are currently confusing output controls:
+- Exec Summary has a print button that is not needed
+- Quote Detail has "Print / Save as PDF" wording that currently opens a preview tab
+- Customer Preview has its own print action
+
+Required implementation:
+
+1. Remove the unnecessary print button from Exec Summary.
+
+2. Update Quote Detail controls so wording matches actual behavior.
+   Preferred approach:
+   - replace "Print / Save as PDF" with something like:
+     • Open Customer Preview
+     OR
+     • Open Customer Document
+   if that button still opens the preview page
+
+3. Add a clearly named PDF export action in the correct place.
+   Preferred locations:
+   - Quote Detail
+   - and/or Customer Preview
+   Keep it simple and consistent.
+
+4. Avoid exposing multiple conflicting actions that appear to do the same thing.
+
+Acceptance criteria:
+- no confusing duplicate print actions
+- button labels match what actually happens
+- PDF export is clearly discoverable
+
+
+--------------------------------------------------
+T022 — Generate a controlled A4 PDF from the customer quote
+--------------------------------------------------
+
+Problem:
+Customer-facing output needs stable size, margins, and pagination.
+
+Required implementation:
+
+1. Generate a PDF with controlled A4 portrait layout.
+
+2. The PDF should include the existing customer-facing quote content:
+   - branding/header
+   - customer/project details
+   - quote summary / totals
+   - exclusions / terms / payment content
+   - schedule of items
+   - drawings
+   - included site photos where applicable
+
+3. Keep layout close to the current customer preview for now, but prioritize:
+   - stable pagination
+   - readable sizing
+   - usable margins
+   - professional consistency
+
+4. The PDF should not include app-shell UI or non-document controls.
+
+Acceptance criteria:
+- generated PDF is A4-oriented
+- content is readable and sensibly scaled
+- multi-page documents paginate more predictably than browser print
+- PDF is clearly more usable than current print output
+
+
+--------------------------------------------------
+T023 — Reuse existing rendering pipeline where safely possible
+--------------------------------------------------
+
+Problem:
+PDF export should not create architecture drift.
+
+Required implementation:
+
+1. Reuse the existing quote model/rendering path as much as possible:
+   - QuoteDocumentModel
+   - QuoteRenderer output
+   - current customer preview structure where appropriate
+
+2. If a PDF-specific adapter layer is needed, keep it small and explicit.
+
+3. Do NOT fork the quote system into two unrelated representations without a strong reason.
+
+Acceptance criteria:
+- architecture remains coherent
+- PDF export clearly sits after Quote Renderer in the pipeline
+- future preview/PDF improvements can evolve together
+
+
+--------------------------------------------------
+T024 — Keep this first PDF pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- build a customer portal
+- add email sending
+- add e-signature
+- add a full theme designer
+- redesign the entire quote visual language
+- add server-side job queues unless truly necessary
+- add speculative template systems
+- redesign estimate/quote lifecycle
+
+This is the first controlled PDF export pass only.
+
+
+--------------------------------------------------
+IMPLEMENTATION GUIDANCE
+--------------------------------------------------
+
+Choose the smallest safe technical approach that can deliver a stable PDF quickly.
+
+Acceptable examples may include:
+- a controlled print-to-PDF style rendering path
+- a dedicated PDF generation library
+- a headless-browser export flow
+- or another focused implementation
+
+But whichever approach is chosen must:
+- preserve the architecture guards
+- be reliable enough for Monday use
+- and be clearly documented in the output
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Exec Summary no longer exposes an unnecessary print button.
+2. Quote Detail wording matches actual behavior.
+3. There is a clear PDF export action for customer-facing quotes.
+4. PDF export produces a more stable A4 customer document than browser print.
+5. The PDF path fits the existing architecture:
+   Estimate / Project → Quotes → Revisions → Snapshot → QuoteDocument → Quote Renderer → PDF Export
+
+
+END OF IMPLEMENTATION

@@ -1,0 +1,467 @@
+This plan is close, but I would harden and adjust it before execution.
+
+The main reasons are:
+
+it is mostly aligned with the current roadmap toward a formal Customer Quote Engine rather than builder-driven quote rendering, which is good 
+
+STEELIQ_CURRENT_STATE
+
+the docs also confirm the current quote preview is still basic and QuoteDocument integration is still upcoming, so lifecycle/page work must stay rendering-agnostic and not accidentally lock in a premature quote model shape 
+
+STEELIQ_SYSTEM_MAP
+
+ 
+
+STEELIQ_QUOTE_DOCUMENT_MODEL
+
+a few implementation choices in your plan are too rigid or risky for the current state
+
+My review
+What is good
+
+The plan correctly treats this as:
+
+quote cleanup
+
+quote lifecycle management
+
+quotes page organisation
+
+It also correctly avoids:
+
+QuoteRenderer work
+
+PDF work
+
+direct quote rendering in the builder
+
+That is consistent with the current phase, where the immediate next milestone is the customer-facing quote engine work after the mobile quoting workflow stabilization. 
+
+STEELIQ_BUILD_TRACKER
+
+ 
+
+STEELIQ_DEV_ROADMAP
+
+What I would change
+1. Do not assume the estimate entity is always called job
+
+Your plan uses jobId and /api/jobs/:id/....
+
+That may be correct in the current codebase, but it should be treated as a codebase discovery item, not locked in at planning level.
+
+Why this matters:
+
+business language in the docs is estimate/quote/site visit
+
+if the DB/API happens to use job, fine
+
+but the implementation should preserve the domain distinction between:
+
+estimate record
+
+quote record
+
+future QuoteDocument output
+
+Hardened change:
+Use “linked estimate/job entity” in the plan, and let the agent confirm the actual storage key and route naming before coding.
+
+2. Add lifecycleAction rules, not just status
+
+Right now the plan focuses on status fields only.
+
+That is not enough for safe behavior, because the key behavior is cascade handling when the parent estimate is archived/deleted.
+
+I would explicitly require:
+
+archive linked quotes
+
+soft-delete linked quotes
+
+hard-delete linked quotes
+
+keep linked quotes but mark orphaned
+
+This logic belongs in a service-layer lifecycle helper, not scattered in routes.
+
+Hardened change:
+Add a dedicated quote lifecycle service/module, even if small.
+
+3. Avoid using hard delete as a normal first-class route unless explicitly admin/dev
+
+For production/business safety, I would be careful with:
+
+DELETE /api/quotes/:id as permanent delete
+
+That is acceptable only if:
+
+clearly explicit
+
+role-gated if roles exist
+
+confirmed in UI
+
+not the default path
+
+Given the docs show quotes are evolving toward formal customer-facing output, archive-first is the safer norm. 
+
+STEELIQ_CURRENT_STATE
+
+Hardened change:
+Prefer:
+
+archive quote
+
+soft delete quote
+
+hard delete quote only via explicit destructive action, with clear separation from normal delete UX
+
+4. Do not overload status="deleted" if soft-delete timestamps already exist
+
+If you add both:
+
+status = deleted
+
+deletedAt
+
+that is workable, but it creates dual truth unless you define strict rules.
+
+I recommend one of these approaches:
+
+Preferred
+
+keep business-visible status values such as draft, generated, archived
+
+use deletedAt for soft deletion
+
+excluded-by-default records are those with deletedAt != null
+
+Acceptable fallback
+
+keep status="deleted" only if the existing status machine already depends on it heavily
+
+Because you do not want page filters, lifecycle rules, and future rendering logic all branching on two independent delete signals.
+
+Hardened change:
+Make one canonical delete rule:
+
+soft deleted iff deletedAt != null
+
+archived iff archivedAt != null or status="archived" depending on existing schema conventions
+
+choose one canonical source of truth and document it
+
+5. Add quote source/version metadata now, even if minimal
+
+Since QuoteDocument/Renderer is next, I would future-proof lightly by checking whether quotes need:
+
+sourceEstimateVersion
+
+quoteRevisionNumber
+
+generatedFromEstimateAt
+
+Not all must be implemented now, but the plan should at least avoid blocking these later.
+
+The docs explicitly say QuoteDocument is expected to support structured pricing, grouped specs, drawings, and photos, and current preview does not yet fully render all fields. 
+
+STEELIQ_QUOTE_DOCUMENT_MODEL
+
+Hardened change:
+At minimum, leave room in the model and do not make assumptions that one estimate can only ever have one quote.
+
+6. T002 should explicitly support multiple quotes per estimate
+
+Your plan already improves getQuoteByJobId to getQuotesByJobId, which is correct.
+
+That is important and should stay, because:
+
+a single estimate may later produce multiple quote revisions
+
+renovation/new build/tender variants may eventually diverge
+
+archived prior versions may need retention
+
+So this part is strong and should remain.
+
+7. Add archive support to the estimate side too, not only delete cascade
+
+Your plan has delete cascade UI, but the business requirement also mentioned:
+
+delete or archive estimate
+
+ask whether the quote should be deleted or archived with it
+
+So the frontend work should cover:
+
+estimate delete flow
+
+estimate archive flow
+
+Hardened change:
+Add a sibling task for archive-cascade UI, not just delete-cascade UI.
+
+8. Quotes page tabs are good, but “Active” needs a precise rule
+
+You wrote:
+
+Active = all non-archived, non-deleted quotes
+
+That is good, but I would define it more precisely as:
+
+Active
+
+quotes with deletedAt == null
+
+not archived
+
+regardless of quote type
+
+Then:
+
+Renovations = active renovation quotes
+
+New Builds = active new_build quotes
+
+Tenders = active tender quotes
+
+Archived = archived quotes only
+
+This prevents confusion where archived renovation quotes appear in Renovations tab.
+
+9. Orphan detection should be computed, not persisted
+
+Do not store isOrphaned in the DB unless absolutely necessary.
+
+Best practice:
+
+compute orphan state in the API response by checking if linked estimate/job still exists
+
+return it as derived response metadata
+
+That avoids stale flags.
+
+Hardened change:
+API enriches quote list payload with:
+
+isOrphaned
+
+linkedEstimateExists
+
+10. The dev clear utility should be dev-only and hard-blocked in production
+
+This must be explicit.
+
+I would require:
+
+route only available when NODE_ENV !== "production" or an explicit dev flag is true
+
+log usage
+
+return count deleted
+
+Hardened task plan
+
+Here is the version I would actually approve.
+
+H001 — Discovery and constraint check
+
+Before coding, confirm:
+
+actual parent entity naming (estimate vs job)
+
+current quote schema
+
+whether quote revisions already exist
+
+whether delete is soft or hard today
+
+current Quotes page data source
+
+current estimate archive/delete entry points
+
+This avoids coding the wrong abstraction.
+
+H002 — Quote lifecycle schema updates
+
+Add only the fields needed now, while staying future-compatible:
+
+quoteType nullable
+
+archivedAt nullable
+
+deletedAt nullable
+
+estimatorName nullable if not derivable
+
+projectName nullable if not derivable
+
+totalValue nullable cache only if beneficial
+
+preserve support for multiple quotes per linked estimate
+
+Also define canonical lifecycle truth:
+
+archived => archivedAt != null or existing archived status convention
+
+deleted => deletedAt != null
+
+Do not create ambiguous double truth without documenting precedence.
+
+H003 — Quote lifecycle service layer
+
+Create a dedicated service/helper for:
+
+get quotes by linked estimate
+
+archive one
+
+soft delete one
+
+hard delete one
+
+archive by linked estimate
+
+soft delete by linked estimate
+
+hard delete by linked estimate
+
+compute orphaned state
+
+This centralizes business logic.
+
+H004 — Dev quote cleanup utility
+
+Implement:
+
+dev-only clear-all-quotes endpoint or admin utility
+
+deletes quotes and revisions
+
+returns deleted count
+
+unavailable in production
+
+Then run it once to clear all existing test quotes.
+
+H005 — Estimate archive/delete cascade behavior
+
+Implement both:
+
+Archive estimate
+
+Prompt:
+
+archive estimate only
+
+archive estimate + linked quotes
+
+Default:
+
+archive linked quotes
+
+Delete estimate
+
+Prompt:
+
+delete estimate only
+
+delete estimate + archive linked quotes
+
+delete estimate + permanently delete linked quotes
+
+Default:
+
+archive linked quotes
+
+This directly matches your business rule.
+
+H006 — Quotes API enrichment
+
+Update quote list/read responses to include derived fields:
+
+isOrphaned
+
+linkedEstimateExists
+
+Do not persist orphan state in storage unless required for performance.
+
+H007 — Quotes page redesign
+
+Implement:
+
+tabs: Active, Renovations, New Builds, Tenders, Archived
+
+search
+
+filters: division, date range, customer, estimator, quote type
+
+sort: last updated, created date, customer, quote value, quote number
+
+badges: Archived, Estimate Deleted, Tender
+
+empty states:
+
+no quotes at all
+
+no filtered results
+
+Keep this page as a management/index view, not a renderer.
+
+H008 — Integration test and architecture note update
+
+Verify:
+
+quote cleanup leaves empty state
+
+new quote appears correctly
+
+delete estimate + archive quote works
+
+orphan badge works
+
+filters/sort work
+
+no rendering logic leaked into builder
+
+update replit.md with lifecycle and quote page rules
+
+Specific changes to your current task list
+T001
+
+Good, but change:
+
+do not force status="deleted" unless existing state machine requires it
+
+define precedence of deletedAt vs status
+
+T002
+
+Good, keep it.
+
+T003
+
+Good, but add:
+
+archive estimate cascade handling too, not only delete
+
+hard delete route should be explicitly destructive and not normal-path UX
+
+T004
+
+Needs widening:
+
+cover estimate archive flow as well as delete flow
+
+T005
+
+Good, keep it.
+
+T006
+
+Good, but compute orphan state dynamically
+
+T007
+
+Good, keep it.

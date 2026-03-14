@@ -1,21 +1,97 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() { return "bytea"; },
+  toDriver(value: Buffer): Buffer { return value; },
+  fromDriver(value: Buffer): Buffer { return Buffer.from(value); },
+});
+
+export const USER_ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer"] as const;
+export type UserRole = typeof USER_ROLES[number];
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email"),
+  displayName: text("display_name"),
+  role: text("role").notNull().default("estimator"),
+  divisionCode: text("division_code"),
+  isActive: boolean("is_active").notNull().default(true),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+}).extend({
+  email: z.string().email().optional(),
+  displayName: z.string().optional(),
+  role: z.enum(USER_ROLES).default("estimator"),
+  divisionCode: z.string().optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const userSessions = pgTable("user_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type UserSession = typeof userSessions.$inferSelect;
+
+export const customers = pgTable("customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  address: text("address"),
+  notes: text("notes"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, archivedAt: true, createdAt: true });
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type Customer = typeof customers.$inferSelect;
+
+export const customerContacts = pgTable("customer_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  role: text("role"),
+  isPrimary: boolean("is_primary").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCustomerContactSchema = createInsertSchema(customerContacts).omit({ id: true, createdAt: true });
+export type InsertCustomerContact = z.infer<typeof insertCustomerContactSchema>;
+export type CustomerContact = typeof customerContacts.$inferSelect;
+
+export const projects = pgTable("projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").notNull(),
+  name: text("name").notNull(),
+  address: text("address"),
+  description: text("description"),
+  divisionCode: text("division_code"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, archivedAt: true, createdAt: true });
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type Project = typeof projects.$inferSelect;
 
 export const customColumnRowSchema = z.object({
   height: z.number().min(0).default(0),
@@ -91,6 +167,7 @@ export const quoteItemSchema = z.object({
   wallThickness: z.number().default(0),
   heightFromFloor: z.number().default(0),
   handleType: z.string().default(""),
+  lockType: z.string().default(""),
   configurationId: z.string().default(""),
   cachedWeightKg: z.number().default(0),
 });
@@ -105,6 +182,7 @@ export const jobs = pgTable("jobs", {
   name: text("name").notNull(),
   address: text("address").default(""),
   date: text("date").default(""),
+  siteType: text("site_type"),
   installationEnabled: boolean("installation_enabled").default(false),
   installationOverride: real("installation_override"),
   installationMarkup: real("installation_markup"),
@@ -112,10 +190,13 @@ export const jobs = pgTable("jobs", {
   deliveryMethod: text("delivery_method"),
   deliveryAmount: real("delivery_amount"),
   deliveryMarkup: real("delivery_markup"),
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, createdAt: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true, archivedAt: true, createdAt: true }).extend({
+  siteType: z.enum(["renovation", "new_build"]).nullable().optional(),
+});
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Job = typeof jobs.$inferSelect;
 
@@ -124,6 +205,13 @@ export const jobItems = pgTable("job_items", {
   jobId: varchar("job_id").notNull(),
   config: jsonb("config").notNull().$type<QuoteItem>(),
   photo: text("photo"),
+  photos: jsonb("photos").$type<Array<{
+    key: string;
+    isPrimary?: boolean;
+    includeInCustomerPdf?: boolean;
+    caption?: string;
+    takenAt?: string;
+  }>>(),
   sortOrder: integer("sort_order").default(0),
 });
 
@@ -136,6 +224,7 @@ export const libraryEntries = pgTable("library_entries", {
   type: text("type").notNull(),
   data: jsonb("data").notNull(),
   sortOrder: integer("sort_order").default(0),
+  divisionScope: text("division_scope"),
 });
 
 export const insertLibraryEntrySchema = createInsertSchema(libraryEntries).omit({ id: true });
@@ -200,16 +289,20 @@ export const insertConfigurationLaborSchema = createInsertSchema(configurationLa
 export type InsertConfigurationLabor = z.infer<typeof insertConfigurationLaborSchema>;
 export type ConfigurationLabor = typeof configurationLabor.$inferSelect;
 
-export const QUOTE_STATUSES = ["draft", "review", "sent", "accepted", "declined", "archived"] as const;
+export const QUOTE_STATUSES = ["draft", "review", "sent", "accepted", "declined", "archived", "cancelled"] as const;
 export type QuoteStatus = typeof QUOTE_STATUSES[number];
 
+export const QUOTE_TYPES = ["renovation", "new_build", "tender"] as const;
+export type QuoteType = typeof QUOTE_TYPES[number];
+
 export const VALID_STATUS_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
-  draft: ["review"],
-  review: ["sent"],
-  sent: ["accepted", "declined"],
+  draft: ["review", "archived"],
+  review: ["sent", "archived", "cancelled"],
+  sent: ["accepted", "declined", "cancelled"],
   accepted: ["archived"],
   declined: ["archived"],
   archived: [],
+  cancelled: ["archived"],
 };
 
 export const numberSequences = pgTable("number_sequences", {
@@ -225,8 +318,21 @@ export const quotes = pgTable("quotes", {
   divisionId: varchar("division_id"),
   customer: text("customer").notNull(),
   status: text("status").notNull().default("draft"),
+  quoteType: text("quote_type"),
   currentRevisionId: varchar("current_revision_id"),
   createdByUserId: varchar("created_by_user_id"),
+  totalValue: real("total_value"),
+  customerId: varchar("customer_id"),
+  projectId: varchar("project_id"),
+  acceptedAt: timestamp("accepted_at"),
+  acceptedByUserId: varchar("accepted_by_user_id"),
+  acceptedValue: real("accepted_value"),
+  acceptedRevisionId: varchar("accepted_revision_id"),
+  sentAt: timestamp("sent_at"),
+  sentToEmail: text("sent_to_email"),
+  archivedAt: timestamp("archived_at"),
+  deletedAt: timestamp("deleted_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -240,6 +346,8 @@ export const quoteRevisions = pgTable("quote_revisions", {
   quoteId: varchar("quote_id").notNull(),
   versionNumber: integer("version_number").notNull(),
   snapshotJson: jsonb("snapshot_json").notNull(),
+  specDisplayOverrideJson: jsonb("spec_display_override_json"),
+  templateKey: text("template_key").notNull().default("base_v1"),
   xeroSyncStatus: text("xero_sync_status"),
   procurementGenerated: boolean("procurement_generated").default(false),
   pdfStorageKey: text("pdf_storage_key"),
@@ -266,3 +374,141 @@ export const auditLogs = pgTable("audit_logs", {
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+
+export const orgSettings = pgTable("org_settings", {
+  id: varchar("id").primaryKey().default("default"),
+  legalName: text("legal_name").notNull().default("Lateral Engineering Limited"),
+  gstNumber: text("gst_number"),
+  nzbn: text("nzbn"),
+  address: text("address"),
+  phone: text("phone"),
+  email: text("email"),
+  bankDetails: text("bank_details"),
+  defaultHeaderNotesBlock: text("default_header_notes_block"),
+  defaultTermsBlock: text("default_terms_block"),
+  defaultExclusionsBlock: text("default_exclusions_block"),
+  paymentTermsBlock: text("payment_terms_block"),
+  quoteValidityDays: integer("quote_validity_days").default(30),
+  templateConfigJson: jsonb("template_config_json"),
+  systemMode: text("system_mode").notNull().default("development"),
+});
+
+export const insertOrgSettingsSchema = createInsertSchema(orgSettings).omit({});
+export type InsertOrgSettings = z.infer<typeof insertOrgSettingsSchema>;
+export type OrgSettings = typeof orgSettings.$inferSelect;
+
+export const divisionSettings = pgTable("division_settings", {
+  divisionCode: varchar("division_code").primaryKey(),
+  tradingName: text("trading_name"),
+  logoUrl: text("logo_url"),
+  templateKey: text("template_key").notNull().default("base_v1"),
+  requiredLegalLine: text("required_legal_line").notNull().default("A trading division of Lateral Engineering Limited"),
+  termsOverrideBlock: text("terms_override_block"),
+  headerNotesOverrideBlock: text("header_notes_override_block"),
+  exclusionsOverrideBlock: text("exclusions_override_block"),
+  fontFamily: text("font_family"),
+  accentColor: text("accent_color"),
+  logoPosition: text("logo_position"),
+  headerVariant: text("header_variant"),
+  scheduleLayoutVariant: text("schedule_layout_variant").notNull().default("image_left_specs_right_v1"),
+  totalsLayoutVariant: text("totals_layout_variant").notNull().default("totals_block_v1"),
+  specDisplayDefaultsJson: jsonb("spec_display_defaults_json"),
+  jobTypePresetsJson: jsonb("job_type_presets_json"),
+  additionalCapabilitiesBlock: text("additional_capabilities_block"),
+});
+
+export const insertDivisionSettingsSchema = createInsertSchema(divisionSettings);
+export type InsertDivisionSettings = z.infer<typeof insertDivisionSettingsSchema>;
+export type DivisionSettings = typeof divisionSettings.$inferSelect;
+
+export const specDictionary = pgTable("spec_dictionary", {
+  key: text("key").primaryKey(),
+  divisionScope: text("division_scope"),
+  group: text("group").notNull(),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").default(0),
+  inputKind: text("input_kind").notNull(),
+  librarySourceKey: text("library_source_key"),
+  optionsJson: jsonb("options_json"),
+  customerVisibleAllowed: boolean("customer_visible_allowed").default(true),
+  unit: text("unit"),
+  helpText: text("help_text"),
+});
+
+export const insertSpecDictionarySchema = createInsertSchema(specDictionary);
+export type InsertSpecDictionary = z.infer<typeof insertSpecDictionarySchema>;
+export type SpecDictionaryEntry = typeof specDictionary.$inferSelect;
+
+export const itemPhotos = pgTable("item_photos", {
+  key: varchar("key").primaryKey(),
+  data: bytea("data").notNull(),
+  mimeType: text("mime_type").notNull().default("image/jpeg"),
+  sizeBytes: integer("size_bytes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ItemPhoto = typeof itemPhotos.$inferSelect;
+
+export const INVOICE_TYPES = ["deposit", "progress", "variation", "final", "retention_release", "credit_note"] as const;
+export type InvoiceType = typeof INVOICE_TYPES[number];
+
+export const INVOICE_STATUSES = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved", "returned_to_draft"] as const;
+export type InvoiceStatus = typeof INVOICE_STATUSES[number];
+
+export const DEPOSIT_TYPES = ["percentage", "fixed"] as const;
+export type DepositType = typeof DEPOSIT_TYPES[number];
+
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  number: text("number").notNull().unique(),
+  quoteId: varchar("quote_id"),
+  quoteRevisionId: varchar("quote_revision_id"),
+  divisionCode: text("division_code"),
+  customerId: varchar("customer_id"),
+  projectId: varchar("project_id"),
+  type: text("type").notNull().default("deposit"),
+  status: text("status").notNull().default("draft"),
+  depositType: text("deposit_type"),
+  depositPercentage: real("deposit_percentage"),
+  amountExclGst: real("amount_excl_gst"),
+  gstAmount: real("gst_amount"),
+  amountInclGst: real("amount_incl_gst"),
+  description: text("description"),
+  notes: text("notes"),
+  xeroInvoiceId: text("xero_invoice_id"),
+  xeroInvoiceNumber: text("xero_invoice_number"),
+  xeroStatus: text("xero_status"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+
+export const OP_JOB_STATUSES = ["active", "on_hold", "completed", "cancelled"] as const;
+export type OpJobStatus = typeof OP_JOB_STATUSES[number];
+
+export const opJobs = pgTable("op_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobNumber: text("job_number").notNull().unique(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("active"),
+  divisionId: varchar("division_id"),
+  customerId: varchar("customer_id"),
+  projectId: varchar("project_id"),
+  sourceQuoteId: varchar("source_quote_id"),
+  acceptedRevisionId: varchar("accepted_revision_id"),
+  notes: text("notes"),
+  archivedAt: timestamp("archived_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
+  createdByUserId: varchar("created_by_user_id"),
+  convertedAt: timestamp("converted_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOpJobSchema = createInsertSchema(opJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOpJob = z.infer<typeof insertOpJobSchema>;
+export type OpJob = typeof opJobs.$inferSelect;

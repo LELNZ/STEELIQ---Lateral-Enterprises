@@ -1,0 +1,182 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema support strictly required for estimate site type persistence.
+Do NOT add unrelated fields.
+Do NOT redesign quote lifecycle.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API changes made
+4. Any migration/backfill actions performed
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Make estimate Site Type a persisted source of truth, and make quoteType automatically inherit from the source estimate during normal quote generation.
+
+This is required for Monday operational workflow.
+
+
+--------------------------------------------------
+T005 — Persist estimate/site type on the job record
+--------------------------------------------------
+
+Problem:
+In the quote builder, Site Type is currently local UI state only.
+It does not persist when the estimate/job is saved, and it resets to None when reopening the job.
+
+Required implementation:
+
+1. Add the minimum required persistent field to the jobs schema for site type.
+   Allowed values:
+   • null
+   • renovation
+   • new_build
+
+2. Update the job create/update API flow so site type is saved and loaded with the job.
+
+3. Update quote-builder so:
+   • Site Type is sent in save/create requests
+   • Existing saved jobs hydrate site type correctly when reopened
+   • Current site type badge/display continues to work
+
+Acceptance criteria:
+• Change Site Type in estimate
+• Save estimate
+• Leave page and reopen estimate
+• Site Type persists correctly
+
+
+--------------------------------------------------
+T006 — Automatically inherit quoteType from estimate site type
+--------------------------------------------------
+
+Problem:
+Quote Detail now has a manual quoteType dropdown, but the normal Executive Summary quote-generation flow does not inherit type from the estimate source of truth.
+
+Required implementation:
+
+1. In the Executive Summary quote-generation/update flow:
+   • read the persisted estimate/job site type
+   • map it to quoteType automatically:
+     - renovation -> renovation
+     - new_build -> new_build
+     - null -> general/null
+
+2. When POST /api/quotes is called from the normal Exec Summary flow,
+   send the derived quoteType automatically.
+
+3. New quotes created from an estimate should no longer default to General when the estimate site type is Renovation or New Build.
+
+Acceptance criteria:
+• Estimate site type = Renovation -> generated quote type = Renovation
+• Estimate site type = New Build -> generated quote type = New Build
+• Estimate site type = None -> generated quote type = General
+
+
+--------------------------------------------------
+T007 — Preserve manual quote type override behavior safely
+--------------------------------------------------
+
+Problem:
+Quote Detail already allows manual quoteType override.
+That should remain available, but the normal default should come from the estimate.
+
+Required implementation:
+
+1. Keep the quote detail quoteType dropdown.
+
+2. Define and implement a simple Monday-safe rule:
+   • initial quote creation defaults from estimate site type
+   • manual quote detail override remains allowed
+   • do NOT implement a complex override history system
+
+3. For quote revision/update from Exec Summary:
+   choose the safer of these two options and clearly state which was implemented:
+   OPTION A:
+   • preserve existing manually overridden quoteType on revision updates
+   OPTION B:
+   • always refresh quoteType from estimate site type on revision updates unless quoteType was manually changed in this session
+
+Prefer the smallest safe implementation that avoids surprising the user.
+
+Acceptance criteria:
+• Quote type defaults correctly from estimate on create
+• Users can still override quote type manually in quote detail
+• Revision behavior is explicit and documented in the output
+
+
+--------------------------------------------------
+T008 — Keep changes tight and Monday-focused
+--------------------------------------------------
+
+Do NOT:
+• redesign the estimate model broadly
+• add extra lifecycle states
+• add customer portal logic
+• add email sending logic
+• redesign quote generation flow
+• add speculative configuration systems
+
+This is a focused source-of-truth and persistence fix only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+Estimate page:
+• Site Type persists correctly
+
+Executive Summary / quote generation:
+• Quote type auto-populates from the estimate source of truth
+
+Quote Detail:
+• Manual override still exists
+
+System behavior:
+• No more mismatch where estimate says Renovation/New Build but generated quote shows General by default
+
+
+END OF IMPLEMENTATION

@@ -1,0 +1,250 @@
+You are continuing development of SteelIQ Pro-Quote.
+
+I have reviewed the latest code download. T001–T008 are already in place and working in the codebase:
+- mobile height/scroll fix
+- mobile tabbed workspace
+- site type selector
+- renovation/new build presets
+- ES52 wind zone auto-fill
+- height-from-floor safety warning
+- photo upload/gallery support
+
+The immediate goal is Monday field readiness only.
+Do NOT do architecture refactors.
+Do NOT change backend/schema/API/pricing/snapshot logic.
+Do NOT redesign desktop.
+Focus on UI/workflow polish and end-to-end usability.
+
+Implement the next Monday-readiness pass with the following priorities.
+
+-----------------------------------
+PRIORITY 1 — MOBILE QUOTE BUILDER SPEED
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Make mobile item editing faster:
+   - When tapping Edit from a mobile item card, automatically switch to the Config tab.
+   - Scroll the config form to the top.
+   - Keep existing form state logic intact.
+
+2. Add a mobile sticky action bar for the Config workflow:
+   - Only on mobile.
+   - Keep desktop unchanged.
+   - Sticky bottom action area with:
+     - Add Item / Update Item
+     - Cancel when editing
+     - Quick switch to Preview
+   - The goal is to avoid forcing the user to scroll all the way to the bottom of a long form just to save the item.
+   - Reuse existing submit/update logic; do not duplicate business logic.
+
+3. Add a “New Item” quick action on mobile:
+   - Visible from Items and Preview tabs.
+   - It should switch to Config tab, clear editing state, load preset-based defaults, and focus the user back into the item-entry flow.
+   - Do not auto-create a database item; this is just a fast reset into a new form state.
+
+Acceptance criteria:
+- From Items tab, estimator can tap Edit and immediately continue editing in Config.
+- From Config, estimator can save/update item without long scroll friction.
+- From Preview or Items, estimator can quickly jump back into creating the next item.
+
+-----------------------------------
+PRIORITY 2 — IMPROVE MOBILE ITEM CARDS
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+Optional small component extraction is allowed only if it simplifies the file.
+
+Tasks:
+1. Improve mobile item card readability:
+   - Make the hierarchy clearer:
+     - item number / item name
+     - category label
+     - dimensions prominently
+     - key specs summary
+   - Show at least:
+     - frame type
+     - glass type or IGU summary
+   - Keep price/sqm/qty visible but secondary.
+
+2. Improve photo visibility on cards:
+   - Show photo count clearly as text or badge, not only a tiny thumbnail.
+   - If there is a primary photo, keep the thumbnail.
+   - Tapping the photo area should open the gallery modal.
+
+3. Improve actions:
+   - Keep Edit, Copy/Duplicate, Photo, Delete.
+   - Ensure touch targets are comfortable on mobile.
+   - Keep desktop item table/panel unchanged.
+
+Acceptance criteria:
+- Estimator can glance at an item card and see type, dimensions, frame, glass, and photo count quickly.
+- Cards feel usable on a phone during a site visit.
+
+-----------------------------------
+PRIORITY 3 — PHOTO WORKFLOW POLISH
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Keep the existing camera/upload flow, but make it clearer and faster:
+   - On mobile cards, keep a clearly labeled Photo / Photos action.
+   - If no photos exist, show an obvious first-photo action.
+   - If photos exist, show count and open gallery reliably.
+
+2. After successful photo capture/upload:
+   - Keep the user in the current mobile workflow context.
+   - Refresh the item card/gallery state immediately.
+   - Show clear success toast.
+   - Do not break existing photo modal behavior.
+
+3. In gallery modal:
+   - Keep primary-photo and include-in-customer-pdf toggles.
+   - Ensure delete still works.
+   - Make the modal feel clean and readable on mobile.
+
+Acceptance criteria:
+- User can add a site photo in a few taps.
+- Photo count updates immediately.
+- Gallery is easy to review from the item card.
+
+-----------------------------------
+PRIORITY 4 — ESTIMATE HEADER USABILITY
+-----------------------------------
+
+File primarily:
+- client/src/pages/quote-builder.tsx
+
+Tasks:
+1. Tighten the mobile estimate header without redesigning desktop.
+2. Make the current estimate context clearer:
+   - job name
+   - address
+   - date
+   - site type
+3. On mobile, reduce visual heaviness:
+   - keep fields usable
+   - keep save button accessible
+   - avoid oversized header feel
+4. If helpful, use small badges or compact text treatment for site type and item count.
+
+Acceptance criteria:
+- On mobile, the estimator can confirm which estimate they are editing without the header feeling bulky.
+- Desktop layout remains effectively unchanged.
+
+-----------------------------------
+PRIORITY 5 — REVIEW / GENERATE QUOTE DISCOVERABILITY
+-----------------------------------
+
+Files:
+- client/src/pages/quote-builder.tsx
+- client/src/pages/exec-summary.tsx
+- client/src/pages/quote-detail.tsx
+- client/src/pages/quote-preview.tsx
+
+Tasks:
+1. Make the path from estimate builder to quote generation more obvious:
+   - In Quote Builder, add a clear CTA for saved jobs with items:
+     - “Review & Generate Quote”
+   - It should navigate to the existing exec summary route:
+     - /job/:id/exec-summary
+   - Do not change backend quote generation logic.
+
+2. In Exec Summary:
+   - Keep existing quote generation behavior.
+   - Make sure the CTA labels are clear for Monday use.
+   - Prefer customer-facing wording where sensible, without changing the workflow.
+
+3. In Quote Detail / Preview:
+   - Ensure the user can clearly get to:
+     - preview
+     - print / save as PDF
+   - No backend export work; just improve usability and clarity.
+
+Acceptance criteria:
+- A user can move from estimate builder → exec summary → create quote → preview → print/save without guessing where to go.
+
+-----------------------------------
+PRIORITY 6 — LIGHT PROFESSIONAL POLISH ON QUOTE PREVIEW
+-----------------------------------
+
+File:
+- client/src/pages/quote-preview.tsx
+
+Tasks:
+1. Do a light professionalism pass only; do not redesign the page.
+2. Improve clarity of the customer-facing document:
+   - customer/project info block
+   - quote metadata
+   - totals block
+   - schedule of items
+   - print spacing
+3. If the address/project details are available from the current data structure, surface them cleanly.
+4. Keep the existing terms/acceptance sections.
+
+Acceptance criteria:
+- The preview looks customer-ready.
+- It prints cleanly from the browser.
+- Changes are polish-level, not structural redesign.
+
+-----------------------------------
+PRIORITY 7 — MONDAY READINESS QA PASS
+-----------------------------------
+
+After implementation, run a manual workflow test and fix any blockers found.
+
+Test this exact flow:
+1. Open Estimates
+2. Create new estimate
+3. Choose Renovation
+4. Add at least 2 items
+5. Enter dimensions/specs
+6. Switch to Preview and confirm drawing is visible
+7. Add photos to at least 1 item
+8. Review item cards in Items tab
+9. Go to Exec Summary
+10. Generate quote
+11. Open quote preview
+12. Print / Save as PDF
+
+Look specifically for:
+- mobile scroll regressions
+- lost form state
+- edit-from-item-card flow problems
+- photo attachment regressions
+- broken navigation
+- missing/unclear CTAs
+- console errors
+
+-----------------------------------
+CONSTRAINTS
+-----------------------------------
+
+Do not change:
+- database schema
+- API routes
+- pricing logic
+- quote snapshot logic
+- backend services
+- shared schema unless absolutely required for a compile fix
+
+Prefer changes in:
+- client/src/pages/quote-builder.tsx
+- client/src/pages/exec-summary.tsx
+- client/src/pages/quote-detail.tsx
+- client/src/pages/quote-preview.tsx
+
+-----------------------------------
+DELIVERABLE
+-----------------------------------
+
+When finished, provide:
+1. A concise summary of what you changed
+2. Any files added
+3. Any remaining Monday blockers
+4. A short manual QA result for the 12-step workflow above

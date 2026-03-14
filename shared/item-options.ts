@@ -129,6 +129,60 @@ export function getHandlesForCategory(category: string): HandleOption[] {
   return WINDOW_HANDLES;
 }
 
+export interface LockOption {
+  value: string;
+  label: string;
+  priceProvision: number | null;
+}
+
+export const DOOR_LOCKS: LockOption[] = [
+  { value: "Lockwood-Selector-Entry", label: "Lockwood Selector Entry Lock", priceProvision: 85.00 },
+  { value: "Yale-Assure-Deadbolt", label: "Yale Assure Deadbolt", priceProvision: 120.00 },
+  { value: "Customer-Supplied", label: "Customer Supplied", priceProvision: null },
+  { value: "TBC", label: "TBC", priceProvision: null },
+  { value: "Custom-Local-Supply", label: "Custom / Local Supply", priceProvision: null },
+];
+
+export interface LockCategoryDef {
+  type: string;
+  label: string;
+  categoryMatch: string;
+  defaults: LockOption[];
+}
+
+export const LOCK_CATEGORIES: LockCategoryDef[] = [
+  { type: "entrance_door_lock", label: "Entry Door Locks", categoryMatch: "entrance-door", defaults: [...DOOR_LOCKS] },
+  { type: "hinge_door_lock", label: "Hinge Door Locks", categoryMatch: "hinge-door", defaults: [...DOOR_LOCKS] },
+  { type: "sliding_door_lock", label: "Sliding Door Locks", categoryMatch: "sliding-door", defaults: [...DOOR_LOCKS] },
+  { type: "bifold_door_lock", label: "Bifold Door Locks", categoryMatch: "bifold-door", defaults: [...DOOR_LOCKS] },
+  { type: "stacker_door_lock", label: "Stacker Door Locks", categoryMatch: "stacker-door", defaults: [...DOOR_LOCKS] },
+  { type: "french_door_lock", label: "French Door Locks", categoryMatch: "french-door", defaults: [...DOOR_LOCKS] },
+];
+
+const CATEGORY_TO_LOCK_TYPE: Record<string, string> = {
+  "entrance-door": "entrance_door_lock",
+  "hinge-door": "hinge_door_lock",
+  "french-door": "french_door_lock",
+  "sliding-door": "sliding_door_lock",
+  "bifold-door": "bifold_door_lock",
+  "stacker-door": "stacker_door_lock",
+};
+
+export function getLockTypeForCategory(category: string): string {
+  return CATEGORY_TO_LOCK_TYPE[category] || "";
+}
+
+export function getLocksForCategory(category: string): LockOption[] {
+  const lockType = getLockTypeForCategory(category);
+  if (!lockType) return [];
+  const cat = LOCK_CATEGORIES.find((c) => c.type === lockType);
+  return cat ? cat.defaults : DOOR_LOCKS;
+}
+
+export function isDoorCategory(category: string): boolean {
+  return DOOR_CATEGORIES.includes(category);
+}
+
 export interface WanzBarOption {
   value: string;
   label: string;

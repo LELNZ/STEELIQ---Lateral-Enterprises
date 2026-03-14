@@ -1,0 +1,87 @@
+🔧 Adjustments I recommend before implementation
+1) Don’t “sync legacy photo field to primary key” (or you’ll break old UI expectations)
+
+In T013D you say:
+
+“Sync legacy photo field to primary key for backward compat.”
+
+This can backfire if any existing code assumes photo is a base64 data URL. If you start writing a UUID .jpg key into photo, older render code might try to render it as img src="<uuid>.jpg" and break.
+
+Best practice:
+
+Treat photo as legacy-only.
+
+Do not write to it anymore.
+
+Use photos[] exclusively for new functionality.
+
+Backward compat is achieved by reading legacy photo and displaying it when photos[] is empty.
+
+If you really need a transitional bridge, add a computed helper in UI:
+
+getPrimaryPhotoSrc(item) returns either /api/item-photos/${key} or the legacy base64 string.
+…but don’t mutate DB legacy fields.
+
+2) Key validation regex should also allow non-uuid future keys
+
+You’re using: ^[a-f0-9-]+\.jpg$
+
+That’s fine for UUIDs today, but slightly restrictive if later you want:
+
+job123_item456_abc.jpg
+
+or storage-provider keys.
+
+Safer regex now (still secure):
+
+^[A-Za-z0-9._-]+\.jpg$
+…and keep the path.resolve + startsWith guard (that’s the real security).
+
+If you prefer staying ultra strict: keep uuid regex, but note it as a future migration constraint.
+
+3) Snapshot schema update must include parsing compatibility
+
+When you add photos to snapshotItemSchema, make sure it is:
+
+optional()
+
+defaults safely to [] when missing
+
+That ensures all existing historical revisions still parse.
+
+4) Deletion safety: handle “no quote exists” and “quote exists but no revisions”
+
+Your plan says:
+
+If no quote exists, delete all files.
+Also ensure:
+
+If quote exists but revisions list is empty (edge case), treat as “no referenced keys”.
+
+And implement file deletion defensively:
+
+ignore ENOENT (file already gone)
+
+never throw and abort DB delete because a file was missing
+
+🟢 Final verdict
+
+This plan is ready to execute with the above tweaks. It preserves:
+
+unified model
+
+deterministic revisions
+
+clean separation of assets vs data
+
+future PDF appendix capability
+
+Recommended small wording changes (so Replit AI executes correctly)
+
+Change “sync legacy photo field” → “do not write legacy photo field anymore”
+
+Loosen key regex slightly (optional but recommended)
+
+Explicitly state “snapshot photos defaults to [] when absent”
+
+State “file delete failures must not block DB delete”

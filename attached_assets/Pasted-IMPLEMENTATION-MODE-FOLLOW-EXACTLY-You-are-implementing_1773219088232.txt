@@ -1,0 +1,243 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused validation and cleanup pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, snapshot flow, or quote template architecture.
+3. Do NOT add unrelated schema fields, endpoints, or systems.
+4. Do NOT bypass the existing Library → Quote Builder → Estimate → Quote → Snapshot → Preview/PDF pipeline.
+5. Do NOT replace the Lock Type feature with a new model.
+6. Preserve the current business rule that Library-backed selectable items are the source of truth.
+7. Focus only on validating and fixing the Lock Type feature end-to-end.
+
+ARCHITECTURE GUARDS
+Library-backed selectable components
+→ Quote Builder item specifics
+→ Estimate items
+→ Quote snapshots
+→ QuoteDocument / QuoteRenderModel
+→ Preview / PDF
+
+Division Estimate Defaults / Job Type Presets
+→ may prefill Lock Type defaults for door items
+
+Company Master Template / Quote Presentation
+→ remains separate from this feature
+
+Do NOT collapse these systems together.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required to fix validation findings.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints unless required by the current feature flow.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Validation results for each required test flow
+5. Any bugs found and fixed
+6. Any risks or limitations remaining
+7. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Do a full end-to-end validation and cleanup pass for the new Lock Type feature.
+
+The feature is now implemented, but it must be proven in real workflow terms:
+- Library
+- Quote Builder
+- Division presets
+- pricing
+- exclusions
+- Preview
+- PDF
+
+If bugs are found, fix them with the smallest safe change.
+
+
+--------------------------------------------------
+T131 — Validate Library lock management flow
+--------------------------------------------------
+
+Required validation:
+
+1. Add a new lock in the Library.
+2. Set:
+   - internal value ID
+   - display label
+   - price provision
+   - allocation
+   - division scope
+3. Save it.
+4. Edit it.
+5. Confirm the saved values reload correctly.
+
+Acceptance criteria:
+- lock entries can be created and edited successfully
+- allocation and scope persist correctly
+- no runtime or save/load errors
+
+
+--------------------------------------------------
+T132 — Validate Quote Builder Lock Type behavior
+--------------------------------------------------
+
+Required validation:
+
+1. Open Quote Builder and test multiple item types.
+
+2. Confirm:
+   - door products show Lock Type under Hardware & Components
+   - non-door products do not show Lock Type unless intentionally supported
+   - Handle and Lock Type can both appear where relevant
+   - Lock Type dropdown options are allocation-aware and library-backed
+
+3. Confirm the dropdown does not show invalid/unallocated lock options.
+
+Acceptance criteria:
+- Lock Type appears in the right places only
+- allocation filtering works correctly
+- UI placement is correct and usable
+
+
+--------------------------------------------------
+T133 — Validate division job type preset behavior for Lock Type
+--------------------------------------------------
+
+Required validation:
+
+1. Set Renovation and New Build default Lock Type values in Division settings.
+2. Save them.
+3. In Quote Builder:
+   - select Renovation
+   - confirm preset-controlled lock value is applied
+   - manually change Lock Type
+   - then switch site type and confirm preset re-applies at selection time
+
+4. Confirm:
+   - site type selection overwrites the preset-controlled value at the moment of selection
+   - after that, the user can still manually change Lock Type
+
+Acceptance criteria:
+- division preset defaults for Lock Type work as intended
+- overwrite happens at site-type selection only
+- manual editing after preset application still works
+
+
+--------------------------------------------------
+T134 — Validate pricing behavior for all lock paths
+--------------------------------------------------
+
+Required validation:
+
+Test these cases:
+1. normal stocked library lock
+2. Customer Supplied
+3. TBC
+4. Custom / Local Supply
+
+Confirm:
+- normal lock uses library pricing
+- customer supplied / TBC do not silently apply wrong stock pricing
+- custom/manual cases behave explicitly and safely
+- any manual pricing path works correctly
+
+Acceptance criteria:
+- pricing behavior is correct and understandable across all lock scenarios
+- no silent wrong pricing is applied
+
+
+--------------------------------------------------
+T135 — Validate exclusion behavior into preview and PDF
+--------------------------------------------------
+
+Required validation:
+
+For a door item, test these lock states:
+- Customer Supplied
+- TBC
+- blank / none
+- Custom / Local Supply (if treated as not included by default)
+
+Generate/update a quote and confirm:
+- the exclusion/note is present where expected
+- the wording is customer-clear
+- Preview and PDF both reflect it
+- exclusions do not duplicate unnecessarily
+
+Acceptance criteria:
+- lock non-inclusion is clearly communicated
+- Preview and PDF match
+- exclusions are snapshot-safe and customer-readable
+
+
+--------------------------------------------------
+T136 — Validate snapshot integrity and historical safety
+--------------------------------------------------
+
+Required validation:
+
+1. Confirm old quote revisions still render correctly.
+2. Confirm new Lock Type values only affect quotes/items going forward.
+3. Confirm changing library lock options does not rewrite historical quote snapshots.
+
+Acceptance criteria:
+- historical quote integrity is preserved
+- snapshot behavior remains correct
+
+
+--------------------------------------------------
+T137 — Fix any issues found with the smallest safe changes
+--------------------------------------------------
+
+If validation reveals bugs:
+1. Fix them with the smallest safe change.
+2. Do NOT redesign the Lock Type architecture.
+3. Do NOT introduce unrelated refactors.
+
+Acceptance criteria:
+- all validation flows pass cleanly
+- fixes are scoped and minimal
+
+
+--------------------------------------------------
+T138 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- redesign the template builder
+- redesign quote lifecycle
+- add customer portal/email logic
+- add unrelated hardware systems
+- rebuild the renderer stack
+- start Hardware library consolidation yet
+
+This is a Lock Type end-to-end validation and cleanup pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Lock entries can be managed reliably in the Library.
+2. Quote Builder shows Lock Type correctly and only where appropriate.
+3. Division preset defaults for Lock Type work correctly.
+4. Pricing behavior is correct across stocked and non-stock scenarios.
+5. Customer-facing exclusions are clear in both Preview and PDF.
+6. Historical quote integrity remains preserved.
+7. The Lock Type feature is production-safe and trustworthy.
+
+
+END OF IMPLEMENTATION

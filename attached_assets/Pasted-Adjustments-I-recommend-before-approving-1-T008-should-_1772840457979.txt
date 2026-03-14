@@ -1,0 +1,109 @@
+Adjustments I recommend before approving
+1. T008 should not say “Use testing skill”
+
+That line does not fit your environment and may confuse Replit.
+
+Replace:
+
+Use testing skill to run automated e2e tests
+
+with:
+
+Run a practical manual QA pass in a mobile viewport and fix any regressions found. If automated tests already exist in the repo, run them as an additional check, but do not block on adding new test infrastructure.
+
+That is safer and more realistic.
+
+2. T011 is too risky as written
+
+This is the biggest thing I would change.
+
+Right now T011 says:
+
+add new multer upload endpoint
+
+add retrieval endpoint
+
+possibly reuse logoUrl
+
+or add logoUploadKey if schema change is low-risk
+
+But your top-level rule says:
+
+Do NOT change database schema
+
+Do NOT change API routes
+
+So T011 currently conflicts with the plan constraints.
+
+Best fix
+
+Reword T011 so it becomes a foundation analysis + safest existing-path implementation only.
+
+Suggested replacement:
+
+Revised T011 — Division Logo Upload Foundation
+
+First inspect whether existing upload/storage patterns and current settings persistence can support division logo upload without schema changes
+
+Prefer reusing existing storage fields and existing asset handling if possible
+
+If low-risk upload wiring is possible without schema changes, implement it
+
+If not, create the UI and code scaffold only, document the blocker, and leave current logoUrl in place as temporary fallback
+
+Do not introduce new DB schema or backend route changes in this phase unless explicitly approved later
+
+That keeps the direction right without accidentally opening a backend project.
+
+3. T012 should explicitly say “foundation only”
+
+This is already implied, but I would tighten it.
+
+Add:
+
+Do not connect Quote Builder to the new settings-backed preset structure in this phase unless the read path is fully ready and non-breaking. Otherwise leave Quote Builder on the existing temporary preset logic and document the migration path.
+
+That avoids half-migrating something before Monday.
+
+4. T007 disclaimer placement is good, but wording should match business intent
+
+Current:
+
+Preliminary Estimate — subject to final measure and confirmation
+
+That is good.
+You may want to make it slightly more trade-safe:
+
+Recommended wording:
+
+Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.
+
+That reads a little more commercially robust.
+
+5. T006 wording tweak
+
+Current planned wording:
+
+“Generate Estimate Revision”
+
+“Generate New Estimate”
+
+These are okay, but for user clarity I’d lean slightly simpler:
+
+Generate Preliminary Estimate
+
+Generate New Estimate Number or Create New Estimate
+
+If the underlying entity is still technically a quote, don’t create terminology confusion in code — but in UI, simpler customer-facing wording is better.
+
+6. T001 reset call should be careful
+
+This part:
+
+form.reset(getNewItemDefaults(siteType)); lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
+
+is probably okay, but I’d add one protection:
+
+Reuse the same new-item initialization helper/path already used elsewhere in the component where possible, rather than manually duplicating reset logic inline.
+
+That reduces the chance of subtle inconsistencies later.

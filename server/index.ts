@@ -2,6 +2,20 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { sessionMiddleware } from "./auth";
+
+const PUBLIC_API_PATHS = new Set([
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/me",
+]);
+
+function apiAuthGuard(req: Request, res: Response, next: NextFunction) {
+  if (!req.path.startsWith("/api/")) return next();
+  if (PUBLIC_API_PATHS.has(req.path)) return next();
+  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+  next();
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +36,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+app.use(sessionMiddleware);
+app.use(apiAuthGuard);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

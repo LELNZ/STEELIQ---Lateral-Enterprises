@@ -1,0 +1,341 @@
+Overall verdict
+
+✅ Good plan
+⚠️ Needs tighter scope boundaries and a couple of implementation guardrails
+
+What’s good
+1) The sequencing is right
+
+Starting with:
+
+app shell
+
+quote builder mobile tabs
+
+estimates/quotes mobile usability
+
+is the correct enterprise approach.
+
+That matches how large teams de-risk mobile redesign:
+
+establish layout framework
+
+pilot it in the core workflow
+
+then expand to adjacent modules
+
+2) It preserves business logic
+
+You’ve correctly protected:
+
+pricing
+
+snapshot logic
+
+revision logic
+
+backend routes
+
+storage
+
+That is essential.
+
+3) It respects multi-division growth
+
+Adding LE/LL placeholders in nav is a good information architecture move now, without pretending those modules are live yet.
+
+4) Quote Builder is correctly treated as highest priority
+
+That is the most important field workflow, so it should be the pilot.
+
+What I would change before giving it to Replit
+Refinement 1 — Don’t let T001 become a vague “scroll fix”
+
+Right now T001 says:
+
+Ensure it uses min-h-0 so nested pages with their own scroll areas work on mobile.
+
+That’s directionally right, but it’s too open-ended.
+
+Better instruction
+
+For App.tsx, tell Replit exactly what to preserve:
+
+keep the current shell
+
+keep the sidebar provider behavior
+
+keep the sticky header
+
+only ensure the content column can shrink and scroll correctly
+
+Practical guardrail
+
+Replit should not start redesigning App.tsx.
+It should only:
+
+make the main flex column safe for nested scroll containers
+
+ensure <main> remains scrollable
+
+avoid any global overflow-hidden mistakes
+
+So I’d tighten T001 to:
+
+add min-h-0 to any flex parent that wraps <main>
+
+keep <main className="flex-1 overflow-auto"> unless there is a proven scroll conflict
+
+do not redesign sidebar/header shell
+
+Refinement 2 — T003 and T004 overlap too much
+
+Right now:
+
+T003 = mobile tabbed workflow
+
+T004 = mobile header simplification
+
+These are related enough that Replit may mix concerns and create regressions.
+
+Better approach
+
+Treat T004 as part of T003, not a separate “freeform” task.
+
+Because the mobile tabbed workflow only works if the mobile header is controlled too.
+
+Recommendation
+
+Merge them conceptually:
+
+T003 = Quote Builder mobile-first layout
+Includes:
+
+tabs
+
+mobile header simplification
+
+stacked job fields
+
+hide redundant bottom sheet on mobile
+
+That reduces ambiguity.
+
+Refinement 3 — Avoid introducing a JS breakpoint hook unless necessary
+
+The plan says:
+
+Use useIsMobile() hook or a custom useIsDesktop using lg breakpoint
+
+This is where Replit could go off track.
+
+You already use Tailwind responsive classes extensively.
+For this phase, CSS-first responsive rendering is safer than JS breakpoint state.
+
+Best practice here
+
+Prefer:
+
+hidden lg:flex
+
+flex lg:hidden
+
+block lg:hidden
+
+Use conditional rendering only where truly necessary.
+
+Why
+
+JS breakpoints can create:
+
+hydration/layout flicker
+
+inconsistent render states
+
+duplicate mounted subtrees if done poorly
+
+Recommendation
+
+Tell Replit:
+
+use Tailwind responsive visibility first
+
+only use JS breakpoint detection if absolutely necessary for behavior, not layout
+
+Refinement 4 — T005 should choose one mobile Items pattern, not “maybe cards, maybe table”
+
+Right now T005 says:
+
+cards preferred
+
+table acceptable if too complex
+
+That gives Replit too much discretion.
+
+For enterprise field UX on phone, cards are the right pattern.
+
+Best practice
+
+On mobile Items tab:
+
+render item cards
+
+keep desktop table unchanged
+
+Each card should show:
+
+item name
+
+category
+
+dimensions
+
+qty
+
+sqm
+
+price
+
+actions
+
+This is the correct field-app pattern.
+
+Recommendation
+
+Change T005 to:
+
+Phone only: use cards
+
+Tablet/Desktop: keep table
+
+That removes ambiguity and gets you closer to the actual target UX.
+
+Refinement 5 — T010 is too broad for one pass
+
+Library + Settings are both large surfaces.
+
+If you leave T010 as-is, Replit may try to over-edit those pages and introduce layout inconsistencies.
+
+Better approach
+
+Limit T010 to “safe mobile containment” only:
+
+make page scroll work
+
+prevent tab overflow
+
+wrap wide tables
+
+stack form grids on small screens
+
+Explicitly say
+
+Do not redesign library interaction model yet.
+Do not redesign settings information architecture yet.
+
+This keeps the phase aligned.
+
+Refinement 6 — Add one “do not regress” test rule
+
+You need a regression protection clause, especially for Quote Builder.
+
+Add this to acceptance:
+
+Quote Builder must still support:
+
+add/edit/delete item
+
+duplicate item
+
+photo capture/upload
+
+save job
+
+open summary
+
+open exec summary
+
+drawing preview
+
+download actions
+
+Because layout work often accidentally disconnects buttons or hides routes.
+
+My recommended revised structure
+Step 1
+
+Responsive shell
+
+minimal App.tsx flex/scroll safety
+
+sidebar IA readiness for LJ / LE / LL
+
+Step 2
+
+Quote Builder mobile-first pilot
+
+mobile tabs: Config / Preview / Items
+
+mobile header simplification included
+
+mobile items = cards
+
+desktop unchanged
+
+Step 3
+
+Estimates / Quotes responsive list flows
+
+jobs-list mobile polish
+
+quotes-list mobile cards
+
+quote-detail mobile stacking
+
+quote-preview mobile readability
+
+Step 4
+
+Basic admin containment
+
+library/settings scroll and overflow fixes only
+
+That is cleaner than the current all-at-once framing.
+
+What I would approve as-is
+
+These tasks are good:
+
+T002
+
+T006
+
+T007
+
+T008
+
+T009
+
+What I would tighten
+
+These tasks need more precise constraints:
+
+T001
+
+T003/T004
+
+T005
+
+T010
+
+Final recommendation
+
+✅ Proceed, but revise the brief slightly before giving it to Replit.
+
+The three most important edits:
+
+Merge T003 + T004
+
+Force mobile Items = cards
+
+Limit T010 to containment, not redesign

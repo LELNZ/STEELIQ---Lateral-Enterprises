@@ -1,0 +1,293 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a scoped change in an active production-style software project.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign existing flows, schemas, or component structure unless explicitly instructed.
+3. Do NOT add new schema fields, tables, API endpoints, route patterns, or background behaviors unless explicitly specified in this brief.
+4. Do NOT introduce speculative improvements outside scope.
+5. Do NOT rename core models, lifecycle terms, or pipeline stages unless explicitly instructed.
+6. Do NOT replace the documented Quote/Revision/QuoteDocument flow.
+7. Do NOT silently change UX meaning through label or behavior drift.
+8. If something appears missing, ambiguous, or risky, stop and ask before changing the design.
+9. Prefer enhancement over replacement.
+10. Preserve backward compatibility unless the brief explicitly allows a breaking change.
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ Quote Preview
+→ Quote Renderer
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+Do NOT create separate unrelated content models for preview and PDF.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required for a structured template builder.
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any template-builder architecture changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Build Template Builder v1 for the quote system.
+
+This is NOT a freeform drag-and-drop page builder.
+This is a structured, schema-driven builder for the company master quote template and division overrides.
+
+The goal is to let us intentionally control quote presentation using safe configurable template settings while keeping Preview and PDF aligned.
+
+
+--------------------------------------------------
+T056 — Define the template-builder architecture for v1
+--------------------------------------------------
+
+Problem:
+We now have:
+- QuoteDocumentModel
+- QuoteRenderModel
+- master template + division override concepts
+- preview + PDF alignment groundwork
+
+But we do not yet have a usable builder interface for controlling the quote template in a structured way.
+
+Required implementation:
+
+1. Establish Template Builder v1 as a structured config editor, not a freeform layout tool.
+2. The builder must edit template configuration values that are safe and explicit.
+3. Keep the architecture:
+   - quote content comes from QuoteDocument / QuoteRenderer
+   - template builder edits presentation config only
+   - preview and PDF both consume the same resolved template config
+
+Acceptance criteria:
+- builder architecture is explicit and safe
+- template editing is config-driven, not arbitrary freeform editing
+
+
+--------------------------------------------------
+T057 — Define company template vs division override responsibilities clearly
+--------------------------------------------------
+
+Problem:
+We need a clean industry-style split between:
+- one company master template
+- division-specific overrides
+
+Required implementation:
+
+1. Keep one company-wide master template as the base.
+2. Division settings should override only approved presentation values.
+
+Recommended split:
+
+COMPANY TEMPLATE CONTROLS
+- section order
+- section visibility defaults
+- header composition rules
+- default totals layout
+- default schedule layout
+- acceptance block structure
+- typography scale tokens
+- spacing scale tokens
+- default photo placement intent
+- default colours / visual tokens where appropriate
+
+DIVISION OVERRIDES
+- logo
+- trading name
+- legal line
+- accent colour
+- optional approved layout variant overrides
+- terms/header notes overrides
+
+3. Reflect this clearly in the UI language.
+
+Acceptance criteria:
+- company template and division overrides are clearly separated
+- builder does not imply every division owns a completely separate quote template
+
+
+--------------------------------------------------
+T058 — Build Template Builder v1 UI in Settings
+--------------------------------------------------
+
+Problem:
+The template system exists in code but is not yet exposed as a usable structured builder.
+
+Required implementation:
+
+1. Add a new structured Template Builder interface in Settings.
+2. Use the current settings structure if practical, or add a clearly named section/page/tab for quote template editing.
+
+Preferred v1 builder sections:
+- Header
+- Summary
+- Schedule
+- Legal
+- Acceptance
+- Theme / Spacing
+
+3. Builder controls should edit safe structured values such as:
+   - section show/hide
+   - section order
+   - header variant
+   - logo size
+   - legal line placement
+   - totals layout variant
+   - schedule layout variant
+   - item density / compactness level
+   - photo placement mode
+   - accent colour
+   - font scale
+   - spacing scale
+
+4. Use controlled selects/toggles/inputs.
+   Do NOT build drag-and-drop layout editing yet.
+
+Acceptance criteria:
+- there is a usable Template Builder v1 UI
+- it exposes structured quote template controls
+- controls are understandable and aligned with the real rendering model
+
+
+--------------------------------------------------
+T059 — Add live preview behavior for template editing
+--------------------------------------------------
+
+Problem:
+A template builder is only useful if we can see the effect of changes.
+
+Required implementation:
+
+1. Add a live preview workflow for template edits.
+2. The builder should update the quote preview representation using the template config being edited.
+3. Use an existing quote/example preview path if practical.
+4. If a fully live editing loop is too risky in one pass, implement the smallest safe approximation:
+   - edit → save → preview refresh
+   But prefer live or near-live preview if safely achievable.
+
+Acceptance criteria:
+- template changes can be previewed clearly
+- builder is not blind configuration editing
+
+
+--------------------------------------------------
+T060 — Ensure Preview and PDF both consume builder-managed template config
+--------------------------------------------------
+
+Problem:
+The builder only has value if both preview and PDF use the same resulting template config.
+
+Required implementation:
+
+1. Ensure the builder writes to the same template/override config that:
+   - Customer Quote Preview uses
+   - PDF engine uses
+
+2. Do NOT create a builder-only config path disconnected from rendering.
+
+3. Keep Preview and PDF in the same template family.
+
+Acceptance criteria:
+- preview and PDF both reflect builder-managed template config
+- no parallel disconnected template configuration system exists
+
+
+--------------------------------------------------
+T061 — Create safe v1 controls only
+--------------------------------------------------
+
+Problem:
+Too much freedom too early will destabilize the quote system.
+
+Required implementation:
+
+For v1, include only structured controls that are low-risk and high-value.
+
+Recommended v1 controls:
+- Header:
+  - logo size
+  - show/hide trading name text
+  - legal line position
+  - contact block variant
+- Summary:
+  - totals layout variant
+  - show/hide selected summary rows where already supported
+- Schedule:
+  - schedule layout variant
+  - compact / standard density
+  - photo placement mode
+- Legal:
+  - section visibility
+  - heading style
+- Acceptance:
+  - compact / standard acceptance layout
+  - show/hide remittance block if already supported
+- Theme:
+  - accent colour
+  - font scale
+  - spacing scale
+
+If some controls are not yet safely implemented, hide or defer them rather than exposing dead settings.
+
+Acceptance criteria:
+- builder exposes meaningful controls
+- dead/non-functional controls are avoided
+- v1 remains safe and maintainable
+
+
+--------------------------------------------------
+T062 — Keep this builder pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- build a drag-and-drop page designer
+- build a freeform canvas editor
+- allow arbitrary section creation
+- allow raw HTML/CSS editing
+- add per-customer custom templates
+- redesign quote lifecycle
+- add customer portal/email logic
+- rebuild the whole renderer stack from scratch
+
+This is Template Builder v1 only:
+structured, controlled, company-template-first.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. We have a real Template Builder v1, not just hidden template plumbing.
+2. The builder edits one company master template with division overrides.
+3. Preview and PDF both consume the resulting template config.
+4. The builder is structured, safe, and understandable.
+5. The system is positioned for future refinement without becoming a chaotic freeform editor.
+
+
+END OF IMPLEMENTATION

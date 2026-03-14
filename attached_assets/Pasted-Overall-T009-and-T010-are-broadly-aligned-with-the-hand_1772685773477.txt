@@ -1,0 +1,118 @@
+Overall
+
+T009 and T010 are broadly aligned with the handover plan and guardrails.
+
+T011 is the big problem: it changes the agreed architecture by implementing a new client-side quote PDF system instead of integrating the existing PDF engine as a black box. That’s a scope/architecture divergence and a regression risk (template locking, historical fidelity, layout parity, font embedding, pagination, GST/terms blocks, etc.).
+
+T009 review
+
+✅ Good:
+
+Checklist matches the intended regression pass.
+
+“Fix any bugs found” is allowed as long as it stays within constraints.
+
+⚠️ Add two specific verifications to avoid subtle regressions:
+
+Quote creation idempotency/double-click: ensure button disables while request pending so you don’t accidentally create duplicate revisions.
+
+Snapshot immutability sanity: verify editing job/library after creating quote does not change preview of stored revision.
+
+No other changes needed.
+
+T010 review (Settings UI)
+
+✅ Mostly good:
+
+Tabs are fine, and keeping existing “Application” content intact is safe.
+
+Uses existing APIs, react-query, toast feedback, basic validation.
+
+⚠️ Biggest risk: field naming mismatch
+The plan uses camelCase fields like legalName, gstNumber, logoUrl, etc. Your backend may expect snake_case (legal_name, gst_number, logo_url) or a specific schema. If the UI sends the wrong shape, PATCH will “succeed” but not persist correctly—or silently drop fields.
+
+Required tweak
+
+Implement a mapping layer in the settings page:
+
+UI model (camelCase) ↔ API payload (whatever the API returns)
+
+Do not guess names—use the response JSON from:
+
+GET /api/settings/org
+
+GET /api/settings/divisions/:code
+as the source of truth.
+
+⚠️ Spec dictionary endpoint: query param mismatch
+
+Handover says scope=LJ pattern; plan uses /api/spec-dictionary?scope={code} which is fine only if that’s truly the endpoint signature.
+
+If the endpoint uses divisionCode instead of scope, adjust accordingly.
+
+✅ Good call:
+
+templateKey readonly (prevents breaking templates).
+
+Placeholder for LE/LL spec defaults.
+
+T011 review (PDF Integration)
+This must change.
+
+The agent proposes:
+
+“Client-side PDF generation using jsPDF… matching preview layout… use preview-data…”
+
+That violates the original constraint:
+
+“PDF generation integration using the existing PDF engine (no changes to PDF engine internals)”
+
+“Treat PDF engine as a black box”
+
+Also, building a second PDF generator in the client creates long-term divergence:
+
+quote preview ≠ pdf output
+
+template rules duplicated in TS
+
+font embedding, pagination, headers/footers become brittle
+
+hard to guarantee historical revision fidelity
+
+Correct T011 approach (what you should instruct Replit to do instead)
+
+Locate the existing quote PDF engine path
+
+Find the server module/route/service already used for quote PDFs (even if currently unused).
+
+Add a thin orchestration endpoint only if needed
+
+Example pattern:
+
+POST /api/quotes/:id/revisions/:revId/pdf (generate/store)
+
+GET /api/quotes/:id/revisions/:revId/pdf (stream/download)
+
+Keep it a wrapper that calls the existing engine; do not modify engine internals.
+
+Template lock
+
+Must pass quote_revisions.template_key into the engine.
+
+UI
+
+Add “Generate PDF” button in quote detail and/or preview.
+
+Button calls the server endpoint; then opens/downloads the returned PDF (or fetches via pdfStorageKey).
+
+If the only PDF code in the repo is jsPDF for drawings
+
+Then the correct action is:
+
+Stop and search the repo for the server-side quote PDF engine/module referenced in your handover.
+
+If it truly doesn’t exist yet, then T011 must be re-scoped to:
+
+“Add server-side PDF engine (new)” — but that contradicts the handover constraints. So don’t proceed without reconciling that mismatch.
+
+Bottom line: Client-side jsPDF quote PDFs should be rejected for T011 unless you explicitly decide to change the architecture.

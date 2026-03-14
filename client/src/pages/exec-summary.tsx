@@ -5,8 +5,8 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type QuoteItem, type JobItem, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor, type FrameConfiguration, type LibraryEntry } from "@shared/schema";
 import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
-import { getGlassPrice } from "@shared/glass-library";
-import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, HANDLE_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
+import { getGlassPrice, getGlassRValue } from "@shared/glass-library";
+import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, getLocksForCategory, getLockTypeForCategory, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES, isDoorCategory } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,9 +23,11 @@ import {
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, Printer, FileText } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
+import DrawingCanvas from "@/components/drawing-canvas";
 
 function calcSqm(width: number, height: number, quantity: number): number {
   return (width * height * quantity) / 1_000_000;
@@ -52,6 +54,7 @@ interface JobData {
   name: string;
   address?: string;
   date?: string;
+  siteType?: string | null;
   installationEnabled?: boolean;
   installationOverride?: number | null;
   installationMarkup?: number | null;
@@ -62,12 +65,21 @@ interface JobData {
   items: JobItem[];
 }
 
+interface ItemPhotoRef {
+  key: string;
+  isPrimary?: boolean;
+  includeInCustomerPdf?: boolean;
+  caption?: string;
+  takenAt?: string;
+}
+
 interface ItemPricingData {
   item: QuoteItem;
   sqm: number;
   salePrice: number;
   pricing: PricingBreakdown | null;
   configName: string;
+  photos: ItemPhotoRef[];
 }
 
 export default function ExecSummary() {
@@ -89,6 +101,13 @@ export default function ExecSummary() {
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
   });
+
+  const { data: existingQuotes = [] } = useQuery<any[]>({
+    queryKey: ["/api/jobs", jobId, "quotes"],
+    enabled: !!jobId,
+  });
+
+  const hasExistingQuote = existingQuotes.length > 0;
 
   const configIds = useMemo(() => {
     if (!job) return [];
@@ -166,6 +185,12 @@ export default function ExecSummary() {
   const { data: libSlidingDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "sliding_door_handle"], queryFn: fetchLib("sliding_door_handle") });
   const { data: libBifoldDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "bifold_door_handle"], queryFn: fetchLib("bifold_door_handle") });
   const { data: libStackerDoorHandles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "stacker_door_handle"], queryFn: fetchLib("stacker_door_handle") });
+  const { data: libEntranceDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "entrance_door_lock"], queryFn: fetchLib("entrance_door_lock") });
+  const { data: libHingeDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "hinge_door_lock"], queryFn: fetchLib("hinge_door_lock") });
+  const { data: libSlidingDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "sliding_door_lock"], queryFn: fetchLib("sliding_door_lock") });
+  const { data: libBifoldDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "bifold_door_lock"], queryFn: fetchLib("bifold_door_lock") });
+  const { data: libStackerDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "stacker_door_lock"], queryFn: fetchLib("stacker_door_lock") });
+  const { data: libFrenchDoorLocks = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "french_door_lock"], queryFn: fetchLib("french_door_lock") });
   const { data: libWanzBars = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "wanz_bar"], queryFn: fetchLib("wanz_bar") });
   const { data: masterProfiles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_profile"], queryFn: fetchLib("direct_profile") });
   const { data: masterAccessories = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_accessory"], queryFn: fetchLib("direct_accessory") });
@@ -214,6 +239,15 @@ export default function ExecSummary() {
     stacker_door_handle: libStackerDoorHandles,
   };
 
+  const locksByType: Record<string, LibraryEntry[]> = {
+    entrance_door_lock: libEntranceDoorLocks,
+    hinge_door_lock: libHingeDoorLocks,
+    sliding_door_lock: libSlidingDoorLocks,
+    bifold_door_lock: libBifoldDoorLocks,
+    stacker_door_lock: libStackerDoorLocks,
+    french_door_lock: libFrenchDoorLocks,
+  };
+
   const lookupGlassPrice = (iguType: string, combo: string, thickness: string): number | null => {
     const entry = libGlass.find((e) => (e.data as any).iguType === iguType && (e.data as any).combo === combo);
     if (entry) return (entry.data as any).prices?.[thickness] ?? null;
@@ -241,16 +275,29 @@ export default function ExecSummary() {
     if (dbPrice != null) return dbPrice;
     return getHandlesForCategory(cat).find((h) => h.value === handleType)?.priceProvision ?? null;
   };
+  const lookupLockPrice = (lockType: string, cat: string): number | null => {
+    if (!lockType) return null;
+    if (lockType === "Customer-Supplied" || lockType === "TBC") return 0;
+    const catLockType = getLockTypeForCategory(cat);
+    const catLocks = locksByType[catLockType] || [];
+    if (catLocks.length > 0) {
+      const entry = catLocks.find((e) => (e.data as any).value === lockType);
+      const dbPrice = entry ? (entry.data as any).priceProvision : null;
+      if (dbPrice != null) return dbPrice;
+    }
+    return getLocksForCategory(cat).find((l) => l.value === lockType)?.priceProvision ?? null;
+  };
 
   const itemPricings: ItemPricingData[] = useMemo(() => {
     if (!job) return [];
-    return job.items.map((ji) => {
+    return job.items.map((ji: any) => {
       const item = ji.config as QuoteItem;
       const sqm = calcSqm(item.width, item.height, item.quantity || 1);
       const salePrice = (item.pricePerSqm || 500) * sqm;
       const cid = item.configurationId;
       let pricing: PricingBreakdown | null = null;
       let configName = cid ? (configNameMap[cid] || "") : "";
+      const photos: ItemPhotoRef[] = (ji.photos as ItemPhotoRef[]) || [];
 
       if (cid && configData[cid]) {
         const cd = configData[cid];
@@ -273,6 +320,7 @@ export default function ExecSummary() {
               glassPricePerSqm: lookupGlassPrice(item.glassIguType || "", item.glassType || "", item.glassThickness || ""),
               linerPricePerM: lookupLinerPrice(item.linerType || ""),
               handlePriceEach: lookupHandlePrice(item.handleType || "", item.category),
+              lockPriceEach: lookupLockPrice(item.lockType || "", item.category),
               openingPanelCount: openingPanels,
               wanzBar: wanzBarInput,
             },
@@ -281,9 +329,9 @@ export default function ExecSummary() {
         }
       }
 
-      return { item, sqm, salePrice, pricing, configName };
+      return { item, sqm, salePrice, pricing, configName, photos };
     });
-  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
+  }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libEntranceDoorLocks, libHingeDoorLocks, libSlidingDoorLocks, libBifoldDoorLocks, libStackerDoorLocks, libFrenchDoorLocks, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
 
   const getInstallationTier = useCallback((category: string, sqm: number): { name: string; cost: number; sell: number } | null => {
     const isDoor = DOOR_CATEGORIES.includes(category);
@@ -403,48 +451,205 @@ export default function ExecSummary() {
 
   const { toast } = useToast();
 
-  const generateQuoteMutation = useMutation({
-    mutationFn: async () => {
-      const snapshot: EstimateSnapshot = {
-        division: "",
-        customer: job?.name || "Unknown",
-        assemblies: itemPricings.map((ip) => ({
-          description: ip.configName,
-          width: ip.item.width,
-          height: ip.item.height,
-          quantity: ip.item.quantity || 1,
-          sqm: ip.sqm,
-          salePrice: ip.salePrice,
-          cost: ip.pricing?.totalCost || 0,
-        })),
-        lineItems: [],
-        operations: [],
-        totals: {
-          cost: totals.grandTotalCost,
-          sell: totals.totalSaleExGst,
-          grossProfit: totals.grossProfit,
-          grossMargin: totals.grossMarginPct,
-          totalLabourHours: totals.totalLaborHours,
-          gpPerHour: totals.grossProfitPerHour,
-        },
+  const buildSnapshotAndPost = async (mode: "revision" | "new_quote") => {
+    const snapshotItems = await Promise.all(itemPricings.map(async (ip, idx) => {
+      const item = ip.item;
+      let drawingImageKey: string | undefined;
+      try {
+        const wrapper = document.querySelector(`[data-testid="drawing-svg-${idx}"]`);
+        const svgEl = wrapper?.querySelector("svg") as SVGSVGElement | null;
+        if (svgEl) {
+          const { svgToPngBlob } = await import("@/lib/export-png");
+          const blob = await svgToPngBlob(svgEl, 2);
+          const formData = new FormData();
+          formData.append("file", blob, "drawing.png");
+          const uploadRes = await fetch("/api/drawing-images", { method: "POST", body: formData });
+          if (uploadRes.ok) {
+            const { key } = await uploadRes.json();
+            drawingImageKey = key;
+          } else {
+            console.warn(`[Snapshot] Drawing upload failed for item ${idx}: HTTP ${uploadRes.status}`);
+          }
+        } else if (item.width > 0 && item.height > 0) {
+          console.warn(`[Snapshot] Drawing SVG not found in DOM for item ${idx} (data-testid="drawing-svg-${idx}")`);
+        }
+      } catch (e) {
+        console.warn(`[Snapshot] Drawing capture error for item ${idx}:`, e);
+      }
+
+      const frameTypeEntry = libFrameTypes.find(ft => (ft.data as any).value === item.frameType);
+      const frameTypeLabel = frameTypeEntry ? (frameTypeEntry.data as any).label : item.frameType || "";
+
+      const specValues: Record<string, any> = {
+        itemRef: item.name,
+        configuration: ip.configName,
+        itemCategory: item.category,
+        width: item.width,
+        height: item.height,
+        quantity: item.quantity || 1,
+        frameSeries: item.frameType || "",
+        frameColor: item.frameColor || "",
+        windZone: item.windZone || "",
+        iguType: item.glassIguType || "",
+        glassType: item.glassType || "",
+        glassThickness: item.glassThickness || "",
+        handleSet: item.handleType || "",
+        lockSet: item.lockType || "",
+        linerType: item.linerType || "",
+        flashingSize: item.flashingSize || 0,
+        wallThickness: item.wallThickness || 0,
+        heightFromFloor: item.heightFromFloor || 0,
+        pricePerSqm: item.pricePerSqm || 500,
+        configurationId: item.configurationId || "",
+        layout: item.layout || "standard",
+        windowType: item.windowType || "",
+        hingeSide: item.hingeSide || "",
+        openDirection: item.openDirection || "",
+        panels: item.panels || 0,
+        wanzBarEnabled: item.wanzBar || false,
+        wanzBarSize: item.wanzBarSize || "",
+        wanzBarSource: item.wanzBarSource || "",
       };
-      const res = await apiRequest("POST", "/api/quotes", {
-        snapshot,
-        sourceJobId: jobId,
-        customer: job?.name || "Unknown",
-      });
-      return res.json();
-    },
+
+      const resolvedSpecs: Record<string, string> = {
+        itemRef: item.name,
+        configuration: ip.configName,
+        itemCategory: CATEGORY_LABELS[item.category] || item.category,
+        overallSize: `${item.width} x ${item.height}mm`,
+        quantity: String(item.quantity || 1),
+        width: `${item.width}mm`,
+        height: `${item.height}mm`,
+        frameSeries: frameTypeLabel,
+        frameColor: item.frameColor || "",
+        windZone: item.windZone || "",
+        rValue: (() => {
+          try {
+            if (item.glassIguType) {
+              const rv = getGlassRValue(item.glassIguType);
+              return rv ? `R${rv}` : "";
+            }
+            return "";
+          } catch {
+            return "";
+          }
+        })(),
+        iguType: item.glassIguType || "",
+        glassType: item.glassType || "",
+        glassThickness: item.glassThickness || "",
+        handleSet: item.handleType || "",
+        lockSet: item.lockType || "",
+        linerType: item.linerType || "",
+        flashingSize: item.flashingSize ? `${item.flashingSize}mm` : "",
+        wallThickness: item.wallThickness ? `${item.wallThickness}mm` : "",
+        heightFromFloor: item.heightFromFloor ? `${item.heightFromFloor}mm` : "",
+      };
+
+      return {
+        itemNumber: idx + 1,
+        itemRef: item.name,
+        title: ip.configName || item.name,
+        quantity: item.quantity || 1,
+        width: item.width,
+        height: item.height,
+        drawingImageKey,
+        photos: ip.photos ?? [],
+        specValues,
+        resolvedSpecs,
+      };
+    }));
+
+    const installSell = installEnabled ? installationTotals.sell : 0;
+    const delivSell = deliveryTotals.sell;
+    const itemsSubtotal = totals.itemSaleTotal;
+    const subtotalExclGst = totals.totalSaleExGst;
+    const gstAmount = totals.gstAmount;
+    const totalInclGst = totals.totalSaleIncGst;
+
+    const lockExclusions: string[] = [];
+    for (const ip of itemPricings) {
+      if (!isDoorCategory(ip.item.category)) continue;
+      const lt = ip.item.lockType || "";
+      if (!lt || lt === "Customer-Supplied") {
+        lockExclusions.push(`${ip.item.name}: Lock not included in supply — Customer Supplied`);
+      } else if (lt === "TBC") {
+        lockExclusions.push(`${ip.item.name}: Lock selection TBC — not included in current pricing`);
+      }
+    }
+
+    const snapshot: EstimateSnapshot = {
+      divisionCode: "LJ",
+      customer: job?.name || "Unknown",
+      specDictionaryVersion: 1,
+      items: snapshotItems,
+      ...(lockExclusions.length > 0 ? { exclusions: lockExclusions } : {}),
+      totalsBreakdown: {
+        itemsSubtotal,
+        installationTotal: installSell,
+        deliveryTotal: delivSell,
+        subtotalExclGst,
+        gstAmount,
+        totalInclGst,
+      },
+      division: "",
+      assemblies: itemPricings.map((ip) => ({
+        description: ip.configName,
+        width: ip.item.width,
+        height: ip.item.height,
+        quantity: ip.item.quantity || 1,
+        sqm: ip.sqm,
+        salePrice: ip.salePrice,
+        cost: ip.pricing?.netCostNzd || 0,
+      })),
+      lineItems: [],
+      operations: [],
+      totals: {
+        cost: totals.grandTotalCost,
+        sell: totals.totalSaleExGst,
+        grossProfit: totals.grossProfit,
+        grossMargin: totals.grossMarginPct,
+        totalLabourHours: totals.totalLaborHours,
+        gpPerHour: totals.grossProfitPerHour,
+      },
+    };
+
+    const derivedQuoteType = (job?.siteType === "renovation" || job?.siteType === "new_build") ? job.siteType : undefined;
+
+    const res = await apiRequest("POST", "/api/quotes", {
+      snapshot,
+      sourceJobId: jobId,
+      customer: job?.name || "Unknown",
+      divisionCode: "LJ",
+      mode,
+      ...(derivedQuoteType ? { quoteType: derivedQuoteType } : {}),
+    });
+    return res.json();
+  };
+
+  const generateQuoteMutation = useMutation({
+    mutationFn: () => buildSnapshotAndPost("revision"),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "quotes"] });
       if (data.isNewRevision) {
-        toast({ title: `New revision added to ${data.quote.number}` });
+        toast({ title: `Revision ${data.revision?.versionNumber || ""} added to ${data.quote.number}`.trim() });
       } else {
         toast({ title: `Quote ${data.quote.number} created` });
       }
     },
     onError: (err: Error) => {
       toast({ title: "Failed to generate quote", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const generateNewQuoteMutation = useMutation({
+    mutationFn: () => buildSnapshotAndPost("new_quote"),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "quotes"] });
+      toast({ title: `New quote ${data.quote.number} created under this estimate` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create new quote", description: err.message, variant: "destructive" });
     },
   });
 
@@ -474,7 +679,7 @@ export default function ExecSummary() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6 print:p-2 print:space-y-4" data-testid="exec-summary-page">
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 overflow-x-hidden print:p-2 print:gap-4" data-testid="exec-summary-page">
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(`/job/${jobId}`)} data-testid="button-back-to-job">
@@ -485,20 +690,50 @@ export default function ExecSummary() {
             <p className="text-sm text-muted-foreground">Executive Summary</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => generateQuoteMutation.mutate()}
-            disabled={generateQuoteMutation.isPending}
-            data-testid="button-generate-quote"
-          >
-            <FileText className="h-4 w-4 mr-1" />
-            {generateQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print">
-            <Printer className="h-4 w-4 mr-1" /> Print
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {hasExistingQuote ? (
+            <>
+              <div className="flex flex-col items-start">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => generateQuoteMutation.mutate()}
+                  disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
+                  data-testid="button-generate-quote"
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  {generateQuoteMutation.isPending ? "Generating..." : "Update Existing Quote"}
+                </Button>
+                <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates a new revision on the selected quote</span>
+              </div>
+              <div className="flex flex-col items-start">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateNewQuoteMutation.mutate()}
+                  disabled={generateQuoteMutation.isPending || generateNewQuoteMutation.isPending}
+                  data-testid="button-generate-new-quote"
+                >
+                  {generateNewQuoteMutation.isPending ? "Creating..." : "Create New Quote"}
+                </Button>
+                <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates a separate quote under this estimate</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-start">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => generateQuoteMutation.mutate()}
+                disabled={generateQuoteMutation.isPending}
+                data-testid="button-generate-quote"
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                {generateQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
+              </Button>
+              <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates the first quote for this estimate</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -508,61 +743,111 @@ export default function ExecSummary() {
         {job.date && <p className="text-sm">{job.date}</p>}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="summary-totals">
+      <div className="order-1 grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="summary-totals">
         <SummaryCard label="Total m²" value={`${totals.totalSqm.toFixed(2)} m²`} testId="text-total-sqm" />
         <SummaryCard label="Total Weight" value={`${totals.totalWeight.toFixed(1)} kg`} testId="text-total-weight" />
         <SummaryCard label="Total Items" value={String(itemPricings.length)} testId="text-total-items" />
         <SummaryCard label="USD → NZD Rate" value={`${usdToNzdRate}`} testId="text-usd-rate" />
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
+      <div className="order-5 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Financial Summary</h2>
 
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[180px] text-sm">Category</TableHead>
-              <TableHead className="text-right text-sm">Detail</TableHead>
-              <TableHead className="text-right text-sm">Cost</TableHead>
-              <TableHead className="text-right text-sm">Sell</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow data-testid="row-manuf-materials">
-              <TableCell className="text-sm font-medium" rowSpan={3}>Manufacturing</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">Materials</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-materials">${fmt(totals.totalMaterials)}</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
-            </TableRow>
-            <TableRow data-testid="row-manuf-labour">
-              <TableCell className="text-right text-sm text-muted-foreground">Labour</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-labor">${fmt(totals.totalLabor)}</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
-            </TableRow>
-            <TableRow className="border-b-2" data-testid="row-manuf-total">
-              <TableCell className="text-right text-sm font-semibold">Total</TableCell>
-              <TableCell className="text-right text-base font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
-              <TableCell className="text-right text-base font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
-            </TableRow>
-            <TableRow data-testid="row-installation">
-              <TableCell className="text-sm font-medium">Installation</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-install-cost">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-install-sell">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</TableCell>
-            </TableRow>
-            <TableRow className="border-b-2" data-testid="row-delivery">
-              <TableCell className="text-sm font-medium">Delivery</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-delivery-cost">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</TableCell>
-              <TableCell className="text-right text-sm" data-testid="text-total-delivery-sell">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</TableCell>
-            </TableRow>
-            <TableRow className="bg-muted/30" data-testid="row-grand-total-cost">
-              <TableCell colSpan={2} className="text-base font-bold">Grand Total Cost (COGS)</TableCell>
-              <TableCell className="text-right text-base font-bold" data-testid="text-grand-total">${fmt(totals.grandTotalCost)}</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[180px] text-sm">Category</TableHead>
+                <TableHead className="text-right text-sm">Detail</TableHead>
+                <TableHead className="text-right text-sm">Cost</TableHead>
+                <TableHead className="text-right text-sm">Sell</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow data-testid="row-manuf-materials">
+                <TableCell className="text-sm font-medium" rowSpan={3}>Manufacturing</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">Materials</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-materials">${fmt(totals.totalMaterials)}</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+              </TableRow>
+              <TableRow data-testid="row-manuf-labour">
+                <TableCell className="text-right text-sm text-muted-foreground">Labour</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-labor">${fmt(totals.totalLabor)}</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+              </TableRow>
+              <TableRow className="border-b-2" data-testid="row-manuf-total">
+                <TableCell className="text-right text-sm font-semibold">Total</TableCell>
+                <TableCell className="text-right text-base font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
+                <TableCell className="text-right text-base font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
+              </TableRow>
+              <TableRow data-testid="row-installation">
+                <TableCell className="text-sm font-medium">Installation</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-install-cost">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-install-sell">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</TableCell>
+              </TableRow>
+              <TableRow className="border-b-2" data-testid="row-delivery">
+                <TableCell className="text-sm font-medium">Delivery</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-delivery-cost">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-delivery-sell">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</TableCell>
+              </TableRow>
+              <TableRow className="bg-muted/30" data-testid="row-grand-total-cost">
+                <TableCell colSpan={2} className="text-base font-bold">Grand Total Cost (COGS)</TableCell>
+                <TableCell className="text-right text-base font-bold" data-testid="text-grand-total">${fmt(totals.grandTotalCost)}</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="md:hidden space-y-3" data-testid="financial-summary-mobile">
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Manufacturing</p>
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="text-muted-foreground">Materials</span>
+              <span className="text-right" data-testid="text-total-materials-mobile">${fmt(totals.totalMaterials)}</span>
+              <span className="text-muted-foreground">Labour</span>
+              <span className="text-right" data-testid="text-total-labor-mobile">${fmt(totals.totalLabor)}</span>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-semibold">Total Cost</span>
+              <span className="text-right font-bold">${fmt(totals.totalManufCost)}</span>
+              <span className="font-semibold">Total Sell</span>
+              <span className="text-right font-bold">${fmt(totals.itemSaleTotal)}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-medium">Installation</span>
+              <span className="text-right text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</span>
+              <span className="text-muted-foreground">Cost</span>
+              <span className="text-right">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</span>
+              <span className="text-muted-foreground">Sell</span>
+              <span className="text-right">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-medium">Delivery</span>
+              <span className="text-right text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</span>
+              <span className="text-muted-foreground">Cost</span>
+              <span className="text-right">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</span>
+              <span className="text-muted-foreground">Sell</span>
+              <span className="text-right">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="grid grid-cols-2 gap-1">
+              <span className="text-base font-bold">Grand Total (COGS)</span>
+              <span className="text-right text-base font-bold">${fmt(totals.grandTotalCost)}</span>
+            </div>
+          </div>
+        </div>
 
         <Separator />
 
@@ -594,7 +879,7 @@ export default function ExecSummary() {
 
         <Separator />
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div data-testid="text-gross-profit">
             <p className="text-sm text-muted-foreground">Gross Profit</p>
             <p className={`text-2xl font-bold ${totals.grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
@@ -616,7 +901,7 @@ export default function ExecSummary() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-3 print:break-before-page" data-testid="installation-section">
+      <div className="order-3 rounded-lg border bg-card p-4 space-y-3 print:break-before-page" data-testid="installation-section">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Installation Labour</h2>
           <div className="flex items-center gap-2 print:hidden">
@@ -672,32 +957,36 @@ export default function ExecSummary() {
                 <span className="text-muted-foreground ml-3">Per-unit sell: </span>
                 <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.sellTotal, 0))}</span>
               </div>
-              <div className="flex items-center gap-2 print:hidden">
-                <Label className="text-sm whitespace-nowrap">Subcontractor Override ($)</Label>
-                <Input
-                  type="number"
-                  className="w-28"
-                  placeholder="—"
-                  value={installOverride}
-                  onChange={(e) => {
-                    setInstallOverride(e.target.value);
-                    const val = parseFloat(e.target.value);
-                    persistJobField("installationOverride", val > 0 ? val : null);
-                  }}
-                  data-testid="input-installation-override"
-                />
-                <Label className="text-sm whitespace-nowrap">Markup (%)</Label>
-                <Input
-                  type="number"
-                  className="w-20"
-                  value={installMarkup}
-                  onChange={(e) => {
-                    setInstallMarkup(e.target.value);
-                    const val = parseFloat(e.target.value);
-                    persistJobField("installationMarkup", val >= 0 ? val : null);
-                  }}
-                  data-testid="input-installation-markup"
-                />
+              <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2 print:hidden">
+                <div className="col-span-1">
+                  <Label className="text-sm">Override ($)</Label>
+                  <Input
+                    type="number"
+                    className="md:w-28"
+                    placeholder="—"
+                    value={installOverride}
+                    onChange={(e) => {
+                      setInstallOverride(e.target.value);
+                      const val = parseFloat(e.target.value);
+                      persistJobField("installationOverride", val > 0 ? val : null);
+                    }}
+                    data-testid="input-installation-override"
+                  />
+                </div>
+                <div className="col-span-1">
+                  <Label className="text-sm">Markup (%)</Label>
+                  <Input
+                    type="number"
+                    className="md:w-20"
+                    value={installMarkup}
+                    onChange={(e) => {
+                      setInstallMarkup(e.target.value);
+                      const val = parseFloat(e.target.value);
+                      persistJobField("installationMarkup", val >= 0 ? val : null);
+                    }}
+                    data-testid="input-installation-markup"
+                  />
+                </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-4 font-bold text-sm">
@@ -712,7 +1001,7 @@ export default function ExecSummary() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
+      <div className="order-4 rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
           <div className="flex items-center gap-2 print:hidden">
@@ -730,8 +1019,8 @@ export default function ExecSummary() {
         </div>
         {deliveryEnabled && (
           <>
-            <div className="flex items-center gap-4 flex-wrap print:hidden">
-              <div className="flex-1 min-w-[200px]">
+            <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-4 print:hidden">
+              <div className="col-span-2 md:flex-1 md:min-w-[200px]">
                 <Label className="text-sm">Delivery Method</Label>
                 <Select
                   value={deliveryMethodId}
@@ -752,7 +1041,7 @@ export default function ExecSummary() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-28">
+              <div className="col-span-1 md:w-28">
                 <Label className="text-sm">Custom Cost ($)</Label>
                 <Input
                   type="number"
@@ -766,7 +1055,7 @@ export default function ExecSummary() {
                   data-testid="input-delivery-custom"
                 />
               </div>
-              <div className="w-20">
+              <div className="col-span-1 md:w-20">
                 <Label className="text-sm">Markup (%)</Label>
                 <Input
                   type="number"
@@ -792,7 +1081,37 @@ export default function ExecSummary() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card" data-testid="items-breakdown">
+      {existingQuotes.length > 0 && (
+        <div className="order-4 md:order-4 rounded-lg border bg-card p-4 space-y-3 print:hidden" data-testid="quote-history-section">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote History</h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Quote #</TableHead>
+                <TableHead>Revision</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Updated</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {existingQuotes.map((q: any) => (
+                <TableRow key={q.id} data-testid={`row-quote-history-${q.id}`}>
+                  <TableCell className="font-mono font-medium" data-testid={`text-quote-history-number-${q.id}`}>{q.number}</TableCell>
+                  <TableCell className="text-sm" data-testid={`text-quote-history-revision-${q.id}`}>v{q.currentRevisionNumber || 1}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" data-testid={`badge-quote-history-status-${q.id}`}>{q.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-NZ") : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <div className="order-2 md:order-5 rounded-lg border bg-card" data-testid="items-breakdown">
         <div className="p-4 border-b">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Per-Item Breakdown</h2>
         </div>
@@ -903,6 +1222,14 @@ export default function ExecSummary() {
                               <br />Sale price: ${fmt(ip.salePrice)} (at ${ip.item.pricePerSqm || 500}/m²)
                             </div>
                           )}
+                          {ip.photos.length > 0 && (
+                            <PhotoInclusionControls
+                              photos={ip.photos}
+                              jobId={jobId!}
+                              itemId={(job?.items[idx] as any)?.id}
+                              itemIndex={idx}
+                            />
+                          )}
                         </TableCell>
                       </TableRow>
                     </CollapsibleContent>
@@ -919,6 +1246,78 @@ export default function ExecSummary() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div style={{ position: "absolute", left: "-9999px", top: 0, overflow: "hidden", pointerEvents: "none" }} aria-hidden="true">
+        {itemPricings.map((ip, idx) => (
+          <div key={idx} data-testid={`drawing-svg-${idx}`} style={{ width: ip.item.width || 600, height: ip.item.height || 600 }}>
+            <DrawingCanvas config={ip.item} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhotoInclusionControls({
+  photos,
+  jobId,
+  itemId,
+  itemIndex,
+}: {
+  photos: ItemPhotoRef[];
+  jobId: string;
+  itemId: string;
+  itemIndex: number;
+}) {
+  const includedCount = photos.filter((p) => p.includeInCustomerPdf).length;
+
+  const updatePhotoMutation = useMutation({
+    mutationFn: async (updatedPhotos: ItemPhotoRef[]) => {
+      await apiRequest("PATCH", `/api/jobs/${jobId}/items/${itemId}`, { photos: updatedPhotos });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
+    },
+  });
+
+  const togglePhoto = (photoKey: string) => {
+    const updated = photos.map((p) =>
+      p.key === photoKey ? { ...p, includeInCustomerPdf: !p.includeInCustomerPdf } : p
+    );
+    updatePhotoMutation.mutate(updated);
+  };
+
+  return (
+    <div className="p-3 border-t space-y-2 print:hidden" data-testid={`photo-controls-${itemIndex}`}>
+      <div className="flex items-center gap-2">
+        <Image className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Media for Customer Quote</span>
+        <span className="text-xs text-muted-foreground ml-auto" data-testid={`text-photo-count-${itemIndex}`}>
+          {includedCount} photo{includedCount !== 1 ? "s" : ""} included
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {photos.map((photo, pIdx) => (
+          <div key={photo.key} className="flex flex-col items-center gap-1">
+            <img
+              src={`/api/item-photos/${photo.key}`}
+              alt={photo.caption || `Photo ${pIdx + 1}`}
+              className="h-16 w-16 object-cover rounded border"
+              data-testid={`img-photo-thumb-${itemIndex}-${pIdx}`}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+            <div className="flex items-center gap-1">
+              <Checkbox
+                id={`photo-include-${itemIndex}-${pIdx}`}
+                checked={!!photo.includeInCustomerPdf}
+                onCheckedChange={() => togglePhoto(photo.key)}
+                data-testid={`checkbox-photo-include-${itemIndex}-${pIdx}`}
+              />
+              <Label htmlFor={`photo-include-${itemIndex}-${pIdx}`} className="text-xs">Include</Label>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

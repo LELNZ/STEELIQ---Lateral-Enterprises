@@ -1,0 +1,243 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused template-default tuning pass in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, or snapshot flow.
+3. Do NOT add drag-and-drop editing, freeform template editing, or raw HTML/CSS editing.
+4. Do NOT add unrelated schema fields, endpoints, or systems.
+5. Do NOT bypass QuoteDocument, QuoteRenderModel, Preview, or PDF engine.
+6. Do NOT create separate unrelated template models for preview and PDF.
+7. Preserve Preview / PDF parity as the default expectation.
+8. Focus only on:
+   - company master template default values
+   - header tuning
+   - schedule density tuning
+   - A4-aligned quote readability
+   - builder usability for these defaults
+
+ARCHITECTURE GUARDS
+Estimate / Project
+→ Quotes
+→ Revisions
+→ Snapshot
+→ QuoteDocument
+→ QuoteRenderModel
+→ Preview
+→ PDF Export
+
+Do NOT bypass QuoteDocument.
+Do NOT collapse live item state with snapped revision state.
+Do NOT move rendering responsibilities into Quote Builder.
+
+SCHEMA / API RESTRICTIONS
+Do NOT add new schema fields unless absolutely necessary.
+Do NOT add unrelated endpoints.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Any template default changes made
+5. Any risks or limitations remaining
+6. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Tune the company master template defaults so the quote looks correct out of the box without needing manual slider tweaking every time.
+
+This is NOT a new builder pass.
+This is a default-value tuning pass using the granular controls that already exist.
+
+The goal is:
+- stronger default header
+- better schedule density
+- better drawing/spec/photo balance
+- cleaner A4 quote output
+- same document family across Preview and PDF
+
+
+--------------------------------------------------
+T090 — Set strong company default header values
+--------------------------------------------------
+
+Problem:
+The system now has granular header controls, but the company defaults still need deliberate tuning.
+
+Required implementation:
+
+Set the company master template defaults to a stronger professional baseline.
+
+Recommended starting defaults (adjust slightly only if real testing proves a better result):
+- showCompanyNameText = false
+- legalLinePlacement = under_logo
+- contactBlockAlignment = compact_right
+- logoWidthMm = 70
+- logoMaxHeightMm = 26
+- headerBottomSpacingMm = 5
+
+Rules:
+1. Apply these as the company master defaults.
+2. Keep the builder controls available for later admin tuning.
+3. Ensure these defaults are reflected in BOTH Preview and PDF.
+
+Acceptance criteria:
+- the default header is logo-led
+- the legal line sits under the logo
+- the dominant oversized company-name text is removed by default
+- the header feels cleaner and more premium without manual adjustment
+
+
+--------------------------------------------------
+T091 — Set strong company default schedule density values
+--------------------------------------------------
+
+Problem:
+The schedule layout needs a better default density baseline so the quote is useful immediately.
+
+Required implementation:
+
+Set the company master template defaults for schedule density to a practical professional baseline.
+
+Recommended starting defaults (adjust slightly only if real testing proves a better result):
+- drawingMaxHeightMm = 40
+- photoMaxHeightMm = 18
+- specRowHeightMm = 3.3
+- itemCardPadding = 2.8
+- itemCardGap = 2.8
+- densityPreset = standard
+
+If current implementation separates row allocation from photo max size, keep that logic correct and tune both where needed.
+
+Rules:
+1. Default output should target:
+   - drawings + specs ≈ 4 items/page
+   - drawings + specs + photos ≈ 3 items/page
+2. Keep readability strong.
+3. Do NOT over-compress the cards.
+
+Acceptance criteria:
+- the default schedule is materially denser and more commercially useful
+- drawings are large enough to be useful
+- spec/config text is slightly tighter but still readable
+- photos remain secondary to drawings
+
+
+--------------------------------------------------
+T092 — Tune visual hierarchy for default company output
+--------------------------------------------------
+
+Problem:
+Even with controls in place, the default quote needs a stronger baseline hierarchy.
+
+Required implementation:
+
+Tune the company master defaults so the default output emphasizes:
+- logo
+- quotation/tender title
+- customer/project details
+- quote summary/totals
+- schedule items
+
+And de-emphasizes:
+- legal line
+- support text
+- photo labels
+- low-value metadata
+
+Adjust only through existing template/render controls or small safe render refinements if truly needed.
+
+Acceptance criteria:
+- the quote feels like a professional customer document by default
+- hierarchy is clear on page 1
+- schedule section reads as the core of the quote
+
+
+--------------------------------------------------
+T093 — Validate defaults against one representative quote
+--------------------------------------------------
+
+Problem:
+Defaults need to be tested against a realistic quote, not only against isolated UI controls.
+
+Required implementation:
+
+1. Use one representative quote with:
+   - multiple schedule items
+   - drawings
+   - site photos
+   - enough content for multiple PDF pages
+
+2. Validate the new defaults against:
+   - Preview
+   - PDF export
+
+3. Confirm that without manual builder adjustment, the default output is materially better than before.
+
+If needed, make one additional small round of default tuning to achieve the target.
+
+Acceptance criteria:
+- one realistic quote proves the defaults work
+- defaults are not only theoretical
+- preview and PDF both benefit
+
+
+--------------------------------------------------
+T094 — Keep the builder useful after default tuning
+--------------------------------------------------
+
+Problem:
+Changing defaults should not make the builder confusing.
+
+Required implementation:
+
+1. Ensure the builder still shows the tuned company defaults correctly.
+2. Ensure slider/select values reflect the real defaults after tuning.
+3. Do not hide useful controls.
+4. Do not add more builder complexity in this pass.
+
+Acceptance criteria:
+- builder remains coherent
+- defaults and visible controls stay in sync
+
+
+--------------------------------------------------
+T095 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- add new template systems
+- add drag-and-drop editing
+- add section reordering
+- redesign quote lifecycle
+- add customer portal/email logic
+- add new unrelated builder controls
+- rebuild the renderer stack
+
+This is a company-default tuning pass only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. The company master template has strong default values.
+2. The default header is logo-led and professionally composed.
+3. The default schedule density is more commercially useful.
+4. Drawings, photos, and spec text are better balanced by default.
+5. Preview and PDF remain aligned as the same document family.
+6. The builder remains available for future tuning, but the out-of-the-box quote already looks much better.
+
+
+END OF IMPLEMENTATION

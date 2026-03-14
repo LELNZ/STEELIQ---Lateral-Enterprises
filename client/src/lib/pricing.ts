@@ -9,6 +9,7 @@ export interface PricingBreakdown {
   glassCostNzd: number;
   linerCostNzd: number;
   handleCostNzd: number;
+  lockCostNzd: number;
   wanzBarCostNzd: number;
   totalWeightKg: number;
   laborHours: number;
@@ -37,6 +38,7 @@ export interface PricingExtras {
   glassPricePerSqm?: number | null;
   linerPricePerM?: number | null;
   handlePriceEach?: number | null;
+  lockPriceEach?: number | null;
   openingPanelCount?: number;
   wanzBar?: WanzBarPricingInput;
 }
@@ -158,6 +160,9 @@ export function calculatePricing(
   const openingPanelCount = extras?.openingPanelCount ?? 1;
   const handleCostNzd = handlePriceEach != null ? handlePriceEach * openingPanelCount * quantity : 0;
 
+  const lockPriceEach = extras?.lockPriceEach ?? null;
+  const lockCostNzd = lockPriceEach != null ? lockPriceEach * quantity : 0;
+
   let wanzBarCostNzd = 0;
   const wb = extras?.wanzBar;
   if (wb && wb.enabled && wb.source) {
@@ -171,7 +176,7 @@ export function calculatePricing(
 
   const profilesCostNzd = profilesCostUsd * usdToNzdRate;
   const accessoriesCostNzd = accessoriesCostUsd * usdToNzdRate;
-  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + wanzBarCostNzd;
+  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + lockCostNzd + wanzBarCostNzd;
   const actualCostPerSqm = sqm > 0 ? netCostNzd / sqm : 0;
   const salePriceNzd = salePricePerSqm * sqm;
   const marginNzd = salePriceNzd - netCostNzd;
@@ -186,6 +191,7 @@ export function calculatePricing(
     glassCostNzd,
     linerCostNzd,
     handleCostNzd,
+    lockCostNzd,
     wanzBarCostNzd,
     totalWeightKg,
     laborHours,

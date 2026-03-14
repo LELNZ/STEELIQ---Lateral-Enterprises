@@ -1,0 +1,205 @@
+STEELIQ PROJECT CONTROL HEADER — MUST FOLLOW
+
+Implement exactly what is requested.
+Do not redesign architecture.
+
+Do NOT:
+
+* change the quote lifecycle
+* bypass QuoteDocument → QuoteRenderModel → Preview/PDF
+* introduce schema creep
+* add unapproved endpoints
+* perform hidden refactors
+* change snapshot behaviour
+* modify pagination logic
+* create alternative rendering systems
+
+Architecture facts that MUST remain true:
+
+• QuoteDocument → QuoteRenderModel → Preview/PDF pipeline is locked
+• Job type presets already exist and are persisted in division settings
+• Schedule first-item-fit pagination is already implemented
+• Hardware consolidation is partial (Wanz Bar still outside Hardware)
+
+All work must be incremental and architecture-safe.
+
+---
+
+TASK
+
+Add **controlled rich-text formatting support** to all quote content blocks used in Organisation and Division settings.
+
+These sections must support formatting:
+
+• Header Notes
+• Terms
+• Exclusions
+• Payment Terms
+• Additional Capabilities
+• Bank / Remittance Details
+
+Formatting must render identically in:
+
+• Quote Preview
+• PDF export
+
+---
+
+EDITOR BEHAVIOUR
+
+Replace current plain text textarea fields with a **controlled rich-text editor**.
+
+Allowed formatting controls:
+
+• Bold
+• Italic
+• Underline
+• Bullet list
+• Numbered list
+• Paragraph spacing
+
+Do NOT allow:
+
+• arbitrary HTML editing
+• embedded scripts
+• images
+• tables
+• font size changes
+• color overrides
+
+Formatting scope must remain controlled and professional.
+
+---
+
+DATA STORAGE
+
+Do NOT redesign schemas.
+
+Store formatted content in the **existing fields**.
+
+Use a safe markup format (example: markdown-like or controlled HTML subset).
+
+Content must remain compatible with:
+
+Organisation defaults
+Division overrides
+
+Division override behaviour must remain unchanged.
+
+---
+
+RENDERING
+
+Preview renderer:
+
+Render formatting using existing React quote preview components.
+
+PDF engine:
+
+Extend the text rendering logic to support:
+
+• bold
+• italic
+• underline
+• bullet lists
+• numbered lists
+• paragraph spacing
+
+Do NOT break existing pagination behaviour.
+
+The ensureSpace() logic must remain intact.
+
+---
+
+ADDITIONAL CAPABILITIES — COMMERCIAL BLOCK
+
+Improve visual hierarchy for the **Additional Capabilities** section.
+
+Render style:
+
+Title
+
+Intro paragraph
+
+Service headings in **bold**
+
+Short supporting description under each heading.
+
+Example structure:
+
+Additional Capabilities
+
+Many of our clients also engage us across multiple stages of fabrication and manufacturing.
+
+**Lateral Engineering**
+Structural steel fabrication, general engineering, repairs and custom manufacturing.
+
+**Lateral Joinery**
+Thermally broken aluminium windows and doors, architectural metalwork and custom joinery.
+
+**Lateral Laser Cutting**
+CNC fibre laser cutting, folded components, sheet processing and small-batch production.
+
+Spacing between service blocks should be slightly larger than normal paragraph spacing.
+
+This creates a professional **commercial content block** rather than a dense legal paragraph.
+
+Do NOT introduce icons or layout widgets.
+
+Keep this text-driven.
+
+---
+
+UX REQUIREMENTS
+
+Editor toolbar should appear above each editable content block.
+
+Toolbar buttons:
+
+B (bold)
+I (italic)
+U (underline)
+• bullet list
+
+1. numbered list
+
+The editor must remain lightweight and fast.
+
+---
+
+ARCHITECTURE SAFETY CHECK
+
+Before completing the task confirm:
+
+• Quote lifecycle unchanged
+• Snapshot generation unchanged
+• QuoteDocument → QuoteRenderModel pipeline untouched
+• Library system untouched
+• Pagination rules preserved
+
+---
+
+MANDATORY HANDOVER UPDATE
+
+After implementation produce a structured report including:
+
+1. Files changed
+2. Behaviour changes
+3. Schema/API changes
+4. Rendering/PDF changes
+5. Architecture verification
+6. Remaining risks/limitations
+7. Updated current system state
+8. Updated recommended next tasks
+9. Regression checks
+
+Regression checks must confirm:
+
+• Library CRUD works
+• Quote builder item creation works
+• Snapshot generation works
+• Quote preview renders
+• PDF export works
+• Schedule pagination rules remain correct
+
+If architecture understanding changed, update the handover stack accordingly.

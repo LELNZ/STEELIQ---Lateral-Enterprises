@@ -1,0 +1,355 @@
+IMPLEMENTATION MODE — FOLLOW EXACTLY
+
+You are implementing a focused library + Quote Builder expansion in an active production-style quoting system.
+
+Operate as an executor, not a planner.
+
+NON-NEGOTIABLE RULES
+1. Do NOT reinterpret this brief into a different architecture.
+2. Do NOT redesign quote lifecycle, revision flow, snapshot flow, or quote template architecture.
+3. Do NOT add unrelated schema fields, endpoints, or systems.
+4. Do NOT bypass the existing Library → Quote Builder → Estimate → Quote pipeline.
+5. Do NOT introduce free-text lock selection as the primary path.
+6. Do NOT collapse Handles and Locks into one field in Quote Builder.
+7. Preserve the current business rule that Library-backed options are the source of truth for constrained selectable items.
+8. Focus only on:
+   - adding Locks as a proper library-backed category
+   - exposing Lock Type in Quote Builder under Hardware & Components
+   - supporting allocation, pricing, division scope, defaults, and exclusions
+   - preserving compatibility with existing quotes/items
+
+ARCHITECTURE GUARDS
+Library-backed selectable components
+→ Quote Builder item specifics
+→ Estimate items
+→ Quote snapshots
+→ QuoteDocument / QuoteRenderModel
+→ Preview / PDF
+
+Division Estimate Defaults / Job Type Presets
+→ may prefill Lock Type defaults for supported door items
+
+Company Master Template / Quote Presentation
+→ remains separate from this feature
+
+Do NOT collapse estimate defaults, library items, and quote presentation together.
+
+SCHEMA / API RESTRICTIONS
+Only add the minimum schema/config support strictly required for:
+- Locks as a new library-backed component category
+- item-level Lock Type selection
+- division preset support for door lock defaults
+- exclusion behavior when lock is not included
+
+Do NOT add unrelated fields.
+Do NOT add unrelated endpoints unless required by existing library/settings save/load patterns.
+Do NOT change payload shapes outside the scoped task unless required and documented.
+
+OUTPUT FORMAT REQUIRED
+At the end provide:
+1. Files changed
+2. Exact behavior changes made
+3. Any schema/API/config changes made
+4. Exact Lock library fields and Quote Builder fields added
+5. How allocation and filtering work
+6. How customer supplied / custom / manual pricing behavior works
+7. How exclusions work when lock is not included
+8. Any migration/backfill actions performed
+9. Any risks or limitations remaining
+10. Confirmation architecture guards were preserved
+
+
+NOW IMPLEMENT THE FOLLOWING TASKS EXACTLY:
+
+
+OBJECTIVE
+
+Add Locks as a proper library-backed selectable category and expose Lock Type in Quote Builder.
+
+Business requirements:
+- Locks are a top-level Library category for now (or grouped under a top-level Hardware area if this can be done safely without destabilizing the current Library UX)
+- In Quote Builder, Lock Type appears under Hardware & Components directly below Handle
+- Locks apply to door products now and future
+- Handles remain their own separate field
+- Some items may have Handle only, some Lock only, some both
+- Customer Supplied / TBC / custom one-off lock scenarios must be supported
+- Allocation, pricing, division scope, and presets must work consistently
+- Historical quote integrity must be preserved
+
+
+--------------------------------------------------
+T120 — Add Locks as a proper library-backed component category
+--------------------------------------------------
+
+Problem:
+The system currently supports Handles and other hardware-related library data, but not Locks as a first-class library-backed selectable category.
+
+Required implementation:
+
+1. Add Locks as a new proper Library-backed category.
+2. Preferred long-term structure:
+   - top-level Hardware area/tab
+   - collapsible line-item groups for:
+     - Handles
+     - Locks
+     - Wanz Bar
+   However:
+   - if converting the whole Library UI to Hardware grouping is too risky in one pass, implement Locks cleanly as its own top-level library category now
+   - and document whether Hardware grouping is deferred
+
+3. Library behavior for Locks should mirror Handles as closely as practical:
+   - internal value ID
+   - display label
+   - price provision
+   - allocation
+   - division scope
+   - add/edit/delete support
+
+Acceptance criteria:
+- Locks are managed as a proper Library-backed category
+- admins can add/edit/delete lock items
+- architecture remains consistent with existing library-backed selectable components
+
+
+--------------------------------------------------
+T121 — Support lock groups and future expansion
+--------------------------------------------------
+
+Problem:
+Locks will expand over time and must support multiple door product contexts.
+
+Required implementation:
+
+1. Support lock group/category organization appropriate for:
+   - Entry Door Locks
+   - Hinge Door Locks
+   - Sliding Door Locks
+   - Bifold Door Locks
+   - future door lock types
+
+2. If the current Library design is best served by one combined lock list with allocation controlling eligibility, that is acceptable.
+3. If grouped display is practical and safe, implement it similarly to Handles by category.
+
+Acceptance criteria:
+- Lock library is future-safe for multiple lock types
+- allocation and organization are clear and manageable
+
+
+--------------------------------------------------
+T122 — Add Lock Type to Quote Builder under Hardware & Components
+--------------------------------------------------
+
+Problem:
+Door items need a Lock Type selection in the same style as other library-backed item specifics.
+
+Required implementation:
+
+1. Add a new field in Quote Builder under Hardware & Components:
+   - Lock Type
+
+2. Place it directly below Handle.
+
+3. Lock Type must be a library-backed dropdown/select.
+4. It must be shown only for product/item types where locks are relevant:
+   - all door products now and future
+   - do NOT show for non-lockable products unless there is a clear reason
+
+5. Handle and Lock Type must remain separate fields.
+   Example:
+   - sliding door with awning may need both
+   - some doors may only need lock
+   - some windows may only need handle
+
+Acceptance criteria:
+- Lock Type appears in the right place in Quote Builder
+- it is allocation-aware and category-aware
+- it coexists cleanly with Handle
+
+
+--------------------------------------------------
+T123 — Use allocation filtering for Lock Type exactly like Handles
+--------------------------------------------------
+
+Problem:
+Locks must only be selectable where they are actually valid.
+
+Required implementation:
+
+1. Implement allocation filtering so Lock Type dropdown only shows valid options for the currently selected item/model/frame/category context.
+2. Reuse the same allocation concept as Handles where practical.
+3. A lock library item must be able to define where it is valid.
+
+Acceptance criteria:
+- Quote Builder only shows valid locks for the current item context
+- allocation behaves consistently with the existing library model
+
+
+--------------------------------------------------
+T124 — Support Customer Supplied / TBC / Custom lock paths correctly
+--------------------------------------------------
+
+Problem:
+Real-world quoting requires non-stock scenarios.
+
+Required implementation:
+
+1. Support these lock selection scenarios:
+   - Standard library lock items
+   - Customer Supplied
+   - TBC
+   - Custom / Local Supply
+
+2. These should be selectable in Quote Builder.
+3. They may be implemented as valid library items / special library entries if that fits the architecture best.
+
+4. Custom / Local Supply behavior:
+   - allow manual pricing override
+   - allow the one-off/custom lock to be added into the library later so it becomes a reusable library item with price and allocation
+
+5. Customer Supplied / TBC should clearly behave as non-stock/manual handling cases.
+
+Acceptance criteria:
+- real-world non-stock cases are supported
+- Quote Builder can represent them cleanly
+- manual pricing path exists where needed
+- custom lock can be promoted into the library later
+
+
+--------------------------------------------------
+T125 — Implement pricing behavior for lock selections
+--------------------------------------------------
+
+Problem:
+Lock selections are tied to pricing models.
+
+Required implementation:
+
+1. Standard lock library items should use their library price provision.
+2. Customer Supplied / TBC / Custom / Local Supply should support manual pricing behavior as needed.
+3. If a lock is not a normal stocked library item, the pricing behavior must be explicit and not silently wrong.
+
+Acceptance criteria:
+- library lock selections participate in pricing correctly
+- manual/non-stock cases are handled explicitly and safely
+
+
+--------------------------------------------------
+T126 — Add division preset support for Lock Type defaults on doors
+--------------------------------------------------
+
+Problem:
+Door items need default lock behavior for on-site quote creation.
+
+Required implementation:
+
+1. Extend the editable Division Job Type Presets so door-related presets can include Lock Type defaults.
+2. Support Renovation and New Build only.
+3. Use the same library-backed option model as the main Quote Builder field.
+
+4. Include support for defaults such as:
+   - Standard Entry Lock
+   - Customer Supplied
+   - TBC
+
+Acceptance criteria:
+- division presets can define Lock Type defaults for door workflows
+- site type selection can prefill lock values where applicable
+
+
+--------------------------------------------------
+T127 — Apply preset values correctly when site type is selected
+--------------------------------------------------
+
+Problem:
+Preset-controlled fields should overwrite current values at site-type selection time.
+
+Required implementation:
+
+1. When Renovation or New Build is selected in Quote Builder:
+   - preset-controlled lock values are applied over the current value at the time of selection
+   - same overwrite behavior as other preset-controlled fields
+
+2. After application, the user must still be able to manually adjust Lock Type.
+
+Acceptance criteria:
+- site-type selection applies lock defaults at selection time only
+- user retains full manual editing afterward
+
+
+--------------------------------------------------
+T128 — Add clear exclusion behavior when lock is not included
+--------------------------------------------------
+
+Problem:
+If a door does not include a supplied lock, the quote must communicate that clearly.
+
+Required implementation:
+
+1. If the selected lock state is something like:
+   - Customer Supplied
+   - TBC
+   - not included
+   - custom/manual case where supply is not included
+   then the system must create a clear exclusion / note for that item.
+
+2. The wording should make it obvious that the lock is not included in the supplied scope unless otherwise stated.
+
+3. This exclusion behavior must be visible in the relevant customer-facing quote output and/or item notes path, using the smallest safe implementation that matches the current architecture.
+
+Acceptance criteria:
+- door items clearly indicate when lock supply is not included
+- customers are not left with ambiguity on lock inclusion
+
+
+--------------------------------------------------
+T129 — Preserve historical quote integrity and handle existing data safely
+--------------------------------------------------
+
+Problem:
+Existing quotes must remain valid and unchanged, while current active data can be updated.
+
+Required implementation:
+
+1. Existing historical quotes/revisions must remain unchanged and reproducible from snapshot.
+2. Existing current quotes/items may be updated safely going forward.
+3. For the small amount of existing active data, use the smallest safe migration/backfill approach.
+4. Do NOT rewrite old quote snapshots.
+
+Acceptance criteria:
+- old quote revisions remain historically correct
+- new and edited data supports Lock Type going forward
+- current active records are handled safely
+
+
+--------------------------------------------------
+T130 — Keep this pass tightly scoped
+--------------------------------------------------
+
+Do NOT:
+- redesign the template builder
+- redesign quote lifecycle
+- add customer portal/email logic
+- add unrelated hardware systems
+- add free-text lock input as the main UX
+- rebuild the renderer stack
+
+This is Locks as a library-backed component + Quote Builder field only.
+
+
+--------------------------------------------------
+SUCCESS CRITERIA
+--------------------------------------------------
+
+After this pass:
+
+1. Locks exist as a proper library-backed category.
+2. Lock Type appears in Quote Builder under Hardware & Components below Handle.
+3. Lock selections are allocation-aware and pricing-aware.
+4. Customer Supplied / TBC / Custom scenarios are supported safely.
+5. Division Job Type Presets can define lock defaults for Renovation / New Build.
+6. Selecting site type applies lock defaults at selection time only.
+7. Quotes clearly state when a lock is not included.
+8. Historical quote revisions remain unchanged.
+
+
+END OF IMPLEMENTATION

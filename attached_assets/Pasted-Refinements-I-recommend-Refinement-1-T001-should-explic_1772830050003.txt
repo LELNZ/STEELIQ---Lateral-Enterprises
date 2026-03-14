@@ -1,0 +1,167 @@
+Refinements I recommend
+Refinement 1 — T001 should explicitly avoid changing <main> overflow unless proven necessary
+
+Right now you say:
+
+keep overflow-auto for pages that need it ... key fix is just changing h-[100dvh] → h-full ... if needed add min-h-0
+
+That’s good, but I’d tighten it one step further:
+
+Add this line
+
+Do not change <main> from overflow-auto to overflow-hidden in this task unless the Quote Builder still has proven outer-scroll issues after the h-full fix and min-h-0 adjustment.
+
+Why: you don’t want Replit “experimenting” with shell behavior that could break Jobs, Library, Quotes, etc.
+
+Refinement 2 — T002 title says “flatten ScrollArea on mobile” but details say “keep the ScrollArea”
+
+That wording is slightly inconsistent and could confuse the agent.
+
+Better phrasing
+
+Rename T002 to:
+
+“Fix mobile Config tab scroll to use a single scroll layer”
+
+Then the details are consistent:
+
+keep the ScrollArea if it is the single scroll container
+
+eliminate competing outer scroll
+
+do not introduce extra nested scroll regions
+
+That is clearer.
+
+Refinement 3 — T003 should explicitly say “do not rebuild the mobile tab system if already present”
+
+Since the previous responsive work already introduced tabs, this task is mostly verification + correction, not a rebuild.
+
+Add this line
+
+Reuse the existing mobile tab state/rendering if present; do not redesign the tab structure unless required to fix a proven Preview/Items visibility issue.
+
+That reduces drift.
+
+Refinement 4 — T005 Renovation defaults should avoid hardcoding library values that may not exist exactly
+
+This is the only real risk in the preset section.
+
+You currently specify things like:
+
+"ES52-Window"
+
+"H3-Pine-19mm-MiterCut"
+
+"Clear"
+
+If those exact internal values are not present, the form could break or default incorrectly.
+
+Better instruction
+
+Change to:
+
+Use the closest existing value string already used in the current app/library for ES52 frame type, EnergySaver IGU, 4/4 glass thickness, 19mm mitercut grooved liner, and the default handle for the selected category. Do not invent new value keys if they do not already exist.
+
+That protects against mismatched option values.
+
+Refinement 5 — T007 wind zone rule should track whether it was auto-set
+
+Right now you say:
+
+only auto-set if windZone is currently empty
+
+That’s safe, but slightly limited. If the user started with auto-set value and then frame type changes again, you may want the rule to keep helping unless the user manually overrode it.
+
+For Monday, your current logic is okay.
+But a slightly better version is:
+
+auto-fill if wind zone is empty
+
+or if wind zone still equals the last auto-filled value
+
+That prevents “sticky incorrect default” after frame-type changes.
+
+Suggested wording
+
+Auto-fill windZone when it is empty, or when it still matches the previously auto-filled wind zone. Do not override a user-edited wind zone.
+
+Refinement 6 — T008 warning should be visible in both mobile and desktop
+
+This seems implied, but I’d say it explicitly.
+
+Because the warning is a business/compliance hint, it should appear regardless of screen size.
+
+Add this line
+
+The height-from-floor warning should appear consistently in both desktop and mobile layouts.
+
+Small implementation caution
+
+Your T005 says:
+
+apply preset at form.reset() time (when adding new item or canceling edit)
+
+Be careful with cancel edit.
+
+If the user is editing an item and hits cancel, do you want:
+
+blank/default form for the next new item using current preset?
+That’s fine.
+
+But make sure canceling edit does not mutate the edited item or accidentally apply preset to an existing item state.
+
+Better wording
+
+Preset defaults should be applied only when initializing a fresh “new item” form state, not when loading an existing item for edit.
+
+That’s an important safeguard.
+
+Recommended final verdict by task
+T001
+
+Approved — very likely the real fix.
+
+T002
+
+Approved — rename slightly for clarity.
+
+T003
+
+Approved — add “verify/correct, don’t rebuild unnecessarily.”
+
+T004
+
+Approved.
+
+T005
+
+Approved — but use existing option values, not invented hardcoded keys.
+
+T006
+
+Approved.
+
+T007
+
+Approved — optionally improve with “previous auto-set value” logic.
+
+T008
+
+Approved.
+
+Best concise recommendation
+
+Before handing this to Replit, make these small wording edits:
+
+Do not change <main> overflow unless clearly still needed after h-full + min-h-0
+
+Rename T002 to single-scroll-layer fix
+
+Reuse existing mobile tabs; don’t rebuild if verification/fix is enough
+
+Use existing library/form option values; do not invent new keys
+
+Apply presets only to fresh new-item initialization
+
+Show height warning on both desktop and mobile

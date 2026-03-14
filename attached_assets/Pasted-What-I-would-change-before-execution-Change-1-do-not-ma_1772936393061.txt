@@ -1,0 +1,157 @@
+What I would change before execution
+Change 1 — do not make this only about projectAddress
+
+The plan is slightly too narrow.
+
+If the goal is truly:
+
+render entirely from QuoteDocumentModel, eliminating ad-hoc data shaping
+
+then the task should explicitly include a small audit of all preview rendering fields, not just address and spec-display save.
+
+Otherwise you may “complete” T017 while still leaving other direct raw-preview access behind.
+
+Add this to T003
+
+Require the developer to confirm:
+
+all displayed fields in quote-preview.tsx come from doc.*
+
+raw preview is used only once: as input to buildQuoteDocumentModel(preview)
+
+no other rendering fields are derived outside the model
+
+any remaining non-render concerns are limited to routing, mutation triggers, and fetch orchestration
+
+That makes the task complete, not partial.
+
+Change 2 — be careful with mutation data
+
+This part needs tightening:
+
+For the spec-display save mutation, use doc.metadata.quoteId and doc.metadata.revisionId
+
+That is reasonable only if those IDs are truly part of the document model contract.
+
+I would define this more carefully:
+
+use doc.metadata.quoteId only if QuoteDocumentModel is explicitly the source of quote identity for preview actions
+
+use doc.metadata.revisionId only if revisions are already real and stable in the API/model
+
+if revision identity is not actually first-class yet, do not invent it just to satisfy the refactor
+
+So I’d rewrite that requirement as:
+
+Use QuoteDocumentModel metadata for preview-related persistence actions only where those identifiers are already part of the documented model contract. Do not introduce speculative metadata fields just to remove a local variable.
+
+That avoids forcing premature model shape.
+
+Change 3 — T001 should include all preview-required project fields, not just address
+
+If the preview currently or soon needs:
+
+project name
+
+address
+
+site/contact metadata
+
+maybe source estimate type
+
+then this endpoint should be treated as the preview source payload, not patched one field at a time.
+
+I would not expand it wildly, but I would add one instruction:
+
+Audit the preview page for any source job fields still needed for display and include them in the preview-data response now if they belong in the document model.
+
+At minimum:
+
+projectAddress
+
+and confirm whether any other project/display fields are still leaking from separate queries
+
+Change 4 — add a contract check for QuoteDocumentModel
+
+Before refactoring the page, make sure the model contract is explicit.
+
+I’d add a small task or subtask:
+
+T002a — QuoteDocumentModel contract check
+
+Confirm the model exposes the rendering sections the preview needs, including:
+
+metadata
+
+branding
+
+org
+
+customer
+
+project
+
+totals
+
+content
+
+item/spec presentation inputs
+
+Acceptance:
+
+page rendering needs can be satisfied entirely from the model without hidden fallback logic
+
+This prevents the page from being “forced” into the model if the model is still missing a field.
+
+Change 5 — strengthen the browser test
+
+The test is good, but I would add one more assertion:
+
+confirm there is no second network dependency on a job fetch for rendering if your test framework/network inspection makes that feasible
+
+If not, at least assert the visible behavior that proves the address is rendered correctly from the preview payload.
+
+Also add:
+
+verify preview still loads when job fetch is not separately called by the page
+
+That would be ideal if practical.
+
+Recommended revised version
+T001
+
+Good, but change to:
+
+Add projectAddress to preview-data and audit whether any other project-level display fields used by the preview still come from external queries. Include them in the preview-data response if they belong in the QuoteDocumentModel.
+
+T002
+
+Good.
+
+T002a
+
+Add:
+
+Confirm QuoteDocumentModel contract covers all currently rendered preview sections and fields required by quote-preview.tsx.
+
+T003
+
+Change acceptance to:
+
+quote-preview.tsx uses raw preview only as the input to buildQuoteDocumentModel(preview). All rendered display fields come from doc.*. No secondary job query is used for rendering.
+
+T004
+
+Good, but strengthen slightly:
+
+verify branding
+
+verify project address
+
+verify quote metadata
+
+verify totals
+
+verify items section
+
+optionally verify no separate job fetch is required for rendering

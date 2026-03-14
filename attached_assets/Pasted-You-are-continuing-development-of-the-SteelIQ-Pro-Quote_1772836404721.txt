@@ -1,0 +1,320 @@
+You are continuing development of the SteelIQ Pro-Quote system.
+
+Before implementing any changes, first analyze the current codebase to determine what functionality already exists.
+
+--------------------------------
+STEP 1 — CODEBASE ANALYSIS
+--------------------------------
+
+Inspect the repository and verify whether the following features already exist and are functioning:
+
+Mobile Quote Builder architecture
+- Quote Builder root height uses h-full rather than h-[100dvh]
+- App shell <main> uses min-h-0 where necessary
+- Mobile workspace tabs exist for Config / Preview / Items
+- No nested scroll fighting between builder and page
+- Preview tab shows drawing immediately
+- Items tab scrolls properly
+- Switching tabs preserves unsaved form inputs
+
+Site Visit Mode functionality
+- Site Type selector (Renovation / New Build)
+- Renovation preset defaults
+- New Build preset defaults
+- Wind zone auto-fill when ES52 frame is selected
+- Height-from-floor safety glazing warning under 800mm
+
+Photo functionality
+- Photo capture/upload
+- Gallery modal
+- Photos attached to items
+
+If these features already exist and appear stable:
+DO NOT reimplement them.
+
+Only fix them if you find a regression or clear bug during testing.
+
+--------------------------------
+IMPORTANT PRODUCT RULE
+--------------------------------
+
+The Quote Builder already supports library-backed configurations.
+
+Example:
+If a configuration like "1 awning + 1 fixed" already exists in the library,
+the system should use that existing configuration model.
+
+Do NOT force auto-creation of new configuration entries.
+
+Only allow the existing system behavior where a new configuration is created
+when the configuration does not exist in the library.
+
+Do not change this behavior.
+
+Do not modify pricing logic, configuration logic, or library logic.
+
+--------------------------------
+PRIMARY GOAL
+--------------------------------
+
+Prepare the system for a **real site visit workflow by Monday**.
+
+Focus on improving usability and workflow polish.
+
+Do NOT perform architecture refactors.
+
+Do NOT change:
+- database schema
+- API routes
+- pricing logic
+- quote snapshot logic
+- backend services
+- shared schema
+
+Keep desktop layout unchanged.
+
+Focus changes mainly in:
+
+client/src/pages/quote-builder.tsx  
+client/src/pages/exec-summary.tsx  
+client/src/pages/quote-detail.tsx  
+client/src/pages/quote-preview.tsx  
+
+--------------------------------
+PRIORITY 1 — MOBILE ITEM WORKFLOW SPEED
+--------------------------------
+
+File:
+client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Improve item creation and editing workflow on mobile.
+
+1. Ensure the user can rapidly move between items.
+
+When tapping Edit from an item card:
+- automatically switch to the Config tab
+- scroll the form to the top
+- preserve existing form state
+
+2. Provide a clear way to start the next item.
+
+From the Items tab and Preview tab:
+- provide a visible action to create a new item
+- this must preserve the existing item creation logic
+- switch to the Config tab and begin the edit workflow
+
+Acceptance criteria:
+- estimator can move item-to-item quickly during a site visit
+- library-backed configurations continue working without unnecessary auto-create
+
+--------------------------------
+PRIORITY 2 — MOBILE CONFIG SCREEN ERGONOMICS
+--------------------------------
+
+File:
+client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Add a mobile sticky action bar while editing items.
+
+Include buttons such as:
+- Save / Update Item
+- Cancel edit
+- Switch to Preview
+- Return to Items
+
+The purpose is to prevent users from needing to scroll to the bottom of a long form just to save.
+
+Reuse existing submit/update logic.
+
+Do not duplicate business logic.
+
+Acceptance criteria:
+- Config tab feels like the primary working screen
+- save/update actions are always accessible
+
+--------------------------------
+PRIORITY 3 — IMPROVE MOBILE ITEM CARDS
+--------------------------------
+
+File:
+client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Improve readability of item cards.
+
+Cards should clearly show:
+
+Item number or name  
+Item type or category  
+Dimensions (prominent)  
+Frame type  
+Glass / IGU summary  
+Photo count  
+
+Maintain actions:
+
+Edit  
+Duplicate  
+Photos  
+Delete  
+
+Desktop item layout must remain unchanged.
+
+Acceptance criteria:
+- estimator can quickly review multiple openings
+- item cards are readable at a glance on mobile
+
+--------------------------------
+PRIORITY 4 — PHOTO WORKFLOW POLISH
+--------------------------------
+
+File:
+client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Improve the usability of the existing photo system.
+
+Ensure:
+
+- item cards show a clear Photo / Photos action
+- photo count updates immediately after capture/upload
+- gallery modal is easy to read on mobile
+- success feedback (toast) appears after photo attach
+
+Do not change how photos are stored.
+
+Acceptance criteria:
+- estimator can capture and attach site photos quickly
+
+--------------------------------
+PRIORITY 5 — ESTIMATE HEADER CLARITY
+--------------------------------
+
+File:
+client/src/pages/quote-builder.tsx
+
+Tasks:
+
+Improve the visibility of job context.
+
+Ensure the user can clearly see:
+
+estimate/job name  
+address  
+site type  
+(optional) item count  
+
+Keep the header compact on mobile.
+
+Desktop layout should remain effectively unchanged.
+
+Acceptance criteria:
+- user can confirm they are working on the correct property
+
+--------------------------------
+PRIORITY 6 — REVIEW / GENERATE ESTIMATE FLOW
+--------------------------------
+
+Files:
+client/src/pages/quote-builder.tsx  
+client/src/pages/exec-summary.tsx  
+client/src/pages/quote-detail.tsx  
+client/src/pages/quote-preview.tsx  
+
+Tasks:
+
+Make the path from estimate builder to customer document clearer.
+
+Add a visible CTA when items exist:
+
+"Review & Generate Estimate"
+
+This should route to the existing Exec Summary page.
+
+Improve visible wording where helpful:
+
+Review Estimate  
+Generate Preliminary Estimate  
+Preview Customer Document  
+Print / Save PDF  
+
+Do not modify backend quote generation logic.
+
+Acceptance criteria:
+- user can easily move from builder to customer-ready document
+
+--------------------------------
+PRIORITY 7 — LIGHT QUOTE PREVIEW POLISH
+--------------------------------
+
+File:
+client/src/pages/quote-preview.tsx
+
+Tasks:
+
+Improve professionalism of the customer document.
+
+Focus on:
+
+customer/job info block  
+quote metadata  
+item schedule readability  
+totals clarity  
+print spacing  
+
+If appropriate, add a small note such as:
+
+"Preliminary Estimate — subject to final measure and confirmation."
+
+Do not redesign the page.
+
+Acceptance criteria:
+- preview looks professional
+- prints cleanly
+
+--------------------------------
+FINAL STEP — MONDAY FIELD QA
+--------------------------------
+
+After implementing improvements, perform a manual workflow test.
+
+Test the full flow:
+
+1. Open Estimates
+2. Create new estimate
+3. Choose Renovation
+4. Add item
+5. Enter dimensions/specs
+6. Verify drawing appears in Preview
+7. Attach photos
+8. Review item cards
+9. Go to Review / Generate Estimate
+10. Open customer preview
+11. Print / Save PDF
+
+Look for:
+
+- mobile scroll regressions
+- lost form state
+- broken library-backed configuration behavior
+- photo workflow issues
+- unclear navigation
+- console errors
+
+--------------------------------
+DELIVERABLE
+--------------------------------
+
+When finished, report:
+
+1. Summary of changes made
+2. Files modified
+3. Any bugs discovered during analysis
+4. Results of the QA workflow
+5. Any remaining blockers for Monday field use
