@@ -892,8 +892,10 @@ function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: s
             </div>
             <div>
               <Label className="text-xs">Project</Label>
-              <Select value={selProject} onValueChange={setSelProject}>
-                <SelectTrigger className="h-8 text-sm" data-testid="select-link-project"><SelectValue placeholder="Select project" /></SelectTrigger>
+              <Select value={selProject} onValueChange={setSelProject} disabled={!selCustomer || selCustomer === "__none__"}>
+                <SelectTrigger className="h-8 text-sm" data-testid="select-link-project">
+                  <SelectValue placeholder={selCustomer && selCustomer !== "__none__" ? "Select project" : "Select a customer first"} />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— None —</SelectItem>
                   {filteredProjects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}

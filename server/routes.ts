@@ -1852,22 +1852,6 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/quotes/:id/customer", async (req, res) => {
-    const schema = z.object({
-      customerId: z.string().nullable().optional(),
-      projectId: z.string().nullable().optional(),
-    });
-    const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    try {
-      const updated = await storage.updateQuote(req.params.id, parsed.data as any);
-      if (!updated) return res.status(404).json({ error: "Not found" });
-      return res.json(updated);
-    } catch (e: any) {
-      return res.status(500).json({ error: e.message });
-    }
-  });
-
   // ─── Invoice Routes ───────────────────────────────────────────────────────
   app.get("/api/invoices", async (req, res) => {
     try {
@@ -1999,6 +1983,20 @@ export async function registerRoutes(
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const { customerId, projectId } = parsed.data;
+
+      if (projectId) {
+        if (!customerId) {
+          return res.status(400).json({ error: "A customer must be selected before linking a project." });
+        }
+        const project = await storage.getProject(projectId);
+        if (!project) return res.status(404).json({ error: "Project not found." });
+        if (project.customerId !== customerId) {
+          return res.status(400).json({ error: "This project does not belong to the selected customer. Please select a project that belongs to the chosen customer." });
+        }
+      }
+
       const updated = await storage.updateQuote(req.params.id, parsed.data);
       return res.json(updated);
     } catch (e: any) {
