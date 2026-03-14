@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact, Project } from "@shared/schema";
 import { CONTACT_CATEGORIES } from "@shared/schema";
+import { contactDisplayName } from "@/lib/contact-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,19 +34,19 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-const emptyContactForm = { name: "", email: "", phone: "", mobile: "", role: "", category: "client", notes: "", isPrimary: false };
+const emptyContactForm = { firstName: "", lastName: "", email: "", phone: "", mobile: "", roleTitle: "", category: "client", notes: "", isPrimary: false };
 
 function ContactRow({ contact, onEdit, onDelete }: { contact: CustomerContact; onEdit: (c: CustomerContact) => void; onDelete: (id: string) => void }) {
   return (
     <div className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/50 group">
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="font-medium text-sm truncate">{contact.name}</span>
+        <span className="font-medium text-sm truncate">{contactDisplayName(contact)}</span>
         {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
         {contact.category && contact.category !== "client" && (
           <Badge variant="secondary" className="text-xs px-1.5 py-0">{CATEGORY_LABELS[contact.category] ?? contact.category}</Badge>
         )}
-        {contact.role && <span className="text-xs text-muted-foreground hidden sm:inline">{contact.role}</span>}
+        {contact.roleTitle && <span className="text-xs text-muted-foreground hidden sm:inline">{contact.roleTitle}</span>}
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {contact.email && <span className="hidden sm:inline">{contact.email}</span>}
@@ -138,11 +139,12 @@ function CustomerRow({ customer }: { customer: Customer }) {
   function openEditContact(contact: CustomerContact) {
     setEditingContact(contact);
     setEditContactForm({
-      name: contact.name,
+      firstName: contact.firstName || "",
+      lastName: contact.lastName || "",
       email: contact.email || "",
       phone: contact.phone || "",
       mobile: contact.mobile || "",
-      role: contact.role || "",
+      roleTitle: contact.roleTitle || "",
       category: contact.category || "client",
       notes: contact.notes || "",
       isPrimary: contact.isPrimary ?? false,
@@ -265,8 +267,18 @@ function CustomerRow({ customer }: { customer: Customer }) {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Name *</Label>
-                <Input value={contactForm.name} onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))} data-testid="input-contact-name" />
+                <Label>First Name *</Label>
+                <Input value={contactForm.firstName} onChange={(e) => setContactForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="e.g. Jane" data-testid="input-contact-firstname" />
+              </div>
+              <div>
+                <Label>Last Name</Label>
+                <Input value={contactForm.lastName} onChange={(e) => setContactForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="e.g. Smith" data-testid="input-contact-lastname" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Role Title</Label>
+                <Input value={contactForm.roleTitle} onChange={(e) => setContactForm((f) => ({ ...f, roleTitle: e.target.value }))} placeholder="e.g. Owner, Site Manager" data-testid="input-contact-roletitle" />
               </div>
               <div>
                 <Label>Category</Label>
@@ -281,10 +293,6 @@ function CustomerRow({ customer }: { customer: Customer }) {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div>
-              <Label>Role</Label>
-              <Input value={contactForm.role} onChange={(e) => setContactForm((f) => ({ ...f, role: e.target.value }))} placeholder="e.g. Owner, Site Manager" data-testid="input-contact-role" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -318,7 +326,7 @@ function CustomerRow({ customer }: { customer: Customer }) {
             <Button variant="outline" onClick={() => setShowAddContact(false)}>Cancel</Button>
             <Button
               onClick={() => addContactMutation.mutate(contactForm)}
-              disabled={!contactForm.name || addContactMutation.isPending}
+              disabled={!contactForm.firstName || addContactMutation.isPending}
               data-testid="button-save-contact"
             >
               {addContactMutation.isPending ? "Adding…" : "Add Contact"}
@@ -335,8 +343,18 @@ function CustomerRow({ customer }: { customer: Customer }) {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Name *</Label>
-                <Input value={editContactForm.name} onChange={(e) => setEditContactForm((f) => ({ ...f, name: e.target.value }))} data-testid="input-edit-contact-name" />
+                <Label>First Name *</Label>
+                <Input value={editContactForm.firstName} onChange={(e) => setEditContactForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="e.g. Jane" data-testid="input-edit-contact-firstname" />
+              </div>
+              <div>
+                <Label>Last Name</Label>
+                <Input value={editContactForm.lastName} onChange={(e) => setEditContactForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="e.g. Smith" data-testid="input-edit-contact-lastname" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Role Title</Label>
+                <Input value={editContactForm.roleTitle} onChange={(e) => setEditContactForm((f) => ({ ...f, roleTitle: e.target.value }))} placeholder="e.g. Owner, Site Manager" data-testid="input-edit-contact-roletitle" />
               </div>
               <div>
                 <Label>Category</Label>
@@ -351,10 +369,6 @@ function CustomerRow({ customer }: { customer: Customer }) {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div>
-              <Label>Role</Label>
-              <Input value={editContactForm.role} onChange={(e) => setEditContactForm((f) => ({ ...f, role: e.target.value }))} placeholder="e.g. Owner, Site Manager" data-testid="input-edit-contact-role" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -388,7 +402,7 @@ function CustomerRow({ customer }: { customer: Customer }) {
             <Button variant="outline" onClick={() => setEditingContact(null)}>Cancel</Button>
             <Button
               onClick={() => editContactMutation.mutate(editContactForm)}
-              disabled={!editContactForm.name || editContactMutation.isPending}
+              disabled={!editContactForm.firstName || editContactMutation.isPending}
               data-testid="button-save-edit-contact"
             >
               {editContactMutation.isPending ? "Saving…" : "Save Changes"}

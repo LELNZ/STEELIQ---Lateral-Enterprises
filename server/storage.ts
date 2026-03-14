@@ -639,13 +639,30 @@ export class DatabaseStorage implements IStorage {
     if (filters?.category) conditions.push(eq(customerContacts.category, filters.category));
     if (filters?.search) {
       const q = `%${filters.search}%`;
-      conditions.push(or(ilike(customerContacts.name, q), ilike(customerContacts.email, q), ilike(customerContacts.phone, q))!);
+      const matchingCustomerIds = await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(ilike(customers.name, q));
+      const customerIdList = matchingCustomerIds.map((c) => c.id);
+      const searchOr = or(
+        ilike(customerContacts.firstName, q),
+        ilike(customerContacts.lastName, q),
+        ilike(customerContacts.email, q),
+        ilike(customerContacts.phone, q),
+        ilike(customerContacts.mobile, q),
+        customerIdList.length > 0 ? inArray(customerContacts.customerId, customerIdList) : sql`false`,
+      );
+      conditions.push(searchOr!);
     }
-    return db.select().from(customerContacts).where(and(...conditions)).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+    return db
+      .select()
+      .from(customerContacts)
+      .where(and(...conditions))
+      .orderBy(asc(customerContacts.firstName), asc(customerContacts.lastName));
   }
 
   async getCustomerContacts(customerId: string): Promise<CustomerContact[]> {
-    return db.select().from(customerContacts).where(and(eq(customerContacts.customerId, customerId), isNull(customerContacts.archivedAt))).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.name));
+    return db.select().from(customerContacts).where(and(eq(customerContacts.customerId, customerId), isNull(customerContacts.archivedAt))).orderBy(desc(customerContacts.isPrimary), asc(customerContacts.firstName), asc(customerContacts.lastName));
   }
 
   async getContact(id: string): Promise<CustomerContact | undefined> {

@@ -1711,11 +1711,12 @@ export async function registerRoutes(
   });
 
   const contactBodySchema = z.object({
-    name: z.string().min(1),
+    firstName: z.string().min(1),
+    lastName: z.string().optional().nullable(),
+    roleTitle: z.string().optional().nullable(),
     email: z.string().email().optional().nullable(),
     phone: z.string().optional().nullable(),
     mobile: z.string().optional().nullable(),
-    role: z.string().optional().nullable(),
     category: z.enum(["client", "supplier", "subcontractor", "consultant", "other"]).default("client"),
     notes: z.string().optional().nullable(),
     isPrimary: z.boolean().default(false),
