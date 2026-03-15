@@ -1,0 +1,464 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 4
+INVOICE LIFECYCLE + XERO SCAFFOLD
+WITH INVOICE PATH AUDIT AND CANONICAL FLOW ENFORCEMENT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- internal quote lifecycle remains quote-based
+- customer-facing document label setting already exists
+- numbering controls already exist
+- Customers are global/shared records
+- Contacts are global/shared records
+- Projects belong to one customer
+- Jobs are division-owned
+- quote customer/project linkage now has one canonical safe route
+- LJ estimating builder must remain operationally unchanged
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF is locked
+
+CRITICAL LJ RULE
+
+The current Lateral Joinery estimation builder must remain operationally unchanged.
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder in this phase.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Build the first safe operational invoice lifecycle and Xero scaffold.
+
+This phase must:
+1. audit current invoice routes/UI and enforce one canonical invoice flow
+2. harden invoice creation rules and status flow
+3. preserve SteelIQ as the operational invoice record owner before Xero push
+4. add Xero scaffold fields and push workflow safely
+5. store Xero invoice identifiers and returned live invoice number
+6. display Xero invoice number/status clearly once pushed
+7. preserve accounting integrity and reissue safety
+8. provide minimum practical UI/admin surfaces required for real staff use
+
+This phase is:
+- invoice lifecycle foundation
+- Xero scaffold / push foundation
+
+This phase is NOT:
+- a full accounting replacement
+- payment reconciliation completion
+- customer portal
+- variation workflow
+- retention workflow
+- back-costing
+- a redesign of quotes/jobs/customers
+
+==================================================
+PART 0 — MANDATORY PRE-FLIGHT AUDIT
+==================================================
+
+Before implementing, audit the current codebase for invoice-related paths.
+
+Required audit:
+- all invoice routes
+- all invoice UI entry points
+- all invoice status write paths
+- all invoice number generation paths
+- all current Xero-related fields/usages
+- whether there are duplicate or conflicting invoice creation flows
+
+Required decision:
+Define and preserve one canonical invoice flow for this phase.
+
+If duplicate/unsafe invoice write paths exist:
+- align them
+- retire dead paths
+- or route them into the canonical flow
+Do NOT leave conflicting invoice lifecycle paths in place.
+
+You must report this audit truthfully in the handover.
+
+==================================================
+PART 1 — INVOICE SOURCE AND OWNERSHIP RULES
+==================================================
+
+For this phase, implement and preserve these exact rules:
+
+1. SteelIQ owns the operational invoice record
+2. Xero becomes accounting truth once the invoice is pushed
+3. SteelIQ must keep its own stable internal invoice record identity
+4. Xero invoice number becomes the official accounting-facing invoice number once returned by Xero
+5. Pushed invoices must retain:
+   - internal SteelIQ invoice id
+   - Xero invoice id
+   - Xero invoice number
+   - Xero status
+6. changing/reissuing a pushed invoice must not silently overwrite accounting history
+7. if a pushed invoice must be replaced, the system must warn that the Xero invoice must be deleted before replacement/reissue
+
+Do NOT make SteelIQ depend solely on Xero’s invoice number as the only identifier.
+
+==================================================
+PART 2 — CANONICAL INVOICE CREATION RULES
+==================================================
+
+Define the canonical invoice creation rule for this phase.
+
+Required source rule:
+Invoices must be created from accepted commercial/operational context only.
+
+Safe minimum rule for this phase:
+- invoice can be created from an accepted quote context
+- if a linked job exists, the invoice should inherit its operational context where relevant
+- invoice must inherit and store, where available:
+  - quoteId
+  - quoteRevisionId / acceptedRevisionId if your current model uses this path
+  - customerId
+  - projectId
+  - divisionCode
+
+Required validation:
+- do not allow invoice creation from unaccepted quote state
+- do not allow invoices with broken customer/project/division linkage if source data exists
+- do not allow invoice creation paths that bypass the canonical validation
+
+If current UI already creates deposit invoices from accepted quote detail, keep that as the canonical starting point unless audit proves otherwise.
+
+==================================================
+PART 3 — INVOICE STATUS LIFECYCLE
+==================================================
+
+Implement a clear, minimal, safe invoice lifecycle for this phase.
+
+Required statuses for this phase:
+- draft
+- ready_for_xero
+- pushed_to_xero_draft
+- approved
+- returned_to_draft
+
+Required meaning:
+- draft:
+  internal editable invoice draft, not yet pushed
+- ready_for_xero:
+  validated and intentionally ready to push
+- pushed_to_xero_draft:
+  successfully created in Xero as a draft invoice
+- approved:
+  approved/finalized state if current system/Xero flow supports it safely
+- returned_to_draft:
+  operationally returned to draft after warning logic, not silently rewriting history
+
+Required rules:
+- define allowed transitions clearly
+- do not allow arbitrary status mutation everywhere
+- do not let UI bypass allowed state transitions
+- do not silently rewrite pushed invoice history
+
+If approval is not fully safe yet, keep approved minimal and report limitations truthfully.
+
+==================================================
+PART 4 — XERO SCAFFOLD AND PUSH FLOW
+==================================================
+
+Build the first safe Xero push scaffold.
+
+Required outcome:
+SteelIQ can push an invoice to Xero in a controlled way and store the returned accounting identifiers.
+
+Required stored fields / usage:
+- xeroInvoiceId
+- xeroInvoiceNumber
+- xeroStatus
+- pushedAt if not already represented safely
+- any minimal sync metadata required for safe traceability
+
+Required push behavior:
+- user creates invoice draft in SteelIQ
+- user marks/sends/pushes invoice through a practical UI action
+- backend sends invoice payload to Xero through the integration scaffold
+- on success, SteelIQ stores returned:
+  - Xero invoice id
+  - Xero invoice number
+  - Xero status
+- invoice status becomes pushed_to_xero_draft or the safest equivalent supported by the implementation
+
+Required UI behavior:
+- before push: show internal draft state
+- after push: clearly show returned Xero invoice number
+- after push: clearly show Xero-linked status
+- if push fails: clear error feedback, no ambiguous partial-success UI
+
+IMPORTANT:
+If true live Xero API push cannot be completed safely in this phase due to environment/config limitations, implement the complete scaffold and wiring truthfully, but do not falsely claim end-to-end live Xero push is complete. Separate:
+- complete scaffold
+- live push verified
+- not verified / blocked by credentials/config
+
+==================================================
+PART 5 — INVOICE NUMBERING RULES
+==================================================
+
+Implement the correct numbering behavior for this phase.
+
+Required rule:
+- SteelIQ may create a draft internal invoice record with its own stable reference/number
+- once pushed to Xero, the returned Xero invoice number must be stored and displayed as the official accounting invoice number
+
+UI requirement:
+- clearly distinguish internal draft identity from official Xero invoice number
+- once Xero number exists, display it prominently
+- do not mutate historical identity ambiguously
+
+Do NOT redesign all numbering architecture.
+Do NOT remove SteelIQ’s internal invoice identity.
+
+==================================================
+PART 6 — REISSUE / RETURN-TO-DRAFT SAFETY
+==================================================
+
+Implement and/or harden safe behavior for pushed invoices.
+
+Required behavior:
+- if an invoice has been pushed to Xero, returning/replacing/reissuing it must warn the user that the Xero invoice must be deleted before replacement/reissue
+- this warning must be visible in practical UI, not backend-only
+- do not allow silent accounting ambiguity
+
+If current return-to-draft logic exists, align it to this rule and make the UI operationally clear.
+
+==================================================
+PART 7 — UI / OPERATIONAL SURFACES REQUIRED
+==================================================
+
+To count as complete, this phase must include practical UI surfaces for staff use.
+
+Required surfaces:
+1. invoice list/detail visibility sufficient to see:
+   - internal invoice number/reference
+   - type
+   - customer/project context where practical
+   - status
+   - Xero number if pushed
+   - Xero status if pushed
+
+2. accepted quote detail / invoice area must support:
+   - creating invoice draft(s)
+   - seeing created invoices
+   - push-to-Xero action or clearly staged ready-for-Xero action
+   - warning behavior on return/reissue
+
+3. clear status badges/labels
+4. clear error/success feedback for push attempts
+5. no backend-only completion
+
+Do not mark this phase complete if the Xero/invoice logic exists only in code without a usable staff surface.
+
+==================================================
+PART 8 — SCOPE LIMITS
+==================================================
+
+This phase may include:
+- deposit invoice flow fully
+- progress/final scaffolding only if already cheap and safe
+
+But do NOT expand scope into:
+- full staged payment engine
+- variation invoices
+- retention release completion
+- payment reconciliation
+- debtor management
+- credit control workflows
+- portal invoice visibility
+- Xero webhook sync completion
+- full approvals redesign
+
+Keep scope tight and production-safe.
+
+==================================================
+NOT IN SCOPE
+==================================================
+
+Do NOT implement any of the following in this phase:
+- customer portal
+- payment reconciliation engine
+- bank feed logic
+- variation workflow
+- retention workflow
+- back-costing
+- LEL estimator
+- library redesign
+- granular permissions redesign
+- jobs architecture redesign
+- quote lifecycle redesign
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal schema additions required for safe invoice lifecycle + Xero linkage
+- minimal route hardening for canonical invoice flow
+- minimal Xero integration scaffold routes/actions if required
+- minimal UI changes on quote detail/invoice surfaces/invoice listing
+- minimal status transition enforcement
+
+Not allowed:
+- broad schema refactor
+- duplicate invoice APIs
+- speculative accounting abstractions
+- unrelated module redesign
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal commercial lifecycle remains quote-based
+- accepted quote history remains frozen unless safely reverted under allowed rules
+- Customers remain global/shared
+- Contacts remain global/shared
+- Projects belong to one customer
+- Jobs remain division-owned
+- invoices consume accepted/job state and do not rewrite quote history
+- LJ estimating builder remains functionally unchanged
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. invoice pre-flight audit results for all invoice routes/write paths
+2. canonical invoice flow identified and enforced
+3. accepted quote can create invoice draft safely
+4. invoice inherits coherent quote/customer/project/division linkage
+5. invoice statuses follow the intended allowed lifecycle
+6. push-to-Xero action behaves correctly for success/failure paths
+7. returned Xero invoice id/number/status are stored and displayed correctly
+8. pushed invoice reissue/return-to-draft warning works clearly
+9. no duplicate unsafe invoice write path remains
+10. existing quote detail still works
+11. accepted quote -> job conversion still works
+12. LJ estimate builder still creates/edits estimates correctly
+13. quote preview still works through QuoteDocument -> QuoteRenderModel -> Preview/PDF
+14. PDF export still works through the locked pipeline
+15. TypeScript passes
+16. Build/runtime checks pass
+
+If live Xero push could not be verified, explicitly state:
+- what was implemented
+- what remains unverified
+- what environment/config is required to verify it
+
+Do not claim completion if:
+- invoice lifecycle is ambiguous
+- duplicate invoice write paths remain
+- Xero number is not stored/displayed clearly
+- pushed invoice history can be silently overwritten
+- UI operational surfaces are missing
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- what the canonical invoice flow now is
+- whether any legacy/duplicate invoice write path remained
+- how invoice status transitions now work
+- how SteelIQ internal invoice identity works
+- how Xero invoice id/number/status are stored
+- whether live Xero push was truly verified or only scaffolded
+- what minimum next step is recommended after this phase

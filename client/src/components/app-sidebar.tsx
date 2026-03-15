@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2, Contact } from "lucide-react";
+import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2, Contact, ReceiptText } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useAuth } from "@/lib/auth-context";
@@ -104,6 +104,15 @@ export function AppSidebar() {
                   <Link href="/quotes" onClick={(e) => guardedClick(e, "/quotes")} data-testid="link-sidebar-quotes">
                     <FileText />
                     <span>Quotes</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={location.startsWith("/invoices")} tooltip="Invoices">
+                  <Link href="/invoices" onClick={(e) => guardedClick(e, "/invoices")} data-testid="link-sidebar-invoices">
+                    <ReceiptText />
+                    <span>Invoices</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

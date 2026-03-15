@@ -6,6 +6,7 @@ import {
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
+  VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
 } from "@shared/schema";
 import { z } from "zod";
 import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
@@ -1899,10 +1900,32 @@ export async function registerRoutes(
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
+      let inheritedFields: {
+        quoteRevisionId?: string | null;
+        customerId?: string | null;
+        projectId?: string | null;
+        divisionCode?: string | null;
+      } = {};
+
+      if (parsed.data.quoteId) {
+        const quote = await storage.getQuote(parsed.data.quoteId);
+        if (!quote) return res.status(404).json({ error: "Quote not found." });
+        if (quote.status !== "accepted") {
+          return res.status(400).json({ error: "Invoices can only be created from accepted quotes." });
+        }
+        inheritedFields = {
+          quoteRevisionId: parsed.data.quoteRevisionId ?? quote.acceptedRevisionId ?? null,
+          customerId: parsed.data.customerId ?? quote.customerId ?? null,
+          projectId: parsed.data.projectId ?? quote.projectId ?? null,
+          divisionCode: parsed.data.divisionCode ?? quote.divisionId ?? null,
+        };
+      }
+
       const number = await storage.getNextInvoiceNumber();
       const userId = req.user?.id ?? null;
       const invoice = await storage.createInvoice({
         ...parsed.data,
+        ...inheritedFields,
         number,
         status: "draft",
         createdByUserId: userId ?? undefined,
@@ -1941,11 +1964,78 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Not found" });
       const userId = req.user?.id ?? null;
+
       if (parsed.data.status) {
-        logActivity("invoice_updated", "invoice", invoice.id, userId, { from: invoice.status, to: parsed.data.status });
+        const currentStatus = invoice.status as InvoiceStatus;
+        const targetStatus = parsed.data.status as InvoiceStatus;
+        const allowed = VALID_INVOICE_TRANSITIONS[currentStatus] ?? [];
+        if (!allowed.includes(targetStatus)) {
+          return res.status(400).json({
+            error: `Cannot transition invoice from "${currentStatus}" to "${targetStatus}". Allowed: ${allowed.join(", ") || "none"}.`,
+          });
+        }
+        logActivity("invoice_updated", "invoice", invoice.id, userId, { from: currentStatus, to: targetStatus });
       }
+
       const updated = await storage.updateInvoice(req.params.id, parsed.data as any);
       return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Push Invoice to Xero (scaffold) ──────────────────────────────────────
+  app.post("/api/invoices/:id/push-to-xero", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found." });
+
+      if (invoice.status !== "ready_for_xero") {
+        return res.status(400).json({
+          error: `Invoice must be in 'ready_for_xero' status before pushing. Current status: '${invoice.status}'.`,
+        });
+      }
+
+      if (invoice.xeroInvoiceId) {
+        return res.status(409).json({
+          error: "This invoice has already been pushed to Xero. To replace it, use return-to-draft (and delete the Xero invoice first).",
+          xeroInvoiceId: invoice.xeroInvoiceId,
+          xeroInvoiceNumber: invoice.xeroInvoiceNumber,
+        });
+      }
+
+      const xeroConfigured = !!(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET && process.env.XERO_ACCESS_TOKEN);
+      const userId = req.user?.id ?? null;
+
+      if (xeroConfigured) {
+        return res.status(501).json({
+          error: "Live Xero push is scaffolded but not yet wired to the Xero API client. Configure Xero OAuth credentials and implement the Xero API call to enable live push.",
+          xeroMode: "live_not_implemented",
+        });
+      }
+
+      const mockXeroInvoiceId = `XERO-MOCK-${Date.now()}`;
+      const mockXeroInvoiceNumber = `INV-${String(Math.floor(Math.random() * 90000) + 10000)}`;
+      const mockXeroStatus = "DRAFT";
+
+      const updated = await storage.updateInvoice(req.params.id, {
+        xeroInvoiceId: mockXeroInvoiceId,
+        xeroInvoiceNumber: mockXeroInvoiceNumber,
+        xeroStatus: mockXeroStatus,
+        status: "pushed_to_xero_draft",
+      } as any);
+
+      logActivity("invoice_pushed_to_xero", "invoice", invoice.id, userId, {
+        xeroMode: "scaffold",
+        xeroInvoiceId: mockXeroInvoiceId,
+        xeroInvoiceNumber: mockXeroInvoiceNumber,
+      });
+
+      return res.json({
+        invoice: updated,
+        xeroMode: "scaffold",
+        xeroNote: "This is a scaffold push. Xero credentials are not configured. Mock identifiers have been stored for testing the workflow. To enable live push, configure XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_ACCESS_TOKEN.",
+      });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

@@ -525,7 +525,7 @@ export default function QuoteDetail() {
       {quote.status === "accepted" && (
         <>
           <Separator />
-          <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} />
+          <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} customerId={quote.customerId ?? undefined} projectId={quote.projectId ?? undefined} acceptedRevisionId={quote.acceptedRevisionId ?? undefined} />
           <Separator />
           <ConvertToJobSection quoteId={quote.id} />
           <Separator />
@@ -1050,7 +1050,21 @@ function ConvertToJobSection({ quoteId }: { quoteId: string }) {
   );
 }
 
-function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: string; acceptedValue: number; divisionCode?: string }) {
+function InvoiceSection({
+  quoteId,
+  acceptedValue,
+  divisionCode,
+  customerId,
+  projectId,
+  acceptedRevisionId,
+}: {
+  quoteId: string;
+  acceptedValue: number;
+  divisionCode?: string;
+  customerId?: string;
+  projectId?: string;
+  acceptedRevisionId?: string;
+}) {
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
   const [depositMode, setDepositMode] = useState<"percentage" | "fixed">("percentage");
@@ -1075,6 +1089,9 @@ function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: str
       const res = await apiRequest("POST", "/api/invoices", {
         quoteId,
         divisionCode,
+        customerId: customerId ?? null,
+        projectId: projectId ?? null,
+        quoteRevisionId: acceptedRevisionId ?? null,
         type: "deposit",
         depositType: depositMode,
         depositPercentage: depositMode === "percentage" ? parseFloat(depositPct) : null,
@@ -1085,6 +1102,10 @@ function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: str
           ? `${depositPct}% deposit on accepted quotation`
           : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to create invoice");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -1093,6 +1114,55 @@ function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: str
       toast({ title: "Deposit invoice created" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const markReadyMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "ready_for_xero" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to mark ready");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      toast({ title: "Invoice marked ready for Xero" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const unmarkReadyMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "draft" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to unmark");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      toast({ title: "Invoice returned to draft" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const pushToXeroMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("POST", `/api/invoices/${invoiceId}/push-to-xero`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Push to Xero failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      const note = data.xeroMode === "scaffold" ? " (scaffold mode — no live Xero credentials)" : "";
+      toast({ title: "Pushed to Xero" + note });
+    },
+    onError: (e: any) => toast({ title: "Push to Xero failed", description: e.message, variant: "destructive" }),
   });
 
   const returnToDraftMutation = useMutation({
@@ -1139,7 +1209,7 @@ function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: str
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Excl. GST</TableHead>
                 <TableHead className="text-right">Incl. GST</TableHead>
-                <TableHead className="w-[100px]" />
+                <TableHead className="w-[160px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1148,12 +1218,16 @@ function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: str
                   <TableCell className="font-mono text-sm" data-testid={`text-invoice-number-${inv.id}`}>{inv.number}</TableCell>
                   <TableCell className="text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
                   <TableCell>
-                    <Badge variant={inv.status === "approved" ? "default" : inv.status === "returned_to_draft" ? "destructive" : "secondary"} className="text-xs">
-                      {INVOICE_STATUS_LABELS[inv.status] || inv.status}
-                    </Badge>
-                    {inv.xeroInvoiceId && (
-                      <span className="ml-2 text-xs text-muted-foreground">Xero: {inv.xeroInvoiceNumber || inv.xeroInvoiceId}</span>
-                    )}
+                    <div className="space-y-1">
+                      <Badge variant={inv.status === "approved" ? "default" : inv.status === "returned_to_draft" ? "destructive" : inv.status === "ready_for_xero" ? "outline" : "secondary"} className="text-xs">
+                        {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                      </Badge>
+                      {inv.xeroInvoiceNumber && (
+                        <p className="text-xs font-mono text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
+                          Xero: {inv.xeroInvoiceNumber}
+                        </p>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right text-sm">
                     ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
@@ -1161,19 +1235,57 @@ function InvoiceSection({ quoteId, acceptedValue, divisionCode }: { quoteId: str
                   <TableCell className="text-right text-sm font-medium">
                     ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell>
-                    {["pushed_to_xero_draft", "approved"].includes(inv.status) && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => returnToDraftMutation.mutate(inv.id)}
-                        disabled={returnToDraftMutation.isPending}
-                        data-testid={`button-return-to-draft-${inv.id}`}
-                      >
-                        Return to Draft
-                      </Button>
-                    )}
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1 flex-wrap">
+                      {["draft", "returned_to_draft"].includes(inv.status) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => markReadyMutation.mutate(inv.id)}
+                          disabled={markReadyMutation.isPending}
+                          data-testid={`button-mark-ready-${inv.id}`}
+                        >
+                          Mark Ready
+                        </Button>
+                      )}
+                      {inv.status === "ready_for_xero" && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => unmarkReadyMutation.mutate(inv.id)}
+                            disabled={unmarkReadyMutation.isPending}
+                            data-testid={`button-unmark-ready-${inv.id}`}
+                          >
+                            Unmark
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => pushToXeroMutation.mutate(inv.id)}
+                            disabled={pushToXeroMutation.isPending}
+                            data-testid={`button-push-to-xero-${inv.id}`}
+                          >
+                            Push to Xero
+                          </Button>
+                        </>
+                      )}
+                      {["pushed_to_xero_draft", "approved"].includes(inv.status) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => returnToDraftMutation.mutate(inv.id)}
+                          disabled={returnToDraftMutation.isPending}
+                          data-testid={`button-return-to-draft-${inv.id}`}
+                        >
+                          Return to Draft
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
