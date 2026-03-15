@@ -55,6 +55,7 @@ export const customers = pgTable("customers", {
   phone: text("phone"),
   address: text("address"),
   notes: text("notes"),
+  xeroContactId: text("xero_contact_id"),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });

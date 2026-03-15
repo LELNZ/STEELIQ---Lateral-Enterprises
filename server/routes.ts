@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, pool, formatQuoteNumber } from "./storage";
+import { isXeroConfigured, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, XeroPushError } from "./xero-client";
 import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
@@ -1328,19 +1329,19 @@ export async function registerRoutes(
     if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
       return res.status(403).json({ error: "Admin access required" });
     }
-    const REQUIRED_FIELDS = ["XERO_CLIENT_ID", "XERO_CLIENT_SECRET", "XERO_ACCESS_TOKEN"];
-    const OPTIONAL_FIELDS = ["XERO_TENANT_ID"];
-    const presentFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS].filter((f) => !!process.env[f]);
+    const REQUIRED_FIELDS = ["XERO_CLIENT_ID", "XERO_CLIENT_SECRET", "XERO_ACCESS_TOKEN", "XERO_TENANT_ID"];
+    const OPTIONAL_FIELDS: string[] = [];
+    const presentFields = REQUIRED_FIELDS.filter((f) => !!process.env[f]);
     const allRequiredPresent = REQUIRED_FIELDS.every((f) => !!process.env[f]);
 
-    let mode: "not_configured" | "scaffold" | "credentials_present";
+    let mode: "not_configured" | "scaffold" | "live_wired";
     let status: string;
     if (allRequiredPresent) {
-      mode = "credentials_present";
-      status = "Credentials present — live push scaffolded but not yet wired to Xero API client";
+      mode = "live_wired";
+      status = "Live push wired — all credentials present. Push path active; live verification pending first successful push.";
     } else if (presentFields.length > 0) {
       mode = "scaffold";
-      status = "Partial credentials present — scaffold mode only";
+      status = `Partial credentials (${presentFields.length}/${REQUIRED_FIELDS.length}) — scaffold mode only`;
     } else {
       mode = "not_configured";
       status = "Not configured — scaffold mode only";
@@ -1349,13 +1350,19 @@ export async function registerRoutes(
     return res.json({
       mode,
       configured: allRequiredPresent,
-      liveCapable: false,
+      livePushWired: true,
+      liveCapable: allRequiredPresent,
       status,
       requiredFields: REQUIRED_FIELDS,
       optionalFields: OPTIONAL_FIELDS,
       presentFields,
       missingFields: REQUIRED_FIELDS.filter((f) => !process.env[f]),
-      scaffoldNote: "Live Xero push is not yet wired to the Xero API client. Configure all required environment variables and implement the Xero OAuth flow to enable live push.",
+      scaffoldNote: allRequiredPresent
+        ? null
+        : "Live Xero push is wired but credentials are missing. Set XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_ACCESS_TOKEN, and XERO_TENANT_ID to enable live push. Until then, pushes run in scaffold mode.",
+      tokenNote: allRequiredPresent
+        ? "Using static XERO_ACCESS_TOKEN. Tokens expire — if push returns 401, re-authenticate via the Xero Developer Portal and update XERO_ACCESS_TOKEN. A full OAuth refresh flow is recommended for production."
+        : null,
     });
   });
 
@@ -1707,6 +1714,7 @@ export async function registerRoutes(
       phone: z.string().optional().nullable(),
       address: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
+      xeroContactId: z.string().optional().nullable(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -2045,7 +2053,9 @@ export async function registerRoutes(
     }
   });
 
-  // ─── Push Invoice to Xero (scaffold) ──────────────────────────────────────
+  // ─── Push Invoice to Xero ─────────────────────────────────────────────────
+  // Live push when all 4 env vars are present; scaffold otherwise.
+  // On live failure: invoice is NOT updated — left in ready_for_xero for retry.
   app.post("/api/invoices/:id/push-to-xero", async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
@@ -2059,22 +2069,86 @@ export async function registerRoutes(
 
       if (invoice.xeroInvoiceId) {
         return res.status(409).json({
-          error: "This invoice has already been pushed to Xero. To replace it, use return-to-draft (and delete the Xero invoice first).",
+          error: "This invoice has already been pushed to Xero. To replace it, return to draft first (and delete the Xero invoice in Xero before reissuing).",
           xeroInvoiceId: invoice.xeroInvoiceId,
           xeroInvoiceNumber: invoice.xeroInvoiceNumber,
         });
       }
 
-      const xeroConfigured = !!(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET && process.env.XERO_ACCESS_TOKEN);
       const userId = req.user?.id ?? null;
 
-      if (xeroConfigured) {
-        return res.status(501).json({
-          error: "Live Xero push is scaffolded but not yet wired to the Xero API client. Configure Xero OAuth credentials and implement the Xero API call to enable live push.",
-          xeroMode: "live_not_implemented",
+      // ── Live push path ──────────────────────────────────────────────────────
+      if (isXeroConfigured()) {
+        let customer: { name?: string | null; xeroContactId?: string | null } | null = null;
+        if (invoice.customerId) {
+          customer = await storage.getCustomer(invoice.customerId) ?? null;
+        }
+
+        let xeroPayload: ReturnType<typeof buildXeroInvoicePayload>;
+        try {
+          xeroPayload = buildXeroInvoicePayload({
+            invoiceNumber: invoice.number ?? undefined,
+            type: invoice.type,
+            customerName: customer?.name ?? null,
+            xeroContactId: customer?.xeroContactId ?? null,
+            amountExclGst: invoice.amountExclGst ?? undefined,
+            description: invoice.description ?? null,
+            notes: invoice.notes ?? null,
+          });
+        } catch (mappingErr: any) {
+          return res.status(422).json({
+            error: `Invoice payload mapping failed: ${mappingErr.message}`,
+            xeroMode: "live_failed",
+          });
+        }
+
+        let xeroResult: { xeroInvoiceId: string; xeroInvoiceNumber: string; xeroStatus: string };
+        try {
+          const config = getXeroConfig();
+          xeroResult = await createXeroInvoice(xeroPayload, config);
+        } catch (xeroErr: any) {
+          // Live push failed — do NOT update invoice state
+          const isAuthError = xeroErr instanceof XeroPushError && xeroErr.detail.code === 401;
+          const statusCode = xeroErr instanceof XeroPushError && xeroErr.detail.code === 400 ? 422 : 502;
+          logActivity("invoice_push_failed", "invoice", invoice.id, userId, {
+            xeroMode: "live_failed",
+            error: xeroErr.message,
+          });
+          return res.status(statusCode).json({
+            error: xeroErr.message,
+            xeroMode: "live_failed",
+            recoverable: true,
+            hint: isAuthError
+              ? "The Xero access token has expired or is invalid. Update XERO_ACCESS_TOKEN with a fresh token from the Xero Developer Portal."
+              : "The invoice remains in 'ready_for_xero' status and can be retried once the issue is resolved.",
+          });
+        }
+
+        // Success — store real Xero identifiers
+        const updated = await storage.updateInvoice(req.params.id, {
+          xeroInvoiceId: xeroResult.xeroInvoiceId,
+          xeroInvoiceNumber: xeroResult.xeroInvoiceNumber,
+          xeroStatus: xeroResult.xeroStatus,
+          status: "pushed_to_xero_draft",
+        } as any);
+
+        logActivity("invoice_pushed_to_xero", "invoice", invoice.id, userId, {
+          xeroMode: "live",
+          xeroInvoiceId: xeroResult.xeroInvoiceId,
+          xeroInvoiceNumber: xeroResult.xeroInvoiceNumber,
+          xeroStatus: xeroResult.xeroStatus,
+        });
+
+        return res.json({
+          invoice: updated,
+          xeroMode: "live",
+          xeroInvoiceId: xeroResult.xeroInvoiceId,
+          xeroInvoiceNumber: xeroResult.xeroInvoiceNumber,
+          xeroStatus: xeroResult.xeroStatus,
         });
       }
 
+      // ── Scaffold fallback (no credentials configured) ───────────────────────
       const mockXeroInvoiceId = `XERO-MOCK-${Date.now()}`;
       const mockXeroInvoiceNumber = `INV-${String(Math.floor(Math.random() * 90000) + 10000)}`;
       const mockXeroStatus = "DRAFT";
@@ -2095,7 +2169,9 @@ export async function registerRoutes(
       return res.json({
         invoice: updated,
         xeroMode: "scaffold",
-        xeroNote: "This is a scaffold push. Xero credentials are not configured. Mock identifiers have been stored for testing the workflow. To enable live push, configure XERO_CLIENT_ID, XERO_CLIENT_SECRET, and XERO_ACCESS_TOKEN.",
+        xeroNote:
+          "Scaffold push — Xero credentials are not fully configured. Mock identifiers stored for workflow testing. " +
+          "Set XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_ACCESS_TOKEN, and XERO_TENANT_ID to enable live push.",
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });

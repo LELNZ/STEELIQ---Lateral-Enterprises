@@ -1861,15 +1861,17 @@ function SystemModeTab() {
 }
 
 type XeroStatusResponse = {
-  mode: "not_configured" | "scaffold" | "credentials_present";
+  mode: "not_configured" | "scaffold" | "live_wired";
   configured: boolean;
+  livePushWired: boolean;
   liveCapable: boolean;
   status: string;
   requiredFields: string[];
   optionalFields: string[];
   presentFields: string[];
   missingFields: string[];
-  scaffoldNote: string;
+  scaffoldNote: string | null;
+  tokenNote: string | null;
 };
 
 function XeroStatusTab() {
@@ -1878,9 +1880,12 @@ function XeroStatusTab() {
     staleTime: 30_000,
   });
 
-  const modeColor = xeroStatus?.mode === "credentials_present"
-    ? "text-amber-600 dark:text-amber-400"
-    : "text-muted-foreground";
+  const modeColor =
+    xeroStatus?.mode === "live_wired"
+      ? "text-green-700 dark:text-green-400"
+      : xeroStatus?.mode === "scaffold"
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-muted-foreground";
 
   return (
     <div className="space-y-4">
@@ -1898,12 +1903,16 @@ function XeroStatusTab() {
           ) : xeroStatus ? (
             <>
               <div className="flex items-start justify-between gap-4">
-                <div>
+                <div className="space-y-0.5">
                   <p className={`text-sm font-semibold ${modeColor}`} data-testid="text-xero-status">
                     {xeroStatus.status}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Live push capable: <strong>No</strong> — scaffold only in this release
+                  <p className="text-xs text-muted-foreground">
+                    Live push path: <strong>Wired</strong> — active when all credentials are present
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Live push capable: <strong>{xeroStatus.liveCapable ? "Yes" : "No"}</strong>
+                    {xeroStatus.liveCapable && " — awaiting first verified push"}
                   </p>
                 </div>
                 <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => refetch()} disabled={isFetching} data-testid="button-xero-refresh">
@@ -1955,12 +1964,27 @@ function XeroStatusTab() {
 
               <Separator />
 
-              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
-                <p className="font-semibold text-foreground">Scaffold Note</p>
-                <p>{xeroStatus.scaffoldNote}</p>
-                <p className="mt-2">
+              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-2">
+                {xeroStatus.scaffoldNote && (
+                  <div className="space-y-1">
+                    <p className="font-semibold text-foreground">Configuration Required</p>
+                    <p>{xeroStatus.scaffoldNote}</p>
+                  </div>
+                )}
+                {xeroStatus.tokenNote && (
+                  <div className="space-y-1">
+                    <p className="font-semibold text-foreground">Token Note</p>
+                    <p>{xeroStatus.tokenNote}</p>
+                  </div>
+                )}
+                <p>
                   <strong>Environment variables are set on the server — values are never exposed here.</strong>{" "}
                   Only presence/absence is reported above.
+                </p>
+                <p>
+                  For reliable Xero contact matching, set a{" "}
+                  <strong>Xero Contact ID</strong> on each customer record in the Customers page.
+                  Without it, Xero will match or create a contact by name.
                 </p>
               </div>
             </>

@@ -150,6 +150,37 @@ function CustomerRow({ customer }: { customer: Customer }) {
       isPrimary: contact.isPrimary ?? false,
     });
   }
+  const [showEditCustomer, setShowEditCustomer] = useState(false);
+  const [editCustomerForm, setEditCustomerForm] = useState({
+    name: customer.name,
+    email: customer.email ?? "",
+    phone: customer.phone ?? "",
+    address: customer.address ?? "",
+    notes: customer.notes ?? "",
+    xeroContactId: customer.xeroContactId ?? "",
+  });
+
+  const editCustomerMutation = useMutation({
+    mutationFn: async (data: typeof editCustomerForm) => {
+      const payload = {
+        ...data,
+        xeroContactId: data.xeroContactId.trim() || null,
+      };
+      const res = await apiRequest("PATCH", `/api/customers/${customer.id}`, payload);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to update customer");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      setShowEditCustomer(false);
+      toast({ title: "Customer updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   const [projectForm, setProjectForm] = useState({ name: "", address: "", description: "", notes: "" });
 
   const addProjectMutation = useMutation({
@@ -190,6 +221,28 @@ function CustomerRow({ customer }: { customer: Customer }) {
         <TableRow>
           <TableCell colSpan={5} className="bg-muted/20 py-3 px-6">
             <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  {customer.email && <p><Mail className="h-3 w-3 inline mr-1" />{customer.email}</p>}
+                  {customer.phone && <p><Phone className="h-3 w-3 inline mr-1" />{customer.phone}</p>}
+                  {customer.address && <p><MapPin className="h-3 w-3 inline mr-1" />{customer.address}</p>}
+                  {customer.xeroContactId && (
+                    <p className="font-mono text-xs text-muted-foreground">Xero ID: {customer.xeroContactId}</p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={(e) => { e.stopPropagation(); setEditCustomerForm({ name: customer.name, email: customer.email ?? "", phone: customer.phone ?? "", address: customer.address ?? "", notes: customer.notes ?? "", xeroContactId: customer.xeroContactId ?? "" }); setShowEditCustomer(true); }}
+                  data-testid={`button-edit-customer-${customer.id}`}
+                >
+                  <Pencil className="h-3 w-3 mr-1" /> Edit Customer
+                </Button>
+              </div>
+
+              <Separator />
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contacts</p>
@@ -462,6 +515,64 @@ function CustomerRow({ customer }: { customer: Customer }) {
               data-testid="button-save-project"
             >
               {addProjectMutation.isPending ? "Creating…" : "Create Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditCustomer} onOpenChange={setShowEditCustomer}>
+        <DialogContent className="max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Edit Customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Company / Customer Name *</Label>
+              <Input value={editCustomerForm.name} onChange={(e) => setEditCustomerForm((f) => ({ ...f, name: e.target.value }))} data-testid="input-edit-customer-name" />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input type="email" value={editCustomerForm.email} onChange={(e) => setEditCustomerForm((f) => ({ ...f, email: e.target.value }))} data-testid="input-edit-customer-email" />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input value={editCustomerForm.phone} onChange={(e) => setEditCustomerForm((f) => ({ ...f, phone: e.target.value }))} data-testid="input-edit-customer-phone" />
+            </div>
+            <div>
+              <Label>Address</Label>
+              <Input value={editCustomerForm.address} onChange={(e) => setEditCustomerForm((f) => ({ ...f, address: e.target.value }))} data-testid="input-edit-customer-address" />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea value={editCustomerForm.notes} onChange={(e) => setEditCustomerForm((f) => ({ ...f, notes: e.target.value }))} rows={2} data-testid="input-edit-customer-notes" />
+            </div>
+            <Separator />
+            <div>
+              <Label className="flex items-center gap-1.5">
+                Xero Contact ID
+                <span className="text-xs font-normal text-muted-foreground">(optional — for reliable Xero contact linking)</span>
+              </Label>
+              <Input
+                value={editCustomerForm.xeroContactId}
+                onChange={(e) => setEditCustomerForm((f) => ({ ...f, xeroContactId: e.target.value }))}
+                placeholder="e.g. 00000000-0000-0000-0000-000000000000"
+                className="font-mono text-xs"
+                data-testid="input-edit-customer-xero-contact-id"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Found in Xero: Contacts → select contact → copy UUID from the URL.
+                If not set, Xero will match or create a contact by name.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditCustomer(false)}>Cancel</Button>
+            <Button
+              onClick={() => editCustomerMutation.mutate(editCustomerForm)}
+              disabled={!editCustomerForm.name.trim() || editCustomerMutation.isPending}
+              data-testid="button-save-edit-customer"
+            >
+              {editCustomerMutation.isPending ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
