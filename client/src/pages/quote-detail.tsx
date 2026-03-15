@@ -1160,8 +1160,17 @@ function InvoiceSection({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
-      const note = data.xeroMode === "scaffold" ? " (scaffold mode — no live Xero credentials)" : "";
-      toast({ title: "Pushed to Xero" + note });
+      if (data.xeroMode === "live") {
+        toast({
+          title: "Pushed to Xero (Live)",
+          description: `Invoice created in Xero as ${data.xeroInvoiceNumber}. Status: ${data.xeroStatus}.`,
+        });
+      } else {
+        toast({
+          title: "Pushed to Xero (Scaffold)",
+          description: "No live Xero credentials — mock identifiers stored for workflow testing.",
+        });
+      }
     },
     onError: (e: any) => toast({ title: "Push to Xero failed", description: e.message, variant: "destructive" }),
   });
