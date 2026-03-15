@@ -32,6 +32,7 @@ import Contacts from "@/pages/contacts";
 import Users from "@/pages/users";
 import OpJobsList from "@/pages/op-jobs-list";
 import OpJobDetail from "@/pages/op-job-detail";
+import InvoicesPage from "@/pages/invoices";
 
 function Router() {
   return (
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/users" component={Users} />
       <Route path="/op-jobs" component={OpJobsList} />
       <Route path="/op-jobs/:id" component={OpJobDetail} />
+      <Route path="/invoices" component={InvoicesPage} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />

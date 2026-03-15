@@ -469,6 +469,14 @@ export type InvoiceType = typeof INVOICE_TYPES[number];
 export const INVOICE_STATUSES = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved", "returned_to_draft"] as const;
 export type InvoiceStatus = typeof INVOICE_STATUSES[number];
 
+export const VALID_INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
+  draft: ["ready_for_xero"],
+  ready_for_xero: ["draft", "pushed_to_xero_draft"],
+  pushed_to_xero_draft: ["approved", "returned_to_draft"],
+  approved: ["returned_to_draft"],
+  returned_to_draft: ["draft", "ready_for_xero"],
+};
+
 export const DEPOSIT_TYPES = ["percentage", "fixed"] as const;
 export type DepositType = typeof DEPOSIT_TYPES[number];
 
