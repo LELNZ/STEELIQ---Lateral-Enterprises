@@ -1,0 +1,374 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 4.0
+PRE-LIVE XERO HARDENING
+CANONICAL INVOICE SOURCE LOCK + PUSHED-INVOICE SAFETY + XERO ADMIN SURFACE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- internal quote lifecycle remains quote-based
+- customer-facing document label setting already exists
+- numbering controls already exist
+- Customers are global/shared records
+- Contacts are global/shared records
+- Projects belong to one customer
+- Jobs are division-owned
+- quote customer/project linkage now has one canonical safe route
+- invoice lifecycle scaffold exists
+- Xero push currently exists in scaffold mode only
+- LJ estimating builder must remain operationally unchanged
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF is locked
+
+CRITICAL LJ RULE
+
+The current Lateral Joinery estimation builder must remain operationally unchanged.
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder in this phase.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Before live Xero integration, harden the invoice/Xero foundation so there is no ambiguity in source-of-truth, edit safety, or operator controls.
+
+This phase must:
+1. lock invoice creation to the correct accepted commercial truth
+2. remove quoteRevision drift risk in invoice creation
+3. define and enforce pushed-invoice edit safety rules
+4. add a practical Xero admin/settings connection surface
+5. improve finance-facing invoice visibility enough for safe live testing
+6. preserve all current architecture and business rules
+
+This is a pre-live hardening phase.
+It is NOT live Xero completion yet.
+It is NOT a redesign of customers/contacts/accounts.
+It is NOT a general ERP rewrite.
+
+==================================================
+PART 0 — PRE-FLIGHT AUDIT
+==================================================
+
+Before implementing, audit the current codebase for all invoice and Xero-related paths.
+
+Required audit:
+- all invoice creation routes
+- all invoice update routes
+- all invoice UI actions
+- all Xero-related settings/env usage
+- all invoice status mutation paths
+- any current ability to edit pushed invoice commercial fields
+
+You must report this audit truthfully in the handover.
+
+==================================================
+PART 1 — CANONICAL INVOICE SOURCE LOCK
+==================================================
+
+Tighten invoice creation so the system has one safe commercial source rule.
+
+Required rule for this phase:
+- invoice creation must originate from accepted quote context
+- if quote-based invoice creation is used, the system must derive source truth from the accepted quote, not caller overrides
+
+Required behavior:
+When POST /api/invoices is called with quoteId:
+- quote must exist
+- quote must be accepted
+- quoteRevisionId must be derived from quote.acceptedRevisionId
+- customerId must be derived from quote.customerId
+- projectId must be derived from quote.projectId
+- divisionCode must be derived from quote.divisionId
+
+Do NOT allow caller-supplied values to override accepted source truth for these fields when quoteId is present.
+
+If quote.acceptedRevisionId is missing, fail safely and clearly rather than creating an ambiguous invoice.
+
+If there are any other invoice creation paths in UI or backend, align them to this canonical rule or report them truthfully.
+
+==================================================
+PART 2 — PUSHED INVOICE EDIT SAFETY
+==================================================
+
+Define and enforce safe rules for invoices after Xero push.
+
+Required rule:
+Once an invoice has been pushed to Xero, commercial editability must be tightly controlled.
+
+For this phase, implement the safest minimal rule:
+- pushed_to_xero_draft and approved invoices must not allow casual editing of core commercial fields
+- core commercial fields include at minimum:
+  - type
+  - quoteId / quoteRevisionId
+  - customerId
+  - projectId
+  - divisionCode
+  - depositType
+  - depositPercentage
+  - amountExclGst
+  - gstAmount
+  - amountInclGst
+  - description
+- notes may remain editable only if that does not create accounting ambiguity; if unsure, lock notes too and report it
+
+If a pushed invoice must be changed:
+- user must return it to draft through the controlled path
+- user must see the warning that the Xero invoice must be deleted before replacement/reissue
+- do not silently overwrite pushed accounting-linked records
+
+Do NOT implement a full replacement engine yet.
+Do NOT allow broad mutation of pushed invoices.
+
+==================================================
+PART 3 — RETURN-TO-DRAFT / REISSUE SAFETY
+==================================================
+
+Harden return-to-draft behavior.
+
+Required behavior:
+- return-to-draft action must remain explicit and controlled
+- when invoice has xeroInvoiceId/xeroInvoiceNumber, UI must clearly show:
+  - this invoice has been pushed to Xero
+  - the Xero invoice must be deleted before replacement/reissue
+- warning must appear in practical staff UI, not only backend responses
+
+If current UI only shows a toast or vague message, improve it enough to be operationally clear.
+
+Do NOT clear Xero identifiers silently unless the design already safely requires it.
+Preserve auditability.
+
+==================================================
+PART 4 — XERO ADMIN / SETTINGS SURFACE
+==================================================
+
+Add the minimum practical admin/settings surface needed before live Xero work.
+
+Required UI/admin surface:
+A Xero section under Settings or Admin that shows:
+- whether Xero credentials/config appear present
+- whether current mode is scaffold or live-capable
+- the exact required environment/config fields for live enablement
+- a clear status summary such as:
+  - Not configured
+  - Scaffold only
+  - Credentials present but live push not wired
+  - Live-capable (only if truly verified)
+- concise help text for staff/admins
+
+If safe and cheap, include a “Test Xero Configuration” action.
+If not, include clear read-only config status only and report why.
+
+Important:
+- do NOT expose secrets in the UI
+- do NOT dump raw tokens/credentials
+- only show safe presence/health/status information
+
+This is an operational admin surface, not a hidden developer-only feature.
+
+==================================================
+PART 5 — INVOICE UI VISIBILITY HARDENING
+==================================================
+
+Improve invoice visibility enough for safe finance testing.
+
+Required improvements:
+- invoice list and/or quote invoice section should clearly show:
+  - SteelIQ internal invoice reference
+  - invoice status
+  - Xero invoice number when present
+  - Xero status when present
+  - source quote link/reference
+  - customer/project context where practical
+- distinguish clearly between:
+  - internal SteelIQ draft identity
+  - official Xero invoice number once pushed
+
+Do NOT redesign the entire finance module.
+Do only the minimum practical improvements needed for live testing safety.
+
+==================================================
+PART 6 — SCOPE LIMITS
+==================================================
+
+Do NOT implement any of the following in this phase:
+- live OAuth/token refresh completion if it becomes large
+- Xero webhook sync
+- payment reconciliation
+- staged payment engine
+- variation invoices
+- retention workflow
+- customer portal
+- broader Accounts/Relationships redesign
+- Customers/Contacts consolidation redesign
+- LEL estimator
+- library redesign
+- permission redesign
+
+This phase is only pre-live Xero hardening.
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal invoice route hardening
+- minimal status/edit guard rules
+- minimal safe Xero config/status endpoints if required
+- minimal UI/admin surfaces for Xero status
+- minimal invoice list/detail visibility improvements
+- minimal audit logging if needed for edit lock / return-to-draft safety
+
+Not allowed:
+- broad schema refactor
+- speculative accounting abstractions
+- unrelated module redesign
+- hidden alternate invoice flows
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal commercial lifecycle remains quote-based
+- accepted quote history remains frozen unless safely reverted under allowed rules
+- Customers remain global/shared
+- Contacts remain global/shared
+- Projects belong to one customer
+- Jobs remain division-owned
+- invoices consume accepted/job state and do not rewrite quote history
+- LJ estimating builder remains functionally unchanged
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. pre-flight audit results for invoice/Xero paths
+2. invoice creation from accepted quote still works
+3. quote-based invoice creation no longer allows override drift for revision/customer/project/division
+4. invoice creation fails safely if accepted quote truth is incomplete
+5. pushed invoice commercial fields are no longer casually editable
+6. return-to-draft warning is clearly visible in practical UI for Xero-linked invoices
+7. Xero admin/settings surface exists and accurately reports scaffold/live config status
+8. invoice list/detail surfaces clearly distinguish internal invoice reference vs Xero number
+9. no duplicate unsafe invoice edit/write path remains
+10. existing quote detail still works
+11. accepted quote -> job conversion still works
+12. LJ estimate builder still creates/edits estimates correctly
+13. quote preview still works through QuoteDocument -> QuoteRenderModel -> Preview/PDF
+14. PDF export still works through the locked pipeline
+15. TypeScript passes
+16. Build/runtime checks pass
+
+Do not claim completion if:
+- quote-based invoice creation can still drift from accepted truth
+- pushed invoices can still be edited casually
+- Xero config status is only hidden in code with no admin surface
+- reissue safety warning is unclear
+- UI operational surfaces are missing
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- what the canonical invoice creation rule now is
+- whether quoteRevision/customer/project/division override drift was removed
+- what fields are locked once invoice is pushed to Xero
+- how return-to-draft warning now appears to staff
+- what the Xero admin/settings surface shows
+- whether live Xero is still scaffolded or truly ready

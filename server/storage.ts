@@ -156,6 +156,7 @@ export interface IStorage {
   getInvoice(id: string): Promise<Invoice | undefined>;
   getInvoicesByQuote(quoteId: string): Promise<Invoice[]>;
   getAllInvoices(): Promise<Invoice[]>;
+  getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]>;
   updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
 
   getNextJobNumber(divisionCode?: string): Promise<string>;
@@ -742,6 +743,45 @@ export class DatabaseStorage implements IStorage {
 
   async getAllInvoices(): Promise<Invoice[]> {
     return db.select().from(invoices).orderBy(desc(invoices.createdAt));
+  }
+
+  async getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]> {
+    const result = await pool.query(`
+      SELECT
+        i.*,
+        c.name AS "customerName",
+        p.name AS "projectName"
+      FROM invoices i
+      LEFT JOIN customers c ON c.id = i.customer_id
+      LEFT JOIN projects p ON p.id = i.project_id
+      ORDER BY i.created_at DESC
+    `);
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      number: row.number,
+      quoteId: row.quote_id,
+      quoteRevisionId: row.quote_revision_id,
+      divisionCode: row.division_code,
+      customerId: row.customer_id,
+      projectId: row.project_id,
+      type: row.type,
+      status: row.status,
+      depositType: row.deposit_type,
+      depositPercentage: row.deposit_percentage,
+      amountExclGst: row.amount_excl_gst,
+      gstAmount: row.gst_amount,
+      amountInclGst: row.amount_incl_gst,
+      description: row.description,
+      notes: row.notes,
+      xeroInvoiceId: row.xero_invoice_id,
+      xeroInvoiceNumber: row.xero_invoice_number,
+      xeroStatus: row.xero_status,
+      createdByUserId: row.created_by_user_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      customerName: row.customerName ?? null,
+      projectName: row.projectName ?? null,
+    }));
   }
 
   async updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined> {

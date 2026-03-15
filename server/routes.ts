@@ -1322,6 +1322,43 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Xero Configuration Status ───────────────────────────────────────────
+  app.get("/api/settings/xero-status", (req, res) => {
+    const reqUser = (req as any).user;
+    if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    const REQUIRED_FIELDS = ["XERO_CLIENT_ID", "XERO_CLIENT_SECRET", "XERO_ACCESS_TOKEN"];
+    const OPTIONAL_FIELDS = ["XERO_TENANT_ID"];
+    const presentFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS].filter((f) => !!process.env[f]);
+    const allRequiredPresent = REQUIRED_FIELDS.every((f) => !!process.env[f]);
+
+    let mode: "not_configured" | "scaffold" | "credentials_present";
+    let status: string;
+    if (allRequiredPresent) {
+      mode = "credentials_present";
+      status = "Credentials present — live push scaffolded but not yet wired to Xero API client";
+    } else if (presentFields.length > 0) {
+      mode = "scaffold";
+      status = "Partial credentials present — scaffold mode only";
+    } else {
+      mode = "not_configured";
+      status = "Not configured — scaffold mode only";
+    }
+
+    return res.json({
+      mode,
+      configured: allRequiredPresent,
+      liveCapable: false,
+      status,
+      requiredFields: REQUIRED_FIELDS,
+      optionalFields: OPTIONAL_FIELDS,
+      presentFields,
+      missingFields: REQUIRED_FIELDS.filter((f) => !process.env[f]),
+      scaffoldNote: "Live Xero push is not yet wired to the Xero API client. Configure all required environment variables and implement the Xero OAuth flow to enable live push.",
+    });
+  });
+
   // ──────────────────────────────────────────────────────────────────────────
 
   app.get("/api/spec-dictionary", async (req, res) => {
@@ -1856,7 +1893,7 @@ export async function registerRoutes(
   // ─── Invoice Routes ───────────────────────────────────────────────────────
   app.get("/api/invoices", async (req, res) => {
     try {
-      const all = await storage.getAllInvoices();
+      const all = await storage.getAllInvoicesEnriched();
       const userDivision = req.user?.divisionCode;
       const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
       const filtered = isAllDivision ? all : all.filter(i => (i.divisionCode || null) === userDivision);
@@ -1913,11 +1950,16 @@ export async function registerRoutes(
         if (quote.status !== "accepted") {
           return res.status(400).json({ error: "Invoices can only be created from accepted quotes." });
         }
+        if (!quote.acceptedRevisionId) {
+          return res.status(400).json({ error: "Cannot create invoice: accepted quote has no recorded revision. Please contact support." });
+        }
+        // Source truth is always derived from the accepted quote — caller-supplied values for
+        // these fields are ignored to prevent revision/customer/project/division drift.
         inheritedFields = {
-          quoteRevisionId: parsed.data.quoteRevisionId ?? quote.acceptedRevisionId ?? null,
-          customerId: parsed.data.customerId ?? quote.customerId ?? null,
-          projectId: parsed.data.projectId ?? quote.projectId ?? null,
-          divisionCode: parsed.data.divisionCode ?? quote.divisionId ?? null,
+          quoteRevisionId: quote.acceptedRevisionId,
+          customerId: quote.customerId ?? null,
+          projectId: quote.projectId ?? null,
+          divisionCode: quote.divisionId ?? null,
         };
       }
 
@@ -1964,6 +2006,25 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Not found" });
       const userId = req.user?.id ?? null;
+
+      const PUSHED_STATUSES = ["pushed_to_xero_draft", "approved"] as const;
+      const COMMERCIAL_FIELDS = [
+        "type", "quoteId", "quoteRevisionId", "customerId", "projectId", "divisionCode",
+        "depositType", "depositPercentage", "amountExclGst", "gstAmount", "amountInclGst",
+        "description", "notes",
+      ] as const;
+
+      if (PUSHED_STATUSES.includes(invoice.status as any)) {
+        const attemptedCommercialEdit = COMMERCIAL_FIELDS.some(
+          (f) => Object.prototype.hasOwnProperty.call(parsed.data, f) && (parsed.data as any)[f] !== undefined,
+        );
+        if (attemptedCommercialEdit) {
+          return res.status(403).json({
+            error: `Invoice is in '${invoice.status}' status. Commercial fields cannot be edited after Xero push. Return the invoice to draft first (and delete the corresponding Xero invoice before reissuing).`,
+            lockedFields: COMMERCIAL_FIELDS,
+          });
+        }
+      }
 
       if (parsed.data.status) {
         const currentStatus = invoice.status as InvoiceStatus;

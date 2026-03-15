@@ -1071,6 +1071,7 @@ function InvoiceSection({
   const [depositPct, setDepositPct] = useState("50");
   const [depositFixed, setDepositFixed] = useState("");
   const [xeroWarn, setXeroWarn] = useState<string | null>(null);
+  const [xeroReturnInvoice, setXeroReturnInvoice] = useState<Invoice | null>(null);
 
   const { data: invoices = [] } = useQuery<Invoice[]>({
     queryKey: ["/api/quotes", quoteId, "invoices"],
@@ -1191,11 +1192,63 @@ function InvoiceSection({
       </div>
 
       {xeroWarn && (
-        <Alert>
+        <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="text-sm">{xeroWarn}</AlertDescription>
+          <AlertDescription className="text-sm font-medium">{xeroWarn}</AlertDescription>
         </Alert>
       )}
+
+      <Dialog open={!!xeroReturnInvoice} onOpenChange={(open) => { if (!open) setXeroReturnInvoice(null); }}>
+        <DialogContent className="max-w-md" data-testid="dialog-xero-return-warning">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Return to Draft — Xero Invoice Exists
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              This invoice has been pushed to Xero
+              {xeroReturnInvoice?.xeroInvoiceNumber && (
+                <> as <span className="font-mono font-semibold">{xeroReturnInvoice.xeroInvoiceNumber}</span></>
+              )}.
+            </p>
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>You must delete the corresponding Xero invoice before replacing or reissuing.</strong>{" "}
+                Returning to draft here does not remove the invoice from Xero. Failure to delete the Xero invoice first may create accounting inconsistencies.
+              </AlertDescription>
+            </Alert>
+            <p className="text-muted-foreground">
+              Only continue if you have already deleted or voided invoice{" "}
+              {xeroReturnInvoice?.xeroInvoiceNumber ? (
+                <span className="font-mono font-semibold">{xeroReturnInvoice.xeroInvoiceNumber}</span>
+              ) : (
+                "in Xero"
+              )}.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setXeroReturnInvoice(null)} data-testid="button-xero-return-cancel">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={returnToDraftMutation.isPending}
+              onClick={() => {
+                if (xeroReturnInvoice) {
+                  returnToDraftMutation.mutate(xeroReturnInvoice.id);
+                  setXeroReturnInvoice(null);
+                }
+              }}
+              data-testid="button-xero-return-confirm"
+            >
+              I have deleted the Xero invoice — Return to Draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {invoices.length === 0 ? (
         <p className="text-sm text-muted-foreground">No invoices yet.</p>
@@ -1278,7 +1331,13 @@ function InvoiceSection({
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => returnToDraftMutation.mutate(inv.id)}
+                          onClick={() => {
+                            if (inv.xeroInvoiceId) {
+                              setXeroReturnInvoice(inv);
+                            } else {
+                              returnToDraftMutation.mutate(inv.id);
+                            }
+                          }}
                           disabled={returnToDraftMutation.isPending}
                           data-testid={`button-return-to-draft-${inv.id}`}
                         >

@@ -9,6 +9,8 @@ import { ReceiptText, Search } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 
+type EnrichedInvoice = Invoice & { customerName: string | null; projectName: string | null };
+
 const INVOICE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   ready_for_xero: "Ready for Xero",
@@ -36,7 +38,7 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
 export default function InvoicesPage() {
   const [search, setSearch] = useState("");
 
-  const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
+  const { data: invoices = [], isLoading } = useQuery<EnrichedInvoice[]>({
     queryKey: ["/api/invoices"],
   });
 
@@ -46,6 +48,8 @@ export default function InvoicesPage() {
     return (
       inv.number.toLowerCase().includes(q) ||
       (inv.xeroInvoiceNumber ?? "").toLowerCase().includes(q) ||
+      (inv.customerName ?? "").toLowerCase().includes(q) ||
+      (inv.projectName ?? "").toLowerCase().includes(q) ||
       INVOICE_TYPE_LABELS[inv.type]?.toLowerCase().includes(q) ||
       INVOICE_STATUS_LABELS[inv.status]?.toLowerCase().includes(q)
     );
@@ -88,6 +92,8 @@ export default function InvoicesPage() {
                 <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Xero #</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Project</TableHead>
                 <TableHead className="text-right">Excl. GST</TableHead>
                 <TableHead className="text-right">Incl. GST</TableHead>
                 <TableHead>Quote</TableHead>
@@ -101,12 +107,25 @@ export default function InvoicesPage() {
                   </TableCell>
                   <TableCell className="text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(inv.status)} className="text-xs" data-testid={`badge-status-${inv.id}`}>
-                      {INVOICE_STATUS_LABELS[inv.status] || inv.status}
-                    </Badge>
+                    <div className="space-y-0.5">
+                      <Badge variant={statusVariant(inv.status)} className="text-xs" data-testid={`badge-status-${inv.id}`}>
+                        {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                      </Badge>
+                      {inv.xeroStatus && (
+                        <p className="text-[10px] text-muted-foreground font-mono" data-testid={`text-xero-status-${inv.id}`}>
+                          Xero: {inv.xeroStatus}
+                        </p>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
-                    {inv.xeroInvoiceNumber ?? "—"}
+                    {inv.xeroInvoiceNumber ?? <span className="opacity-40">—</span>}
+                  </TableCell>
+                  <TableCell className="text-sm" data-testid={`text-customer-${inv.id}`}>
+                    {inv.customerName ?? <span className="text-xs text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell className="text-sm" data-testid={`text-project-${inv.id}`}>
+                    {inv.projectName ?? <span className="text-xs text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-right text-sm">
                     ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}

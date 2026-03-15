@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1859,6 +1860,119 @@ function SystemModeTab() {
   );
 }
 
+type XeroStatusResponse = {
+  mode: "not_configured" | "scaffold" | "credentials_present";
+  configured: boolean;
+  liveCapable: boolean;
+  status: string;
+  requiredFields: string[];
+  optionalFields: string[];
+  presentFields: string[];
+  missingFields: string[];
+  scaffoldNote: string;
+};
+
+function XeroStatusTab() {
+  const { data: xeroStatus, isLoading, refetch, isFetching } = useQuery<XeroStatusResponse>({
+    queryKey: ["/api/settings/xero-status"],
+    staleTime: 30_000,
+  });
+
+  const modeColor = xeroStatus?.mode === "credentials_present"
+    ? "text-amber-600 dark:text-amber-400"
+    : "text-muted-foreground";
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Xero Integration Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading status…
+            </div>
+          ) : xeroStatus ? (
+            <>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className={`text-sm font-semibold ${modeColor}`} data-testid="text-xero-status">
+                    {xeroStatus.status}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Live push capable: <strong>No</strong> — scaffold only in this release
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => refetch()} disabled={isFetching} data-testid="button-xero-refresh">
+                  {isFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : "Refresh"}
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Required Environment Variables</p>
+                <div className="rounded-lg border divide-y text-sm">
+                  {xeroStatus.requiredFields.map((field) => {
+                    const present = xeroStatus.presentFields.includes(field);
+                    return (
+                      <div key={field} className="flex items-center justify-between px-3 py-2 gap-2" data-testid={`row-xero-field-${field}`}>
+                        <span className="font-mono text-xs">{field}</span>
+                        {present ? (
+                          <Badge variant="default" className="text-xs">Present</Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-xs">Missing</Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {xeroStatus.optionalFields.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Optional Environment Variables</p>
+                  <div className="rounded-lg border divide-y text-sm">
+                    {xeroStatus.optionalFields.map((field) => {
+                      const present = xeroStatus.presentFields.includes(field);
+                      return (
+                        <div key={field} className="flex items-center justify-between px-3 py-2 gap-2" data-testid={`row-xero-field-${field}`}>
+                          <span className="font-mono text-xs">{field}</span>
+                          {present ? (
+                            <Badge variant="secondary" className="text-xs">Present</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">Not set</Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-semibold text-foreground">Scaffold Note</p>
+                <p>{xeroStatus.scaffoldNote}</p>
+                <p className="mt-2">
+                  <strong>Environment variables are set on the server — values are never exposed here.</strong>{" "}
+                  Only presence/absence is reported above.
+                </p>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Unable to load Xero status.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { quoteListPosition, usdToNzdRate, gstRate, updateSetting } = useSettings();
 
@@ -1892,6 +2006,9 @@ export default function Settings() {
               <TabsTrigger value="system" data-testid="tab-system">
                 <Shield className="w-3.5 h-3.5 mr-1.5" />
                 System
+              </TabsTrigger>
+              <TabsTrigger value="xero" data-testid="tab-xero">
+                Xero
               </TabsTrigger>
             </TabsList>
 
@@ -1988,6 +2105,10 @@ export default function Settings() {
 
             <TabsContent value="system">
               <SystemModeTab />
+            </TabsContent>
+
+            <TabsContent value="xero">
+              <XeroStatusTab />
             </TabsContent>
           </Tabs>
         </div>
