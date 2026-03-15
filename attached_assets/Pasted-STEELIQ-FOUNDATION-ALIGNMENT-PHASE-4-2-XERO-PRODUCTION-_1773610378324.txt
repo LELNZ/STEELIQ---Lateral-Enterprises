@@ -1,0 +1,360 @@
+STEELIQ FOUNDATION ALIGNMENT — PHASE 4.2
+XERO PRODUCTION HARDENING + CONTROLLED LIVE VERIFICATION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+All changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in this prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum practical admin/finance surface required for staff use.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+CURRENT-STATE NOTE — SOURCE OF TRUTH
+
+The current codebase is the source of truth.
+
+Preserve these truths:
+- internal quote lifecycle remains quote-based
+- Customers are global/shared
+- Contacts are global/shared
+- Projects belong to one customer
+- Jobs are division-owned
+- invoice lifecycle and pre-live Xero hardening already exist
+- live Xero push code path is wired
+- live Xero push has not yet been truly verified in this environment
+- pushed invoice edit safety already exists
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF is locked
+- LJ estimating builder must remain operationally unchanged
+
+CRITICAL LJ RULE
+
+Do NOT redesign LJ estimating logic.
+Do NOT generalise the LJ builder.
+Do NOT break estimate creation, estimate editing, quote generation, preview, or PDF for LJ.
+
+==================================================
+PHASE GOAL
+==================================================
+
+Harden the Xero integration so it is safe for real production use and perform a controlled live verification if credentials/environment are available.
+
+This phase must:
+1. improve Xero credential/token robustness
+2. remove the most obvious hardcoded accounting assumptions
+3. add enough configurability for safe first production use
+4. improve operator/admin visibility for live Xero state
+5. perform a controlled live verification if credentials are available
+6. keep all existing pushed-invoice safety protections intact
+
+This is a production-hardening phase.
+It is NOT a general finance redesign.
+It is NOT staged payments.
+It is NOT variation/retention work.
+It is NOT Customers/Contacts consolidation.
+
+==================================================
+PART 0 — PRE-FLIGHT XERO PRODUCTION AUDIT
+==================================================
+
+Before implementing, audit and truthfully report:
+
+- current static-token approach
+- whether refresh-token support exists
+- hardcoded account code usage
+- hardcoded tax type usage
+- whether current payload mapping is sufficient for the target Xero organisation
+- whether current environment has live credentials available
+- whether a safe controlled live verification is possible in this environment
+
+Do not guess. Report exact findings.
+
+==================================================
+PART 1 — TOKEN / AUTH HARDENING
+==================================================
+
+Current limitation:
+- live push is wired, but uses a static XERO_ACCESS_TOKEN
+
+Required goal:
+Implement the safest next step toward production reliability.
+
+Preferred outcome:
+- support refresh-token-based token renewal if the repo/environment can safely support it in this phase
+
+If full refresh-token flow is feasible safely in this phase, implement:
+- required env/config support
+- token refresh helper
+- use refreshed token for live push when needed
+- truthful admin/status reporting
+
+If full refresh-token flow is NOT feasible safely in this phase:
+- do NOT fake it
+- keep the current static-token path
+- improve error handling/status visibility further
+- report exactly what is missing for full refresh support
+
+Important:
+- do not expose secrets in UI or logs
+- do not store secrets unsafely in browser-facing code
+
+==================================================
+PART 2 — CONFIGURABLE XERO ACCOUNTING MAPPING
+==================================================
+
+Current limitation:
+- AccountCode is hardcoded to 200
+- TaxType is hardcoded to OUTPUT2
+
+Required goal:
+Make the first production mapping configurable enough for real use.
+
+Implement the minimum safe configuration surface for:
+- default Xero sales account code
+- default Xero tax type
+
+These should live in a practical admin/settings surface, preferably under the existing Xero settings area.
+
+Rules:
+- use safe defaults if unset, but surface them clearly
+- do not redesign the whole settings architecture
+- do not build a giant accounting rules engine
+- do not introduce per-line-item accounting logic in this phase
+
+The goal is:
+- remove the most obvious hardcoded production assumptions
+- let admins align SteelIQ to the target Xero org
+
+==================================================
+PART 3 — LIVE VERIFICATION SUPPORT
+==================================================
+
+Add enough operational support to safely verify live push.
+
+Required behavior:
+- admin/status surface should clearly show:
+  - whether live credentials are present
+  - whether push path is wired
+  - whether live verification has been completed
+  - last verification result/status if safe and practical
+- if safe and environment allows, provide a controlled verification path
+  OR
+  clearly support using the normal push route for first live verification with clear feedback
+
+If live verification is performed in this phase:
+- use one controlled invoice in a safe way
+- report exact result truthfully
+- report returned identifiers/status
+
+If live verification is not possible:
+- do not claim it was verified
+- report the exact blocker
+
+==================================================
+PART 4 — ERROR HANDLING / OPERATOR GUIDANCE HARDENING
+==================================================
+
+Improve Xero operator feedback for real production use.
+
+Required behavior:
+- clearer feedback for:
+  - expired token
+  - invalid tenant
+  - missing account code
+  - invalid tax type
+  - contact mapping failure
+  - general validation failure
+- keep invoice in recoverable state on failure
+- do not falsely mark invoice as pushed
+- keep practical retry guidance visible where appropriate
+
+This can be done in:
+- quote invoice area
+- invoice list/detail surfaces
+- settings/admin Xero surface
+as appropriate
+
+==================================================
+PART 5 — PUSHED-INVOICE SAFETY MUST REMAIN
+==================================================
+
+All existing protections must remain true:
+
+- pushed invoice commercial fields remain locked
+- return-to-draft warning remains clear
+- no Xero integration change may bypass safe status transitions
+- no live verification path may weaken accounting integrity
+
+If any proposed change would weaken these protections, stop and report.
+
+==================================================
+PART 6 — SCOPE LIMITS
+==================================================
+
+Do NOT implement any of the following in this phase:
+- payment reconciliation
+- staged payment engine
+- variation invoices
+- retention workflow
+- portal invoice visibility
+- webhook sync completion unless it is tiny and strictly necessary
+- full customer/accounts redesign
+- Customers/Contacts consolidation
+- LEL estimator
+- library redesign
+- permission redesign
+
+Keep this phase tightly focused on production-hardening the Xero integration.
+
+==================================================
+SCHEMA / API RULES
+==================================================
+
+Allowed:
+- minimal schema additions strictly required for Xero production hardening
+- minimal route hardening
+- minimal Xero settings additions
+- minimal admin/status visibility enhancements
+- minimal token/verification metadata if truly needed and safe
+
+Not allowed:
+- broad schema refactor
+- duplicate push routes
+- speculative finance abstractions
+- unrelated redesign
+
+==================================================
+ARCHITECTURE VERIFICATION — MUST REMAIN TRUE
+==================================================
+
+After implementation, all of the following must still be true:
+
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF unchanged
+- internal commercial lifecycle remains quote-based
+- accepted quote history remains frozen unless safely reverted under allowed rules
+- Customers remain global/shared
+- Contacts remain global/shared
+- Projects belong to one customer
+- Jobs remain division-owned
+- invoices consume accepted/job state and do not rewrite quote history
+- SteelIQ invoice identity remains separate from Xero invoice identity
+- LJ estimating builder remains functionally unchanged
+
+==================================================
+REGRESSION CHECKS — MUST RUN AND REPORT
+==================================================
+
+Explicitly verify and report these:
+
+1. pre-flight Xero production audit results
+2. canonical push route remains /api/invoices/:id/push-to-xero
+3. pushed invoice protections still work
+4. return-to-draft warning still works for Xero-linked invoices
+5. configurable Xero account code works or is surfaced correctly
+6. configurable Xero tax type works or is surfaced correctly
+7. Xero admin/settings surface reflects current real capability clearly
+8. live credential/token handling is improved or blockers are truthfully reported
+9. failed live push still leaves invoice recoverable
+10. successful live push still stores Xero identifiers/status correctly
+11. invoice list/detail still shows Xero linkage clearly
+12. existing quote detail still works
+13. accepted quote -> job conversion still works
+14. LJ estimate builder still creates/edits estimates correctly
+15. quote preview still works through QuoteDocument -> QuoteRenderModel -> Preview/PDF
+16. PDF export still works through the locked pipeline
+17. TypeScript passes
+18. Build/runtime checks pass
+
+If live verification is completed, explicitly report:
+- what invoice was used
+- what Xero identifiers/status were returned
+- whether the result is safe for production confidence
+
+If live verification is not completed, explicitly report:
+- what exact blocker remains
+- whether the system is wired but still not production-verified
+
+Do not claim completion if:
+- production-hardening is still mostly hardcoded
+- live verification is falsely implied
+- pushed invoice safety was weakened
+- admin/operator surfaces are missing
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return handover with exactly these sections:
+
+1. Files changed
+2. Planned tasks summary
+3. Behaviour changes
+4. Schema/API changes
+5. UI changes
+6. Architecture verification
+7. Risks/limitations
+8. Updated current system state
+9. Updated recommended next tasks
+10. Regression checks
+
+Also explicitly state:
+- whether live Xero push is wired
+- whether live Xero push is truly verified
+- what production blockers remain, if any
+- how Xero account code and tax type are now handled
+- whether token handling is production-safe or still partial
+- what the minimum next step is before calling this live-ready

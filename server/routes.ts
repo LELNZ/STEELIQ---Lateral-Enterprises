@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, pool, formatQuoteNumber } from "./storage";
-import { isXeroConfigured, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, XeroPushError } from "./xero-client";
+import { isXeroConfigured, hasRefreshToken, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, XeroPushError } from "./xero-client";
 import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
@@ -1324,24 +1324,33 @@ export async function registerRoutes(
   });
 
   // ─── Xero Configuration Status ───────────────────────────────────────────
-  app.get("/api/settings/xero-status", (req, res) => {
+  app.get("/api/settings/xero-status", async (req, res) => {
     const reqUser = (req as any).user;
     if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
       return res.status(403).json({ error: "Admin access required" });
     }
     const REQUIRED_FIELDS = ["XERO_CLIENT_ID", "XERO_CLIENT_SECRET", "XERO_ACCESS_TOKEN", "XERO_TENANT_ID"];
-    const OPTIONAL_FIELDS: string[] = [];
-    const presentFields = REQUIRED_FIELDS.filter((f) => !!process.env[f]);
+    const OPTIONAL_FIELDS = ["XERO_REFRESH_TOKEN"];
+    const allEnvFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+    const presentFields = allEnvFields.filter((f) => !!process.env[f]);
     const allRequiredPresent = REQUIRED_FIELDS.every((f) => !!process.env[f]);
+    const refreshTokenPresent = hasRefreshToken();
+
+    // Load accounting config from org settings
+    const orgConfig = await storage.getOrgSettings();
+    const accountCode = orgConfig?.xeroAccountCode?.trim() || "200";
+    const taxType = orgConfig?.xeroTaxType?.trim() || "OUTPUT2";
 
     let mode: "not_configured" | "scaffold" | "live_wired";
     let status: string;
     if (allRequiredPresent) {
       mode = "live_wired";
-      status = "Live push wired — all credentials present. Push path active; live verification pending first successful push.";
-    } else if (presentFields.length > 0) {
+      status = refreshTokenPresent
+        ? "Live push wired — all credentials + refresh token present. Auto-refresh on 401 enabled."
+        : "Live push wired — all credentials present. Add XERO_REFRESH_TOKEN for automatic token renewal.";
+    } else if (presentFields.filter((f) => REQUIRED_FIELDS.includes(f)).length > 0) {
       mode = "scaffold";
-      status = `Partial credentials (${presentFields.length}/${REQUIRED_FIELDS.length}) — scaffold mode only`;
+      status = `Partial credentials (${presentFields.filter((f) => REQUIRED_FIELDS.includes(f)).length}/${REQUIRED_FIELDS.length} required) — scaffold mode only`;
     } else {
       mode = "not_configured";
       status = "Not configured — scaffold mode only";
@@ -1352,16 +1361,21 @@ export async function registerRoutes(
       configured: allRequiredPresent,
       livePushWired: true,
       liveCapable: allRequiredPresent,
+      hasRefreshToken: refreshTokenPresent,
       status,
       requiredFields: REQUIRED_FIELDS,
       optionalFields: OPTIONAL_FIELDS,
       presentFields,
       missingFields: REQUIRED_FIELDS.filter((f) => !process.env[f]),
+      accountCode,
+      taxType,
       scaffoldNote: allRequiredPresent
         ? null
         : "Live Xero push is wired but credentials are missing. Set XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_ACCESS_TOKEN, and XERO_TENANT_ID to enable live push. Until then, pushes run in scaffold mode.",
       tokenNote: allRequiredPresent
-        ? "Using static XERO_ACCESS_TOKEN. Tokens expire — if push returns 401, re-authenticate via the Xero Developer Portal and update XERO_ACCESS_TOKEN. A full OAuth refresh flow is recommended for production."
+        ? refreshTokenPresent
+          ? "Automatic token refresh is enabled. On 401, the system will attempt one refresh using XERO_REFRESH_TOKEN before returning an error. Note: Xero refresh tokens rotate — update XERO_REFRESH_TOKEN after each refresh."
+          : "Using static XERO_ACCESS_TOKEN only. Tokens expire (~30 min). Set XERO_REFRESH_TOKEN for automatic renewal on 401. Otherwise, update XERO_ACCESS_TOKEN manually when it expires."
         : null,
     });
   });
@@ -2084,6 +2098,11 @@ export async function registerRoutes(
           customer = await storage.getCustomer(invoice.customerId) ?? null;
         }
 
+        // Load org-configured accounting codes (configurable per-org in Settings → Xero)
+        const orgConfig = await storage.getOrgSettings();
+        const accountCode = orgConfig?.xeroAccountCode?.trim() || "200";
+        const taxType = orgConfig?.xeroTaxType?.trim() || "OUTPUT2";
+
         let xeroPayload: ReturnType<typeof buildXeroInvoicePayload>;
         try {
           xeroPayload = buildXeroInvoicePayload({
@@ -2094,6 +2113,8 @@ export async function registerRoutes(
             amountExclGst: invoice.amountExclGst ?? undefined,
             description: invoice.description ?? null,
             notes: invoice.notes ?? null,
+            accountCode,
+            taxType,
           });
         } catch (mappingErr: any) {
           return res.status(422).json({

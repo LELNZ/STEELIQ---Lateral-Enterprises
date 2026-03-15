@@ -1865,20 +1865,66 @@ type XeroStatusResponse = {
   configured: boolean;
   livePushWired: boolean;
   liveCapable: boolean;
+  hasRefreshToken: boolean;
   status: string;
   requiredFields: string[];
   optionalFields: string[];
   presentFields: string[];
   missingFields: string[];
+  accountCode: string;
+  taxType: string;
   scaffoldNote: string | null;
   tokenNote: string | null;
 };
 
 function XeroStatusTab() {
+  const { toast } = useToast();
+
   const { data: xeroStatus, isLoading, refetch, isFetching } = useQuery<XeroStatusResponse>({
     queryKey: ["/api/settings/xero-status"],
     staleTime: 30_000,
   });
+
+  // Accounting config form state
+  const [accountCode, setAccountCode] = useState<string>("");
+  const [taxType, setTaxType] = useState<string>("");
+  const [accountingSaving, setAccountingSaving] = useState(false);
+
+  // Sync form fields when status data loads
+  useEffect(() => {
+    if (xeroStatus) {
+      setAccountCode(xeroStatus.accountCode ?? "200");
+      setTaxType(xeroStatus.taxType ?? "OUTPUT2");
+    }
+  }, [xeroStatus?.accountCode, xeroStatus?.taxType]);
+
+  const saveAccountingConfig = async () => {
+    if (!accountCode.trim()) {
+      toast({ title: "Validation error", description: "Account code cannot be empty.", variant: "destructive" });
+      return;
+    }
+    if (!taxType.trim()) {
+      toast({ title: "Validation error", description: "Tax type cannot be empty.", variant: "destructive" });
+      return;
+    }
+    setAccountingSaving(true);
+    try {
+      const res = await apiRequest("PATCH", "/api/settings/org", {
+        xeroAccountCode: accountCode.trim(),
+        xeroTaxType: taxType.trim(),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Save failed");
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/xero-status"] });
+      toast({ title: "Accounting configuration saved", description: `AccountCode: ${accountCode.trim()} · TaxType: ${taxType.trim()}` });
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setAccountingSaving(false);
+    }
+  };
 
   const modeColor =
     xeroStatus?.mode === "live_wired"
@@ -1889,6 +1935,7 @@ function XeroStatusTab() {
 
   return (
     <div className="space-y-4">
+      {/* ── Integration Status ──────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -1914,6 +1961,10 @@ function XeroStatusTab() {
                     Live push capable: <strong>{xeroStatus.liveCapable ? "Yes" : "No"}</strong>
                     {xeroStatus.liveCapable && " — awaiting first verified push"}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Auto token refresh: <strong>{xeroStatus.hasRefreshToken ? "Enabled" : "Not configured"}</strong>
+                    {!xeroStatus.hasRefreshToken && " — set XERO_REFRESH_TOKEN to enable"}
+                  </p>
                 </div>
                 <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => refetch()} disabled={isFetching} data-testid="button-xero-refresh">
                   {isFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : "Refresh"}
@@ -1922,6 +1973,7 @@ function XeroStatusTab() {
 
               <Separator />
 
+              {/* Required vars */}
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Required Environment Variables</p>
                 <div className="rounded-lg border divide-y text-sm">
@@ -1941,19 +1993,32 @@ function XeroStatusTab() {
                 </div>
               </div>
 
+              {/* Optional vars */}
               {xeroStatus.optionalFields.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Optional Environment Variables</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Optional Environment Variables
+                  </p>
                   <div className="rounded-lg border divide-y text-sm">
                     {xeroStatus.optionalFields.map((field) => {
                       const present = xeroStatus.presentFields.includes(field);
+                      const isRefreshToken = field === "XERO_REFRESH_TOKEN";
                       return (
-                        <div key={field} className="flex items-center justify-between px-3 py-2 gap-2" data-testid={`row-xero-field-${field}`}>
-                          <span className="font-mono text-xs">{field}</span>
-                          {present ? (
-                            <Badge variant="secondary" className="text-xs">Present</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs">Not set</Badge>
+                        <div key={field} className="px-3 py-2 space-y-0.5" data-testid={`row-xero-field-${field}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs">{field}</span>
+                            {present ? (
+                              <Badge variant="secondary" className="text-xs">Present</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">Not set</Badge>
+                            )}
+                          </div>
+                          {isRefreshToken && (
+                            <p className="text-xs text-muted-foreground">
+                              {present
+                                ? "Auto-refresh enabled — on 401, system will refresh token and retry push once. Xero tokens rotate; update this env var after refresh."
+                                : "Recommended for production. Without it, you must manually update XERO_ACCESS_TOKEN when it expires (~30 min)."}
+                            </p>
                           )}
                         </div>
                       );
@@ -1964,6 +2029,7 @@ function XeroStatusTab() {
 
               <Separator />
 
+              {/* Notes panel */}
               <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-2">
                 {xeroStatus.scaffoldNote && (
                   <div className="space-y-1">
@@ -1973,7 +2039,7 @@ function XeroStatusTab() {
                 )}
                 {xeroStatus.tokenNote && (
                   <div className="space-y-1">
-                    <p className="font-semibold text-foreground">Token Note</p>
+                    <p className="font-semibold text-foreground">Token Management</p>
                     <p>{xeroStatus.tokenNote}</p>
                   </div>
                 )}
@@ -1990,6 +2056,79 @@ function XeroStatusTab() {
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Unable to load Xero status.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Accounting Configuration ────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Accounting Configuration</CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            These values are used on every Xero invoice line item. Consult your Xero chart of accounts to verify codes.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" htmlFor="xero-account-code">
+                    Account Code
+                  </label>
+                  <Input
+                    id="xero-account-code"
+                    data-testid="input-xero-account-code"
+                    value={accountCode}
+                    onChange={(e) => setAccountCode(e.target.value)}
+                    placeholder="e.g. 200"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Xero revenue account code (e.g. <code>200</code> = Sales in NZ standard chart)
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" htmlFor="xero-tax-type">
+                    Tax Type
+                  </label>
+                  <Input
+                    id="xero-tax-type"
+                    data-testid="input-xero-tax-type"
+                    value={taxType}
+                    onChange={(e) => setTaxType(e.target.value)}
+                    placeholder="e.g. OUTPUT2"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Xero tax type (e.g. <code>OUTPUT2</code> = NZ 15% GST, <code>OUTPUT</code> = AU 10% GST)
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={saveAccountingConfig}
+                  disabled={accountingSaving}
+                  data-testid="button-save-xero-accounting"
+                >
+                  {accountingSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+                  Save Accounting Config
+                </Button>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+                <p>
+                  <strong>These values apply to all invoices pushed to Xero.</strong>{" "}
+                  Validation errors from Xero related to account code or tax type will appear in the
+                  push toast on the quote detail page. Common Xero tax types: <code>OUTPUT2</code> (NZ GST),{" "}
+                  <code>OUTPUT</code> (AU GST), <code>NONE</code> (no tax).
+                </p>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
