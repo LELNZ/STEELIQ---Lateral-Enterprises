@@ -22,6 +22,7 @@ import {
   ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import LifecyclePanel from "@/components/lifecycle-panel";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
@@ -346,6 +347,12 @@ export default function OpJobDetail() {
           </div>
         </div>
       )}
+
+      <Separator />
+
+      <div data-testid="section-lifecycle-job" className="rounded-lg border bg-card p-4">
+        <LifecyclePanel jobId={jobId} />
+      </div>
 
       <Separator />
 

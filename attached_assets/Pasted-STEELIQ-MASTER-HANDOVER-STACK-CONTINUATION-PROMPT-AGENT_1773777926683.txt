@@ -1,0 +1,281 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+CURRENT VERIFIED TRUTH
+==================================================
+
+1. The editor/save issue is not the main blocker now.
+2. The latest exported PDF still has rendering defects.
+3. The latest PDF still contains joined words / spacing failures, including examples such as:
+   - Terms& Conditions
+   - TradeAccounts
+   - Tradeaccounts
+   - REMITTANCE / BANK DETAILS Payment Details
+   - "Yourquote or invoice number"
+4. Therefore the previous report claiming the PDF issue was fixed is not yet truthful.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these two scoped items:
+
+1. Finish the PDF rich-text rendering fix so preview/PDF parity is actually restored for content blocks
+2. Refine deposit invoice creation so fixed amounts can be entered either incl. GST or excl. GST, and review invoice entry points for accepted quotes vs jobs
+
+Do not broaden scope beyond these two items.
+
+==================================================
+ISSUE 1 — PDF RICH-TEXT RENDERING STILL BROKEN
+==================================================
+
+The current exported PDF still joins words and collapses heading/body boundaries.
+
+You must:
+- inspect the actual current rich text path from Organisation / Division settings content blocks into:
+  - QuoteDocument
+  - QuoteRenderModel
+  - pdf-engine
+- identify why the previous fix did not fully solve the issue
+- fix the actual remaining cause inside the current locked pipeline only
+
+Important:
+- this is not just a source-content problem in Settings
+- preview may look acceptable while PDF remains wrong
+- the defect is in export rendering/parsing/measurement/composition
+
+Likely affected content blocks:
+- Bank Details / Remittance
+- Payment Terms
+- Terms
+- Exclusions
+- Additional Capabilities
+- Division override blocks
+
+Required outcome:
+- no joined words remain in exported PDF
+- headings and following body text do not run together
+- preview/PDF parity is restored for affected content blocks
+- no parallel renderer introduced
+
+==================================================
+ISSUE 2 — DEPOSIT INVOICE CREATOR REFINEMENT
+==================================================
+
+Current user workflow:
+- accepted quote exists
+- deposit has been received / needs to be invoiced
+- current modal offers:
+  - Percentage
+  - Fixed Amount
+- but fixed amount entry currently only supports one GST basis and needs refinement
+
+Required refinement:
+- in deposit invoice creator, add amount basis selection:
+  - Incl. GST
+  - Excl. GST
+- this must work for fixed amount entry
+- show correct derived values:
+  - excl GST
+  - GST
+  - incl GST
+
+Workflow position:
+- do NOT require a Job to exist before creating a deposit invoice
+- deposit invoice creation from accepted quote should remain supported
+- also review whether invoices should be creatable from the Jobs page/context
+- if a Jobs-page entry point already exists, verify it
+- if it does not exist, report it clearly as partial / recommended next step unless explicitly implemented in this phase
+- do not redesign the invoice ownership model
+
+Approved workflow position for this phase:
+- accepted quote can create deposit invoice before job exists
+- job-based invoice creation may also be desirable later, but do not redesign source-of-truth rules
+
+Required outcome:
+- fixed-amount deposit invoice supports incl/excl GST entry basis
+- calculation/display is operationally clear
+- accepted quote workflow still works
+- no ambiguity in stored invoice values
+
+==================================================
+IMPLEMENTATION RULES FOR THIS PHASE
+==================================================
+
+Allowed:
+- targeted PDF rendering fix
+- targeted rich text normalization/measurement fix
+- targeted modal/UI refinement for deposit invoice creation
+- minimal backend support if required for GST-basis handling
+- small helper functions
+
+Not allowed:
+- renderer replacement
+- quote lifecycle redesign
+- invoice ownership redesign
+- schema creep outside what is strictly required
+- unrelated cleanup/refactor
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved
+3. State the exact remaining PDF bug cause(s)
+4. State the exact invoice modal refinement tasks
+5. Then implement
+
+If the Jobs-page invoice entry point is not implemented in this phase:
+- state that clearly
+- do not claim it exists if it does not
+
+==================================================
+MINIMUM REGRESSION CHECKS
+==================================================
+
+PDF / rendering:
+- quote preview still renders through current pipeline
+- PDF export still renders through current pipeline
+- affected text blocks appear in preview
+- affected text blocks appear in PDF
+- no joined words remain in exported PDF for the tested quote
+- heading/body boundaries remain visually separated in PDF
+- no duplicated or dropped content
+- preview/PDF parity improved for tested content blocks
+
+Invoice workflow:
+- accepted quote can still create deposit invoice without creating a job first
+- deposit invoice modal supports percentage
+- deposit invoice modal supports fixed amount
+- fixed amount can be entered incl GST
+- fixed amount can be entered excl GST
+- breakdown values calculate correctly
+- invoice create flow still succeeds
+- existing invoice lifecycle safeguards still work
+
+Safety:
+- no break to accepted quote flow
+- no break to convert-to-job flow
+- no break to Xero settings tab
+- no break to division settings text blocks
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact bug cause(s) found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim complete unless the exported PDF was actually re-tested and the spacing issue is actually gone.

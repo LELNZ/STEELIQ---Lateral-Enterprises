@@ -31,6 +31,7 @@ import type { PreviewData } from "@/lib/quote-document";
 import { buildQuoteRenderModel } from "@/lib/quote-renderer";
 import { generateQuotePdf, generateQuotePdfBase64 } from "@/lib/pdf-engine";
 import { Textarea } from "@/components/ui/textarea";
+import LifecyclePanel from "@/components/lifecycle-panel";
 
 interface QuoteWithRevisions extends Quote {
   revisions: QuoteRevision[];
@@ -521,6 +522,12 @@ export default function QuoteDetail() {
       </div>
 
       {quote.sourceJobId && <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />}
+
+      <Separator />
+
+      <div data-testid="section-lifecycle" className="rounded-lg border bg-card p-4">
+        <LifecyclePanel quoteId={quote.id} />
+      </div>
 
       {quote.status === "accepted" && (
         <>
@@ -1070,6 +1077,7 @@ function InvoiceSection({
   const [depositMode, setDepositMode] = useState<"percentage" | "fixed">("percentage");
   const [depositPct, setDepositPct] = useState("50");
   const [depositFixed, setDepositFixed] = useState("");
+  const [fixedGstBasis, setFixedGstBasis] = useState<"excl" | "incl">("excl");
   const [xeroWarn, setXeroWarn] = useState<string | null>(null);
   const [xeroReturnInvoice, setXeroReturnInvoice] = useState<Invoice | null>(null);
 
@@ -1081,7 +1089,9 @@ function InvoiceSection({
   const GST_RATE = 0.15;
   const exclGst = depositMode === "percentage"
     ? (acceptedValue * (parseFloat(depositPct) || 0)) / 100
-    : parseFloat(depositFixed) || 0;
+    : fixedGstBasis === "incl"
+      ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
+      : parseFloat(depositFixed) || 0;
   const gst = exclGst * GST_RATE;
   const inclGst = exclGst + gst;
 
@@ -1101,7 +1111,7 @@ function InvoiceSection({
         amountInclGst: inclGst,
         description: depositMode === "percentage"
           ? `${depositPct}% deposit on accepted quotation`
-          : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+          : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST (fixed amount)`,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -1406,8 +1416,30 @@ function InvoiceSection({
                 </div>
               </div>
             ) : (
-              <div>
-                <Label>Amount (NZD excl. GST)</Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>Amount (NZD)</Label>
+                  <div className="flex gap-1 ml-auto">
+                    <Button
+                      size="sm"
+                      variant={fixedGstBasis === "excl" ? "default" : "outline"}
+                      onClick={() => setFixedGstBasis("excl")}
+                      className="h-6 px-2 text-xs"
+                      data-testid="button-gst-basis-excl"
+                    >
+                      Excl. GST
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={fixedGstBasis === "incl" ? "default" : "outline"}
+                      onClick={() => setFixedGstBasis("incl")}
+                      className="h-6 px-2 text-xs"
+                      data-testid="button-gst-basis-incl"
+                    >
+                      Incl. GST
+                    </Button>
+                  </div>
+                </div>
                 <Input
                   type="number"
                   min="0"
@@ -1417,6 +1449,9 @@ function InvoiceSection({
                   placeholder="0.00"
                   data-testid="input-deposit-fixed"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Enter amount {fixedGstBasis === "incl" ? "including" : "excluding"} GST — breakdown shown below.
+                </p>
               </div>
             )}
             <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">

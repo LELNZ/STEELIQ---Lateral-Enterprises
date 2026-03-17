@@ -117,10 +117,10 @@ function renderInlineTokensPdf(
     pdf.setFontSize(fontSize);
     pdf.setTextColor(color);
 
-    // Inter-token boundary: if the previous token ended without whitespace and
-    // this token starts without whitespace, insert a space between them.
-    // This prevents adjacent tokens with different styles (e.g. bold followed by
-    // normal) from running together in the PDF — both visually and in text extraction.
+    // Inter-token boundary: render an explicit space character when adjacent styled
+    // tokens meet without whitespace. Using pdf.text(" ") encodes the space as an
+    // actual character in the PDF text stream (not a positioning-only cursor advance),
+    // so extractors always detect the word boundary regardless of font metrics.
     if (ti > 0) {
       const prevText = tokens[ti - 1].text;
       const currText = token.text;
@@ -130,24 +130,47 @@ function renderInlineTokensPdf(
         currText.length > 0 &&
         !currText.startsWith(" ")
       ) {
+        // Use the previous token's font so the space character width is correct
+        const prevToken = tokens[ti - 1];
+        const prevStyle =
+          prevToken.bold && prevToken.italic ? "bolditalic" :
+          prevToken.bold ? "bold" :
+          prevToken.italic ? "italic" :
+          "normal";
+        pdf.setFont(FONT_NORMAL, prevStyle);
+        pdf.text(" ", curX, curY);
         curX += pdf.getTextWidth(" ");
+        // Restore current token font for subsequent rendering
+        pdf.setFont(FONT_NORMAL, style);
       }
     }
 
     const words = token.text.split(" ");
     for (let wi = 0; wi < words.length; wi++) {
       const word = words[wi];
-      if (!word) { if (wi < words.length - 1) curX += pdf.getTextWidth(" "); continue; }
+      // Empty string from multiple consecutive spaces: render explicit space in stream
+      if (!word) {
+        if (wi < words.length - 1) {
+          pdf.text(" ", curX, curY);
+          curX += pdf.getTextWidth(" ");
+        }
+        continue;
+      }
 
       const wordW = pdf.getTextWidth(word);
-      const spaceW = wi < words.length - 1 ? pdf.getTextWidth(" ") : 0;
+      // Trailing space: include as part of the text string so the space character
+      // is encoded in the PDF stream, not just implied by cursor position.
+      const hasTrailingSpace = wi < words.length - 1;
 
       if (curX + wordW > maxX && curX > x) {
         curY += lineH;
         curX = x;
       }
 
-      pdf.text(word, curX, curY);
+      // Render word WITH trailing space (except last word of last token).
+      // Including the space in the string encodes it as an actual PDF character.
+      const textToRender = hasTrailingSpace ? word + " " : word;
+      pdf.text(textToRender, curX, curY);
 
       if (token.underline) {
         pdf.setDrawColor(color);
@@ -155,7 +178,7 @@ function renderInlineTokensPdf(
         pdf.line(curX, curY + 0.6, curX + wordW, curY + 0.6);
       }
 
-      curX += wordW + spaceW;
+      curX += pdf.getTextWidth(textToRender);
     }
   }
 
@@ -767,7 +790,8 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
     pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
     pdf.text("ADDITIONAL CAPABILITIES", LEFT_MARGIN, y + 3);
-    y += SECTION_GAP;
+    // +3 accounts for the baseline offset used above so body starts below the heading
+    y += SECTION_GAP + 3;
 
     y = renderRichTextPdf(pdf, y, legal.additionalCapabilities, {
       ...richOpts,
@@ -793,7 +817,8 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
       pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
       pdf.setTextColor(COLOR_MUTED);
       pdf.text(section.heading.toUpperCase(), LEFT_MARGIN, y + 3);
-      y += SECTION_GAP;
+      // +3 accounts for the baseline offset used above so body starts below the heading
+      y += SECTION_GAP + 3;
 
       y = renderRichTextPdf(pdf, y, section.body, richOpts);
 
@@ -809,7 +834,8 @@ function renderLegal(pdf: Pdf, y: number, model: QuoteRenderModel): number {
     pdf.setFontSize(mmSize(T.typography.sectionHeadingSize));
     pdf.setTextColor(COLOR_MUTED);
     pdf.text("REMITTANCE / BANK DETAILS", LEFT_MARGIN, y + 3);
-    y += SECTION_GAP;
+    // +3 accounts for the baseline offset used above so body starts below the heading
+    y += SECTION_GAP + 3;
 
     y = renderRichTextPdf(pdf, y, legal.bankDetails, richOpts);
 
