@@ -86,6 +86,23 @@ export function isAllBold(tokens: InlineToken[]): boolean {
   return tokens.length > 0 && tokens.every((t) => t.bold);
 }
 
+/**
+ * Joins inline tokens into plain text, inserting a space at token boundaries
+ * where adjacent tokens would otherwise run together (e.g. bold followed by
+ * normal text without leading/trailing space). This is used for height
+ * measurement via pdf.splitTextToSize — keeping it consistent with the actual
+ * rendered output prevents mis-calculated line-wrap heights.
+ */
 export function tokensToPlainText(tokens: InlineToken[]): string {
-  return tokens.map((t) => t.text).join("");
+  return tokens.reduce((acc, token, i) => {
+    if (i === 0) return token.text;
+    const prevText = tokens[i - 1].text;
+    const currText = token.text;
+    const needsSpace =
+      prevText.length > 0 &&
+      !prevText.endsWith(" ") &&
+      currText.length > 0 &&
+      !currText.startsWith(" ");
+    return acc + (needsSpace ? " " : "") + currText;
+  }, "");
 }

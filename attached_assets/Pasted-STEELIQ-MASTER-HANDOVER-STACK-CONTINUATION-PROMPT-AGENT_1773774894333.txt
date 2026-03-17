@@ -1,0 +1,312 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+CURRENT USER-CONFIRMED TRUTH FOR THIS PHASE
+==================================================
+
+1. The earlier Division Settings save failure was NOT the primary editor bug.
+2. The user resolved that save failure by filling in missing site preset values.
+3. The remaining live issues are:
+   - text deletion / unstable editing in the "Additional Capabilities" rich text box
+   - PDF rendering mismatch versus online preview
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Fix only these two issues:
+
+1. Division Settings / Additional Capabilities text editing bug
+2. Preview vs PDF rendering mismatch for rich text / content blocks
+
+Do not broaden scope.
+
+==================================================
+ISSUE 1 — ADDITIONAL CAPABILITIES TEXT EDITING BUG
+==================================================
+
+Current live symptom:
+- in Division Settings -> Quote Presentation -> Additional Capabilities
+- text may delete unexpectedly while typing
+- adding spaces may remove words
+- editing existing content is unstable
+
+Important clarification:
+- do NOT treat the already-resolved Job Type Presets save validation issue as the root cause for this phase
+- this phase is about the editor behaviour itself
+
+Your task:
+- inspect the current RichTextEditor implementation and its use for:
+  - additionalCapabilitiesBlock
+  - termsOverrideBlock
+  - headerNotesOverrideBlock
+  - exclusionsOverrideBlock
+- identify why content is being deleted or rewritten while typing
+- fix it without replacing the editor stack unless absolutely necessary
+- preserve stored data shape and existing API contracts
+- preserve compatibility with preview/PDF consumption
+
+Required result:
+- user can type normally into Additional Capabilities
+- adding spaces does not delete words
+- inserting text in the middle of content is stable
+- paragraph spacing and line breaks remain stable
+- save/load round-trip preserves content
+
+==================================================
+ISSUE 2 — PREVIEW VS PDF RENDERING MISMATCH
+==================================================
+
+You must use the current pipeline only:
+QuoteDocument -> QuoteRenderModel -> Preview/PDF
+
+Do not build any parallel renderer.
+
+Observed evidence from current user screenshots and exported PDF:
+- online preview lower content blocks render with expected readable spacing
+- exported PDF collapses certain text boundaries and headings/body transitions
+- examples seen in exported PDF:
+  - "REMITTANCE / BANK DETAILS Payment Details" runs together
+  - "Trade Accounts" becomes "TradeAccounts"
+  - "Trade accounts" becomes "Tradeaccounts"
+  - "\"Your quote or invoice number\"" becomes "\"Yourquote or invoice number\""
+
+This means:
+- the PDF export path is losing whitespace and/or block separation compared with browser preview
+- the issue likely exists in rich text normalization, HTML/markdown/plain-text conversion, or PDF text-run assembly
+- the issue is NOT just screenshot artifact; it is present in extracted PDF text
+
+Your task:
+- inspect the full current path for division/org content override blocks from stored editor content through:
+  - preview rendering
+  - QuoteDocument assembly
+  - QuoteRenderModel generation
+  - PDF export rendering
+- identify exactly where whitespace / block boundaries are lost
+- fix the minimum safe cause inside the existing pipeline
+- maintain preview/PDF parity
+
+Likely relevant content blocks:
+- Additional Capabilities
+- Terms
+- Payment Terms
+- Remittance / Bank Details
+- Exclusions
+- Header notes / division overrides
+
+Likely relevant defect categories:
+- adjacent styled text nodes concatenated without spaces
+- markdown/rich-text flattening that strips whitespace between inline runs
+- block-to-text conversion collapsing paragraph boundaries
+- PDF renderer line composition not inserting separators between node fragments
+
+Required result:
+- headings and following body text no longer overlap or run together in PDF
+- preview and PDF remain aligned for the affected blocks
+- no duplicated or dropped content
+- no architecture changes
+
+==================================================
+IMPLEMENTATION RULES FOR THIS PHASE
+==================================================
+
+Allowed:
+- targeted fix in current RichTextEditor handling
+- targeted normalization/sanitization fix
+- targeted rendering fix in QuoteDocument / QuoteRenderModel / PDF path
+- helper functions if needed
+- minimal regression-safe UI fixes
+
+Not allowed:
+- swapping the editor framework unless absolutely required and explicitly justified
+- schema redesign
+- route redesign
+- alternative rendering engine
+- quote lifecycle changes
+- unrelated cleanup
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current repo/codebase as source of truth
+2. Identify exact files involved
+3. State exact bug cause(s) found
+4. Briefly list the tasks you will perform
+5. Then implement
+
+If you cannot fully prove every aspect of the PDF issue from code immediately:
+- identify the most likely concrete rendering fault
+- fix only what the code supports
+- report any remaining gap explicitly
+
+==================================================
+MINIMUM REGRESSION CHECKS
+==================================================
+
+You must run and report all relevant regression checks:
+
+Division settings / editor:
+- LJ Division Settings page loads
+- Additional Capabilities accepts inserted text
+- typing spaces does not delete words
+- editing in the middle of content is stable
+- save succeeds
+- reload preserves content
+- Terms Override still works
+- Header Notes Override still works
+- Exclusions Override still works
+
+Rendering / preview / PDF:
+- quote preview still renders through current pipeline
+- PDF export still renders through current pipeline
+- preview/PDF parity remains intact for affected text blocks
+- Additional Capabilities renders in preview
+- Additional Capabilities renders in PDF
+- Remittance / Bank Details renders in preview
+- Remittance / Bank Details renders in PDF
+- spaces between headings/body text are preserved in PDF
+- no joined words such as TradeAccounts / Yourquote remain in PDF output
+
+Safety:
+- no schema drift unless explicitly justified
+- no route contract changes unless explicitly justified
+- no break to Xero settings tab
+- no break to Job Type Presets section
+- no break to quote detail preview/export flow
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact bug cause(s) found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim complete unless both issues were actually fixed and verified.
+
+==================================================
+TRUTHFULNESS REMINDER
+==================================================
+
+Do not claim success unless:
+- the editor bug was reproduced and fixed
+- the PDF whitespace/rendering mismatch was reproduced and fixed
+- preview/PDF behaviour for the affected blocks was verified
