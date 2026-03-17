@@ -1,0 +1,527 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT LIVE DIVISION REALITY
+==================================================
+
+Only LJ is currently operating as the active working division in the app.
+
+LEL and LL are not yet set up as working live divisions in operational use.
+
+This phase must therefore:
+- build a GLOBAL lifecycle framework
+- implement LJ as the FIRST live lifecycle template
+- keep the framework ready for future LEL and LL templates later
+- NOT pretend LEL/LL are operationally active today
+
+Do not hardcode the lifecycle engine as LJ-only forever.
+Do not build fake live operational rollout for LEL/LL in this phase.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Build PHASE 1 of a global lifecycle platform for SteelIQ.
+
+This is a phased build.
+
+Do NOT attempt the full end-state lifecycle in one go.
+
+This phase is only:
+- lifecycle foundation
+- global framework
+- shared manufacturing master workflow structure
+- division template support
+- default LJ lifecycle template as the first live implementation
+- read-only lifecycle visibility on quote/job surfaces
+- automatic mapping from existing commercial/job/invoice events where already available
+
+Do NOT build full editable operational task management yet unless explicitly required below.
+
+==================================================
+BUSINESS INTENT
+==================================================
+
+SteelIQ needs a clear lifecycle system so staff can quickly see:
+- where a quote/job is in the full start-to-finish process
+- what stage it is currently in
+- what has already happened
+- what is still required next
+- who owns the next step
+- what is blocked
+- what is internal responsibility
+- what is client responsibility
+- what evidence is required later for completion
+
+This lifecycle must eventually support all divisions, but with division-specific templates layered over one shared global engine.
+
+==================================================
+ARCHITECTURAL DECISION — LOCK THIS IN
+==================================================
+
+Implement:
+- one GLOBAL lifecycle engine/framework
+- one SHARED lifecycle status model
+- one SHARED ownership/audit model
+- one SHARED manufacturing master workflow structure
+- DIVISION-SPECIFIC templates layered over that structure
+- future JOB-TYPE overlays supported by architecture, but not fully built in this phase
+
+Do NOT build separate unrelated lifecycle systems per division.
+
+Approved direction:
+- global engine
+- shared master workflow
+- division template
+- later job-type overlays
+- later admin-editable template management
+- later controlled one-off task exception flow
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Build Phase 1 only.
+
+Required deliverables:
+
+1. Global lifecycle foundation
+2. Lifecycle template support by division
+3. Shared manufacturing master workflow structure
+4. Default LJ lifecycle template as the first live template
+5. Automatic lifecycle milestone mapping from existing known system events
+6. Read-only lifecycle panel on relevant pages
+7. Current stage / next action / owner visibility
+8. Responsibility visibility including internal/client/external classification
+9. Audit-safe lifecycle instance model
+10. Template versioning foundation
+
+Do NOT build:
+- full editable checklist/task UI
+- full procurement module integration
+- full production module integration
+- full finance automation
+- admin template builder
+- full approval workflow for custom tasks
+- full evidence-upload completion flow
+- dashboard suite
+unless minimally required for Phase 1 visibility and architecture safety
+
+==================================================
+GLOBAL LIFECYCLE FRAMEWORK — REQUIRED
+==================================================
+
+Create a shared lifecycle framework with these concepts:
+
+Lifecycle template level:
+- lifecycle template
+- lifecycle template version
+- lifecycle stage definition
+- lifecycle task definition
+
+Lifecycle instance level:
+- lifecycle instance
+- lifecycle instance stage state
+- lifecycle instance task state or equivalent future-safe structure
+- lifecycle events / audit-safe state tracking
+
+Common stage concepts:
+- stage key
+- stage label
+- stage order
+- stage status
+- stage owner role
+- next action text
+- blocked reason (nullable)
+- completedAt (nullable)
+- responsibility type
+
+Responsibility type values:
+- internal
+- client
+- external
+
+Common status model for now:
+- not_started
+- active
+- blocked
+- complete
+- not_applicable
+
+Keep statuses fixed and shared globally for now.
+
+==================================================
+TEMPLATE VERSIONING — REQUIRED
+==================================================
+
+Best-practice rule:
+- lifecycle template version must be assigned at quote acceptance
+- operational execution activates from that assigned version at job creation / conversion
+- later template edits must not rewrite historical/live lifecycle expectations for already accepted jobs
+
+This phase must lay the foundation for that.
+Do not ignore template versioning.
+
+==================================================
+SHARED MANUFACTURING MASTER WORKFLOW — REQUIRED
+==================================================
+
+Define a shared manufacturing master lifecycle structure that can support LJ now and LEL/LL later.
+
+Use these top-level master stages:
+- Estimate
+- Quote
+- Acceptance
+- Commercial Setup
+- Design / Review
+- Procurement
+- Production Planning
+- Manufacture
+- QA / Compliance
+- Dispatch / Delivery / Install
+- Invoicing
+- Closeout
+
+This is the shared global manufacturing structure.
+
+Because LJ is the only active live division today, create the first live division template for LJ by mapping LJ-relevant stage labels/behaviour onto this master structure.
+
+For LJ in Phase 1, it is acceptable to present stage labels such as:
+- Estimate
+- Quote
+- Acceptance
+- Commercial Setup
+- Site Measure / Review
+- Procurement
+- Manufacture
+- Delivery / Install
+- Invoicing
+- Closeout
+
+But keep the underlying architecture compatible with the broader shared manufacturing master workflow.
+
+==================================================
+RESPONSIBILITY MODEL — REQUIRED
+==================================================
+
+Best practice requires visibility of who owns work and whether the action sits with the business or with the client.
+
+This phase must support stage/task responsibility classification:
+- internal
+- client
+- external
+
+And owner role visibility such as:
+- estimator
+- admin
+- finance
+- production
+- project manager or equivalent future-safe role if current fixed roles do not yet map perfectly
+- viewer where relevant for display only
+
+Do not redesign the platform role model in this phase.
+If current fixed roles are insufficient for perfect operational mapping, use the safest compatible owner-role representation and report the limitation explicitly.
+
+==================================================
+AUTOMATIC MILESTONE MAPPING — REQUIRED
+==================================================
+
+Map lifecycle stages from existing system truth where available.
+
+Use current existing events/states only.
+Do NOT invent fake state.
+
+Minimum expected mappings:
+- estimate/job created -> Estimate active or complete as appropriate
+- quote created -> Quote active
+- quote sent/review/accepted/declined -> Quote / Acceptance stage updates
+- quote accepted -> Acceptance complete, Commercial Setup active, lifecycle template version assigned
+- deposit invoice created -> Commercial Setup advances appropriately
+- invoice present / invoice status info -> Invoicing stage visibility where possible
+- convert to job / op-job created -> operational stages become active
+- archived/cancelled/declined states reflected safely without falsifying history
+
+If data is not yet available for a stage:
+- show the stage as not_started
+- do not fake completeness
+
+==================================================
+READ-ONLY UI SURFACE — REQUIRED
+==================================================
+
+Add a minimum practical lifecycle UI surface to:
+- quote detail page
+- job/op-job detail page if relevant and available in current codebase
+
+The lifecycle panel must show:
+- ordered stage bar or stage list
+- current active stage
+- completed stages
+- blocked stage if applicable
+- owner role for each stage
+- responsibility type for each stage where useful
+- next action summary
+- lifecycle source notes where helpful
+- template/version indicator where appropriate for admin/operational trust
+
+This is an operational visibility surface, not just backend data.
+
+Do NOT mark this phase complete without that UI.
+
+==================================================
+PAGE / MODULE BEHAVIOUR RULES
+==================================================
+
+Quote detail page:
+- should show commercial lifecycle even before job conversion
+- after acceptance, should show future operational stages in not_started/queued state
+- should make it clear that lifecycle version is assigned at acceptance
+
+Job/op-job page:
+- should show same lifecycle instance from job perspective if current codebase supports a stable detail view
+- must not mutate accepted quote history
+
+Do not merge quote editable state with lifecycle state.
+Lifecycle is derived/controlled operational status, not replacement commercial source-of-truth.
+
+==================================================
+SCHEMA / DATA RULES
+==================================================
+
+You may add minimal schema required for lifecycle foundation.
+
+But:
+- keep schema narrow
+- no speculative bloat for future phases unless clearly justified
+- do not build a massive task engine in Phase 1 if not needed
+- do not build freeform per-job workflow editing in Phase 1
+
+Preferred direction:
+- lifecycle template records/config
+- lifecycle instance/progress support tied to quote/job context
+- template version support
+- audit-safe timestamps / owner role / responsibility type / stage state
+
+Historical integrity is mandatory.
+
+==================================================
+WHAT THIS PHASE MUST NOT DO
+==================================================
+
+Do NOT:
+- build the full editable checklist/task completion system
+- build admin lifecycle template editor
+- build notification/escalation engine
+- redesign customers/contacts
+- redesign quote/job/invoice lifecycle
+- redesign invoice ownership
+- redesign production modules
+- hardcode the framework as LJ-only forever
+- allow ad hoc uncontrolled per-job lifecycle mutation
+
+==================================================
+MINIMUM OPERATIONAL QUESTIONS THIS PHASE MUST ANSWER
+==================================================
+
+On a quote/job page, staff must be able to answer:
+- Where is this record in the lifecycle?
+- What stage is active now?
+- What is the next required action?
+- Who owns the current stage?
+- Is this waiting on us, the client, or an external party?
+- What stages are still ahead?
+
+==================================================
+IMPLEMENTATION APPROACH
+==================================================
+
+Recommended approach:
+- add lifecycle foundation model
+- create shared master workflow structure
+- create default LJ template config from that structure
+- assign lifecycle template version at quote acceptance
+- write lifecycle derivation/mapping service from existing quote/invoice/job data
+- surface lifecycle panel in quote detail first
+- surface lifecycle on job/op-job detail if current codebase has a stable operational page
+
+Do not overbuild.
+Phase 1 is visibility + structure.
+
+==================================================
+FORTUNE-500 PARITY DIRECTION — REQUIRED DESIGN ALIGNMENT
+==================================================
+
+The implemented architecture must align with mature enterprise workflow patterns:
+
+- template-driven workflow architecture
+- template versioning
+- separation of template vs live instance
+- explicit owner/responsibility model
+- visible client/external blockers
+- audit-safe state progression
+- future support for evidence-based completion
+- future support for approved one-off task exceptions
+- future support for dashboards/escalations
+
+You do NOT need to build all of those now.
+You DO need to ensure Phase 1 does not block them architecturally.
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- estimate -> quote flows still work
+- accepted quote flow still works
+- convert-to-job flow still works
+- invoice creation still works
+- quote detail page still works
+- op-job/job detail page still works if touched
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- no break to Xero/invoice surfaces
+- no break to archive/unarchive flows
+
+Lifecycle-specific verification:
+- new quote shows lifecycle
+- accepted quote shows Acceptance complete and Commercial Setup active
+- quote with deposit invoice reflects Commercial Setup / Invoicing state appropriately
+- converted job reflects operational lifecycle progression appropriately
+- responsibility type displays correctly where implemented
+- lifecycle version assignment occurs at acceptance or equivalent safe milestone
+- stages with no available evidence remain not_started, not falsely complete
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Lifecycle design implemented
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim lifecycle is fully implemented.
+This is Phase 1 only.
+
+==================================================
+SUCCESS CRITERIA FOR PHASE 1
+==================================================
+
+Phase 1 is complete only if:
+- a global lifecycle framework exists
+- a shared manufacturing master workflow structure exists
+- LJ default template exists as the first live template
+- existing quote/job/invoice signals map into lifecycle state
+- lifecycle template versioning foundation exists
+- quote detail has a working lifecycle panel
+- job/op-job lifecycle visibility is added if relevant/currently supported
+- no architecture drift occurred
+
+If editable tasks/checklists are not built yet, that is acceptable for Phase 1.

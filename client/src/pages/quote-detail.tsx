@@ -31,6 +31,7 @@ import type { PreviewData } from "@/lib/quote-document";
 import { buildQuoteRenderModel } from "@/lib/quote-renderer";
 import { generateQuotePdf, generateQuotePdfBase64 } from "@/lib/pdf-engine";
 import { Textarea } from "@/components/ui/textarea";
+import LifecyclePanel from "@/components/lifecycle-panel";
 
 interface QuoteWithRevisions extends Quote {
   revisions: QuoteRevision[];
@@ -521,6 +522,12 @@ export default function QuoteDetail() {
       </div>
 
       {quote.sourceJobId && <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />}
+
+      <Separator />
+
+      <div data-testid="section-lifecycle" className="rounded-lg border bg-card p-4">
+        <LifecyclePanel quoteId={quote.id} />
+      </div>
 
       {quote.status === "accepted" && (
         <>

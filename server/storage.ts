@@ -20,12 +20,14 @@ import {
   type Project, type InsertProject,
   type Invoice, type InsertInvoice,
   type OpJob, type InsertOpJob,
+  type LifecycleTemplate, type LifecycleInstance,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
   orgSettings, divisionSettings, specDictionary,
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, opJobs,
+  lifecycleTemplates, lifecycleInstances,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -172,6 +174,17 @@ export interface IStorage {
   getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined>;
   getDemoQuotes(): Promise<Quote[]>;
   getDemoOpJobs(): Promise<OpJob[]>;
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  getActiveLifecycleTemplate(divisionCode: string): Promise<LifecycleTemplate | undefined>;
+  getLifecycleInstanceForQuote(quoteId: string): Promise<LifecycleInstance | undefined>;
+  createLifecycleInstance(data: {
+    quoteId: string;
+    divisionCode: string;
+    templateId: string;
+    templateVersion: number;
+  }): Promise<LifecycleInstance>;
+  updateLifecycleInstanceJob(quoteId: string, opJobId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -870,6 +883,53 @@ export class DatabaseStorage implements IStorage {
 
   async getDemoOpJobs(): Promise<OpJob[]> {
     return db.select().from(opJobs).where(eq(opJobs.isDemoRecord, true));
+  }
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+  async getActiveLifecycleTemplate(divisionCode: string): Promise<LifecycleTemplate | undefined> {
+    const [row] = await db
+      .select()
+      .from(lifecycleTemplates)
+      .where(and(eq(lifecycleTemplates.divisionCode, divisionCode), eq(lifecycleTemplates.isActive, true)))
+      .orderBy(desc(lifecycleTemplates.version))
+      .limit(1);
+    return row;
+  }
+
+  async getLifecycleInstanceForQuote(quoteId: string): Promise<LifecycleInstance | undefined> {
+    const [row] = await db
+      .select()
+      .from(lifecycleInstances)
+      .where(eq(lifecycleInstances.quoteId, quoteId))
+      .limit(1);
+    return row;
+  }
+
+  async createLifecycleInstance(data: {
+    quoteId: string;
+    divisionCode: string;
+    templateId: string;
+    templateVersion: number;
+  }): Promise<LifecycleInstance> {
+    const [created] = await db
+      .insert(lifecycleInstances)
+      .values({
+        quoteId: data.quoteId,
+        divisionCode: data.divisionCode,
+        templateId: data.templateId,
+        templateVersion: data.templateVersion,
+        assignedAt: new Date(),
+      })
+      .returning();
+    return created;
+  }
+
+  async updateLifecycleInstanceJob(quoteId: string, opJobId: string): Promise<void> {
+    await db
+      .update(lifecycleInstances)
+      .set({ opJobId })
+      .where(eq(lifecycleInstances.quoteId, quoteId));
   }
 }
 

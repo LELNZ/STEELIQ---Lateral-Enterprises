@@ -537,3 +537,35 @@ export const opJobs = pgTable("op_jobs", {
 export const insertOpJobSchema = createInsertSchema(opJobs).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertOpJob = z.infer<typeof insertOpJobSchema>;
 export type OpJob = typeof opJobs.$inferSelect;
+
+// ─── Lifecycle Framework ─────────────────────────────────────────────────────
+
+// Stores the template definition for each division (versioned for auditability).
+// templateJson contains a LifecycleTemplateConfig (see shared/lifecycle.ts).
+export const lifecycleTemplates = pgTable("lifecycle_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  divisionCode: text("division_code").notNull(),
+  name: text("name").notNull(),
+  version: integer("version").notNull().default(1),
+  templateJson: jsonb("template_json").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type LifecycleTemplate = typeof lifecycleTemplates.$inferSelect;
+
+// Records which template version was assigned to a quote at acceptance.
+// Once created, this record is immutable — it preserves what lifecycle
+// framework was in effect when commercial commitment was made.
+export const lifecycleInstances = pgTable("lifecycle_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quoteId: varchar("quote_id").notNull().references(() => quotes.id),
+  opJobId: varchar("op_job_id"),  // populated when job is created from this quote
+  divisionCode: text("division_code").notNull(),
+  templateId: varchar("template_id").notNull().references(() => lifecycleTemplates.id),
+  templateVersion: integer("template_version").notNull(),
+  assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type LifecycleInstance = typeof lifecycleInstances.$inferSelect;

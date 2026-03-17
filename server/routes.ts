@@ -18,6 +18,8 @@ import path from "path";
 import { sendQuoteEmail, isEmailConfigured } from "./email";
 import fs from "fs";
 import crypto from "crypto";
+import { seedLifecycleTemplates } from "./lifecycle-templates";
+import { deriveLifecycleState } from "./lifecycle-service";
 import {
   handleEstimateDeleteCascade,
   handleEstimateArchiveCascade,
@@ -144,6 +146,7 @@ export async function registerRoutes(
   await seedDeliveryRates();
   await seedOrgAndDivisions();
   await seedSpecDictionary();
+  await seedLifecycleTemplates();
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
@@ -1906,6 +1909,26 @@ export async function registerRoutes(
         acceptedValue,
         revisionId: quote.currentRevisionId,
       });
+
+      // Assign lifecycle template version at acceptance (audit-safe milestone)
+      try {
+        const divisionCode = quote.divisionId ?? "LJ";
+        const existingInstance = await storage.getLifecycleInstanceForQuote(quote.id);
+        if (!existingInstance) {
+          const template = await storage.getActiveLifecycleTemplate(divisionCode);
+          if (template) {
+            await storage.createLifecycleInstance({
+              quoteId: quote.id,
+              divisionCode,
+              templateId: template.id,
+              templateVersion: template.version,
+            });
+          }
+        }
+      } catch (lcErr: any) {
+        console.error("[lifecycle] Failed to create lifecycle instance on accept:", lcErr.message);
+      }
+
       return res.json(updated);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2396,6 +2419,13 @@ export async function registerRoutes(
         jobNumber,
       });
 
+      // Link lifecycle instance to the new job (non-fatal if fails)
+      try {
+        await storage.updateLifecycleInstanceJob(quote.id, opJob.id);
+      } catch (lcErr: any) {
+        console.error("[lifecycle] Failed to link lifecycle instance to job:", lcErr.message);
+      }
+
       return res.status(201).json(opJob);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2729,6 +2759,65 @@ export async function registerRoutes(
       const updated = await storage.updateOpJob(req.params.id, parsed.data);
       if (!updated) return res.status(404).json({ error: "Job not found" });
       return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Lifecycle Routes ─────────────────────────────────────────────────────
+  // GET /api/quotes/:id/lifecycle — derive lifecycle state from existing signals
+  app.get("/api/quotes/:id/lifecycle", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      const userDivision = (req as any).user?.divisionCode;
+      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
+        return res.status(403).json({ error: "Access denied: different division" });
+      }
+
+      const invoices = await storage.getInvoicesByQuote(quote.id);
+      const opJob = await storage.getOpJobByQuoteId(quote.id) ?? null;
+      const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
+
+      const lifecycle = deriveLifecycleState(quote, invoices, opJob, instance);
+      if (!lifecycle) {
+        return res.status(404).json({ error: "No lifecycle template available for this division" });
+      }
+      return res.json(lifecycle);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/op-jobs/:id/lifecycle — derive lifecycle state from job context
+  app.get("/api/op-jobs/:id/lifecycle", async (req, res) => {
+    try {
+      const job = await storage.getOpJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+
+      const userDivision = (req as any).user?.divisionCode;
+      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      if (!isAllDivision && (job.divisionId || null) !== userDivision) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (!job.sourceQuoteId) {
+        return res.status(404).json({ error: "Job has no source quote — lifecycle not available" });
+      }
+
+      const quote = await storage.getQuote(job.sourceQuoteId);
+      if (!quote) return res.status(404).json({ error: "Source quote not found" });
+
+      const invoices = await storage.getInvoicesByQuote(quote.id);
+      const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
+
+      const lifecycle = deriveLifecycleState(quote, invoices, job, instance);
+      if (!lifecycle) {
+        return res.status(404).json({ error: "No lifecycle template available for this division" });
+      }
+      return res.json(lifecycle);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
