@@ -106,7 +106,8 @@ function renderInlineTokensPdf(
   let curX = x;
   let curY = y;
 
-  for (const token of tokens) {
+  for (let ti = 0; ti < tokens.length; ti++) {
+    const token = tokens[ti];
     const style =
       token.bold && token.italic ? "bolditalic" :
       token.bold ? "bold" :
@@ -115,6 +116,23 @@ function renderInlineTokensPdf(
     pdf.setFont(FONT_NORMAL, style);
     pdf.setFontSize(fontSize);
     pdf.setTextColor(color);
+
+    // Inter-token boundary: if the previous token ended without whitespace and
+    // this token starts without whitespace, insert a space between them.
+    // This prevents adjacent tokens with different styles (e.g. bold followed by
+    // normal) from running together in the PDF — both visually and in text extraction.
+    if (ti > 0) {
+      const prevText = tokens[ti - 1].text;
+      const currText = token.text;
+      if (
+        prevText.length > 0 &&
+        !prevText.endsWith(" ") &&
+        currText.length > 0 &&
+        !currText.startsWith(" ")
+      ) {
+        curX += pdf.getTextWidth(" ");
+      }
+    }
 
     const words = token.text.split(" ");
     for (let wi = 0; wi < words.length; wi++) {

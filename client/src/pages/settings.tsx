@@ -90,6 +90,8 @@ function OrgSettingsTab() {
   const { toast } = useToast();
   const { data: org, isLoading } = useQuery<OrgSettings>({
     queryKey: ["/api/settings/org"],
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   const [form, setForm] = useState<Partial<OrgSettings>>({});
@@ -246,7 +248,7 @@ function OrgSettingsTab() {
             <p className="text-xs text-muted-foreground mb-2">Displayed on customer invoices and quotes</p>
             <RichTextEditor
               value={form.bankDetails || ""}
-              onChange={(v) => setForm({ ...form, bankDetails: v })}
+              onChange={(v) => setForm(prev => ({ ...prev, bankDetails: v }))}
               rows={3}
               data-testid="input-org-bankDetails"
             />
@@ -280,7 +282,7 @@ function OrgSettingsTab() {
             <Label className="text-sm font-medium mb-1 block">Default Header Notes</Label>
             <RichTextEditor
               value={form.defaultHeaderNotesBlock || ""}
-              onChange={(v) => setForm({ ...form, defaultHeaderNotesBlock: v })}
+              onChange={(v) => setForm(prev => ({ ...prev, defaultHeaderNotesBlock: v }))}
               rows={3}
               data-testid="input-org-defaultHeaderNotesBlock"
             />
@@ -289,7 +291,7 @@ function OrgSettingsTab() {
             <Label className="text-sm font-medium mb-1 block">Default Terms</Label>
             <RichTextEditor
               value={form.defaultTermsBlock || ""}
-              onChange={(v) => setForm({ ...form, defaultTermsBlock: v })}
+              onChange={(v) => setForm(prev => ({ ...prev, defaultTermsBlock: v }))}
               rows={4}
               data-testid="input-org-defaultTermsBlock"
             />
@@ -298,7 +300,7 @@ function OrgSettingsTab() {
             <Label className="text-sm font-medium mb-1 block">Default Exclusions</Label>
             <RichTextEditor
               value={form.defaultExclusionsBlock || ""}
-              onChange={(v) => setForm({ ...form, defaultExclusionsBlock: v })}
+              onChange={(v) => setForm(prev => ({ ...prev, defaultExclusionsBlock: v }))}
               rows={3}
               data-testid="input-org-defaultExclusionsBlock"
             />
@@ -307,7 +309,7 @@ function OrgSettingsTab() {
             <Label className="text-sm font-medium mb-1 block">Payment Terms</Label>
             <RichTextEditor
               value={form.paymentTermsBlock || ""}
-              onChange={(v) => setForm({ ...form, paymentTermsBlock: v })}
+              onChange={(v) => setForm(prev => ({ ...prev, paymentTermsBlock: v }))}
               rows={3}
               data-testid="input-org-paymentTermsBlock"
             />
@@ -614,6 +616,8 @@ function DivisionSettingsTab() {
 
   const { data: div, isLoading } = useQuery<DivisionSettings>({
     queryKey: ["/api/settings/divisions", selectedCode],
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   const { data: specEntries } = useQuery<SpecEntry[]>({
@@ -852,7 +856,7 @@ function DivisionSettingsTab() {
                 <Label className="text-sm font-medium mb-1 block">Terms Override</Label>
                 <RichTextEditor
                   value={form.termsOverrideBlock || ""}
-                  onChange={(v) => setForm({ ...form, termsOverrideBlock: v })}
+                  onChange={(v) => setForm(prev => ({ ...prev, termsOverrideBlock: v }))}
                   rows={3}
                   data-testid="input-div-termsOverrideBlock"
                 />
@@ -861,7 +865,7 @@ function DivisionSettingsTab() {
                 <Label className="text-sm font-medium mb-1 block">Header Notes Override</Label>
                 <RichTextEditor
                   value={form.headerNotesOverrideBlock || ""}
-                  onChange={(v) => setForm({ ...form, headerNotesOverrideBlock: v })}
+                  onChange={(v) => setForm(prev => ({ ...prev, headerNotesOverrideBlock: v }))}
                   rows={3}
                   data-testid="input-div-headerNotesOverrideBlock"
                 />
@@ -870,7 +874,7 @@ function DivisionSettingsTab() {
                 <Label className="text-sm font-medium mb-1 block">Exclusions Override</Label>
                 <RichTextEditor
                   value={form.exclusionsOverrideBlock || ""}
-                  onChange={(v) => setForm({ ...form, exclusionsOverrideBlock: v })}
+                  onChange={(v) => setForm(prev => ({ ...prev, exclusionsOverrideBlock: v }))}
                   rows={3}
                   data-testid="input-div-exclusionsOverrideBlock"
                 />
@@ -880,7 +884,7 @@ function DivisionSettingsTab() {
                 <p className="text-xs text-muted-foreground mb-2">Cross-promotes other Lateral divisions on the quote. Use **bold** for service headings and a blank line between each service block.</p>
                 <RichTextEditor
                   value={form.additionalCapabilitiesBlock || ""}
-                  onChange={(v) => setForm({ ...form, additionalCapabilitiesBlock: v })}
+                  onChange={(v) => setForm(prev => ({ ...prev, additionalCapabilitiesBlock: v }))}
                   rows={6}
                   placeholder={"Many of our clients also engage us across multiple stages.\n\n**Lateral Engineering**\nStructural steel fabrication, general engineering, repairs and custom manufacturing.\n\n**Lateral Laser Cutting**\nCNC fibre laser cutting, folded components, sheet processing and small-batch production."}
                   data-testid="input-div-additionalCapabilitiesBlock"
