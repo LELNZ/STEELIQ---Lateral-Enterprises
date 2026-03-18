@@ -1,0 +1,362 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT TRUTH AFTER PR #12 REVIEW
+==================================================
+
+PR #12 delivered meaningful work, but it is not yet clean enough to leave as-is before returning to lifecycle.
+
+What appears implemented:
+- French window types added in builder/schema/drawing path
+- manual price override added in Quote Builder and pricing logic
+- removal and rubbish fee logic added
+- removal/rubbish included in exec-summary totals and estimate snapshot totals
+
+What still needs tightening:
+1. Removal and rubbish controls are currently centred in Exec Summary / job-style surface, not clearly aligned to the primary estimate/quote commercial workflow
+2. It is not yet fully proven that removal and rubbish feed the actual quote commercial outputs, preview, and PDF the way staff need
+3. Manual override edit ownership should remain clear and not become confusing across too many surfaces
+4. Exec Summary is becoming too long and needs collapsible cards / sections for practical use on large jobs
+
+This phase is a cleanup / operational-surface tightening phase before returning to lifecycle work.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these items:
+
+1. Tighten the commercial ownership and placement of:
+   - manual price override
+   - removal fee
+   - rubbish/general waste fee
+
+2. Verify and fix propagation of removal/rubbish into:
+   - estimate totals
+   - quote commercial outputs
+   - preview
+   - PDF
+   where applicable in the current architecture
+
+3. Make Exec Summary operationally manageable for large jobs by adding collapsible cards/sections
+
+Do NOT return to lifecycle in this phase.
+Do NOT broaden into unrelated pricing redesign.
+
+==================================================
+GOAL 1 — CLEAN COMMERCIAL SURFACE OWNERSHIP
+==================================================
+
+Best-practice direction for this phase:
+
+- Manual price override should remain primarily owned by the Quote Builder / estimate item commercial surface
+- Removal and rubbish/general-waste charges should be properly part of the estimate/quote commercial workflow
+- Exec Summary should be a strong review/operational surface, not the only place where critical commercial extras effectively live
+
+Required task:
+- review current placement of removal/rubbish controls
+- tighten the UX and data flow so these charges are clearly part of the estimate/quote workflow
+- do this without architecture redesign
+
+Important:
+- do NOT create conflicting multiple sources of truth
+- if a field is editable in more than one place, state clearly which surface owns it and keep sync behaviour deterministic
+- preserve pre-acceptance editability and post-acceptance freeze rules
+
+Best-practice rule remains locked:
+- pre-acceptance estimate/quote values can update quote output
+- accepted quote commercial history remains frozen
+
+==================================================
+GOAL 2 — PROPAGATION INTO QUOTE / PREVIEW / PDF
+==================================================
+
+Current concern:
+- removal and rubbish totals appear to flow into exec-summary totals and estimate snapshot totals
+- but it is not yet fully proven that they are correctly reflected in actual quote commercial outputs and customer-facing document paths
+
+Required task:
+- review the full current path from estimate/commercial state into:
+  - quote totals
+  - quote preview
+  - QuoteDocument
+  - QuoteRenderModel
+  - PDF
+- verify where removal and rubbish are included or missing
+- implement the minimum safe fixes needed so the commercial outputs are truthful and consistent
+
+Do not invent a parallel document path.
+Fix this only inside the current locked pipeline.
+
+Required result:
+- if removal/rubbish are meant to be part of quote commercial totals, they must appear correctly and consistently
+- preview and PDF must remain aligned
+- no ambiguity about whether those charges are included in the quote figure
+
+==================================================
+GOAL 3 — EXEC SUMMARY COLLAPSIBLE CARDS
+==================================================
+
+Business requirement:
+- Exec Summary becomes too long on large jobs
+- cards/sections should be collapsible
+
+Required behaviour:
+- major cards/sections in Exec Summary become collapsible
+- include Expand All / Collapse All controls
+- preserve a clean operational scanning experience
+- keep key top-level totals visible and easy to access
+- large detail sections should not force excessive scrolling
+
+Recommended sections to support collapsing where relevant:
+- manufacturing breakdown
+- installation
+- removal
+- rubbish removal
+- delivery
+- item detail tables
+- quote history / related historical blocks
+- any other large cards already present
+
+Recommended UX:
+- collapsed card header should still show useful summary info where possible
+  - item count
+  - sell total
+  - override active
+  - enabled/disabled state
+- auto-collapsing detail-heavy cards when item count is high is acceptable if done safely
+- do not hide the key overall totals summary
+
+Required result:
+- Exec Summary is materially easier to use on large jobs
+- no loss of operational visibility
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted UI cleanup in Quote Builder / Exec Summary
+- targeted data-flow tightening
+- targeted quote output propagation fixes
+- targeted collapsible-card implementation
+- small helper components/hooks if needed
+- minimal schema/API changes only if strictly required
+
+Not allowed:
+- pricing-engine rewrite
+- quote lifecycle redesign
+- document pipeline redesign
+- new parallel totals system
+- speculative cleanup unrelated to this phase
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved
+3. State where manual override is currently owned
+4. State where removal/rubbish are currently owned
+5. State whether quote preview/PDF already include them correctly
+6. State which Exec Summary cards/sections you will make collapsible
+7. Then implement
+
+If removal/rubbish are not currently able to feed quote preview/PDF without a larger structural issue, stop and explain before widening architecture.
+
+==================================================
+DESIGN RULES FOR THIS PHASE
+==================================================
+
+Manual override:
+- keep primary edit ownership in Quote Builder / estimate item commercial surface
+- preserve live margin recalculation
+- preserve clear "manual override active" state
+- preserve reset-to-system behaviour
+
+Removal and rubbish:
+- make their place in the estimate/quote commercial workflow clear
+- do not leave them as hidden side-costs only visible deep in Exec Summary
+- preserve internal separation of:
+  - removal
+  - installation
+  - rubbish/general waste
+
+Exec Summary:
+- improve manageability, not ownership confusion
+- keep it a useful operational review surface
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Manual override:
+- no override mode still works
+- per m² override still works
+- total sell override still works
+- quote totals remain correct pre-acceptance
+- accepted quote history still remains frozen after acceptance
+
+Removal / rubbish:
+- removal fee still calculates correctly
+- rubbish fee still calculates correctly
+- both still flow into estimate totals
+- both are reflected correctly wherever quote commercial totals are displayed
+- both are reflected correctly in preview/PDF if intended by current quote output design
+- no double counting
+- no hidden mismatch between builder/summary/document totals
+
+Exec Summary:
+- major sections are collapsible
+- Expand All / Collapse All works
+- key totals remain visible
+- long jobs are materially easier to navigate
+
+Safety:
+- no break to quote builder
+- no break to estimate save/update
+- no break to quote creation/update
+- no break to quote preview/PDF
+- no break to invoice/Xero flows
+- no break to lifecycle code already added
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact ownership/propagation issues found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless:
+- commercial ownership is clearer
+- removal/rubbish propagation is verified/fixed
+- Exec Summary collapsible sections are implemented and tested
+
+==================================================
+SUCCESS CRITERIA FOR THIS PHASE
+==================================================
+
+This phase is complete only if:
+- manual override ownership remains clean
+- removal and rubbish charges are properly integrated into estimate/quote commercial flow
+- preview/PDF totals are truthful and aligned where applicable
+- Exec Summary is collapsible and more usable on large jobs
+- no architecture drift occurred

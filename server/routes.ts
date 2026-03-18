@@ -1538,6 +1538,8 @@ export async function registerRoutes(
         templateKey: currentRevision.templateKey || "base_v1",
         specDictionaryGrouped: grouped,
         effectiveSpecDisplayKeys,
+        totalsDisplayConfig: (currentRevision as any).totalsDisplayConfigJson || null,
+        commercialRemarks: (currentRevision as any).commercialRemarks || null,
         projectAddress,
         companyTemplateConfig: orgSettings?.templateConfigJson || null,
       });
@@ -1548,13 +1550,45 @@ export async function registerRoutes(
 
   app.patch("/api/quotes/:id/revisions/:revId/spec-display", async (req, res) => {
     try {
-      const { specDisplayKeys } = z.object({ specDisplayKeys: z.array(z.string()) }).parse(req.body);
+      const body = z.object({
+        specDisplayKeys: z.array(z.string()).optional(),
+        totalsDisplayConfig: z.object({
+          showItemsSubtotal: z.boolean(),
+          showInstallation: z.boolean(),
+          showDelivery: z.boolean(),
+          showRemoval: z.boolean(),
+          showRubbish: z.boolean(),
+          showSubtotal: z.boolean(),
+          showGst: z.boolean(),
+          showCommercialRemarks: z.boolean().optional(),
+        }).optional(),
+        commercialRemarks: z.string().nullable().optional(),
+      }).parse(req.body);
+
       const client = await pool.connect();
       try {
-        await client.query(
-          `UPDATE quote_revisions SET spec_display_override_json = $1 WHERE id = $2 AND quote_id = $3`,
-          [JSON.stringify(specDisplayKeys), req.params.revId, req.params.id]
-        );
+        const parts: string[] = [];
+        const values: unknown[] = [];
+        let idx = 1;
+        if (body.specDisplayKeys !== undefined) {
+          parts.push(`spec_display_override_json = $${idx++}`);
+          values.push(JSON.stringify(body.specDisplayKeys));
+        }
+        if (body.totalsDisplayConfig !== undefined) {
+          parts.push(`totals_display_config_json = $${idx++}`);
+          values.push(JSON.stringify(body.totalsDisplayConfig));
+        }
+        if (body.commercialRemarks !== undefined) {
+          parts.push(`commercial_remarks = $${idx++}`);
+          values.push(body.commercialRemarks);
+        }
+        if (parts.length > 0) {
+          values.push(req.params.revId, req.params.id);
+          await client.query(
+            `UPDATE quote_revisions SET ${parts.join(", ")} WHERE id = $${idx++} AND quote_id = $${idx++}`,
+            values
+          );
+        }
         res.json({ ok: true });
       } finally {
         client.release();

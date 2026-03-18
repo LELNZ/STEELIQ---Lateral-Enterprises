@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -235,6 +236,16 @@ export default function QuoteBuilder() {
   const [jobDate, setJobDate] = useState(new Date().toISOString().split("T")[0]);
   const [savedJobId, setSavedJobId] = useState<string | null>(jobId || null);
 
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const [deliveryEnabled, setDeliveryEnabled] = useState(false);
+  const [deliveryMethodId, setDeliveryMethodId] = useState<string>("");
+  const [deliveryCustom, setDeliveryCustom] = useState<string>("");
+  const [deliveryMarkup, setDeliveryMarkup] = useState<string>("15");
+  const [removalEnabled, setRemovalEnabled] = useState(false);
+  const [removalMarkup, setRemovalMarkup] = useState<string>("15");
+  const [rubbishEnabled, setRubbishEnabled] = useState(false);
+  const [rubbishTonnage, setRubbishTonnage] = useState<string>("");
+
   const [galleryItemId, setGalleryItemId] = useState<string | null>(null);
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("");
@@ -286,6 +297,12 @@ export default function QuoteBuilder() {
   const { data: masterProfiles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_profile"], queryFn: fetchLib("direct_profile") });
   const { data: masterAccessories = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_accessory"], queryFn: fetchLib("direct_accessory") });
   const { data: masterLabour = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "labour_operation"], queryFn: fetchLib("labour_operation") });
+  const { data: deliveryRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "delivery_rate"], queryFn: fetchLib("delivery_rate") });
+
+  const persistJobField = useCallback((field: string, value: any) => {
+    if (!savedJobId) return;
+    apiRequest("PATCH", `/api/jobs/${savedJobId}`, { [field]: value });
+  }, [savedJobId]);
 
   const { data: specDictionary = [] } = useQuery<SpecDictionaryEntry[]>({
     queryKey: ["/api/spec-dictionary", "LJ"],
@@ -380,6 +397,16 @@ export default function QuoteBuilder() {
         photos: ji.photos || [],
         dbId: ji.id,
       })));
+      const ej = existingJob as any;
+      const initDelivery = ej.deliveryEnabled === true ? true : ej.deliveryEnabled === false ? false : !!(ej.deliveryMethod || (ej.deliveryAmount != null && ej.deliveryAmount > 0));
+      setDeliveryEnabled(initDelivery);
+      setDeliveryMethodId(ej.deliveryMethod || "");
+      setDeliveryCustom(ej.deliveryAmount != null ? String(ej.deliveryAmount) : "");
+      setDeliveryMarkup(ej.deliveryMarkup != null ? String(ej.deliveryMarkup) : "15");
+      setRemovalEnabled(!!ej.removalEnabled);
+      setRemovalMarkup(ej.removalMarkup != null ? String(ej.removalMarkup) : "15");
+      setRubbishEnabled(!!ej.rubbishEnabled);
+      setRubbishTonnage(ej.rubbishTonnage != null ? String(ej.rubbishTonnage) : "");
     }
   }, [existingJob]);
 
@@ -3134,6 +3161,40 @@ export default function QuoteBuilder() {
                 </div>
                 </div>
               </ScrollArea>
+              {savedJobId && (
+                <div className="border-t px-3 py-2 shrink-0">
+                  <button
+                    className="flex items-center gap-2 w-full text-left"
+                    onClick={() => setExtrasOpen(o => !o)}
+                    data-testid="button-extras-toggle-lg"
+                  >
+                    {extrasOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Commercial Extras</span>
+                    {!extrasOpen && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        {[deliveryEnabled && "Delivery", removalEnabled && "Removal", rubbishEnabled && "Rubbish"].filter(Boolean).join(" · ") || "None"}
+                      </span>
+                    )}
+                  </button>
+                  {extrasOpen && (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Delivery</Label>
+                        <Switch checked={deliveryEnabled} onCheckedChange={(v) => { setDeliveryEnabled(v); persistJobField("deliveryEnabled", v); }} data-testid="switch-extras-delivery-lg" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Old Window/Door Removal</Label>
+                        <Switch checked={removalEnabled} onCheckedChange={(v) => { setRemovalEnabled(v); persistJobField("removalEnabled", v); }} data-testid="switch-extras-removal-lg" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Rubbish / Waste Removal</Label>
+                        <Switch checked={rubbishEnabled} onCheckedChange={(v) => { setRubbishEnabled(v); persistJobField("rubbishEnabled", v); if (v && (!rubbishTonnage || parseFloat(rubbishTonnage) <= 0)) { setRubbishTonnage("1"); persistJobField("rubbishTonnage", 1); } }} data-testid="switch-extras-rubbish-lg" />
+                      </div>
+                      <p className="text-xs text-muted-foreground">Detailed pricing & markup in Exec Summary.</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -3214,6 +3275,120 @@ export default function QuoteBuilder() {
                     </div>
                     );
                   })}
+                  {savedJobId && (
+                    <div className="mt-3 rounded-lg border bg-muted/30 p-3 space-y-2">
+                      <button
+                        className="flex items-center gap-2 w-full text-left"
+                        onClick={() => setExtrasOpen(o => !o)}
+                        data-testid="button-extras-toggle"
+                      >
+                        {extrasOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Commercial Extras</span>
+                        {!extrasOpen && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            {[deliveryEnabled && "Delivery", removalEnabled && "Removal", rubbishEnabled && "Rubbish"].filter(Boolean).join(" · ") || "None"}
+                          </span>
+                        )}
+                      </button>
+                      {extrasOpen && (
+                        <div className="space-y-3 pt-1">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Delivery</Label>
+                            <Switch
+                              checked={deliveryEnabled}
+                              onCheckedChange={(v) => { setDeliveryEnabled(v); persistJobField("deliveryEnabled", v); }}
+                              data-testid="switch-extras-delivery"
+                            />
+                          </div>
+                          {deliveryEnabled && (
+                            <div className="pl-2 space-y-2">
+                              <Select
+                                value={deliveryMethodId}
+                                onValueChange={(v) => { setDeliveryMethodId(v); setDeliveryCustom(""); persistJobField("deliveryMethod", v); persistJobField("deliveryAmount", null); }}
+                              >
+                                <SelectTrigger className="h-8 text-xs" data-testid="select-extras-delivery-method">
+                                  <SelectValue placeholder="Method" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {deliveryRates.map((r) => {
+                                    const d = r.data as any;
+                                    const sell = d.sellNzd ?? d.rateNzd ?? 0;
+                                    return <SelectItem key={r.id} value={r.id}>{d.name}{sell > 0 ? ` ($${sell})` : " (Custom)"}</SelectItem>;
+                                  })}
+                                </SelectContent>
+                              </Select>
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <Label className="text-xs">Custom Cost ($)</Label>
+                                  <Input
+                                    type="number"
+                                    className="h-8 text-xs"
+                                    placeholder="—"
+                                    value={deliveryCustom}
+                                    onChange={(e) => { setDeliveryCustom(e.target.value); const val = parseFloat(e.target.value); persistJobField("deliveryAmount", val > 0 ? val : null); }}
+                                    data-testid="input-extras-delivery-custom"
+                                  />
+                                </div>
+                                <div className="w-20">
+                                  <Label className="text-xs">Markup (%)</Label>
+                                  <Input
+                                    type="number"
+                                    className="h-8 text-xs"
+                                    value={deliveryMarkup}
+                                    onChange={(e) => { setDeliveryMarkup(e.target.value); const val = parseFloat(e.target.value); persistJobField("deliveryMarkup", val >= 0 ? val : null); }}
+                                    data-testid="input-extras-delivery-markup"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Old Window / Door Removal</Label>
+                            <Switch
+                              checked={removalEnabled}
+                              onCheckedChange={(v) => { setRemovalEnabled(v); persistJobField("removalEnabled", v); }}
+                              data-testid="switch-extras-removal"
+                            />
+                          </div>
+                          {removalEnabled && (
+                            <div className="pl-2">
+                              <Label className="text-xs">Markup (%)</Label>
+                              <Input
+                                type="number"
+                                className="h-8 text-xs"
+                                value={removalMarkup}
+                                onChange={(e) => { setRemovalMarkup(e.target.value); const val = parseFloat(e.target.value); persistJobField("removalMarkup", val >= 0 ? val : null); }}
+                                data-testid="input-extras-removal-markup"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">Rate is per-item based on window size tier. Detailed breakdown in Exec Summary.</p>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Rubbish / Waste Removal</Label>
+                            <Switch
+                              checked={rubbishEnabled}
+                              onCheckedChange={(v) => { setRubbishEnabled(v); persistJobField("rubbishEnabled", v); if (v && (!rubbishTonnage || parseFloat(rubbishTonnage) <= 0)) { setRubbishTonnage("1"); persistJobField("rubbishTonnage", 1); } }}
+                              data-testid="switch-extras-rubbish"
+                            />
+                          </div>
+                          {rubbishEnabled && (
+                            <div className="pl-2">
+                              <Label className="text-xs">Estimated Tonnage</Label>
+                              <Input
+                                type="number"
+                                className="h-8 text-xs"
+                                placeholder="e.g. 0.5"
+                                value={rubbishTonnage}
+                                onChange={(e) => { setRubbishTonnage(e.target.value); const val = parseFloat(e.target.value); persistJobField("rubbishTonnage", val > 0 ? val : null); }}
+                                data-testid="input-extras-rubbish-tonnage"
+                              />
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground pt-1 border-t">Full pricing detail for all extras is in the Exec Summary.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="pt-2 space-y-2">
                     <Button variant="outline" className="w-full" onClick={startNewItem} data-testid="button-items-add-next">
                       <Plus className="w-4 h-4 mr-1.5" /> Add Next Item
