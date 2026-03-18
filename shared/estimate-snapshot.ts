@@ -26,6 +26,8 @@ const totalsBreakdownSchema = z.object({
   itemsSubtotal: z.number().default(0),
   installationTotal: z.number().default(0),
   deliveryTotal: z.number().default(0),
+  removalTotal: z.number().default(0),
+  rubbishTotal: z.number().default(0),
   subtotalExclGst: z.number().default(0),
   gstAmount: z.number().default(0),
   totalInclGst: z.number().default(0),

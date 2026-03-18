@@ -80,7 +80,14 @@ function getLayoutSummary(config: QuoteItem) {
     return `Custom ${colCount}-col (${rowCounts.join("/")})`;
   }
   const cat = config.category;
-  if (cat === "windows-standard") return config.windowType === "awning" ? "Awning" : "Fixed";
+  if (cat === "windows-standard") {
+    const wt = config.windowType;
+    if (wt === "awning") return "Awning";
+    if (wt === "french-left") return "French (Left)";
+    if (wt === "french-right") return "French (Right)";
+    if (wt === "french-pair") return "French Pair";
+    return "Fixed";
+  }
   if (cat === "sliding-window" || cat === "sliding-door") return "Fixed + Sliding";
   if (cat === "entrance-door") {
     if (!config.sidelightEnabled) return "Door (No Sidelight)";
@@ -175,6 +182,8 @@ const defaultValues: InsertQuoteItem = {
   lockType: "",
   configurationId: "",
   cachedWeightKg: 0,
+  overrideMode: "none",
+  overrideValue: null,
 };
 
 interface ItemPhotoRef {
@@ -574,14 +583,20 @@ export default function QuoteBuilder() {
   const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
   const currentPricing: PricingBreakdown | null = useMemo(() => {
     if (!hasConfigData) return null;
+    const oMode = w.overrideMode || "none";
+    const oVal = w.overrideValue ?? null;
+    const sqmForPricing = ((w.width || 0) * (w.height || 0) * (w.quantity || 1)) / 1_000_000;
+    const salePriceOverride = oMode === "total_sell" && oVal ? oVal
+      : oMode === "per_sqm" && oVal ? oVal * sqmForPricing
+      : null;
     return calculatePricing(
       w.width || 0, w.height || 0, w.quantity || 1,
       configProfiles, configAccessories, configLabor,
       usdToNzdRate, w.pricePerSqm || 500,
-      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput },
+      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined },
       { masterProfiles, masterAccessories, masterLabour }
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour]);
+  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -1329,6 +1344,10 @@ export default function QuoteBuilder() {
 
   function calcItemPrice(item: QuoteItem | InsertQuoteItem): number {
     const sqm = (item.width * item.height * (item.quantity || 1)) / 1_000_000;
+    const oMode = (item as any).overrideMode || "none";
+    const oVal = (item as any).overrideValue ?? null;
+    if (oMode === "total_sell" && oVal) return oVal;
+    if (oMode === "per_sqm" && oVal) return oVal * sqm;
     return sqm * (item.pricePerSqm || 500);
   }
 
@@ -1773,6 +1792,9 @@ export default function QuoteBuilder() {
                       <SelectContent>
                         <SelectItem value="fixed">Fixed</SelectItem>
                         <SelectItem value="awning">Awning (Top-Hung)</SelectItem>
+                        <SelectItem value="french-left">French — Left Hinge</SelectItem>
+                        <SelectItem value="french-right">French — Right Hinge</SelectItem>
+                        <SelectItem value="french-pair">French Pair (Double)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2758,21 +2780,63 @@ export default function QuoteBuilder() {
                   </h2>
                   <div className="space-y-2">
                     <div>
-                      <Label className="text-xs">Sale Price per m² (${w.pricePerSqm || 500}/m²)</Label>
+                      <div className="flex items-center justify-between mb-1">
+                        <Label className="text-xs">Sale Price per m² (${w.pricePerSqm || 500}/m²)</Label>
+                        {(w.overrideMode || "none") !== "none" && (
+                          <Badge variant="secondary" className="text-[10px] h-4" data-testid="badge-price-override-active">Override Active</Badge>
+                        )}
+                      </div>
                       <Slider
                         value={[w.pricePerSqm || 500]}
                         onValueChange={([v]) => form.setValue("pricePerSqm", v)}
                         min={500}
                         max={750}
                         step={5}
+                        disabled={(w.overrideMode || "none") !== "none"}
                         data-testid="slider-price-per-sqm"
                       />
                       <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
                         <span>$500</span>
                         <span className="font-medium">
-                          Sale: ${((w.pricePerSqm || 500) * parseFloat(calcSqm(w.width || 0, w.height || 0, w.quantity || 1))).toFixed(2)}
+                          {(w.overrideMode || "none") !== "none"
+                            ? `Override: $${calcItemPrice(w as any).toFixed(2)}`
+                            : `Sale: $${((w.pricePerSqm || 500) * parseFloat(calcSqm(w.width || 0, w.height || 0, w.quantity || 1))).toFixed(2)}`
+                          }
                         </span>
                         <span>$750</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border p-2 space-y-2 bg-muted/20" data-testid="price-override-section">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Manual Price Override</Label>
+                        {(w.overrideMode || "none") !== "none" && (
+                          <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive hover:text-destructive px-1"
+                            onClick={() => { form.setValue("overrideMode", "none"); form.setValue("overrideValue", null); }}
+                            data-testid="button-clear-price-override">
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Select value={w.overrideMode || "none"} onValueChange={(v) => form.setValue("overrideMode", v as any)}>
+                          <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-override-mode"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No Override (Slider)</SelectItem>
+                            <SelectItem value="per_sqm">Override $/m²</SelectItem>
+                            <SelectItem value="total_sell">Override Total Sell</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {(w.overrideMode || "none") !== "none" && (
+                          <Input
+                            type="number"
+                            className="h-7 text-xs w-24"
+                            placeholder={(w.overrideMode === "per_sqm") ? "$/m²" : "$ total"}
+                            value={w.overrideValue ?? ""}
+                            onChange={(e) => form.setValue("overrideValue", e.target.value ? parseFloat(e.target.value) : null)}
+                            data-testid="input-override-value"
+                          />
+                        )}
                       </div>
                     </div>
 

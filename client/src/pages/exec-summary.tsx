@@ -62,6 +62,11 @@ interface JobData {
   deliveryMethod?: string | null;
   deliveryAmount?: number | null;
   deliveryMarkup?: number | null;
+  removalEnabled?: boolean;
+  removalOverride?: number | null;
+  removalMarkup?: number | null;
+  rubbishEnabled?: boolean;
+  rubbishTonnage?: number | null;
   items: JobItem[];
 }
 
@@ -95,6 +100,11 @@ export default function ExecSummary() {
   const [deliveryMethodId, setDeliveryMethodId] = useState<string>("");
   const [deliveryCustom, setDeliveryCustom] = useState<string>("");
   const [deliveryMarkup, setDeliveryMarkup] = useState<string>("15");
+  const [removalEnabled, setRemovalEnabled] = useState(false);
+  const [removalOverride, setRemovalOverride] = useState<string>("");
+  const [removalMarkup, setRemovalMarkup] = useState<string>("15");
+  const [rubbishEnabled, setRubbishEnabled] = useState(false);
+  const [rubbishTonnage, setRubbishTonnage] = useState<string>("");
   const [initialized, setInitialized] = useState(false);
 
   const { data: job, isLoading: jobLoading } = useQuery<JobData>({
@@ -197,6 +207,8 @@ export default function ExecSummary() {
   const { data: masterLabour = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "labour_operation"], queryFn: fetchLib("labour_operation") });
   const { data: installationRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "installation_rate"], queryFn: fetchLib("installation_rate") });
   const { data: deliveryRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "delivery_rate"], queryFn: fetchLib("delivery_rate") });
+  const { data: removalRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "removal_rate"], queryFn: fetchLib("removal_rate") });
+  const { data: generalWasteRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "general_waste"], queryFn: fetchLib("general_waste") });
 
   useEffect(() => {
     if (job && !initialized) {
@@ -211,6 +223,11 @@ export default function ExecSummary() {
       setDeliveryMethodId(job.deliveryMethod || "");
       setDeliveryCustom(job.deliveryAmount != null ? String(job.deliveryAmount) : "");
       setDeliveryMarkup(job.deliveryMarkup != null ? String(job.deliveryMarkup) : "15");
+      setRemovalEnabled(!!job.removalEnabled);
+      setRemovalOverride(job.removalOverride != null ? String(job.removalOverride) : "");
+      setRemovalMarkup(job.removalMarkup != null ? String(job.removalMarkup) : "15");
+      setRubbishEnabled(!!job.rubbishEnabled);
+      setRubbishTonnage(job.rubbishTonnage != null ? String(job.rubbishTonnage) : "");
       setInitialized(true);
     }
   }, [job, initialized]);
@@ -293,7 +310,12 @@ export default function ExecSummary() {
     return job.items.map((ji: any) => {
       const item = ji.config as QuoteItem;
       const sqm = calcSqm(item.width, item.height, item.quantity || 1);
-      const salePrice = (item.pricePerSqm || 500) * sqm;
+      const overrideMode = item.overrideMode || "none";
+      const overrideVal = item.overrideValue ?? null;
+      const salePriceOverride = overrideMode === "total_sell" && overrideVal ? overrideVal
+        : overrideMode === "per_sqm" && overrideVal ? overrideVal * sqm
+        : null;
+      const salePrice = salePriceOverride ?? ((item.pricePerSqm || 500) * sqm);
       const cid = item.configurationId;
       let pricing: PricingBreakdown | null = null;
       let configName = cid ? (configNameMap[cid] || "") : "";
@@ -323,6 +345,7 @@ export default function ExecSummary() {
               lockPriceEach: lookupLockPrice(item.lockType || "", item.category),
               openingPanelCount: openingPanels,
               wanzBar: wanzBarInput,
+              salePriceOverride: salePriceOverride ?? undefined,
             },
             { masterProfiles, masterAccessories, masterLabour }
           );
@@ -404,6 +427,67 @@ export default function ExecSummary() {
     return { cost: 0, sell: 0, isCustom: false };
   }, [deliveryEnabled, deliveryMethodId, deliveryCustom, deliveryMarkup, deliveryRates]);
 
+  const getRemovalTier = useCallback((category: string, sqm: number): { name: string; cost: number; sell: number } | null => {
+    const isDoor = DOOR_CATEGORIES.includes(category);
+    const cat = isDoor ? "door" : "window";
+    const tiers = removalRates.filter((r) => (r.data as any).category === cat);
+    for (const t of tiers) {
+      const d = t.data as any;
+      if (sqm >= d.minSqm && sqm < d.maxSqm) return { name: d.name, cost: d.costPerUnit, sell: d.sellPerUnit };
+    }
+    if (tiers.length > 0) {
+      const last = tiers[tiers.length - 1].data as any;
+      return { name: last.name, cost: last.costPerUnit, sell: last.sellPerUnit };
+    }
+    return null;
+  }, [removalRates]);
+
+  const removalItems = useMemo(() => {
+    if (!removalEnabled) return [];
+    return itemPricings.map((ip) => {
+      const unitSqm = (ip.item.width * ip.item.height) / 1_000_000;
+      const tier = getRemovalTier(ip.item.category, unitSqm);
+      const qty = ip.item.quantity || 1;
+      return {
+        name: ip.item.name,
+        category: ip.item.category,
+        unitSqm,
+        qty,
+        tierName: tier?.name || "—",
+        costPerUnit: tier?.cost || 0,
+        sellPerUnit: tier?.sell || 0,
+        costTotal: (tier?.cost || 0) * qty,
+        sellTotal: (tier?.sell || 0) * qty,
+      };
+    });
+  }, [removalEnabled, itemPricings, getRemovalTier]);
+
+  const removalTotals = useMemo(() => {
+    const overrideVal = parseFloat(removalOverride);
+    const rawMarkup = parseFloat(removalMarkup);
+    const markupPct = Number.isFinite(rawMarkup) ? rawMarkup : 15;
+    if (removalEnabled && overrideVal > 0) {
+      const cost = overrideVal;
+      const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
+      return { cost, sell, isOverride: true };
+    }
+    const cost = removalItems.reduce((acc, i) => acc + i.costTotal, 0);
+    const sell = removalItems.reduce((acc, i) => acc + i.sellTotal, 0);
+    return { cost, sell, isOverride: false };
+  }, [removalEnabled, removalOverride, removalMarkup, removalItems]);
+
+  const rubbishTotals = useMemo(() => {
+    if (!rubbishEnabled) return { cost: 0, sell: 0, rateEntry: null as any };
+    const rate = generalWasteRates[0];
+    if (!rate) return { cost: 0, sell: 0, rateEntry: null as any };
+    const d = rate.data as any;
+    const tonnes = parseFloat(rubbishTonnage);
+    if (!Number.isFinite(tonnes) || tonnes <= 0) return { cost: 0, sell: 0, rateEntry: d };
+    const cost = Math.round(d.costPerTonne * tonnes * 100) / 100;
+    const sell = Math.round(d.sellPerTonne * tonnes * 100) / 100;
+    return { cost, sell, rateEntry: d };
+  }, [rubbishEnabled, rubbishTonnage, generalWasteRates]);
+
   const totals = useMemo(() => {
     let totalSqm = 0;
     let totalManufCost = 0;
@@ -429,8 +513,12 @@ export default function ExecSummary() {
     const installSell = installEnabled ? installationTotals.sell : 0;
     const delivCost = deliveryTotals.cost;
     const delivSell = deliveryTotals.sell;
-    const grandTotalCost = totalManufCost + installCost + delivCost;
-    const totalSaleExGst = itemSaleTotal + installSell + delivSell;
+    const removalCost = removalEnabled ? removalTotals.cost : 0;
+    const removalSell = removalEnabled ? removalTotals.sell : 0;
+    const rubbishCost = rubbishEnabled ? rubbishTotals.cost : 0;
+    const rubbishSell = rubbishEnabled ? rubbishTotals.sell : 0;
+    const grandTotalCost = totalManufCost + installCost + delivCost + removalCost + rubbishCost;
+    const totalSaleExGst = itemSaleTotal + installSell + delivSell + removalSell + rubbishSell;
     const gstAmount = totalSaleExGst * (gstRate / 100);
     const totalSaleIncGst = totalSaleExGst + gstAmount;
     const grossProfit = totalSaleExGst - grandTotalCost;
@@ -444,10 +532,10 @@ export default function ExecSummary() {
       totalLabor, totalWeight, grossProfit, grossMarginPct,
       grossProfitPerHour, totalLaborHours,
       avgCostPerSqm, avgSalePerSqm, installCost, installSell,
-      delivCost, delivSell, grandTotalCost, totalSaleExGst,
-      gstAmount, totalSaleIncGst,
+      delivCost, delivSell, removalCost, removalSell, rubbishCost, rubbishSell,
+      grandTotalCost, totalSaleExGst, gstAmount, totalSaleIncGst,
     };
-  }, [itemPricings, installEnabled, installationTotals, deliveryTotals, gstRate]);
+  }, [itemPricings, installEnabled, installationTotals, deliveryTotals, removalEnabled, removalTotals, rubbishEnabled, rubbishTotals, gstRate]);
 
   const { toast } = useToast();
 
@@ -560,6 +648,8 @@ export default function ExecSummary() {
 
     const installSell = installEnabled ? installationTotals.sell : 0;
     const delivSell = deliveryTotals.sell;
+    const removalSell = removalEnabled ? removalTotals.sell : 0;
+    const rubbishSell = rubbishEnabled ? rubbishTotals.sell : 0;
     const itemsSubtotal = totals.itemSaleTotal;
     const subtotalExclGst = totals.totalSaleExGst;
     const gstAmount = totals.gstAmount;
@@ -586,6 +676,8 @@ export default function ExecSummary() {
         itemsSubtotal,
         installationTotal: installSell,
         deliveryTotal: delivSell,
+        removalTotal: removalSell,
+        rubbishTotal: rubbishSell,
         subtotalExclGst,
         gstAmount,
         totalInclGst,
@@ -786,11 +878,23 @@ export default function ExecSummary() {
                 <TableCell className="text-right text-sm" data-testid="text-total-install-cost">{installEnabled ? `$${fmt(totals.installCost)}` : "—"}</TableCell>
                 <TableCell className="text-right text-sm" data-testid="text-total-install-sell">{installEnabled ? `$${fmt(totals.installSell)}` : "—"}</TableCell>
               </TableRow>
-              <TableRow className="border-b-2" data-testid="row-delivery">
+              <TableRow data-testid="row-delivery">
                 <TableCell className="text-sm font-medium">Delivery</TableCell>
                 <TableCell className="text-right text-sm text-muted-foreground">{deliveryEnabled ? (deliveryTotals.isCustom ? "Custom" : deliveryMethodId ? "Standard" : "No method") : "Supply Only"}</TableCell>
                 <TableCell className="text-right text-sm" data-testid="text-total-delivery-cost">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</TableCell>
                 <TableCell className="text-right text-sm" data-testid="text-total-delivery-sell">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</TableCell>
+              </TableRow>
+              <TableRow data-testid="row-removal">
+                <TableCell className="text-sm font-medium">Old Item Removal</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{removalEnabled ? (removalTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-removal-cost">{removalEnabled ? `$${fmt(totals.removalCost)}` : "—"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-removal-sell">{removalEnabled ? `$${fmt(totals.removalSell)}` : "—"}</TableCell>
+              </TableRow>
+              <TableRow className="border-b-2" data-testid="row-rubbish">
+                <TableCell className="text-sm font-medium">Rubbish Removal</TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground">{rubbishEnabled ? `${rubbishTonnage || "0"}t` : "Disabled"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-rubbish-cost">{rubbishEnabled && totals.rubbishCost > 0 ? `$${fmt(totals.rubbishCost)}` : "—"}</TableCell>
+                <TableCell className="text-right text-sm" data-testid="text-total-rubbish-sell">{rubbishEnabled && totals.rubbishSell > 0 ? `$${fmt(totals.rubbishSell)}` : "—"}</TableCell>
               </TableRow>
               <TableRow className="bg-muted/30" data-testid="row-grand-total-cost">
                 <TableCell colSpan={2} className="text-base font-bold">Grand Total Cost (COGS)</TableCell>
@@ -838,6 +942,28 @@ export default function ExecSummary() {
               <span className="text-right">{deliveryEnabled && totals.delivCost > 0 ? `$${fmt(totals.delivCost)}` : "—"}</span>
               <span className="text-muted-foreground">Sell</span>
               <span className="text-right">{deliveryEnabled && totals.delivSell > 0 ? `$${fmt(totals.delivSell)}` : "—"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-medium">Old Item Removal</span>
+              <span className="text-right text-muted-foreground">{removalEnabled ? (removalTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</span>
+              <span className="text-muted-foreground">Cost</span>
+              <span className="text-right">{removalEnabled ? `$${fmt(totals.removalCost)}` : "—"}</span>
+              <span className="text-muted-foreground">Sell</span>
+              <span className="text-right">{removalEnabled ? `$${fmt(totals.removalSell)}` : "—"}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <div className="grid grid-cols-2 gap-1 text-sm">
+              <span className="font-medium">Rubbish Removal</span>
+              <span className="text-right text-muted-foreground">{rubbishEnabled ? `${rubbishTonnage || "0"}t` : "Disabled"}</span>
+              <span className="text-muted-foreground">Cost</span>
+              <span className="text-right">{rubbishEnabled && totals.rubbishCost > 0 ? `$${fmt(totals.rubbishCost)}` : "—"}</span>
+              <span className="text-muted-foreground">Sell</span>
+              <span className="text-right">{rubbishEnabled && totals.rubbishSell > 0 ? `$${fmt(totals.rubbishSell)}` : "—"}</span>
             </div>
           </div>
 
@@ -1078,6 +1204,149 @@ export default function ExecSummary() {
         )}
         {!deliveryEnabled && (
           <p className="text-sm text-muted-foreground py-2" data-testid="text-delivery-supply-only">Supply Only — Customer to Collect</p>
+        )}
+      </div>
+
+      <div className="order-4 rounded-lg border bg-card p-4 space-y-3" data-testid="removal-section">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Old Window / Door Removal</h2>
+          <div className="flex items-center gap-2 print:hidden">
+            <Label htmlFor="removal-toggle" className="text-sm">Enable</Label>
+            <Switch
+              id="removal-toggle"
+              checked={removalEnabled}
+              onCheckedChange={(v) => {
+                setRemovalEnabled(v);
+                persistJobField("removalEnabled", v);
+              }}
+              data-testid="switch-removal"
+            />
+          </div>
+        </div>
+        {removalEnabled && (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Unit m²</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead className="text-right">Cost/Unit</TableHead>
+                  <TableHead className="text-right">Sell/Unit</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Cost Total</TableHead>
+                  <TableHead className="text-right">Sell Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {removalItems.map((ri, idx) => (
+                  <TableRow key={idx} data-testid={`row-removal-${idx}`}>
+                    <TableCell className="text-sm font-medium">{ri.name}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground capitalize">{ri.category}</TableCell>
+                    <TableCell className="text-right text-sm">{ri.unitSqm.toFixed(2)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{ri.tierName}</TableCell>
+                    <TableCell className="text-right text-sm">${fmt(ri.costPerUnit)}</TableCell>
+                    <TableCell className="text-right text-sm">${fmt(ri.sellPerUnit)}</TableCell>
+                    <TableCell className="text-right text-sm">{ri.qty}</TableCell>
+                    <TableCell className="text-right text-sm">${fmt(ri.costTotal)}</TableCell>
+                    <TableCell className="text-right text-sm">${fmt(ri.sellTotal)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4 print:hidden">
+              <div className="flex-1">
+                <Label className="text-sm">Override Cost ($)</Label>
+                <Input
+                  type="number"
+                  placeholder="Leave blank for rate-based"
+                  value={removalOverride}
+                  onChange={(e) => {
+                    setRemovalOverride(e.target.value);
+                    const val = parseFloat(e.target.value);
+                    persistJobField("removalOverride", val > 0 ? val : null);
+                  }}
+                  data-testid="input-removal-override"
+                />
+              </div>
+              <div className="w-24">
+                <Label className="text-sm">Markup (%)</Label>
+                <Input
+                  type="number"
+                  value={removalMarkup}
+                  onChange={(e) => {
+                    setRemovalMarkup(e.target.value);
+                    const val = parseFloat(e.target.value);
+                    persistJobField("removalMarkup", val >= 0 ? val : null);
+                  }}
+                  data-testid="input-removal-markup"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-4 font-bold text-sm" data-testid="text-removal-total">
+              <span>Cost: ${fmt(removalTotals.cost)}</span>
+              <span>Sell: ${fmt(removalTotals.sell)}</span>
+              {removalTotals.isOverride && <Badge variant="outline">Override</Badge>}
+            </div>
+          </>
+        )}
+        {!removalEnabled && (
+          <p className="text-sm text-muted-foreground py-2" data-testid="text-removal-disabled">Not included — existing windows remain in place</p>
+        )}
+      </div>
+
+      <div className="order-4 rounded-lg border bg-card p-4 space-y-3" data-testid="rubbish-section">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Rubbish / General Waste Removal</h2>
+          <div className="flex items-center gap-2 print:hidden">
+            <Label htmlFor="rubbish-toggle" className="text-sm">Enable</Label>
+            <Switch
+              id="rubbish-toggle"
+              checked={rubbishEnabled}
+              onCheckedChange={(v) => {
+                setRubbishEnabled(v);
+                persistJobField("rubbishEnabled", v);
+                if (v && (!rubbishTonnage || parseFloat(rubbishTonnage) <= 0)) {
+                  setRubbishTonnage("1");
+                  persistJobField("rubbishTonnage", 1);
+                }
+              }}
+              data-testid="switch-rubbish"
+            />
+          </div>
+        </div>
+        {rubbishEnabled && (
+          <>
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4 print:hidden">
+              <div className="flex-1">
+                <Label className="text-sm">Estimated Tonnage</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 0.5"
+                  value={rubbishTonnage}
+                  onChange={(e) => {
+                    setRubbishTonnage(e.target.value);
+                    const val = parseFloat(e.target.value);
+                    persistJobField("rubbishTonnage", val > 0 ? val : null);
+                  }}
+                  data-testid="input-rubbish-tonnage"
+                />
+              </div>
+              {rubbishTotals.rateEntry && (
+                <div className="text-sm text-muted-foreground md:pb-2">
+                  Rate: Cost ${rubbishTotals.rateEntry.costPerTonne}/t · Sell ${rubbishTotals.rateEntry.sellPerTonne}/t
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-4 font-bold text-sm" data-testid="text-rubbish-total">
+              <span>Cost: ${fmt(rubbishTotals.cost)}</span>
+              <span>Sell: ${fmt(rubbishTotals.sell)}</span>
+            </div>
+          </>
+        )}
+        {!rubbishEnabled && (
+          <p className="text-sm text-muted-foreground py-2" data-testid="text-rubbish-disabled">Not included</p>
         )}
       </div>
 
