@@ -2,6 +2,12 @@
 // Computes lifecycle state from existing system signals (quote, invoices, op-job).
 // No stored stage-state — everything is derived at read time.
 // This keeps historical records immutable and lifecycle visible immediately.
+//
+// ARCHITECTURE: deriveLifecycleState accepts the template as a parameter.
+// The caller (route) is responsible for loading the correct template from DB:
+//   - Pre-acceptance: active template for the quote's division
+//   - Post-acceptance: the specific template locked to the lifecycle instance
+// This ensures template versioning is materially real, not just schema-declared.
 
 import {
   ComputedLifecycleState,
@@ -11,14 +17,6 @@ import {
   StageStatus,
 } from "@shared/lifecycle";
 import { type Quote, type Invoice, type OpJob, type LifecycleInstance } from "@shared/schema";
-import { LJ_LIFECYCLE_TEMPLATE_V1 } from "./lifecycle-templates";
-
-// ─── Template Registry ────────────────────────────────────────────────────────
-// Phase 1: LJ only. Future divisions added here when their templates exist.
-function getTemplateForDivision(divisionCode: string): LifecycleTemplateConfig | null {
-  if (divisionCode === "LJ") return LJ_LIFECYCLE_TEMPLATE_V1;
-  return null;
-}
 
 // ─── Next Action Text ─────────────────────────────────────────────────────────
 function nextActionText(stageKey: string, quote: Quote): string {
@@ -52,15 +50,18 @@ function nextActionText(stageKey: string, quote: Quote): string {
 }
 
 // ─── Stage Derivation ─────────────────────────────────────────────────────────
+// computedPrev: map of already-derived stage statuses (for dependency checks)
 function deriveStageStatus(
   stage: LifecycleStageTemplate,
   quote: Quote,
   invoices: Invoice[],
   opJob: OpJob | null,
+  computedPrev: Map<string, StageStatus>,
 ): {
   status: StageStatus;
   completedAt: string | null;
   sourceNote: string | null;
+  blockedReason: string | null;
 } {
   switch (stage.key) {
     case "estimate": {
@@ -69,13 +70,14 @@ function deriveStageStatus(
           status: "complete",
           completedAt: null,
           sourceNote: `Linked estimate: ${quote.sourceJobId}`,
+          blockedReason: null,
         };
       }
-      // Quote exists without a linked estimate — estimate stage N/A or implicitly done
       return {
         status: "not_applicable",
         completedAt: null,
         sourceNote: "No linked estimate — created directly",
+        blockedReason: null,
       };
     }
 
@@ -85,6 +87,7 @@ function deriveStageStatus(
           status: "complete",
           completedAt: quote.acceptedAt?.toISOString?.() ?? null,
           sourceNote: `Quote ${quote.number} accepted`,
+          blockedReason: null,
         };
       }
       if (["archived", "declined"].includes(quote.status)) {
@@ -92,13 +95,14 @@ function deriveStageStatus(
           status: "not_applicable",
           completedAt: null,
           sourceNote: `Quote ${quote.number} is ${quote.status}`,
+          blockedReason: null,
         };
       }
-      // draft, review, sent → active
       return {
         status: "active",
         completedAt: null,
         sourceNote: `Quote ${quote.number} status: ${quote.status}`,
+        blockedReason: null,
       };
     }
 
@@ -108,6 +112,7 @@ function deriveStageStatus(
           status: "complete",
           completedAt: quote.acceptedAt?.toISOString?.() ?? null,
           sourceNote: `Accepted${quote.acceptedAt ? " " + new Date(quote.acceptedAt).toLocaleDateString("en-NZ") : ""}`,
+          blockedReason: null,
         };
       }
       if (["sent", "review"].includes(quote.status)) {
@@ -115,16 +120,16 @@ function deriveStageStatus(
           status: "active",
           completedAt: null,
           sourceNote: "Quote issued — awaiting client acceptance",
+          blockedReason: null,
         };
       }
-      return { status: "not_started", completedAt: null, sourceNote: null };
+      return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
     }
 
     case "commercial_setup": {
       if (quote.status !== "accepted") {
-        return { status: "not_started", completedAt: null, sourceNote: null };
+        return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
       }
-      // Check if deposit invoice is in a processed state
       const processedInvoice = invoices.find((inv) =>
         ["approved", "pushed_to_xero_draft", "returned_to_draft"].includes(inv.status ?? ""),
       );
@@ -133,51 +138,80 @@ function deriveStageStatus(
           status: "complete",
           completedAt: processedInvoice.createdAt?.toISOString?.() ?? null,
           sourceNote: `Deposit invoice ${processedInvoice.number} — ${processedInvoice.status}`,
+          blockedReason: null,
         };
       }
-      // Draft deposit invoice exists — in progress
       const draftInvoice = invoices.find((inv) => inv.status === "draft" || inv.status === "ready_for_xero");
       if (draftInvoice) {
         return {
           status: "active",
           completedAt: null,
           sourceNote: `Deposit invoice ${draftInvoice.number} — ${draftInvoice.status}`,
+          blockedReason: null,
         };
       }
-      // Accepted but no invoice yet — needs commercial setup
       return {
         status: "active",
         completedAt: null,
         sourceNote: "Quote accepted — deposit invoice not yet created",
+        blockedReason: null,
       };
     }
 
     case "site_measure": {
-      if (!opJob) return { status: "not_started", completedAt: null, sourceNote: null };
+      // Blocked if commercial_setup is still active (deposit invoice not processed)
+      const commercialStatus = computedPrev.get("commercial_setup");
+      if (commercialStatus === "active" && !opJob) {
+        return {
+          status: "blocked",
+          completedAt: null,
+          sourceNote: "Waiting for commercial setup",
+          blockedReason: "Complete commercial setup (deposit invoice) before scheduling site measure",
+        };
+      }
+      if (!opJob) return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
       if (opJob.status === "completed") {
         return {
           status: "complete",
           completedAt: opJob.updatedAt?.toISOString?.() ?? null,
           sourceNote: `Job ${opJob.jobNumber} completed`,
+          blockedReason: null,
         };
       }
       return {
         status: "active",
         completedAt: null,
         sourceNote: `Job ${opJob.jobNumber} active — site measure in scope`,
+        blockedReason: null,
       };
     }
 
-    // Procurement, Manufacture — no system signals yet; remain not_started
     case "procurement":
+      return {
+        status: "not_started",
+        completedAt: null,
+        sourceNote: "No system signal available — manual tracking in a future phase",
+        blockedReason: null,
+      };
+
     case "manufacture":
-      return { status: "not_started", completedAt: null, sourceNote: "No system signal available — set manually in a future phase" };
+      return {
+        status: "not_started",
+        completedAt: null,
+        sourceNote: "No system signal available — manual tracking in a future phase",
+        blockedReason: null,
+      };
 
     case "delivery_install":
-      return { status: "not_started", completedAt: null, sourceNote: "No system signal available — set manually in a future phase" };
+      return {
+        status: "not_started",
+        completedAt: null,
+        sourceNote: "No system signal available — manual tracking in a future phase",
+        blockedReason: null,
+      };
 
     case "invoicing": {
-      if (invoices.length === 0) return { status: "not_started", completedAt: null, sourceNote: null };
+      if (invoices.length === 0) return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
       const finalised = invoices.filter((inv) =>
         ["approved", "pushed_to_xero_draft"].includes(inv.status ?? ""),
       );
@@ -186,12 +220,14 @@ function deriveStageStatus(
           status: "active",
           completedAt: null,
           sourceNote: `${finalised.length} invoice(s) in Xero or approved`,
+          blockedReason: null,
         };
       }
       return {
         status: "active",
         completedAt: null,
         sourceNote: `${invoices.length} invoice(s) present`,
+        blockedReason: null,
       };
     }
 
@@ -201,6 +237,7 @@ function deriveStageStatus(
           status: "complete",
           completedAt: opJob.updatedAt?.toISOString?.() ?? null,
           sourceNote: `Job ${opJob.jobNumber} marked completed`,
+          blockedReason: null,
         };
       }
       if (opJob?.status === "cancelled") {
@@ -208,44 +245,51 @@ function deriveStageStatus(
           status: "not_applicable",
           completedAt: null,
           sourceNote: `Job ${opJob.jobNumber} was cancelled`,
+          blockedReason: null,
         };
       }
-      return { status: "not_started", completedAt: null, sourceNote: null };
+      return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
     }
 
     default:
-      return { status: "not_started", completedAt: null, sourceNote: null };
+      return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
   }
 }
 
 // ─── Main Derivation Function ─────────────────────────────────────────────────
+// template: the LifecycleTemplateConfig to derive from.
+//   - Pre-acceptance: caller passes the active template for the division (DB-loaded).
+//   - Post-acceptance: caller passes the template locked to the instance (by instance.templateId).
+// This makes template versioning materially real: if the template changes after acceptance,
+// the locked instance continues to show the original stage structure.
 export function deriveLifecycleState(
   quote: Quote,
   invoices: Invoice[],
   opJob: OpJob | null,
   instance: LifecycleInstance | null,
-): ComputedLifecycleState | null {
-  const divisionCode = quote.divisionId ?? "LJ";
-  const template = getTemplateForDivision(divisionCode);
+  template: LifecycleTemplateConfig,
+): ComputedLifecycleState {
+  const divisionCode = template.divisionCode;
+  const templateVersion = instance?.templateVersion ?? template.stages.length > 0 ? (instance?.templateVersion ?? 1) : 1;
 
-  if (!template) {
-    // No lifecycle template for this division yet
-    return null;
-  }
+  // Derive stages in sort order, carrying forward computed statuses for dependency checks
+  const sortedStages = [...template.stages].sort((a, b) => a.order - b.order);
+  const computedPrev = new Map<string, StageStatus>();
+  const stages: ComputedStageState[] = [];
 
-  const templateVersion = instance?.templateVersion ?? 1;
-
-  const stages: ComputedStageState[] = template.stages.map((stageDef) => {
-    const { status, completedAt, sourceNote } = deriveStageStatus(
+  for (const stageDef of sortedStages) {
+    const { status, completedAt, sourceNote, blockedReason } = deriveStageStatus(
       stageDef,
       quote,
       invoices,
       opJob,
+      computedPrev,
     );
+    computedPrev.set(stageDef.key, status);
 
     const isActive = status === "active";
 
-    return {
+    stages.push({
       key: stageDef.key,
       label: stageDef.label,
       masterKey: stageDef.masterKey,
@@ -255,13 +299,12 @@ export function deriveLifecycleState(
       description: stageDef.description,
       status,
       nextAction: isActive ? nextActionText(stageDef.key, quote) : null,
-      blockedReason: null,
+      blockedReason,
       completedAt,
       sourceNote,
-    };
-  });
+    });
+  }
 
-  // Determine current active stage (first active stage in order)
   const currentStage = stages.find((s) => s.status === "active") ?? null;
   const blockedStage = stages.find((s) => s.status === "blocked") ?? null;
 

@@ -2896,6 +2896,8 @@ export async function registerRoutes(
 
   // ─── Lifecycle Routes ─────────────────────────────────────────────────────
   // GET /api/quotes/:id/lifecycle — derive lifecycle state from existing signals
+  // Template loading: post-acceptance uses instance.templateId (locked version);
+  // pre-acceptance uses the current active template for the division.
   app.get("/api/quotes/:id/lifecycle", async (req, res) => {
     try {
       const quote = await storage.getQuote(req.params.id);
@@ -2907,14 +2909,22 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Access denied: different division" });
       }
 
+      const divisionCode = quote.divisionId ?? "LJ";
       const invoices = await storage.getInvoicesByQuote(quote.id);
       const opJob = await storage.getOpJobByQuoteId(quote.id) ?? null;
       const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
 
-      const lifecycle = deriveLifecycleState(quote, invoices, opJob, instance);
-      if (!lifecycle) {
+      // Load template: use the locked instance templateId post-acceptance, otherwise active template
+      const templateRecord = instance
+        ? await storage.getLifecycleTemplateById(instance.templateId)
+        : await storage.getActiveLifecycleTemplate(divisionCode);
+
+      if (!templateRecord) {
         return res.status(404).json({ error: "No lifecycle template available for this division" });
       }
+
+      const templateConfig = templateRecord.templateJson as import("@shared/lifecycle").LifecycleTemplateConfig;
+      const lifecycle = deriveLifecycleState(quote, invoices, opJob, instance, templateConfig);
       return res.json(lifecycle);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2922,6 +2932,7 @@ export async function registerRoutes(
   });
 
   // GET /api/op-jobs/:id/lifecycle — derive lifecycle state from job context
+  // Uses the same DB-driven template resolution as the quote lifecycle route.
   app.get("/api/op-jobs/:id/lifecycle", async (req, res) => {
     try {
       const job = await storage.getOpJob(req.params.id);
@@ -2940,13 +2951,21 @@ export async function registerRoutes(
       const quote = await storage.getQuote(job.sourceQuoteId);
       if (!quote) return res.status(404).json({ error: "Source quote not found" });
 
+      const divisionCode = quote.divisionId ?? "LJ";
       const invoices = await storage.getInvoicesByQuote(quote.id);
       const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
 
-      const lifecycle = deriveLifecycleState(quote, invoices, job, instance);
-      if (!lifecycle) {
+      // Load template: use the locked instance templateId post-acceptance, otherwise active template
+      const templateRecord = instance
+        ? await storage.getLifecycleTemplateById(instance.templateId)
+        : await storage.getActiveLifecycleTemplate(divisionCode);
+
+      if (!templateRecord) {
         return res.status(404).json({ error: "No lifecycle template available for this division" });
       }
+
+      const templateConfig = templateRecord.templateJson as import("@shared/lifecycle").LifecycleTemplateConfig;
+      const lifecycle = deriveLifecycleState(quote, invoices, job, instance, templateConfig);
       return res.json(lifecycle);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });

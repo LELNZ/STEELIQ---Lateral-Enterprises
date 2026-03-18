@@ -177,6 +177,7 @@ export interface IStorage {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   getActiveLifecycleTemplate(divisionCode: string): Promise<LifecycleTemplate | undefined>;
+  getLifecycleTemplateById(id: string): Promise<LifecycleTemplate | undefined>;
   getLifecycleInstanceForQuote(quoteId: string): Promise<LifecycleInstance | undefined>;
   createLifecycleInstance(data: {
     quoteId: string;
@@ -893,6 +894,15 @@ export class DatabaseStorage implements IStorage {
       .from(lifecycleTemplates)
       .where(and(eq(lifecycleTemplates.divisionCode, divisionCode), eq(lifecycleTemplates.isActive, true)))
       .orderBy(desc(lifecycleTemplates.version))
+      .limit(1);
+    return row;
+  }
+
+  async getLifecycleTemplateById(id: string): Promise<LifecycleTemplate | undefined> {
+    const [row] = await db
+      .select()
+      .from(lifecycleTemplates)
+      .where(eq(lifecycleTemplates.id, id))
       .limit(1);
     return row;
   }
