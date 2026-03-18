@@ -43,7 +43,7 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery" | "removal" | "waste";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "site-costs" | "profile_roles";
 
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
@@ -220,10 +220,7 @@ export default function Library() {
             <TabsTrigger value="hardware" data-testid="tab-hardware">Hardware</TabsTrigger>
             <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
             <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
-            <TabsTrigger value="installation" data-testid="tab-installation">Installation</TabsTrigger>
-            <TabsTrigger value="delivery" data-testid="tab-delivery">Delivery</TabsTrigger>
-            <TabsTrigger value="removal" data-testid="tab-removal">Removal</TabsTrigger>
-            <TabsTrigger value="waste" data-testid="tab-waste">Waste</TabsTrigger>
+            <TabsTrigger value="site-costs" data-testid="tab-site-costs">Site Costs</TabsTrigger>
             <TabsTrigger value="profile_roles" data-testid="tab-profile-roles">Profile Roles</TabsTrigger>
           </TabsList>
 
@@ -251,17 +248,8 @@ export default function Library() {
           <TabsContent value="manufacturing_labour">
             <ManufacturingLabourSection divisionCode={selectedDivision} />
           </TabsContent>
-          <TabsContent value="installation">
-            <InstallationSection divisionCode={selectedDivision} />
-          </TabsContent>
-          <TabsContent value="delivery">
-            <DeliverySection divisionCode={selectedDivision} />
-          </TabsContent>
-          <TabsContent value="removal">
-            <RemovalSection divisionCode={selectedDivision} />
-          </TabsContent>
-          <TabsContent value="waste">
-            <WasteSection divisionCode={selectedDivision} />
+          <TabsContent value="site-costs">
+            <SiteCostsContent divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="profile_roles">
             <ProfileRoleDictionarySection />
@@ -3103,6 +3091,32 @@ function DeliveryRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEn
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SiteCostsContent({ divisionCode }: { divisionCode?: string | null }) {
+  const [subTab, setSubTab] = useState<"installation" | "delivery" | "removal" | "waste">("installation");
+  return (
+    <Tabs value={subTab} onValueChange={(v) => setSubTab(v as any)}>
+      <TabsList className="mb-4" data-testid="site-costs-subtabs">
+        <TabsTrigger value="installation" data-testid="subtab-installation">Installation</TabsTrigger>
+        <TabsTrigger value="delivery" data-testid="subtab-delivery">Delivery</TabsTrigger>
+        <TabsTrigger value="removal" data-testid="subtab-removal">Removal</TabsTrigger>
+        <TabsTrigger value="waste" data-testid="subtab-waste">Waste / Disposal</TabsTrigger>
+      </TabsList>
+      <TabsContent value="installation">
+        <InstallationSection divisionCode={divisionCode} />
+      </TabsContent>
+      <TabsContent value="delivery">
+        <DeliverySection divisionCode={divisionCode} />
+      </TabsContent>
+      <TabsContent value="removal">
+        <RemovalSection divisionCode={divisionCode} />
+      </TabsContent>
+      <TabsContent value="waste">
+        <WasteSection divisionCode={divisionCode} />
+      </TabsContent>
+    </Tabs>
   );
 }
 

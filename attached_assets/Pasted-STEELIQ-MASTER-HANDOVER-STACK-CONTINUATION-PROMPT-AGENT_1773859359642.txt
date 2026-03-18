@@ -1,0 +1,361 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT SYSTEM STATE
+==================================================
+
+Recently completed and now acceptable:
+- Site Costs library grouping is in place
+- Installation footer duplicate subtotal text removed
+- Customer quote totals display controls are in place
+- Details box and quick-edit flow are in place
+- French option visibility is now acceptable in the builder flow
+- Removal/Waste library surfacing is now in place
+- Phase 9 operational fixes are now in place:
+  - Additional Capabilities overwrite protection
+  - bulk item save path for better performance
+  - first-item loss on new estimates fixed
+  - quote-stage customer capture groundwork/UI
+
+Now the next priority is:
+LIFECYCLE FOUNDATION TIGHTENING
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Tighten the lifecycle foundation so it becomes truly template-driven and safe to build Phase 2 on top of.
+
+This phase is only for:
+- removing hardcoded LJ-only runtime dependency
+- making lifecycle execution use stored template data
+- making version assignment materially real
+- adding minimal blocked-state derivation support
+- hardening lifecycle instance integrity
+
+Do NOT build:
+- editable task UI
+- admin template editor
+- custom task approvals
+- evidence uploads
+- dashboards
+- notifications
+- job-type overlays
+- full operational automation
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. DB-driven lifecycle template execution
+2. True use of assigned template/version at runtime
+3. Lifecycle instance integrity hardening
+4. Minimal real blocked-state derivation
+5. Keep LJ as the only live active template, but remove hardcoded runtime architecture drift
+6. Preserve current lifecycle UI and existing quote/job flows
+
+==================================================
+ISSUE 1 — RUNTIME IS NOT TRULY TEMPLATE-DRIVEN
+==================================================
+
+Current problem:
+- lifecycle_templates table exists
+- lifecycle_instances store templateId and templateVersion
+- but lifecycle derivation still has hardcoded LJ-only runtime behaviour
+
+Required fix:
+- runtime lifecycle derivation must load the assigned template from stored lifecycle_templates/templateJson whenever a lifecycle instance exists
+- before acceptance, lifecycle preview may use the active template for the division
+- after acceptance, the lifecycle must use the template/version assigned to that specific lifecycle instance
+- do not leave runtime derivation tied only to an imported LJ constant
+
+Required outcome:
+- pre-acceptance preview can resolve active LJ template safely
+- post-acceptance lifecycle is derived from the assigned stored template/version
+- architecture becomes truly template-driven, not just schema-declared
+
+==================================================
+ISSUE 2 — TEMPLATE VERSIONING MUST BE MATERIALLY REAL
+==================================================
+
+Current problem:
+- templateVersion is stored on lifecycle_instances
+- but if runtime ignores DB templateJson and uses code constant, versioning is only partially real
+
+Required fix:
+- the lifecycle response must be based on the actual stored template record/version when instance exists
+- lifecycle API output must therefore reflect the assigned version truthfully
+- if template version 1 was assigned at acceptance, later code/template changes must not rewrite that record’s displayed lifecycle structure
+
+Required outcome:
+- template assignment at acceptance is not merely metadata
+- it materially controls runtime lifecycle rendering
+
+==================================================
+ISSUE 3 — LIFECYCLE INSTANCE INTEGRITY
+==================================================
+
+Current problem:
+- route logic may avoid duplicates in application code
+- but schema/integrity may still allow more than one lifecycle_instance per quote if code paths drift
+
+Required fix:
+- harden the schema and/or storage logic so one quote cannot silently receive multiple lifecycle instances
+- if uniqueness is enforced at DB level, do that cleanly and safely
+- if existing data could violate this, handle migration safely and report clearly
+- do not introduce unsafe destructive migration
+
+Required outcome:
+- one quote = one lifecycle instance
+- quote acceptance remains idempotent and safe
+
+==================================================
+ISSUE 4 — BLOCKED STATE IS SCAFFOLDED BUT NOT REAL
+==================================================
+
+Current problem:
+- shared status model includes blocked
+- UI supports blocked
+- lifecycle derivation never actually emits blocked
+- blockedReason is always null
+
+Required fix:
+- implement minimal real blocked-state derivation using existing trustworthy signals only
+- do NOT invent fake blockers
+
+Safe acceptable examples if supported by current code/data:
+- if a lifecycle stage has a known explicit dependency that current state proves is preventing progression, mark blocked
+- if no robust blocked signal exists for a stage, leave it active/not_started and report limitation honestly
+
+Minimum acceptable implementation:
+- add a narrow, truthful blocked derivation for cases that are actually provable from current data
+- otherwise explicitly document where blocked remains future-phase
+
+Do not fabricate blockers just to exercise the badge.
+
+==================================================
+ISSUE 5 — KEEP UI/STABILITY, DO NOT WIDEN SCOPE
+==================================================
+
+The current LifecyclePanel is already operational and should remain usable.
+
+You may:
+- refine the panel only as needed to support truthful template/version display
+- improve source-note transparency if useful
+- preserve current practical layout
+
+Do NOT redesign the page structure or build stage editing.
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted schema hardening for lifecycle instance integrity
+- targeted storage methods
+- targeted lifecycle-service refactor
+- targeted route changes to load actual template/version
+- minimal lifecycle-panel refinement
+- safe migration / seeding updates if required
+
+Not allowed:
+- admin template builder
+- full task engine
+- new unrelated modules
+- role model redesign
+- quote/job lifecycle redesign
+- speculative future-phase data structures beyond what is required
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact lifecycle files involved
+3. State exactly where runtime remains hardcoded
+4. State exactly how you will make runtime template-driven
+5. State exactly how you will harden single-instance integrity
+6. State whether blocked derivation is truly possible from current data
+7. Then implement
+
+==================================================
+EXPECTED ARCHITECTURE AFTER THIS PHASE
+==================================================
+
+After this phase, the lifecycle foundation should work like this:
+
+Pre-acceptance:
+- lifecycle preview uses active template for the quote division
+
+At acceptance:
+- lifecycle instance created once
+- assigned template id/version locked
+
+Post-acceptance:
+- lifecycle API derives from stored assigned template/version, not just hardcoded constant
+
+At job creation:
+- lifecycle instance links to opJob
+- job page reads same lifecycle instance truthfully
+
+This is the exact enterprise-safe contract required before later editable/checklist phases.
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- quote detail page still loads
+- op-job detail page still loads
+- accepted quote flow still works
+- convert-to-job flow still works
+- invoice creation still works
+- deposit invoice flow still works
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- no break to Xero/invoice surfaces
+- no break to archive/unarchive flows
+
+Lifecycle-specific verification:
+- LJ quote still shows lifecycle before acceptance
+- accepting a quote creates exactly one lifecycle instance
+- repeated acceptance path / reload / retries do not create duplicate lifecycle instances
+- accepted quote lifecycle resolves from assigned stored template/version
+- op-job lifecycle resolves from same instance/template version
+- template/version indicator shown in UI remains truthful
+- if blocked state is implemented, show one verified blocked case only if truly data-driven
+- if blocked cannot be truthfully derived broadly yet, report that clearly instead of faking it
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact hardcoded/runtime issues found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+==================================================
+SUCCESS CRITERIA FOR THIS TIGHTENING PHASE
+==================================================
+
+This phase is complete only if:
+- lifecycle runtime is truly DB/template-driven when instance exists
+- pre-acceptance preview still works
+- template version assignment is materially real
+- single-instance integrity is hardened
+- current UI still works
+- no architecture drift occurred
+
+Do not claim full global lifecycle completion.
+This is lifecycle foundation tightening before Phase 2.

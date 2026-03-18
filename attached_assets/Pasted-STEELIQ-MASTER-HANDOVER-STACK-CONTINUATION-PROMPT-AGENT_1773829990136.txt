@@ -1,0 +1,391 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT SYSTEM STATE
+==================================================
+
+Recently completed and now acceptable:
+- Site Costs library grouping is in place
+- Installation footer duplicate subtotal text removed
+- Customer quote totals display controls are in place
+- Details box and quick-edit flow are in place
+- French option visibility is now acceptable in the builder flow
+- Removal/Waste library surfacing is now in place
+
+Still open and now the highest-priority operational issues:
+1. LJ Additional Capabilities overwrite/loss risk
+2. Slow save / add-to-quote / update-quote performance
+3. First item loss on brand-new estimates
+4. Safe quote-stage customer/contact capture
+
+These four items are the only scope for this phase.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these four items:
+
+1. Investigate and fix LJ Additional Capabilities overwrite/loss risk
+2. Audit and materially improve slow save / add-to-quote / update-quote performance
+3. Fix first-item loss on brand-new estimates
+4. Implement safe quote-stage customer/contact capture rules
+
+Do NOT return to lifecycle in this phase.
+Do NOT broaden into unrelated UI cleanup.
+
+==================================================
+GOAL 1 — ADDITIONAL CAPABILITIES CONTENT LOSS / OVERWRITE
+==================================================
+
+Current truth:
+- the Additional Capabilities field still exists in code and UI
+- the likely issue is not field removal
+- the likely issue is that the saved LJ value has been overwritten, reset, or replaced unexpectedly
+
+Required tasks:
+- inspect the current LJ division settings load/save path for additionalCapabilitiesBlock
+- determine exactly why the LJ content was lost or replaced
+- verify whether:
+  - a default/test value overwrote the saved value
+  - a save path is sending blank/placeholder content
+  - a stale form-state overwrite is occurring
+  - a seed/reset/default path is incorrectly reapplying content
+- fix the overwrite/loss path
+
+Required result:
+- Additional Capabilities no longer gets unexpectedly overwritten
+- current LJ value is preserved on load/save
+- if recoverable from current code/data, restore the previous LJ content
+- if not recoverable from system data, do NOT invent a false recovery; report that truthfully and preserve the current field safely
+
+Important:
+- do not claim exact old text was recovered unless it actually was
+- if recovery is not possible, report that clearly
+
+==================================================
+GOAL 2 — PERFORMANCE AUDIT AND SPEED IMPROVEMENT
+==================================================
+
+Current operational problem:
+- save takes roughly 12–15 seconds
+- add/update quote takes several seconds to respond
+- additional save lag then blocks clean navigation and causes leave-page warning frustration
+
+Required tasks:
+- audit the end-to-end path for:
+  - estimate save
+  - add to quote
+  - update quote
+  - post-save dirty-state clearing
+- identify exact major causes of latency
+- implement the minimum safe changes that materially reduce real wait time
+
+Likely areas to inspect:
+- oversized payloads
+- full-estimate save when only one item changed
+- duplicate save calls
+- serial save + quote generation/update steps that could be consolidated
+- expensive recomputation on critical path
+- excessive query invalidation/refetch
+- unsaved-changes flag not clearing fast enough after successful persistence
+
+Required result:
+- save is materially faster
+- add/update quote is materially faster
+- false/lingering unsaved-changes warning is reduced or eliminated after successful save
+- do not fake success by changing only the toast timing; improve the real critical path
+
+Be truthful:
+- report what became faster
+- report what remains slow if not fully solved
+
+==================================================
+GOAL 3 — FIRST ITEM LOSS ON BRAND-NEW ESTIMATES
+==================================================
+
+Current broken workflow:
+- user opens a brand-new estimate
+- user configures the first item in Quote Builder
+- user clicks Add to Quote
+- item is lost
+- estimate saves
+- user must rebuild the item manually
+
+This is unacceptable.
+
+Best-practice direction:
+- a new estimate must have a persisted draft/shell before first item-add is allowed to fail
+- Add to Quote must not silently discard the built item
+
+Required tasks:
+- inspect the brand-new estimate creation path
+- determine whether the estimate shell/job record is missing when first Add to Quote is attempted
+- fix the flow safely
+
+Approved implementation direction:
+- either create/persist a draft estimate shell automatically when the new estimate page is opened or first meaningfully edited
+- or make first Add to Quote atomically:
+  1. create the estimate shell if missing
+  2. persist the item
+  3. only clear/reset builder state after confirmed success
+
+Required result:
+- first Add to Quote on a new estimate does not lose the item
+- user is not forced to manually save first
+- builder state is not cleared unless persistence succeeds
+
+==================================================
+GOAL 4 — QUOTE-STAGE CUSTOMER / CONTACT CAPTURE
+==================================================
+
+Business question to implement safely:
+- should quote-stage details create customer/contact records, or only accepted jobs?
+
+Best-practice rule for this phase:
+- do NOT wait until job acceptance to capture useful customer/contact context
+- but do NOT blindly create poor-quality contact records from partial data
+
+Approved rule:
+1. Customer/company can be created/linked at quote stage
+2. Contact person should only be created/linked when minimum viable contact data exists
+3. Accepted jobs may later confirm or enrich those records, but quote-stage capture should already support quoting/sending/follow-up
+4. Dedupe safely against existing customers/contacts where possible
+
+Minimum viable contact rule for this phase:
+- create/link a contact only when there is at least:
+  - a person name
+  and
+  - email or phone
+
+If only partial or weak data exists:
+- do not create junk contact records
+- preserve the quote data without forcing bad CRM hygiene
+
+Required tasks:
+- inspect current quote/estimate customer/contact capture flow
+- identify what already exists vs what is missing
+- implement the minimum safe improvement to support quote-stage customer/company linkage and sensible contact creation/linkage
+- do not redesign Customers/Contacts model
+
+Required result:
+- quote-stage workflow can capture useful customer/contact context earlier
+- no junk contact explosion
+- no architecture redesign of Customers vs Contacts
+- accepted quote/job can still build on the same records later
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted settings save-path fixes
+- targeted estimate/quote workflow fixes
+- targeted persistence/order-of-operations fixes
+- targeted performance improvements
+- targeted customer/contact capture improvements
+- minimal schema/API changes only if strictly required
+
+Not allowed:
+- Customers/Contacts redesign
+- quote lifecycle redesign
+- full CRM redesign
+- speculative performance refactor unrelated to this phase
+- hidden architecture cleanup
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved for each of the four issues
+3. State exactly why Additional Capabilities content can be lost/overwritten
+4. State the most likely causes of save/add/update slowness
+5. State exactly why first Add to Quote loses the item on a new estimate
+6. State what current customer/contact capture behaviour already exists
+7. Then implement
+
+If any issue requires larger structural change than expected, stop and explain before widening architecture.
+
+==================================================
+DESIGN RULES FOR THIS PHASE
+==================================================
+
+Additional Capabilities:
+- preserve saved division content
+- do not overwrite with defaults/test data unintentionally
+
+Performance:
+- prioritize real latency reduction over UI masking
+- preserve integrity and safe saves
+
+New estimate item add:
+- never clear the builder on failed persistence
+- never require users to discover hidden prerequisite saves
+
+Customer/contact capture:
+- create useful records early
+- avoid junk/incomplete contacts
+- keep Customers and Contacts as separate pages/model for now
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Additional Capabilities:
+- LJ Additional Capabilities field still loads
+- saving other division settings no longer wipes it
+- save/reload preserves the value
+- if original content is unrecoverable, this is reported clearly
+
+Performance:
+- estimate save still works
+- add-to-quote still works
+- update-quote still works
+- save/add/update latency is materially improved
+- unsaved-changes warning clears appropriately after successful save
+
+New estimate workflow:
+- brand-new estimate can add first item successfully
+- first item is not lost
+- builder state is preserved on failure
+- no forced manual pre-save required
+
+Customer/contact:
+- quote-stage can link/create customer safely
+- contact creation only occurs when minimum viable contact data exists
+- no break to accepted quote/job flows
+- no break to preview/PDF
+- no break to invoice/Xero/lifecycle code
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact issues found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless:
+- Additional Capabilities overwrite/loss path is fixed
+- performance is materially improved
+- first Add to Quote on a new estimate no longer loses the item
+- quote-stage customer/contact capture is implemented safely
+- no architecture drift occurred

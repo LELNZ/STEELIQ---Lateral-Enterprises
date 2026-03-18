@@ -1116,13 +1116,7 @@ export default function ExecSummary() {
               </TableBody>
             </Table>
             <Separator />
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="text-sm">
-                <span className="text-muted-foreground">Subtotal cost: </span>
-                <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.costTotal, 0))}</span>
-                <span className="text-muted-foreground ml-3">Subtotal sell: </span>
-                <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.sellTotal, 0))}</span>
-              </div>
+            <div className="flex items-center justify-end flex-wrap gap-2">
               <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2 print:hidden">
                 <div className="col-span-1">
                   <Label className="text-sm">Override ($)</Label>

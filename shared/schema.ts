@@ -206,6 +206,11 @@ export const jobs = pgTable("jobs", {
   removalMarkup: real("removal_markup"),
   rubbishEnabled: boolean("rubbish_enabled").default(false),
   rubbishTonnage: real("rubbish_tonnage"),
+  clientName: text("client_name"),
+  clientEmail: text("client_email"),
+  clientPhone: text("client_phone"),
+  customerId: varchar("customer_id"),
+  contactId: varchar("contact_id"),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -575,6 +580,8 @@ export const lifecycleInstances = pgTable("lifecycle_instances", {
   templateVersion: integer("template_version").notNull(),
   assignedAt: timestamp("assigned_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  quoteIdUnique: uniqueIndex("lifecycle_instances_quote_id_unique").on(table.quoteId),
+}));
 
 export type LifecycleInstance = typeof lifecycleInstances.$inferSelect;

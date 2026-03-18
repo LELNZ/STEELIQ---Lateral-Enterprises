@@ -95,6 +95,7 @@ function StageRow({ stage, isLast }: { stage: ComputedStageState; isLast: boolea
   const isComplete = stage.status === "complete";
   const isNA = stage.status === "not_applicable";
   const isNotStarted = stage.status === "not_started";
+  const isBlocked = stage.status === "blocked";
 
   return (
     <div
@@ -102,6 +103,7 @@ function StageRow({ stage, isLast }: { stage: ComputedStageState; isLast: boolea
       className={[
         "flex gap-3 py-2.5 px-3 rounded-md transition-colors",
         isActive ? "bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30" : "",
+        isBlocked ? "bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30" : "",
         isNA || isNotStarted ? "opacity-50" : "",
       ].join(" ")}
     >
@@ -125,6 +127,7 @@ function StageRow({ stage, isLast }: { stage: ComputedStageState; isLast: boolea
               "text-sm font-medium leading-snug",
               isActive ? "text-blue-800 dark:text-blue-200" : "",
               isComplete ? "text-emerald-800 dark:text-emerald-200" : "",
+              isBlocked ? "text-amber-800 dark:text-amber-200" : "",
               isNA || isNotStarted ? "text-muted-foreground" : "text-foreground",
             ].join(" ")}
           >
@@ -301,17 +304,27 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
       </div>
 
       {/* Footer — template assignment info */}
-      {lifecycle.assignedAt && (
-        <div className="text-xs text-muted-foreground/60 pt-1 border-t border-border/50">
-          Template assigned{" "}
-          {new Date(lifecycle.assignedAt).toLocaleDateString("en-NZ", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}
-          {" · "}Template: {lifecycle.divisionCode} v{lifecycle.templateVersion}
-        </div>
-      )}
+      <div className="text-xs text-muted-foreground/60 pt-1 border-t border-border/50">
+        {lifecycle.instanceId && lifecycle.assignedAt ? (
+          <>
+            Template locked{" "}
+            {new Date(lifecycle.assignedAt).toLocaleDateString("en-NZ", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+            {" · "}{lifecycle.divisionCode} v{lifecycle.templateVersion}
+          </>
+        ) : lifecycle.stages.find((s) => s.key === "acceptance")?.status === "complete" ? (
+          <>
+            {lifecycle.divisionCode} v{lifecycle.templateVersion} · Active template (accepted pre-tracking)
+          </>
+        ) : (
+          <>
+            Preview — template will be locked at acceptance · {lifecycle.divisionCode} v{lifecycle.templateVersion}
+          </>
+        )}
+      </div>
     </div>
   );
 }

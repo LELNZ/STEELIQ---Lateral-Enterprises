@@ -481,6 +481,100 @@ export async function registerRoutes(
     }
   });
 
+  app.put("/api/jobs/:id/items", async (req, res) => {
+    try {
+      const jobId = req.params.id;
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      const bodySchema = z.object({ items: z.array(jobItemBodySchema) });
+      const { items } = bodySchema.parse(req.body);
+      await storage.deleteJobItems(jobId);
+      const created: any[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const p = items[i];
+        const item = await storage.addJobItem({
+          jobId,
+          config: p.config,
+          photo: p.photo || null,
+          photos: normalizePhotoPrimary(p.photos) || null,
+          sortOrder: i,
+        });
+        created.push(item);
+      }
+      res.json({ ok: true, count: created.length });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/jobs/:id/link-customer", async (req, res) => {
+    try {
+      const jobId = req.params.id;
+      const { clientName, clientEmail, clientPhone } = z.object({
+        clientName: z.string().min(1),
+        clientEmail: z.string().optional().nullable(),
+        clientPhone: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      const job = await storage.getJob(jobId);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+
+      let customerId = (job as any).customerId as string | null ?? null;
+
+      if (!customerId) {
+        const allCustomers = await storage.getAllCustomers();
+        const nameLower = clientName.trim().toLowerCase();
+        let match = allCustomers.find(c =>
+          c.name.toLowerCase() === nameLower ||
+          (clientEmail && c.email && c.email.toLowerCase() === clientEmail.toLowerCase())
+        );
+        if (match) {
+          customerId = match.id;
+        } else {
+          const newCustomer = await storage.createCustomer({
+            name: clientName.trim(),
+            email: clientEmail || undefined,
+            phone: clientPhone || undefined,
+          });
+          customerId = newCustomer.id;
+        }
+        await storage.updateJob(jobId, { customerId } as any);
+      }
+
+      const hasMinContactData = clientName.trim() && (clientEmail || clientPhone);
+      if (hasMinContactData && customerId) {
+        const contacts = await storage.getCustomerContacts(customerId);
+        const alreadyLinked = (job as any).contactId as string | null ?? null;
+        if (!alreadyLinked) {
+          const existingContact = contacts.find(c =>
+            (clientEmail && c.email && c.email.toLowerCase() === clientEmail!.toLowerCase()) ||
+            (clientPhone && c.phone && c.phone === clientPhone) ||
+            (clientPhone && c.mobile && c.mobile === clientPhone)
+          );
+          let contactId: string;
+          if (existingContact) {
+            contactId = existingContact.id;
+          } else {
+            const nameParts = clientName.trim().split(" ");
+            const newContact = await storage.createCustomerContact(customerId, {
+              customerId,
+              firstName: nameParts[0] || clientName.trim(),
+              lastName: nameParts.slice(1).join(" ") || undefined,
+              email: clientEmail || undefined,
+              phone: clientPhone || undefined,
+            });
+            contactId = newContact.id;
+          }
+          await storage.updateJob(jobId, { contactId } as any);
+        }
+      }
+
+      res.json({ ok: true, customerId });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   app.get("/api/library", async (req, res) => {
     try {
       const type = req.query.type as string | undefined;
@@ -2802,6 +2896,8 @@ export async function registerRoutes(
 
   // ─── Lifecycle Routes ─────────────────────────────────────────────────────
   // GET /api/quotes/:id/lifecycle — derive lifecycle state from existing signals
+  // Template loading: post-acceptance uses instance.templateId (locked version);
+  // pre-acceptance uses the current active template for the division.
   app.get("/api/quotes/:id/lifecycle", async (req, res) => {
     try {
       const quote = await storage.getQuote(req.params.id);
@@ -2813,14 +2909,22 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Access denied: different division" });
       }
 
+      const divisionCode = quote.divisionId ?? "LJ";
       const invoices = await storage.getInvoicesByQuote(quote.id);
       const opJob = await storage.getOpJobByQuoteId(quote.id) ?? null;
       const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
 
-      const lifecycle = deriveLifecycleState(quote, invoices, opJob, instance);
-      if (!lifecycle) {
+      // Load template: use the locked instance templateId post-acceptance, otherwise active template
+      const templateRecord = instance
+        ? await storage.getLifecycleTemplateById(instance.templateId)
+        : await storage.getActiveLifecycleTemplate(divisionCode);
+
+      if (!templateRecord) {
         return res.status(404).json({ error: "No lifecycle template available for this division" });
       }
+
+      const templateConfig = templateRecord.templateJson as import("@shared/lifecycle").LifecycleTemplateConfig;
+      const lifecycle = deriveLifecycleState(quote, invoices, opJob, instance, templateConfig);
       return res.json(lifecycle);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2828,6 +2932,7 @@ export async function registerRoutes(
   });
 
   // GET /api/op-jobs/:id/lifecycle — derive lifecycle state from job context
+  // Uses the same DB-driven template resolution as the quote lifecycle route.
   app.get("/api/op-jobs/:id/lifecycle", async (req, res) => {
     try {
       const job = await storage.getOpJob(req.params.id);
@@ -2846,13 +2951,21 @@ export async function registerRoutes(
       const quote = await storage.getQuote(job.sourceQuoteId);
       if (!quote) return res.status(404).json({ error: "Source quote not found" });
 
+      const divisionCode = quote.divisionId ?? "LJ";
       const invoices = await storage.getInvoicesByQuote(quote.id);
       const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
 
-      const lifecycle = deriveLifecycleState(quote, invoices, job, instance);
-      if (!lifecycle) {
+      // Load template: use the locked instance templateId post-acceptance, otherwise active template
+      const templateRecord = instance
+        ? await storage.getLifecycleTemplateById(instance.templateId)
+        : await storage.getActiveLifecycleTemplate(divisionCode);
+
+      if (!templateRecord) {
         return res.status(404).json({ error: "No lifecycle template available for this division" });
       }
+
+      const templateConfig = templateRecord.templateJson as import("@shared/lifecycle").LifecycleTemplateConfig;
+      const lifecycle = deriveLifecycleState(quote, invoices, job, instance, templateConfig);
       return res.json(lifecycle);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
