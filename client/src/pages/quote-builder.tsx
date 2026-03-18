@@ -944,7 +944,24 @@ export default function QuoteBuilder() {
     const current = [...(w.panelRows || [])];
     while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
     const rows = [...(current[panelIdx] || [{ height: 0, type: "fixed" }])];
-    rows[rowIdx] = { ...rows[rowIdx], type: rows[rowIdx].type === "awning" ? "fixed" : "awning" };
+    const cur = rows[rowIdx].type || "fixed";
+    let next: "fixed" | "sliding" | "awning";
+    if (isStacker) {
+      const cycle: Record<string, "fixed" | "sliding" | "awning"> = { fixed: "sliding", sliding: "awning", awning: "fixed" };
+      next = cycle[cur] ?? "fixed";
+    } else {
+      next = cur === "awning" ? "fixed" : "awning";
+    }
+    rows[rowIdx] = { ...rows[rowIdx], type: next };
+    current[panelIdx] = rows;
+    form.setValue("panelRows", current);
+  }
+
+  function setPanelRowSlideDirection(panelIdx: number, rowIdx: number, dir: "left" | "right") {
+    const current = [...(w.panelRows || [])];
+    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
+    const rows = [...(current[panelIdx] || [{ height: 0, type: "fixed" }])];
+    rows[rowIdx] = { ...rows[rowIdx], slideDirection: dir };
     current[panelIdx] = rows;
     form.setValue("panelRows", current);
   }
@@ -2225,7 +2242,7 @@ export default function QuoteBuilder() {
                                 </div>
                                 <div className="space-y-1">
                                   {panelRowDefs.map((row, ri) => {
-                                    const typeLabel = row.type === "awning" ? "AWN" : "FIX";
+                                    const typeLabel = row.type === "awning" ? "AWN" : row.type === "sliding" ? "SLD" : "FIX";
                                     const isActive = row.type !== "fixed";
                                     return (
                                       <div key={ri} className="flex items-center gap-1.5">
@@ -2243,6 +2260,34 @@ export default function QuoteBuilder() {
                                         >
                                           {typeLabel}
                                         </button>
+                                        {isStacker && row.type === "sliding" && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPanelRowSlideDirection(pi, ri, "left")}
+                                              className={`shrink-0 rounded-sm text-xs py-0.5 px-1.5 border transition-colors ${
+                                                row.slideDirection === "left"
+                                                  ? "bg-primary/15 border-primary/30 text-primary"
+                                                  : "bg-background border-border text-muted-foreground"
+                                              }`}
+                                              data-testid={`button-panel-row-slide-left-${pi}-${ri}`}
+                                            >
+                                              <ArrowLeft className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPanelRowSlideDirection(pi, ri, "right")}
+                                              className={`shrink-0 rounded-sm text-xs py-0.5 px-1.5 border transition-colors ${
+                                                row.slideDirection !== "left"
+                                                  ? "bg-primary/15 border-primary/30 text-primary"
+                                                  : "bg-background border-border text-muted-foreground"
+                                              }`}
+                                              data-testid={`button-panel-row-slide-right-${pi}-${ri}`}
+                                            >
+                                              <ArrowRight className="w-3 h-3" />
+                                            </button>
+                                          </>
+                                        )}
                                         <Input
                                           type="number"
                                           min={0}
@@ -2262,7 +2307,9 @@ export default function QuoteBuilder() {
                           </div>
                         );
                       })}
-                      <p className="text-xs text-muted-foreground">FIX = Fixed, AWN = Awning. 0 = even split.</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isStacker ? "FIX / SLD / AWN cycle. Arrow buttons set slide direction. 0 = even split." : "FIX = Fixed, AWN = Awning. 0 = even split."}
+                      </p>
                     </div>
                   );
                 })()}

@@ -597,37 +597,44 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
       const px = i * pw;
 
       let yOff = 0;
+      let hasSlidingRow = false;
       for (let ri = 0; ri < panelRowDefs.length; ri++) {
+        const rowDef = panelRowDefs[ri];
         const rh = rowHeights[ri];
-        const pType = panelRowDefs[ri].type === "awning" ? "awning" as const : "fixed" as const;
+        const pType = rowDef.type === "awning" ? "awning" as const : rowDef.type === "sliding" ? "sliding" as const : "fixed" as const;
+        if (pType === "sliding") hasSlidingRow = true;
         elements.push(
           <Pane key={`st-${i}-${ri}`} x={px} y={yOff} w={pw} h={rh}
-            frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+            frameSize={frameSize} type={pType} slideDirection={rowDef.slideDirection ?? "right"}
+            openDirection={od} strokeScale={ss} />
         );
         yOff += rh;
       }
 
-      const inset = frameSize * 0.7;
-      const gx = px + inset;
-      const gy = inset;
-      const gw = pw - inset * 2;
-      const gh = H - inset * 2;
-      if (gw > 0 && gh > 0) {
-        const midX = px + pw / 2;
-        const midY = gy + gh / 2;
-        const arrowLen = gw * 0.25;
-        const headSize = Math.min(gh * 0.025, 12);
-        const tipX = midX + arrowLen;
-        const baseX = tipX - headSize * 2;
-        elements.push(
-          <g key={`sta-${i}`}>
-            <line x1={midX - arrowLen} y1={midY} x2={midX + arrowLen} y2={midY}
-              stroke="#2d2d2d" strokeWidth={1.5 * ss} />
-            <polyline
-              points={`${baseX},${midY - headSize} ${tipX},${midY} ${baseX},${midY + headSize}`}
-              fill="#2d2d2d" stroke="#2d2d2d" strokeWidth={1.5 * ss} />
-          </g>
-        );
+      // Only draw the generic panel slide arrow if no row is already typed as sliding
+      // (sliding Pane rows draw their own directional arrows)
+      if (!hasSlidingRow) {
+        const inset = frameSize * 0.7;
+        const gy = inset;
+        const gw = pw - inset * 2;
+        const gh = H - inset * 2;
+        if (gw > 0 && gh > 0) {
+          const midX = px + pw / 2;
+          const midY = gy + gh / 2;
+          const arrowLen = gw * 0.25;
+          const headSize = Math.min(gh * 0.025, 12);
+          const tipX = midX + arrowLen;
+          const baseX = tipX - headSize * 2;
+          elements.push(
+            <g key={`sta-${i}`}>
+              <line x1={midX - arrowLen} y1={midY} x2={midX + arrowLen} y2={midY}
+                stroke="#2d2d2d" strokeWidth={1.5 * ss} />
+              <polyline
+                points={`${baseX},${midY - headSize} ${tipX},${midY} ${baseX},${midY + headSize}`}
+                fill="#2d2d2d" stroke="#2d2d2d" strokeWidth={1.5 * ss} />
+            </g>
+          );
+        }
       }
     }
 
