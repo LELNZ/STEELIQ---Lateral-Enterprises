@@ -1,0 +1,232 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT TRUTH
+==================================================
+
+The Details box feature is now structurally correct and much improved.
+
+Current verified result:
+- customer-facing quote preview shows a dedicated Details box between totals and Schedule of Items
+- exported PDF also shows the dedicated Details box in the correct general location
+- totals display is now customer-safe
+
+However:
+1. the Details box placement/spacing in PDF still needs refinement
+2. editing the Details text still has too much friction because users must go into Quote Display Settings
+3. the user wants a faster editing path, but not full inline editing inside the preview pane
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these two refinements:
+
+1. Refine Details box spacing/placement in preview and PDF
+2. Add a quick-edit Details surface on the main quote page, fully synced with the preview and Quote Display Settings
+
+Do NOT redesign the quote page.
+Do NOT build full inline editing inside the preview pane.
+Do NOT change QuoteDocument -> QuoteRenderModel -> Preview/PDF architecture.
+
+==================================================
+GOAL 1 — DETAILS BOX SPACING/POLISH
+==================================================
+
+Required task:
+- review current preview and PDF spacing around the Details box
+- refine padding/margins/vertical spacing so the block sits more cleanly between:
+  - Quote Summary totals
+  - Schedule of Items
+
+Required result:
+- Details box remains in the same general location
+- spacing feels intentional and visually balanced
+- preview/PDF remain aligned
+- no architecture change
+
+==================================================
+GOAL 2 — QUICK-EDIT DETAILS ON MAIN QUOTE PAGE
+==================================================
+
+Best-practice direction for this phase:
+- preview remains primarily a render/review surface
+- add a quick-edit Details control on the main quote page
+- keep advanced granular controls in Quote Display Settings
+
+Required behaviour:
+- on the main quote page, add a compact surface for:
+  - Details Box show/hide
+  - Customer-facing Details text
+- this should be quick to access without opening the side settings panel
+- this should write to the same underlying revision/display-settings state already used by Quote Display Settings
+- sync must be deterministic
+- no double-source-of-truth logic
+
+Important:
+- do NOT create a second unrelated data store
+- do NOT make preview itself a freeform editing canvas
+- the quote main page quick-edit control is a convenience surface for the same existing setting
+
+Recommended UI:
+- compact card or section on quote main page
+- clear label such as:
+  Customer-facing Details
+- textarea
+- show/hide toggle
+- optional helper link:
+  Open full Quote Display Settings
+
+==================================================
+SYNC REQUIREMENT — MUST FOLLOW EXACTLY
+==================================================
+
+The new quick-edit Customer-facing Details field on the main quote page must auto-populate and stay in sync with:
+1. the live customer preview
+2. the Quote Display Settings / Edit Spec Display side panel field
+
+Required behaviour:
+- typing into the quote-page Details textbox updates the preview immediately
+- opening Quote Display Settings shows the same current text and toggle state
+- editing the text in Quote Display Settings updates the quote-page textbox too
+- both surfaces must write to the same underlying revision/display-settings state
+- no duplicate source of truth
+- no separate unsynced local field
+- persistence behaviour must remain revision-based exactly as current display settings are stored
+
+This is a sync/ownership requirement, not a new data model.
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- Details box still renders in preview
+- Details box still renders in PDF
+- spacing is improved in both
+- quote main page quick-edit updates preview correctly
+- quick-edit auto-populates from existing saved revision/display settings
+- quick-edit stays in sync with Quote Display Settings
+- changing text in Quote Display Settings updates the quote-page textbox
+- changing text in quote-page textbox updates Quote Display Settings state
+- Details Box show/hide toggle stays synced between both surfaces
+- no break to totals visibility controls
+- no break to quote preview/PDF export
+- no break to revision persistence
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact spacing/edit-flow issues found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless:
+- Details box spacing is improved
+- main quote page quick-edit exists
+- quick-edit auto-populates correctly
+- preview and Quote Display Settings stay in sync with it
+- no architecture drift occurred

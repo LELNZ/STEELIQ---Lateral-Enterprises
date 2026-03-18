@@ -125,6 +125,7 @@ export default function QuotePreview() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "preview-data"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
       toast({ title: "Display settings saved" });
     },
     onError: (err: Error) => {

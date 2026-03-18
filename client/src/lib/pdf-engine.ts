@@ -661,11 +661,11 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
 
 function renderCommercialRemarks(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   if (!model.commercialRemarks) return y;
-  y = ensureSpace(pdf, y, 18);
-  y += SECTION_GAP / 2;
+  y = ensureSpace(pdf, y, 20);
+  y += SECTION_GAP;
 
-  const PAD_H = 4;
-  const PAD_V = 3.5;
+  const PAD_H = 5;
+  const PAD_V = 4;
   const innerLeft = LEFT_MARGIN + PAD_H;
   const innerWidth = CONTENT_WIDTH - PAD_H * 2;
   const boxStartY = y;
@@ -676,7 +676,7 @@ function renderCommercialRemarks(pdf: Pdf, y: number, model: QuoteRenderModel): 
   pdf.setFontSize(mmSize(6.5));
   pdf.setTextColor(COLOR_MUTED);
   pdf.text("DETAILS", innerLeft, y + 2);
-  y += 5.5;
+  y += 6;
 
   // Body text
   const bodyEndY = renderRichTextPdf(pdf, y, model.commercialRemarks, {
@@ -696,7 +696,7 @@ function renderCommercialRemarks(pdf: Pdf, y: number, model: QuoteRenderModel): 
   pdf.setLineWidth(0.3);
   pdf.roundedRect(LEFT_MARGIN, boxStartY, CONTENT_WIDTH, boxEndY - boxStartY, 2, 2, "S");
 
-  return boxEndY + SECTION_GAP / 2;
+  return boxEndY + SECTION_GAP;
 }
 
 function renderTotals(pdf: Pdf, y: number, model: QuoteRenderModel): number {

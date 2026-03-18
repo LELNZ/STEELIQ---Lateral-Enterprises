@@ -241,6 +241,7 @@ export default function QuoteBuilder() {
   const [deliveryMethodId, setDeliveryMethodId] = useState<string>("");
   const [deliveryCustom, setDeliveryCustom] = useState<string>("");
   const [deliveryMarkup, setDeliveryMarkup] = useState<string>("15");
+  const [installationEnabled, setInstallationEnabled] = useState(false);
   const [removalEnabled, setRemovalEnabled] = useState(false);
   const [removalMarkup, setRemovalMarkup] = useState<string>("15");
   const [rubbishEnabled, setRubbishEnabled] = useState(false);
@@ -403,6 +404,7 @@ export default function QuoteBuilder() {
       setDeliveryMethodId(ej.deliveryMethod || "");
       setDeliveryCustom(ej.deliveryAmount != null ? String(ej.deliveryAmount) : "");
       setDeliveryMarkup(ej.deliveryMarkup != null ? String(ej.deliveryMarkup) : "15");
+      setInstallationEnabled(!!ej.installationEnabled);
       setRemovalEnabled(!!ej.removalEnabled);
       setRemovalMarkup(ej.removalMarkup != null ? String(ej.removalMarkup) : "15");
       setRubbishEnabled(!!ej.rubbishEnabled);
@@ -1813,7 +1815,7 @@ export default function QuoteBuilder() {
 
                 {showWindowType && (
                   <div>
-                    <Label className="text-xs">Window Type</Label>
+                    <Label className="text-xs">Opening Type <span className="font-normal text-muted-foreground">(Fixed · Awning · French)</span></Label>
                     <Select value={w.windowType} onValueChange={(v) => form.setValue("windowType", v as any)}>
                       <SelectTrigger data-testid="select-window-type"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -3172,12 +3174,16 @@ export default function QuoteBuilder() {
                     <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Commercial Extras</span>
                     {!extrasOpen && (
                       <span className="text-xs text-muted-foreground ml-1">
-                        {[deliveryEnabled && "Delivery", removalEnabled && "Removal", rubbishEnabled && "Rubbish"].filter(Boolean).join(" · ") || "None"}
+                        {[installationEnabled && "Installation", deliveryEnabled && "Delivery", removalEnabled && "Removal", rubbishEnabled && "Rubbish"].filter(Boolean).join(" · ") || "None"}
                       </span>
                     )}
                   </button>
                   {extrasOpen && (
                     <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Installation Labour</Label>
+                        <Switch checked={installationEnabled} onCheckedChange={(v) => { setInstallationEnabled(v); persistJobField("installationEnabled", v); }} data-testid="switch-extras-installation-lg" />
+                      </div>
                       <div className="flex items-center justify-between">
                         <Label className="text-xs">Delivery</Label>
                         <Switch checked={deliveryEnabled} onCheckedChange={(v) => { setDeliveryEnabled(v); persistJobField("deliveryEnabled", v); }} data-testid="switch-extras-delivery-lg" />
@@ -3286,12 +3292,20 @@ export default function QuoteBuilder() {
                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Commercial Extras</span>
                         {!extrasOpen && (
                           <span className="text-xs text-muted-foreground ml-1">
-                            {[deliveryEnabled && "Delivery", removalEnabled && "Removal", rubbishEnabled && "Rubbish"].filter(Boolean).join(" · ") || "None"}
+                            {[installationEnabled && "Installation", deliveryEnabled && "Delivery", removalEnabled && "Removal", rubbishEnabled && "Rubbish"].filter(Boolean).join(" · ") || "None"}
                           </span>
                         )}
                       </button>
                       {extrasOpen && (
                         <div className="space-y-3 pt-1">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Installation Labour</Label>
+                            <Switch
+                              checked={installationEnabled}
+                              onCheckedChange={(v) => { setInstallationEnabled(v); persistJobField("installationEnabled", v); }}
+                              data-testid="switch-extras-installation"
+                            />
+                          </div>
                           <div className="flex items-center justify-between">
                             <Label className="text-xs font-medium">Delivery</Label>
                             <Switch

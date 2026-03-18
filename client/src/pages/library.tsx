@@ -43,7 +43,7 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "installation" | "delivery" | "removal" | "waste";
 
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
@@ -222,6 +222,8 @@ export default function Library() {
             <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
             <TabsTrigger value="installation" data-testid="tab-installation">Installation</TabsTrigger>
             <TabsTrigger value="delivery" data-testid="tab-delivery">Delivery</TabsTrigger>
+            <TabsTrigger value="removal" data-testid="tab-removal">Removal</TabsTrigger>
+            <TabsTrigger value="waste" data-testid="tab-waste">Waste</TabsTrigger>
             <TabsTrigger value="profile_roles" data-testid="tab-profile-roles">Profile Roles</TabsTrigger>
           </TabsList>
 
@@ -254,6 +256,12 @@ export default function Library() {
           </TabsContent>
           <TabsContent value="delivery">
             <DeliverySection divisionCode={selectedDivision} />
+          </TabsContent>
+          <TabsContent value="removal">
+            <RemovalSection divisionCode={selectedDivision} />
+          </TabsContent>
+          <TabsContent value="waste">
+            <WasteSection divisionCode={selectedDivision} />
           </TabsContent>
           <TabsContent value="profile_roles">
             <ProfileRoleDictionarySection />
@@ -3090,6 +3098,359 @@ function DeliveryRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEn
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-delivery">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RemovalSection({ divisionCode }: { divisionCode?: string | null }) {
+  const { toast } = useToast();
+  const { data: rates = [], isLoading } = useLibraryEntries("removal_rate", divisionCode);
+  const [editRate, setEditRate] = useState<LibraryEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      setDeleteId(null);
+      toast({ title: "Rate deleted" });
+    },
+  });
+
+  const windowRates = rates.filter((r) => (r.data as any).category === "window");
+  const doorRates = rates.filter((r) => (r.data as any).category === "door");
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="removal-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Removal Rates</h2>
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="button-add-removal-rate">
+          <Plus className="w-4 h-4 mr-1" /> Add Rate
+        </Button>
+      </div>
+
+      {[{ title: "Window Removal", items: windowRates }, { title: "Door Removal", items: doorRates }].map(({ title, items }) => (
+        <Card key={title}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">{title}</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Size Name</TableHead>
+                  <TableHead>Min m²</TableHead>
+                  <TableHead>Max m²</TableHead>
+                  <TableHead>Cost/Unit ($)</TableHead>
+                  <TableHead>Sell/Unit ($)</TableHead>
+                  <TableHead>Scope</TableHead>
+                  <TableHead className="w-20"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No rates</TableCell></TableRow>
+                ) : items.map((r) => {
+                  const d = r.data as any;
+                  return (
+                    <TableRow key={r.id} data-testid={`row-removal-${r.id}`}>
+                      <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell>{d.minSqm}</TableCell>
+                      <TableCell>{d.maxSqm >= 999 ? "∞" : d.maxSqm}</TableCell>
+                      <TableCell className="font-medium">${d.costPerUnit}</TableCell>
+                      <TableCell className="font-semibold">${d.sellPerUnit}</TableCell>
+                      <TableCell><ScopeBadge entry={r} /></TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditRate(r)} data-testid={`button-edit-removal-${r.id}`}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(r.id)} data-testid={`button-delete-removal-${r.id}`}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ))}
+
+      {(editRate || adding) && (
+        <RemovalRateDialog entry={editRate} divisionCode={divisionCode} onClose={() => { setEditRate(null); setAdding(false); }} />
+      )}
+
+      {deleteId && (
+        <Dialog open onOpenChange={() => setDeleteId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Rate</DialogTitle>
+              <DialogDescription>Are you sure you want to delete this removal rate?</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => deleteMutation.mutate(deleteId!)} disabled={deleteMutation.isPending} data-testid="button-confirm-delete-removal">
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+function RemovalRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = (entry?.data ?? {}) as any;
+  const [values, setValues] = useState({
+    name: d.name ?? "",
+    category: d.category ?? "window",
+    minSqm: d.minSqm ?? 0,
+    maxSqm: d.maxSqm ?? 1,
+    costPerUnit: d.costPerUnit ?? 0,
+    sellPerUnit: d.sellPerUnit ?? 0,
+    description: d.description ?? "",
+  });
+  const ds = divisionCode ?? null;
+  const [scopeValue, setScopeValue] = useState<string>(entry?.divisionScope ?? ds ?? "all");
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: scopeValue === "all" ? null : scopeValue });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "removal_rate", data: values, sortOrder: 0, divisionScope: scopeValue === "all" ? null : scopeValue });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({ title: isEdit ? "Rate updated" : "Rate added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-removal-rate">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Removal Rate" : "Add Removal Rate"}</DialogTitle>
+          <DialogDescription>Set pricing for a removal size tier.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Size Name</Label>
+            <Input value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} data-testid="input-removal-name" />
+          </div>
+          <div>
+            <Label>Category</Label>
+            <Select value={values.category} onValueChange={(v) => setValues({ ...values, category: v })}>
+              <SelectTrigger data-testid="select-removal-category"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="window">Window</SelectItem>
+                <SelectItem value="door">Door</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Min m²</Label>
+            <Input type="number" value={values.minSqm} onChange={(e) => setValues({ ...values, minSqm: parseFloat(e.target.value) || 0 })} data-testid="input-removal-min" />
+          </div>
+          <div>
+            <Label>Max m²</Label>
+            <Input type="number" value={values.maxSqm} onChange={(e) => setValues({ ...values, maxSqm: parseFloat(e.target.value) || 0 })} data-testid="input-removal-max" />
+          </div>
+          <div>
+            <Label>Cost per Unit ($)</Label>
+            <Input type="number" value={values.costPerUnit} onChange={(e) => setValues({ ...values, costPerUnit: parseFloat(e.target.value) || 0 })} data-testid="input-removal-cost" />
+          </div>
+          <div>
+            <Label>Sell per Unit ($)</Label>
+            <Input type="number" value={values.sellPerUnit} onChange={(e) => setValues({ ...values, sellPerUnit: parseFloat(e.target.value) || 0 })} data-testid="input-removal-sell" />
+          </div>
+          <div className="col-span-2">
+            <Label>Description</Label>
+            <Input value={values.description} onChange={(e) => setValues({ ...values, description: e.target.value })} data-testid="input-removal-description" />
+          </div>
+          <div className="col-span-2">
+            <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-removal">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function WasteSection({ divisionCode }: { divisionCode?: string | null }) {
+  const { toast } = useToast();
+  const { data: rates = [], isLoading } = useLibraryEntries("general_waste", divisionCode);
+  const [editRate, setEditRate] = useState<LibraryEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      setDeleteId(null);
+      toast({ title: "Rate deleted" });
+    },
+  });
+
+  if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
+
+  return (
+    <div className="space-y-4" data-testid="waste-section">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">General Waste (Rubbish Removal) Rates</h2>
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="button-add-waste-rate">
+          <Plus className="w-4 h-4 mr-1" /> Add Rate
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="overflow-x-auto pt-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Cost/Tonne ($)</TableHead>
+                <TableHead>Sell/Tonne ($)</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Scope</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rates.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No waste rates</TableCell></TableRow>
+              ) : rates.map((r) => {
+                const d = r.data as any;
+                return (
+                  <TableRow key={r.id} data-testid={`row-waste-${r.id}`}>
+                    <TableCell className="font-medium">{d.name}</TableCell>
+                    <TableCell className="font-medium">${d.costPerTonne}</TableCell>
+                    <TableCell className="font-semibold">${d.sellPerTonne}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{d.description}</TableCell>
+                    <TableCell><ScopeBadge entry={r} /></TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditRate(r)} data-testid={`button-edit-waste-${r.id}`}>
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(r.id)} data-testid={`button-delete-waste-${r.id}`}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {(editRate || adding) && (
+        <WasteRateDialog entry={editRate} divisionCode={divisionCode} onClose={() => { setEditRate(null); setAdding(false); }} />
+      )}
+
+      {deleteId && (
+        <Dialog open onOpenChange={() => setDeleteId(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Rate</DialogTitle>
+              <DialogDescription>Are you sure you want to delete this waste rate?</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => deleteMutation.mutate(deleteId!)} disabled={deleteMutation.isPending} data-testid="button-confirm-delete-waste">
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+function WasteRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = (entry?.data ?? {}) as any;
+  const [values, setValues] = useState({
+    name: d.name ?? "General Waste Disposal",
+    costPerTonne: d.costPerTonne ?? 0,
+    sellPerTonne: d.sellPerTonne ?? 0,
+    description: d.description ?? "",
+  });
+  const ds = divisionCode ?? null;
+  const [scopeValue, setScopeValue] = useState<string>(entry?.divisionScope ?? ds ?? "all");
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: scopeValue === "all" ? null : scopeValue });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "general_waste", data: values, sortOrder: 0, divisionScope: scopeValue === "all" ? null : scopeValue });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({ title: isEdit ? "Rate updated" : "Rate added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-waste-rate">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Waste Rate" : "Add Waste Rate"}</DialogTitle>
+          <DialogDescription>Set pricing for rubbish removal by tonne.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <Label>Rate Name</Label>
+            <Input value={values.name} onChange={(e) => setValues({ ...values, name: e.target.value })} data-testid="input-waste-name" />
+          </div>
+          <div>
+            <Label>Cost per Tonne ($)</Label>
+            <Input type="number" value={values.costPerTonne} onChange={(e) => setValues({ ...values, costPerTonne: parseFloat(e.target.value) || 0 })} data-testid="input-waste-cost" />
+          </div>
+          <div>
+            <Label>Sell per Tonne ($)</Label>
+            <Input type="number" value={values.sellPerTonne} onChange={(e) => setValues({ ...values, sellPerTonne: parseFloat(e.target.value) || 0 })} data-testid="input-waste-sell" />
+          </div>
+          <div className="col-span-2">
+            <Label>Description</Label>
+            <Input value={values.description} onChange={(e) => setValues({ ...values, description: e.target.value })} data-testid="input-waste-description" />
+          </div>
+          <div className="col-span-2">
+            <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-waste">
             {saveMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
