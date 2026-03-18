@@ -25,12 +25,13 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
-import { buildQuoteDocumentModel } from "@/lib/quote-document";
+import { useState, useEffect } from "react";
+import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG, type TotalsDisplayConfig } from "@/lib/quote-document";
 import type { PreviewData } from "@/lib/quote-document";
 import { buildQuoteRenderModel } from "@/lib/quote-renderer";
 import { generateQuotePdf, generateQuotePdfBase64 } from "@/lib/pdf-engine";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import LifecyclePanel from "@/components/lifecycle-panel";
 
 interface QuoteWithRevisions extends Quote {
@@ -237,6 +238,54 @@ export default function QuoteDetail() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Customer-facing Details: quick-edit state
+  const currentRevisionForDetails = quote?.revisions?.find(r => r.id === quote?.currentRevisionId);
+  const savedDetailsText = (currentRevisionForDetails as any)?.commercialRemarks ?? "";
+  const savedDetailsConfig = (currentRevisionForDetails as any)?.totalsDisplayConfigJson as TotalsDisplayConfig | null;
+  const savedShowDetails = savedDetailsConfig?.showCommercialRemarks ?? true;
+
+  const [localDetailsText, setLocalDetailsText] = useState<string | null>(null);
+  const [localShowDetails, setLocalShowDetails] = useState<boolean | null>(null);
+
+  const detailsRevisionId = currentRevisionForDetails?.id;
+  useEffect(() => {
+    setLocalDetailsText(null);
+    setLocalShowDetails(null);
+  }, [detailsRevisionId]);
+
+  const effectiveDetailsText = localDetailsText ?? savedDetailsText;
+  const effectiveShowDetails = localShowDetails ?? savedShowDetails;
+  const hasUnsavedDetails = localDetailsText !== null || localShowDetails !== null;
+
+  const detailsMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentRevisionForDetails) throw new Error("No current revision");
+      const fullConfig: TotalsDisplayConfig = {
+        ...DEFAULT_TOTALS_DISPLAY_CONFIG,
+        ...(savedDetailsConfig || {}),
+        showCommercialRemarks: effectiveShowDetails,
+      };
+      const res = await apiRequest("PATCH", `/api/quotes/${quoteId}/revisions/${currentRevisionForDetails.id}/spec-display`, {
+        totalsDisplayConfig: fullConfig,
+        commercialRemarks: effectiveDetailsText || null,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).error || "Save failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      setLocalDetailsText(null);
+      setLocalShowDetails(null);
+      toast({ title: "Details saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -465,6 +514,55 @@ export default function QuoteDetail() {
       )}
 
       <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} />
+
+      {currentRevisionForDetails && (
+        <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="section-details-quick-edit">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Customer-facing Details</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Shown as a dedicated block below the quote summary in the customer PDF and preview.</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Label htmlFor="details-show-toggle" className="text-xs text-muted-foreground">Show</Label>
+              <Switch
+                id="details-show-toggle"
+                checked={effectiveShowDetails}
+                onCheckedChange={(v) => setLocalShowDetails(v)}
+                data-testid="switch-details-show"
+              />
+            </div>
+          </div>
+          <Textarea
+            value={effectiveDetailsText}
+            onChange={e => setLocalDetailsText(e.target.value)}
+            placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
+            rows={4}
+            className="text-sm resize-none"
+            data-testid="textarea-details-quick-edit"
+          />
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground h-7 px-2"
+              onClick={() => navigate(`/quote/${quoteId}/preview`)}
+              data-testid="link-open-quote-display-settings"
+            >
+              <ExternalLink className="h-3 w-3 mr-1" />
+              Open Quote Display Settings
+            </Button>
+            <Button
+              size="sm"
+              disabled={!hasUnsavedDetails || detailsMutation.isPending}
+              onClick={() => detailsMutation.mutate()}
+              data-testid="button-save-details"
+            >
+              {detailsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+              Save
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Separator />
 
