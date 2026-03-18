@@ -107,6 +107,17 @@ export default function ExecSummary() {
   const [rubbishTonnage, setRubbishTonnage] = useState<string>("");
   const [initialized, setInitialized] = useState(false);
 
+  const SECTION_KEYS = ["financial", "installation", "delivery", "removal", "rubbish", "history", "items"] as const;
+  type SectionKey = typeof SECTION_KEYS[number];
+  const [sectionCollapsed, setSectionCollapsed] = useState<Record<SectionKey, boolean>>({
+    financial: false, installation: false, delivery: false,
+    removal: false, rubbish: false, history: false, items: false,
+  });
+  const toggleSection = (key: SectionKey) => setSectionCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+  const expandAll = () => setSectionCollapsed({ financial: false, installation: false, delivery: false, removal: false, rubbish: false, history: false, items: false });
+  const collapseAll = () => setSectionCollapsed({ financial: true, installation: true, delivery: true, removal: true, rubbish: true, history: true, items: true });
+  const allCollapsed = SECTION_KEYS.every(k => sectionCollapsed[k]);
+
   const { data: job, isLoading: jobLoading } = useQuery<JobData>({
     queryKey: ["/api/jobs", jobId],
     enabled: !!jobId,
@@ -842,9 +853,31 @@ export default function ExecSummary() {
         <SummaryCard label="USD → NZD Rate" value={`${usdToNzdRate}`} testId="text-usd-rate" />
       </div>
 
-      <div className="order-5 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Financial Summary</h2>
+      <div className="order-1 flex items-center justify-end gap-2 print:hidden" data-testid="section-collapse-controls">
+        <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={allCollapsed ? expandAll : collapseAll} data-testid="button-toggle-all-sections">
+          {allCollapsed ? "Expand All" : "Collapse All"}
+        </Button>
+      </div>
 
+      <div className="order-5 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
+        <button
+          className="w-full flex items-center justify-between print:hidden"
+          onClick={() => toggleSection("financial")}
+          data-testid="toggle-financial"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Financial Summary</h2>
+          <div className="flex items-center gap-3">
+            {sectionCollapsed.financial && (
+              <span className="text-sm font-medium text-foreground" data-testid="summary-financial-collapsed">
+                Sell: ${fmt(totals.totalSaleExGst)} excl. GST
+              </span>
+            )}
+            {sectionCollapsed.financial ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          </div>
+        </button>
+        <h2 className="hidden print:block text-sm font-semibold uppercase tracking-wider text-muted-foreground">Financial Summary</h2>
+
+        {!sectionCollapsed.financial && <div className="space-y-4">
         <div className="hidden md:block">
           <Table>
             <TableHeader>
@@ -1025,11 +1058,18 @@ export default function ExecSummary() {
             </p>
           </div>
         </div>
+        </div>}
       </div>
 
       <div className="order-3 rounded-lg border bg-card p-4 space-y-3 print:break-before-page" data-testid="installation-section">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Installation Labour</h2>
+          <button className="flex items-center gap-2 print:hidden" onClick={() => toggleSection("installation")} data-testid="toggle-installation">
+            {sectionCollapsed.installation ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Installation Labour</h2>
+            {sectionCollapsed.installation && installEnabled && <span className="text-sm font-medium text-foreground ml-2">${fmt(installationTotals.sell)}</span>}
+            {sectionCollapsed.installation && !installEnabled && <span className="text-xs text-muted-foreground ml-2">Disabled</span>}
+          </button>
+          <h2 className="hidden print:block text-sm font-semibold uppercase tracking-wider text-muted-foreground">Installation Labour</h2>
           <div className="flex items-center gap-2 print:hidden">
             <Label htmlFor="install-toggle" className="text-sm">Enable</Label>
             <Switch
@@ -1043,7 +1083,7 @@ export default function ExecSummary() {
             />
           </div>
         </div>
-        {installEnabled && (
+        {!sectionCollapsed.installation && installEnabled && (
           <>
             <Table>
               <TableHeader>
@@ -1122,14 +1162,20 @@ export default function ExecSummary() {
             </div>
           </>
         )}
-        {!installEnabled && (
+        {!sectionCollapsed.installation && !installEnabled && (
           <p className="text-sm text-muted-foreground py-2">Installation pricing is disabled. Toggle to enable per-unit installation costs.</p>
         )}
       </div>
 
       <div className="order-4 rounded-lg border bg-card p-4 space-y-3" data-testid="delivery-section">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
+          <button className="flex items-center gap-2 print:hidden" onClick={() => toggleSection("delivery")} data-testid="toggle-delivery">
+            {sectionCollapsed.delivery ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
+            {sectionCollapsed.delivery && deliveryEnabled && <span className="text-sm font-medium text-foreground ml-2">${fmt(deliveryTotals.sell)}</span>}
+            {sectionCollapsed.delivery && !deliveryEnabled && <span className="text-xs text-muted-foreground ml-2">Supply Only</span>}
+          </button>
+          <h2 className="hidden print:block text-sm font-semibold uppercase tracking-wider text-muted-foreground">Delivery</h2>
           <div className="flex items-center gap-2 print:hidden">
             <Label htmlFor="delivery-toggle" className="text-sm">Enable</Label>
             <Switch
@@ -1143,7 +1189,7 @@ export default function ExecSummary() {
             />
           </div>
         </div>
-        {deliveryEnabled && (
+        {!sectionCollapsed.delivery && deliveryEnabled && (
           <>
             <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-4 print:hidden">
               <div className="col-span-2 md:flex-1 md:min-w-[200px]">
@@ -1202,14 +1248,20 @@ export default function ExecSummary() {
             </div>
           </>
         )}
-        {!deliveryEnabled && (
+        {!sectionCollapsed.delivery && !deliveryEnabled && (
           <p className="text-sm text-muted-foreground py-2" data-testid="text-delivery-supply-only">Supply Only — Customer to Collect</p>
         )}
       </div>
 
       <div className="order-4 rounded-lg border bg-card p-4 space-y-3" data-testid="removal-section">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Old Window / Door Removal</h2>
+          <button className="flex items-center gap-2 print:hidden" onClick={() => toggleSection("removal")} data-testid="toggle-removal">
+            {sectionCollapsed.removal ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Old Window / Door Removal</h2>
+            {sectionCollapsed.removal && removalEnabled && <span className="text-sm font-medium text-foreground ml-2">${fmt(removalTotals.sell)}</span>}
+            {sectionCollapsed.removal && !removalEnabled && <span className="text-xs text-muted-foreground ml-2">Not included</span>}
+          </button>
+          <h2 className="hidden print:block text-sm font-semibold uppercase tracking-wider text-muted-foreground">Old Window / Door Removal</h2>
           <div className="flex items-center gap-2 print:hidden">
             <Label htmlFor="removal-toggle" className="text-sm">Enable</Label>
             <Switch
@@ -1223,7 +1275,7 @@ export default function ExecSummary() {
             />
           </div>
         </div>
-        {removalEnabled && (
+        {!sectionCollapsed.removal && removalEnabled && (
           <>
             <Table>
               <TableHeader>
@@ -1291,14 +1343,20 @@ export default function ExecSummary() {
             </div>
           </>
         )}
-        {!removalEnabled && (
+        {!sectionCollapsed.removal && !removalEnabled && (
           <p className="text-sm text-muted-foreground py-2" data-testid="text-removal-disabled">Not included — existing windows remain in place</p>
         )}
       </div>
 
       <div className="order-4 rounded-lg border bg-card p-4 space-y-3" data-testid="rubbish-section">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Rubbish / General Waste Removal</h2>
+          <button className="flex items-center gap-2 print:hidden" onClick={() => toggleSection("rubbish")} data-testid="toggle-rubbish">
+            {sectionCollapsed.rubbish ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Rubbish / General Waste Removal</h2>
+            {sectionCollapsed.rubbish && rubbishEnabled && <span className="text-sm font-medium text-foreground ml-2">{rubbishTonnage || "1"}t · ${fmt(rubbishTotals.sell)}</span>}
+            {sectionCollapsed.rubbish && !rubbishEnabled && <span className="text-xs text-muted-foreground ml-2">Not included</span>}
+          </button>
+          <h2 className="hidden print:block text-sm font-semibold uppercase tracking-wider text-muted-foreground">Rubbish / General Waste Removal</h2>
           <div className="flex items-center gap-2 print:hidden">
             <Label htmlFor="rubbish-toggle" className="text-sm">Enable</Label>
             <Switch
@@ -1316,7 +1374,7 @@ export default function ExecSummary() {
             />
           </div>
         </div>
-        {rubbishEnabled && (
+        {!sectionCollapsed.rubbish && rubbishEnabled && (
           <>
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-4 print:hidden">
               <div className="flex-1">
@@ -1345,15 +1403,19 @@ export default function ExecSummary() {
             </div>
           </>
         )}
-        {!rubbishEnabled && (
+        {!sectionCollapsed.rubbish && !rubbishEnabled && (
           <p className="text-sm text-muted-foreground py-2" data-testid="text-rubbish-disabled">Not included</p>
         )}
       </div>
 
       {existingQuotes.length > 0 && (
         <div className="order-4 md:order-4 rounded-lg border bg-card p-4 space-y-3 print:hidden" data-testid="quote-history-section">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote History</h2>
-          <Table>
+          <button className="flex items-center gap-2 w-full text-left" onClick={() => toggleSection("history")} data-testid="toggle-quote-history">
+            {sectionCollapsed.history ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quote History</h2>
+            {sectionCollapsed.history && <span className="text-xs text-muted-foreground ml-2">{existingQuotes.length} quote{existingQuotes.length !== 1 ? "s" : ""}</span>}
+          </button>
+          {!sectionCollapsed.history && <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Quote #</TableHead>
@@ -1376,15 +1438,20 @@ export default function ExecSummary() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </Table>}
         </div>
       )}
 
       <div className="order-2 md:order-5 rounded-lg border bg-card" data-testid="items-breakdown">
-        <div className="p-4 border-b">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Per-Item Breakdown</h2>
+        <div className="p-4 border-b flex items-center justify-between">
+          <button className="flex items-center gap-2" onClick={() => toggleSection("items")} data-testid="toggle-per-item">
+            {sectionCollapsed.items ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Per-Item Breakdown</h2>
+            {sectionCollapsed.items && <span className="text-xs text-muted-foreground ml-2">{itemPricings.length} item{itemPricings.length !== 1 ? "s" : ""}</span>}
+          </button>
+          <h2 className="hidden print:block text-sm font-semibold uppercase tracking-wider text-muted-foreground">Per-Item Breakdown</h2>
         </div>
-        <Table>
+        {!sectionCollapsed.items && <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-8"></TableHead>
@@ -1514,7 +1581,7 @@ export default function ExecSummary() {
               </TableRow>
             )}
           </TableBody>
-        </Table>
+        </Table>}
       </div>
 
       <div style={{ position: "absolute", left: "-9999px", top: 0, overflow: "hidden", pointerEvents: "none" }} aria-hidden="true">

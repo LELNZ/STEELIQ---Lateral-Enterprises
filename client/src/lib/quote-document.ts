@@ -83,6 +83,8 @@ export interface QuoteDocumentTotals {
   itemsSubtotal: number;
   installationTotal: number;
   deliveryTotal: number;
+  removalTotal: number;
+  rubbishTotal: number;
   subtotalExclGst: number;
   gstAmount: number;
   totalInclGst: number;
@@ -199,6 +201,8 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       itemsSubtotal: tb.itemsSubtotal,
       installationTotal: tb.installationTotal,
       deliveryTotal: tb.deliveryTotal,
+      removalTotal: (tb as any).removalTotal ?? 0,
+      rubbishTotal: (tb as any).rubbishTotal ?? 0,
       subtotalExclGst: tb.subtotalExclGst || tb.itemsSubtotal,
       gstAmount: tb.gstAmount,
       totalInclGst: tb.totalInclGst,

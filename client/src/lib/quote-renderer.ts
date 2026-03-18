@@ -124,7 +124,7 @@ function fmtCurrency(n: number): string {
 
 function buildTotals(doc: QuoteDocumentModel): RenderTotals {
   const t = doc.totals;
-  const hasBreakdown = t.itemsSubtotal > 0 || t.installationTotal > 0 || t.deliveryTotal > 0;
+  const hasBreakdown = t.itemsSubtotal > 0 || t.installationTotal > 0 || t.deliveryTotal > 0 || (t.removalTotal ?? 0) > 0 || (t.rubbishTotal ?? 0) > 0;
   const hasLegacyOnly = !hasBreakdown && t.legacySell !== null;
 
   if (!hasBreakdown && !hasLegacyOnly) {
@@ -142,6 +142,12 @@ function buildTotals(doc: QuoteDocumentModel): RenderTotals {
     }
     if (t.deliveryTotal > 0) {
       lines.push({ label: "Delivery", amount: t.deliveryTotal, formatted: `$${fmtCurrency(t.deliveryTotal)}`, emphasis: "normal" });
+    }
+    if ((t.removalTotal ?? 0) > 0) {
+      lines.push({ label: "Removal of Old Windows & Doors", amount: t.removalTotal, formatted: `$${fmtCurrency(t.removalTotal)}`, emphasis: "normal" });
+    }
+    if ((t.rubbishTotal ?? 0) > 0) {
+      lines.push({ label: "Rubbish Removal", amount: t.rubbishTotal, formatted: `$${fmtCurrency(t.rubbishTotal)}`, emphasis: "normal" });
     }
     lines.push({ label: "", amount: 0, formatted: "", emphasis: "separator" });
     lines.push({ label: "Subtotal (excl. GST)", amount: t.subtotalExclGst, formatted: `$${fmtCurrency(t.subtotalExclGst)}`, emphasis: "normal" });
