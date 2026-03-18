@@ -261,6 +261,9 @@ export default function QuoteBuilder() {
   const [formTab, setFormTab] = useState<string>("drawing");
   const [mobileTab, setMobileTab] = useState<"config" | "preview" | "items">("config");
   const [siteType, setSiteType] = useState<"renovation" | "new_build" | null>(null);
+  const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
   const isLargeScreen = useIsLargeScreen();
   const { quoteListPosition, usdToNzdRate } = useSettings();
   const roomDropdownRef = useRef<HTMLDivElement>(null);
@@ -409,6 +412,9 @@ export default function QuoteBuilder() {
       setRemovalMarkup(ej.removalMarkup != null ? String(ej.removalMarkup) : "15");
       setRubbishEnabled(!!ej.rubbishEnabled);
       setRubbishTonnage(ej.rubbishTonnage != null ? String(ej.rubbishTonnage) : "");
+      setClientName(ej.clientName || "");
+      setClientEmail(ej.clientEmail || "");
+      setClientPhone(ej.clientPhone || "");
     }
   }, [existingJob]);
 
@@ -1285,35 +1291,42 @@ export default function QuoteBuilder() {
     saveInProgressRef.current = true;
     setIsSaving(true);
     try {
+      const jobMeta: Record<string, any> = {
+        name: jobName, address: jobAddress, date: jobDate, siteType: siteType || null,
+        clientName: clientName.trim() || null,
+        clientEmail: clientEmail.trim() || null,
+        clientPhone: clientPhone.trim() || null,
+      };
+
       let currentJobId = savedJobId;
       if (!currentJobId) {
-        const res = await apiRequest("POST", "/api/jobs", {
-          name: jobName, address: jobAddress, date: jobDate, siteType: siteType || null,
-        });
+        const res = await apiRequest("POST", "/api/jobs", jobMeta);
         const job = await res.json();
         currentJobId = job.id;
         setSavedJobId(job.id);
       } else {
-        await apiRequest("PATCH", `/api/jobs/${currentJobId}`, {
-          name: jobName, address: jobAddress, date: jobDate, siteType: siteType || null,
-        });
-        const existingItems = await fetch(`/api/jobs/${currentJobId}`).then(r => r.json());
-        for (const ei of (existingItems.items || [])) {
-          await apiRequest("DELETE", `/api/jobs/${currentJobId}/items/${ei.id}`);
-        }
+        await apiRequest("PATCH", `/api/jobs/${currentJobId}`, jobMeta);
       }
 
-      const normalized = items.map(iwp => ({ ...iwp, item: ensureConfigId(iwp.item) }));
-      for (let i = 0; i < normalized.length; i++) {
+      const bulkItems = items.map((iwp, i) => {
         const payload: any = {
-          config: normalized[i].item,
-          photos: normalized[i].photos || [],
+          config: ensureConfigId(iwp.item),
+          photos: iwp.photos || [],
           sortOrder: i,
         };
-        if (normalized[i].photo && normalized[i].photo!.startsWith("data:image/") && !(normalized[i].photos?.length)) {
-          payload.photo = normalized[i].photo;
+        if (iwp.photo && iwp.photo.startsWith("data:image/") && !(iwp.photos?.length)) {
+          payload.photo = iwp.photo;
         }
-        await apiRequest("POST", `/api/jobs/${currentJobId}/items`, payload);
+        return payload;
+      });
+      await apiRequest("PUT", `/api/jobs/${currentJobId}/items`, { items: bulkItems });
+
+      if (clientName.trim()) {
+        apiRequest("POST", `/api/jobs/${currentJobId}/link-customer`, {
+          clientName: clientName.trim(),
+          clientEmail: clientEmail.trim() || null,
+          clientPhone: clientPhone.trim() || null,
+        }).catch(() => {});
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
@@ -1358,7 +1371,6 @@ export default function QuoteBuilder() {
       });
       const job = await res.json();
       setSavedJobId(job.id);
-      navigate(`/job/${job.id}`, { replace: true });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       return job.id;
     } catch (e: any) {
@@ -1521,44 +1533,81 @@ export default function QuoteBuilder() {
           </div>
         </div>
         {isLargeScreen ? (
-          <div className="flex items-end gap-3">
-            <div className="flex-1 min-w-0">
-              <Label className="text-xs">Job Name *</Label>
-              <Input
-                value={jobName}
-                onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
-                placeholder="e.g. Smith Residence"
-                data-testid="input-job-name"
-              />
+          <div className="space-y-2">
+            <div className="flex items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs">Job Name *</Label>
+                <Input
+                  value={jobName}
+                  onChange={(e) => { setJobName(e.target.value); setHasUnsavedChanges(true); }}
+                  placeholder="e.g. Smith Residence"
+                  data-testid="input-job-name"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs">Address</Label>
+                <Input
+                  value={jobAddress}
+                  onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
+                  placeholder="e.g. 123 Main St"
+                  data-testid="input-job-address"
+                />
+              </div>
+              <div className="w-40 shrink-0">
+                <Label className="text-xs">Date</Label>
+                <Input
+                  type="date"
+                  value={jobDate}
+                  onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
+                  data-testid="input-job-date"
+                />
+              </div>
+              <div className="w-36 shrink-0">
+                <Label className="text-xs">Site Type</Label>
+                <Select value={siteType || "__none__"} onValueChange={(v) => handleSiteTypeChange(v === "__none__" ? null : v as "renovation" | "new_build")}>
+                  <SelectTrigger data-testid="select-site-type"><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    <SelectItem value="renovation">Renovation</SelectItem>
+                    <SelectItem value="new_build">New Build</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <Label className="text-xs">Address</Label>
-              <Input
-                value={jobAddress}
-                onChange={(e) => { setJobAddress(e.target.value); setHasUnsavedChanges(true); }}
-                placeholder="e.g. 123 Main St"
-                data-testid="input-job-address"
-              />
-            </div>
-            <div className="w-40 shrink-0">
-              <Label className="text-xs">Date</Label>
-              <Input
-                type="date"
-                value={jobDate}
-                onChange={(e) => { setJobDate(e.target.value); setHasUnsavedChanges(true); }}
-                data-testid="input-job-date"
-              />
-            </div>
-            <div className="w-36 shrink-0">
-              <Label className="text-xs">Site Type</Label>
-              <Select value={siteType || "__none__"} onValueChange={(v) => handleSiteTypeChange(v === "__none__" ? null : v as "renovation" | "new_build")}>
-                <SelectTrigger data-testid="select-site-type"><SelectValue placeholder="Select..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  <SelectItem value="renovation">Renovation</SelectItem>
-                  <SelectItem value="new_build">New Build</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-end gap-3">
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs">Client Name</Label>
+                <Input
+                  value={clientName}
+                  onChange={(e) => { setClientName(e.target.value); setHasUnsavedChanges(true); }}
+                  onBlur={() => persistJobField("clientName", clientName.trim() || null)}
+                  placeholder="e.g. John Smith"
+                  data-testid="input-client-name"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <Label className="text-xs">Client Email</Label>
+                <Input
+                  type="email"
+                  value={clientEmail}
+                  onChange={(e) => { setClientEmail(e.target.value); setHasUnsavedChanges(true); }}
+                  onBlur={() => persistJobField("clientEmail", clientEmail.trim() || null)}
+                  placeholder="e.g. john@example.com"
+                  data-testid="input-client-email"
+                />
+              </div>
+              <div className="w-44 shrink-0">
+                <Label className="text-xs">Client Phone</Label>
+                <Input
+                  type="tel"
+                  value={clientPhone}
+                  onChange={(e) => { setClientPhone(e.target.value); setHasUnsavedChanges(true); }}
+                  onBlur={() => persistJobField("clientPhone", clientPhone.trim() || null)}
+                  placeholder="e.g. 021 123 4567"
+                  data-testid="input-client-phone"
+                />
+              </div>
+              <div className="w-36 shrink-0" />
             </div>
           </div>
         ) : (
@@ -1618,6 +1667,42 @@ export default function QuoteBuilder() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs">Client Name</Label>
+                <Input
+                  value={clientName}
+                  onChange={(e) => { setClientName(e.target.value); setHasUnsavedChanges(true); }}
+                  onBlur={() => persistJobField("clientName", clientName.trim() || null)}
+                  placeholder="e.g. John Smith"
+                  data-testid="input-client-name-mobile"
+                />
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1 min-w-0">
+                  <Label className="text-xs">Email</Label>
+                  <Input
+                    type="email"
+                    value={clientEmail}
+                    onChange={(e) => { setClientEmail(e.target.value); setHasUnsavedChanges(true); }}
+                    onBlur={() => persistJobField("clientEmail", clientEmail.trim() || null)}
+                    placeholder="e.g. john@example.com"
+                    data-testid="input-client-email-mobile"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <Label className="text-xs">Phone</Label>
+                  <Input
+                    type="tel"
+                    value={clientPhone}
+                    onChange={(e) => { setClientPhone(e.target.value); setHasUnsavedChanges(true); }}
+                    onBlur={() => persistJobField("clientPhone", clientPhone.trim() || null)}
+                    placeholder="e.g. 021 123 4567"
+                    data-testid="input-client-phone-mobile"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
                 <Button variant="ghost" size="sm" className="shrink-0" onClick={() => setHeaderCollapsed(true)} data-testid="button-collapse-header">
                   <ChevronUp className="w-4 h-4 mr-1" /> Done
                 </Button>

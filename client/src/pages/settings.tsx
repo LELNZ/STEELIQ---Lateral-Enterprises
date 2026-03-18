@@ -626,13 +626,16 @@ function DivisionSettingsTab() {
   });
 
   const [form, setForm] = useState<Partial<DivisionSettings>>({});
+  const originalFormRef = useRef<Partial<DivisionSettings>>({});
 
   useEffect(() => {
-    setForm({});
-  }, [selectedCode]);
-
-  useEffect(() => {
-    if (div) setForm(div);
+    if (div) {
+      setForm(div);
+      originalFormRef.current = div;
+    } else {
+      setForm({});
+      originalFormRef.current = {};
+    }
   }, [div]);
 
   const mutation = useMutation({
@@ -651,7 +654,21 @@ function DivisionSettingsTab() {
   });
 
   const handleSave = () => {
-    mutation.mutate(form);
+    const changed: Partial<DivisionSettings> = {};
+    for (const key of Object.keys(form) as (keyof DivisionSettings)[]) {
+      if (key === "divisionCode") continue;
+      const currentVal = (form as any)[key];
+      const originalVal = (originalFormRef.current as any)[key];
+      if (JSON.stringify(currentVal) !== JSON.stringify(originalVal)) {
+        if (currentVal === "" && typeof originalVal === "string" && originalVal.length > 0) continue;
+        (changed as any)[key] = currentVal;
+      }
+    }
+    if (Object.keys(changed).length === 0) {
+      toast({ title: "No changes to save" });
+      return;
+    }
+    mutation.mutate(changed);
   };
 
   const resolvedPresets = useMemo(() => {
