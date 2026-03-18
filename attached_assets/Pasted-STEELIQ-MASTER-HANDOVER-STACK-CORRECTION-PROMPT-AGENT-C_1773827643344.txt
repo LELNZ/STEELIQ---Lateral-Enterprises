@@ -1,0 +1,180 @@
+STEELIQ MASTER HANDOVER STACK — CORRECTION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+==================================================
+CURRENT TRUTH
+==================================================
+
+The previous report is overstated. The following issues are still visibly open in the live UI and must be corrected.
+
+Open issues confirmed by live review:
+
+1. French window option is not visibly/selectably available in the actual builder flow being used by staff
+2. Compact Commercial Extras view is missing an Installation toggle
+3. Installation Labour footer still shows misleading labels:
+   - "Per-unit cost"
+   - "Per-unit sell"
+   even though the values shown are rolled-up totals
+4. Site Costs library structure/UI is still not properly delivered for staff use
+
+This phase is a correction pass only.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Fix only these four items:
+
+1. Make French window option operationally visible in the live builder flow
+2. Add Installation to the compact Commercial Extras view
+3. Correct misleading Installation Labour footer labels/math
+4. Deliver a proper Site Costs library surface for staff
+
+Do NOT broaden scope.
+
+==================================================
+GOAL 1 — FRENCH WINDOW OPTION MUST BE LIVE/USABLE
+==================================================
+
+Current issue:
+- user does not see the French window option in the live builder flow
+- previous report claimed this was complete, but that is not sufficiently proven
+
+Required task:
+- inspect exactly where the window type/opening type selector appears in the current builder flow
+- ensure French options are actually visible/selectable in the real UI used by staff
+- verify all intended variants are present where applicable:
+  - French Left
+  - French Right
+  - French Pair
+
+Required result:
+- user can see and select French options in the actual builder workflow
+- do not report complete unless this is visually verified in the live path
+
+==================================================
+GOAL 2 — COMPACT COMMERCIAL EXTRAS MUST INCLUDE INSTALLATION
+==================================================
+
+Current issue:
+- compact Commercial Extras view currently shows:
+  - Delivery
+  - Old Window/Door Removal
+  - Rubbish / Waste Removal
+- Installation is missing
+
+Required task:
+- add Installation to the compact Commercial Extras summary/control view
+- keep the compact view consistent with the real commercial/site-cost model
+- do not create ownership confusion
+
+Required result:
+- compact Commercial Extras includes Installation alongside the other site-cost categories
+- sync remains deterministic with Exec Summary / underlying state
+
+==================================================
+GOAL 3 — INSTALLATION LABOUR FOOTER MUST BE TRUTHFUL
+==================================================
+
+Current issue:
+- Installation Labour footer still labels rolled-up totals as:
+  - Per-unit cost
+  - Per-unit sell
+- this is misleading and operationally incorrect
+
+Required task:
+- audit the footer logic
+- either:
+  a) calculate true per-unit figures, or
+  b) rename the labels to truthful total-based wording
+
+Required result:
+- no misleading “per-unit” wording remains if the values are actually totals
+- financial summary must be trustworthy
+
+==================================================
+GOAL 4 — SITE COSTS LIBRARY SURFACE
+==================================================
+
+Current issue:
+- site-cost logic exists partially
+- but staff still do not have a proper clean library surface for site activities/costs
+
+Required direction:
+Deliver a proper staff-usable Site Costs library structure or the closest safe equivalent within the current library architecture.
+
+It must clearly surface editable/admin-manageable rate areas for:
+- Installation
+- Removal
+- Waste / Disposal
+- Delivery
+
+Important:
+- hidden seeded backend data is not enough
+- staff must be able to find and edit these rates in the app
+- keep it division-safe
+- do not redesign the whole library architecture if a safe incremental grouping/tab approach works
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved
+3. State why French options are not visible in the live builder flow
+4. State why Installation is missing from compact Commercial Extras
+5. State whether Installation footer values are totals or true per-unit values
+6. State how Site Costs library will be surfaced cleanly for staff
+7. Then implement
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- French options are visible/selectable in the builder flow
+- manual override still works
+- compact Commercial Extras shows Installation, Delivery, Removal, and Rubbish
+- Installation footer wording is truthful
+- site-cost library surfaces are visible/editable for staff
+- no break to estimate save/update
+- no break to quote preview/PDF
+- no break to exec summary calculations
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact issues found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless all four issues are actually fixed and visibly verified.

@@ -1118,9 +1118,9 @@ export default function ExecSummary() {
             <Separator />
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="text-sm">
-                <span className="text-muted-foreground">Per-unit cost: </span>
+                <span className="text-muted-foreground">Subtotal cost: </span>
                 <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.costTotal, 0))}</span>
-                <span className="text-muted-foreground ml-3">Per-unit sell: </span>
+                <span className="text-muted-foreground ml-3">Subtotal sell: </span>
                 <span className="font-medium">${fmt(installationItems.reduce((a, i) => a + i.sellTotal, 0))}</span>
               </div>
               <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2 print:hidden">
