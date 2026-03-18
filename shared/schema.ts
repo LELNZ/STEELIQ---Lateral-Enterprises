@@ -206,6 +206,11 @@ export const jobs = pgTable("jobs", {
   removalMarkup: real("removal_markup"),
   rubbishEnabled: boolean("rubbish_enabled").default(false),
   rubbishTonnage: real("rubbish_tonnage"),
+  clientName: text("client_name"),
+  clientEmail: text("client_email"),
+  clientPhone: text("client_phone"),
+  customerId: varchar("customer_id"),
+  contactId: varchar("contact_id"),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
