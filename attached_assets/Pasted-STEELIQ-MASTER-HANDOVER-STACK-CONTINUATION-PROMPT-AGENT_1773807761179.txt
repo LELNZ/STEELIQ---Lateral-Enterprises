@@ -1,0 +1,385 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+Examples:
+- Jobs consume accepted quote revisions but do not mutate accepted quote history
+- Invoices consume accepted/job state but do not rewrite quote history
+- Production modules consume job/operational records, not raw quote-builder state
+- PDF output consumes QuoteRenderModel and does not invent alternative document state
+- Archive/cleanup actions change visibility/admin state but do not falsify historical commercial transitions
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT LIVE DIVISION REALITY
+==================================================
+
+Only LJ is currently operating as the active working division in the app.
+
+Any new configuration/pricing work in this phase must:
+- work for LJ immediately
+- be division-safe from day one
+- not hardcode an LJ-only dead end
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these tightly scoped features:
+
+1. French-style window opening type under the existing window builder
+2. Manual pricing override alongside current slider/system pricing
+3. Removal-of-old-windows fee support
+4. Rubbish removal fee support using a general-waste library item charged by ton rate
+
+Do not broaden scope beyond those four items.
+
+==================================================
+FEATURE 1 — FRENCH-STYLE WINDOW OPENING TYPE
+==================================================
+
+Business requirement:
+- This is NOT a new category.
+- Add this under the existing window row opening-type selector where Fixed and Awning already exist.
+- Same ES52 profile family for now.
+- Main difference is opening behaviour / hinges / hardware logic.
+- Must be division-safe from day one.
+
+Required opening options:
+- single left-hand side-opening
+- single right-hand side-opening
+- double French pair with both leaves operable by default
+
+Required behaviour:
+- available in the existing builder row selector UI
+- available anywhere current row opening types are edited
+- stored in existing item/config state safely
+- drawing engine updates immediately
+- preview/PDF updates correctly through the current pipeline
+
+Drawing/render requirements:
+- triangle/swing graphic must change from top-hung awning logic to side-opening logic
+- hinge side must be represented correctly
+- pair/double opening must show both leaves meeting in the middle
+- opening arrows/graphic must remain consistent with current drawing style
+- preview and PDF must match
+
+Implementation rule:
+- keep this within the current existing window family
+- do not create a whole separate product category unless the current code absolutely forces it, and if so stop and explain first
+
+==================================================
+FEATURE 2 — MANUAL PRICE OVERRIDE
+==================================================
+
+Business requirement:
+- keep current slider/system pricing
+- add manual override alongside it
+- clearly show when manual override is active
+- must feed consistently across all estimate entry points
+
+Required override modes:
+- sale price per m² override
+- total sell override
+
+Required UI behaviour:
+- item card / builder surface
+- estimate summary/context where relevant
+- all connected entry points must stay in sync
+- editing one must update the others
+- show clear state such as:
+  - system pricing
+  - manual override active
+- include reset option back to system-calculated pricing
+
+Required pricing behaviour:
+- margin must still recalculate live
+- quote generation must use the active override value if one exists
+- override must flow into quote revisions correctly
+- if estimate is updated before quote acceptance, quote can update from estimate state
+- after quote acceptance, accepted commercial history must remain frozen
+- do NOT mutate accepted quote history silently
+
+Best-practice rule locked in for this phase:
+- estimate changes update quote only pre-acceptance
+- accepted quote history remains frozen after acceptance
+
+Free-entry rule:
+- no override reason required for now
+
+Data-model requirement:
+- preserve both system-calculated pricing and override state clearly enough for auditability
+- do not create ambiguous pricing logic
+
+==================================================
+FEATURE 3 — REMOVAL OF OLD WINDOWS FEE
+==================================================
+
+Business requirement:
+- separate removal from installation
+- renovation jobs often require removal of old windows before install of new ones
+- this must not be buried inside installation cost
+
+Required logic:
+- keep installation price per window
+- add removal price per window as a separate library-driven cost component
+- removal and installation must both be visible and separately costed
+- both must feed totals and margin correctly
+
+Defaults / toggles:
+- when siteType = renovation, removal should default on
+- when siteType = new_build, removal should default off
+- staff must still be able to toggle removal on/off manually
+- do not assume all renovation jobs require removal with no override
+
+UI requirement:
+- show removal separately from installation in operational pricing surfaces
+- keep internal costing clear
+- customer-facing combination can remain unchanged unless existing quote output already breaks it out
+
+==================================================
+FEATURE 4 — RUBBISH REMOVAL FEE (GENERAL WASTE)
+==================================================
+
+Business requirement:
+- add rubbish removal fee support
+- this must be library-driven
+- use a general waste item charged by ton rate
+
+Required logic:
+- create a library item/configuration for general waste by ton
+- allow entry of tonnage in estimate/pricing workflow
+- calculate rubbish removal fee from tonnage × library rate
+- keep this separate from removal labour and installation labour
+- feed totals and margin correctly
+
+Required UI behaviour:
+- staff can enable/use rubbish removal when needed
+- tonnage entry is clear and practical
+- calculated value is visible in pricing breakdown
+
+Implementation rule:
+- do not hardcode a one-off flat rubbish fee
+- it must be library-backed and rate-based
+
+==================================================
+PRICING STRUCTURE RULES FOR THIS PHASE
+==================================================
+
+The system should now support separate site-work cost buckets such as:
+- removal of old windows
+- installation of new windows
+- rubbish/general waste removal
+
+These must remain separately understandable internally.
+
+Do not collapse them into one hidden lump-sum logic path.
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files/modules involved
+3. State exactly how the opening-type selector currently works
+4. State exactly how pricing slider/system pricing currently flows
+5. State exactly where installation pricing is currently sourced
+6. State exactly how you will add removal and rubbish removal without architecture drift
+7. Then implement
+
+If the current code makes one of these four features unsafe within scope, stop and explain before changing architecture.
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted schema/data-model additions if strictly required
+- targeted builder UI updates
+- targeted drawing engine updates
+- targeted pricing engine updates
+- targeted library updates
+- targeted quote generation updates
+- targeted preview/PDF compatibility updates through the existing pipeline
+
+Not allowed:
+- product-family redesign
+- quote lifecycle redesign
+- replacing the pricing engine wholesale
+- bypassing QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- speculative workflow redesign beyond this phase
+
+==================================================
+MINIMUM REGRESSION REQUIREMENTS
+==================================================
+
+French window:
+- existing fixed opening still works
+- existing awning opening still works
+- new french/side-opening option appears in row selector
+- left-hand single opening renders correctly
+- right-hand single opening renders correctly
+- double French pair renders correctly
+- preview reflects correct opening graphics
+- PDF reflects correct opening graphics
+- ES52/profile family still works correctly
+
+Manual override:
+- slider/system pricing still works when no override is active
+- per m² override works
+- total sell override works
+- manual override active state displays clearly
+- all linked pricing entry points stay in sync
+- margin recalculates correctly
+- reset to system pricing works
+- quote generation uses active override before acceptance
+- accepted quote history remains frozen after acceptance
+
+Removal fee:
+- installation pricing still works
+- removal per-window fee can be enabled/disabled
+- renovation defaults removal on
+- new build defaults removal off
+- staff can override the default
+- removal cost is included correctly in totals
+
+Rubbish removal:
+- general-waste library item exists and is used by rate
+- tonnage can be entered
+- rubbish removal fee calculates correctly from ton rate
+- rubbish fee flows into totals and margin correctly
+
+Safety:
+- no break to estimate save/update
+- no break to quote creation/update
+- no break to quote preview/PDF
+- no break to invoice/Xero flows
+- no break to existing library functionality
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact existing logic reviewed
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless all four requested features are implemented and tested.
+
+==================================================
+SUCCESS CRITERIA FOR THIS PHASE
+==================================================
+
+This phase is complete only if:
+- french-style window option works in builder + preview + PDF
+- manual pricing override works and feeds quote generation correctly pre-acceptance
+- removal fee support exists and is library-backed
+- rubbish/general waste removal fee exists and is library-backed by ton rate
+- no architecture drift occurred

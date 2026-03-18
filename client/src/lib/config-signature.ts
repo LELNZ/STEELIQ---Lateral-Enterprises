@@ -84,15 +84,33 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
       };
     }
     const wt = item.windowType || "fixed";
-    const label = wt === "awning" ? "Awning" : "Fixed";
+    let label: string;
+    let awningCount = 0, fixedCount = 0, hingeCount = 0, mullionCount = 0;
+    if (wt === "awning") {
+      label = "Awning";
+      awningCount = 1;
+    } else if (wt === "french-left") {
+      label = "French Left";
+      hingeCount = 1;
+    } else if (wt === "french-right") {
+      label = "French Right";
+      hingeCount = 1;
+    } else if (wt === "french-pair") {
+      label = "French Pair";
+      hingeCount = 2;
+      mullionCount = 1;
+    } else {
+      label = "Fixed";
+      fixedCount = 1;
+    }
     return {
       signature: `window:${label}`,
       label,
-      awningCount: wt === "awning" ? 1 : 0,
-      fixedCount: wt === "fixed" ? 1 : 0,
+      awningCount,
+      fixedCount,
       slidingCount: 0,
-      hingeCount: 0,
-      mullionCount: 0,
+      hingeCount,
+      mullionCount,
       transomCount: 0,
     };
   }
@@ -225,6 +243,8 @@ export function findMatchingConfiguration(
     if (sigPanelPart === "awning" && nameLower.includes("awning") && !nameLower.includes("+")) return c;
     if (sigPanelPart === "fixed" && nameLower.includes("fixed") && !nameLower.includes("+")) return c;
     if (sigPanelPart === "standard" && nameLower.includes("standard")) return c;
+    if ((sigPanelPart === "french left" || sigPanelPart === "french right") && nameLower.includes("hinge") && !nameLower.includes("+")) return c;
+    if (sigPanelPart === "french pair" && (nameLower.includes("french") || (nameLower.includes("hinge") && nameLower.includes("2")))) return c;
   }
 
   const awningPatterns: Record<string, RegExp> = {

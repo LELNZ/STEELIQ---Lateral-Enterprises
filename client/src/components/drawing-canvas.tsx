@@ -324,6 +324,25 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   }
 
   if (category === "windows-standard") {
+    if (windowType === "french-left") {
+      return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
+        type="hinge" hingeSide="left" openDirection="out" strokeScale={ss} />;
+    }
+    if (windowType === "french-right") {
+      return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
+        type="hinge" hingeSide="right" openDirection="out" strokeScale={ss} />;
+    }
+    if (windowType === "french-pair") {
+      const halfW = W / 2;
+      return (
+        <g>
+          <Pane x={0} y={0} w={halfW} h={H} frameSize={frameSize}
+            type="hinge" hingeSide="left" openDirection="out" strokeScale={ss} />
+          <Pane x={halfW} y={0} w={halfW} h={H} frameSize={frameSize}
+            type="hinge" hingeSide="right" openDirection="out" strokeScale={ss} />
+        </g>
+      );
+    }
     const wt = windowType === "awning" ? "awning" : "fixed";
     return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
       type={wt} openDirection="out" strokeScale={ss} />;

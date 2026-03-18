@@ -41,6 +41,7 @@ export interface PricingExtras {
   lockPriceEach?: number | null;
   openingPanelCount?: number;
   wanzBar?: WanzBarPricingInput;
+  salePriceOverride?: number | null;
 }
 
 function calcProfileLength(
@@ -178,7 +179,9 @@ export function calculatePricing(
   const accessoriesCostNzd = accessoriesCostUsd * usdToNzdRate;
   const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + lockCostNzd + wanzBarCostNzd;
   const actualCostPerSqm = sqm > 0 ? netCostNzd / sqm : 0;
-  const salePriceNzd = salePricePerSqm * sqm;
+  const salePriceNzd = (extras?.salePriceOverride != null && extras.salePriceOverride > 0)
+    ? extras.salePriceOverride
+    : salePricePerSqm * sqm;
   const marginNzd = salePriceNzd - netCostNzd;
   const marginPercent = salePriceNzd > 0 ? (marginNzd / salePriceNzd) * 100 : 0;
 

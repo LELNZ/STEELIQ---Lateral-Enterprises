@@ -144,6 +144,8 @@ export async function registerRoutes(
   await seedLabourOperations();
   await seedInstallationRates();
   await seedDeliveryRates();
+  await seedRemovalRates();
+  await seedGeneralWasteRates();
   await seedOrgAndDivisions();
   await seedSpecDictionary();
   await seedLifecycleTemplates();
@@ -3321,6 +3323,43 @@ async function seedDeliveryRates() {
     await storage.createLibraryEntry({
       type: "delivery_rate",
       data: DEFAULT_DELIVERY_RATES[i],
+      sortOrder: i,
+    });
+  }
+}
+
+const DEFAULT_REMOVAL_RATES = [
+  { name: "Small Window Removal", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 75, sellPerUnit: 100, description: "" },
+  { name: "Medium Window Removal", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 112.5, sellPerUnit: 150, description: "" },
+  { name: "Large Window Removal", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 150, sellPerUnit: 200, description: "" },
+  { name: "Extra Large Window Removal", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 187.5, sellPerUnit: 250, description: "" },
+  { name: "Standard Door Removal", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 112.5, sellPerUnit: 150, description: "" },
+  { name: "Large Door Removal", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 150, sellPerUnit: 200, description: "" },
+];
+
+async function seedRemovalRates() {
+  const existing = await storage.getLibraryEntries("removal_rate");
+  if (existing.length > 0) return;
+  for (let i = 0; i < DEFAULT_REMOVAL_RATES.length; i++) {
+    await storage.createLibraryEntry({
+      type: "removal_rate",
+      data: DEFAULT_REMOVAL_RATES[i],
+      sortOrder: i,
+    });
+  }
+}
+
+const DEFAULT_GENERAL_WASTE_RATES = [
+  { name: "General Waste Disposal", costPerTonne: 150, sellPerTonne: 200, description: "Rubbish removal and skip hire" },
+];
+
+async function seedGeneralWasteRates() {
+  const existing = await storage.getLibraryEntries("general_waste");
+  if (existing.length > 0) return;
+  for (let i = 0; i < DEFAULT_GENERAL_WASTE_RATES.length; i++) {
+    await storage.createLibraryEntry({
+      type: "general_waste",
+      data: DEFAULT_GENERAL_WASTE_RATES[i],
       sortOrder: i,
     });
   }
