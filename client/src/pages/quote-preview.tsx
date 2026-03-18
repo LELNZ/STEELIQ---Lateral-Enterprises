@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ArrowLeftCircle, Download, Settings2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { PreviewData, QuoteDocumentModel } from "@/lib/quote-document";
-import { buildQuoteDocumentModel } from "@/lib/quote-document";
+import type { PreviewData, QuoteDocumentModel, TotalsDisplayConfig } from "@/lib/quote-document";
+import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG } from "@/lib/quote-document";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/lib/quote-renderer";
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
@@ -45,8 +47,10 @@ export default function QuotePreview() {
   }, [doc]);
 
   const [localKeys, setLocalKeys] = useState<string[] | null>(null);
+  const [localTotalsConfig, setLocalTotalsConfig] = useState<TotalsDisplayConfig | null>(null);
+  const [localRemarks, setLocalRemarks] = useState<string | null>(null);
 
-  useEffect(() => { setLocalKeys(null); }, [quoteId]);
+  useEffect(() => { setLocalKeys(null); setLocalTotalsConfig(null); setLocalRemarks(null); }, [quoteId]);
 
   const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
 
@@ -70,11 +74,27 @@ export default function QuotePreview() {
     return () => clearTimeout(timer);
   }, [renderModel, toast]);
 
-  const liveScheduleItems: RenderScheduleItem[] = useMemo(() => {
-    if (!doc) return [];
-    if (localKeys) return rebuildScheduleItems(doc, localKeys);
-    return renderModel?.scheduleItems ?? [];
-  }, [doc, localKeys, renderModel]);
+  const effectiveTotalsConfig: TotalsDisplayConfig = localTotalsConfig ?? doc?.totalsDisplayConfig ?? DEFAULT_TOTALS_DISPLAY_CONFIG;
+  const effectiveRemarks: string = localRemarks !== null ? localRemarks : (doc?.content.commercialRemarks ?? "");
+
+  const liveDoc: QuoteDocumentModel | null = useMemo(() => {
+    if (!doc) return null;
+    const hasLocalOverrides = localKeys !== null || localTotalsConfig !== null || localRemarks !== null;
+    if (!hasLocalOverrides) return doc;
+    return {
+      ...doc,
+      specDisplay: { ...doc.specDisplay, effectiveKeys: localKeys ?? doc.specDisplay.effectiveKeys },
+      totalsDisplayConfig: localTotalsConfig ?? doc.totalsDisplayConfig,
+      content: { ...doc.content, commercialRemarks: localRemarks !== null ? localRemarks : doc.content.commercialRemarks },
+    };
+  }, [doc, localKeys, localTotalsConfig, localRemarks]);
+
+  const liveRenderModel: QuoteRenderModel | null = useMemo(() => {
+    if (!liveDoc) return null;
+    return buildQuoteRenderModel(liveDoc);
+  }, [liveDoc]);
+
+  const liveScheduleItems: RenderScheduleItem[] = liveRenderModel?.scheduleItems ?? renderModel?.scheduleItems ?? [];
 
   const toggleSpecKey = (key: string) => {
     setLocalKeys(prev => {
@@ -84,19 +104,31 @@ export default function QuotePreview() {
     });
   };
 
+  const toggleTotalsField = (field: keyof TotalsDisplayConfig) => {
+    setLocalTotalsConfig(prev => {
+      const current = prev ?? effectiveTotalsConfig;
+      return { ...current, [field]: !current[field] };
+    });
+  };
+
+  const hasUnsavedChanges = localKeys !== null || localTotalsConfig !== null || localRemarks !== null;
+
   const saveSpecDisplayMutation = useMutation({
     mutationFn: async () => {
-      if (!doc || !localKeys) return;
-      await apiRequest("PATCH", `/api/quotes/${doc.metadata.quoteId}/revisions/${doc.metadata.revisionId}/spec-display`, {
-        specDisplayKeys: localKeys,
-      });
+      if (!doc) return;
+      const payload: Record<string, unknown> = {};
+      if (localKeys !== null) payload.specDisplayKeys = localKeys;
+      if (localTotalsConfig !== null) payload.totalsDisplayConfig = localTotalsConfig;
+      if (localRemarks !== null) payload.commercialRemarks = localRemarks || null;
+      if (Object.keys(payload).length === 0) return;
+      await apiRequest("PATCH", `/api/quotes/${doc.metadata.quoteId}/revisions/${doc.metadata.revisionId}/spec-display`, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "preview-data"] });
-      toast({ title: "Spec display saved" });
+      toast({ title: "Display settings saved" });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to save spec display", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to save display settings", description: err.message, variant: "destructive" });
     },
   });
 
@@ -108,7 +140,8 @@ export default function QuotePreview() {
     return <div className="flex items-center justify-center h-full"><p className="text-muted-foreground">Quote not found</p></div>;
   }
 
-  const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = renderModel;
+  const activeModel = liveRenderModel ?? renderModel;
+  const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
 
   return (
     <div className="mx-auto print:max-w-none" style={{ maxWidth: "794px" }} data-testid="quote-preview-page">
@@ -129,32 +162,82 @@ export default function QuotePreview() {
                 <Settings2 className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Edit </span>Spec Display
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-[400px] overflow-y-auto">
+            <SheetContent className="w-[420px] overflow-y-auto">
               <SheetHeader>
-                <SheetTitle>Visible Specs</SheetTitle>
+                <SheetTitle>Quote Display Settings</SheetTitle>
               </SheetHeader>
-              <div className="mt-4 space-y-4">
-                {Object.entries(doc.specDisplay.specDictionaryGrouped).map(([group, specs]) => (
-                  <div key={group}>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{group}</p>
-                    <div className="space-y-1.5">
-                      {specs.filter(s => s.customerVisibleAllowed).map(spec => (
-                        <div key={spec.key} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`spec-${spec.key}`}
-                            checked={effectiveKeys.includes(spec.key)}
-                            onCheckedChange={() => toggleSpecKey(spec.key)}
-                            data-testid={`checkbox-spec-${spec.key}`}
-                          />
-                          <Label htmlFor={`spec-${spec.key}`} className="text-sm">{spec.label}</Label>
-                        </div>
-                      ))}
-                    </div>
+              <div className="mt-4 space-y-6">
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Totals Lines Visibility</p>
+                  <p className="text-xs text-muted-foreground mb-3">The final total is always shown. Toggle individual breakdown lines on or off for the customer-facing quote.</p>
+                  <div className="space-y-2.5">
+                    {([
+                      { key: "showItemsSubtotal", label: "Items Subtotal" },
+                      { key: "showInstallation", label: "Installation" },
+                      { key: "showDelivery", label: "Delivery" },
+                      { key: "showRemoval", label: "Old Window/Door Removal" },
+                      { key: "showRubbish", label: "Rubbish / Waste Removal" },
+                      { key: "showSubtotal", label: "Subtotal (excl. GST)" },
+                      { key: "showGst", label: "GST (15%)" },
+                    ] as { key: keyof TotalsDisplayConfig; label: string }[]).map(({ key, label }) => (
+                      <div key={key} className="flex items-center justify-between gap-3">
+                        <Label htmlFor={`totals-${key}`} className="text-sm cursor-pointer">{label}</Label>
+                        <Switch
+                          id={`totals-${key}`}
+                          checked={effectiveTotalsConfig[key]}
+                          onCheckedChange={() => toggleTotalsField(key)}
+                          data-testid={`switch-totals-${key}`}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                <Separator />
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Commercial Remarks</p>
+                  <p className="text-xs text-muted-foreground mb-2">Optional free-text shown to the customer below the quote summary (e.g. payment terms, scope notes, inclusions).</p>
+                  <Textarea
+                    value={effectiveRemarks}
+                    onChange={e => setLocalRemarks(e.target.value)}
+                    placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
+                    rows={5}
+                    className="text-sm"
+                    data-testid="textarea-commercial-remarks"
+                  />
+                </div>
+
+                <Separator />
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Item Spec Columns</p>
+                  <div className="space-y-4">
+                    {Object.entries(doc.specDisplay.specDictionaryGrouped).map(([group, specs]) => (
+                      <div key={group}>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">{group}</p>
+                        <div className="space-y-1.5">
+                          {specs.filter(s => s.customerVisibleAllowed).map(spec => (
+                            <div key={spec.key} className="flex items-center gap-2">
+                              <Checkbox
+                                id={`spec-${spec.key}`}
+                                checked={effectiveKeys.includes(spec.key)}
+                                onCheckedChange={() => toggleSpecKey(spec.key)}
+                                data-testid={`checkbox-spec-${spec.key}`}
+                              />
+                              <Label htmlFor={`spec-${spec.key}`} className="text-sm">{spec.label}</Label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <Button
                   onClick={() => saveSpecDisplayMutation.mutate()}
-                  disabled={saveSpecDisplayMutation.isPending || !localKeys}
+                  disabled={saveSpecDisplayMutation.isPending || !hasUnsavedChanges}
                   className="w-full"
                   data-testid="button-save-spec-display"
                 >
@@ -168,11 +251,9 @@ export default function QuotePreview() {
             size="sm"
             disabled={pdfExporting}
             onClick={async () => {
-              if (!renderModel) return;
               setPdfExporting(true);
               try {
-                const exportModel = { ...renderModel, scheduleItems: liveScheduleItems };
-                await generateQuotePdf(exportModel);
+                await generateQuotePdf(activeModel);
                 toast({ title: "PDF exported successfully" });
               } catch (err: any) {
                 toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
@@ -198,7 +279,7 @@ export default function QuotePreview() {
         )}
 
         <h2 className="text-lg font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
-          {T.documentMode === "tender" ? "TENDER" : renderModel.documentLabel.toUpperCase()}
+          {T.documentMode === "tender" ? "TENDER" : activeModel.documentLabel.toUpperCase()}
         </h2>
 
         {isSectionVisible(T, "disclaimer") && (
@@ -219,6 +300,14 @@ export default function QuotePreview() {
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Quote Summary</p>
             <TotalsSection totals={totals} template={T} />
+          </div>
+        )}
+
+        {activeModel.commercialRemarks && (
+          <div className="space-y-1.5" data-testid="commercial-remarks-block">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: T.colors.bodyText }}>
+              {activeModel.commercialRemarks}
+            </p>
           </div>
         )}
 

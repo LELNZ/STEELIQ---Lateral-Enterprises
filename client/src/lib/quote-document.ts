@@ -1,6 +1,26 @@
 import type { OrgSettings, DivisionSettings, Quote, QuoteRevision, SpecDictionaryEntry } from "@shared/schema";
 import type { EstimateSnapshot, SnapshotItem } from "@shared/estimate-snapshot";
 
+export interface TotalsDisplayConfig {
+  showItemsSubtotal: boolean;
+  showInstallation: boolean;
+  showDelivery: boolean;
+  showRemoval: boolean;
+  showRubbish: boolean;
+  showSubtotal: boolean;
+  showGst: boolean;
+}
+
+export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
+  showItemsSubtotal: true,
+  showInstallation: true,
+  showDelivery: true,
+  showRemoval: true,
+  showRubbish: true,
+  showSubtotal: true,
+  showGst: true,
+};
+
 export interface PreviewData {
   orgSettings: OrgSettings;
   divisionSettings: DivisionSettings;
@@ -10,6 +30,8 @@ export interface PreviewData {
   templateKey: string;
   specDictionaryGrouped: Record<string, SpecDictionaryEntry[]>;
   effectiveSpecDisplayKeys: string[];
+  totalsDisplayConfig: TotalsDisplayConfig | null;
+  commercialRemarks: string | null;
   projectAddress: string | null;
   companyTemplateConfig?: Record<string, unknown> | null;
 }
@@ -100,6 +122,7 @@ export interface QuoteDocumentContent {
   terms: string | null;
   paymentTerms: string | null;
   additionalCapabilities: string | null;
+  commercialRemarks: string | null;
 }
 
 export interface QuoteDocumentSpecDisplay {
@@ -115,6 +138,7 @@ export interface QuoteDocumentModel {
   project: QuoteDocumentProject;
   items: QuoteDocumentItem[];
   totals: QuoteDocumentTotals;
+  totalsDisplayConfig: TotalsDisplayConfig;
   content: QuoteDocumentContent;
   specDisplay: QuoteDocumentSpecDisplay;
   companyTemplateConfig?: Record<string, unknown> | null;
@@ -155,6 +179,11 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
 
   const tb = snapshot.totalsBreakdown || { itemsSubtotal: 0, installationTotal: 0, deliveryTotal: 0, subtotalExclGst: 0, gstAmount: 0, totalInclGst: 0 };
   const legacy = snapshot.totals;
+
+  const totalsDisplayConfig: TotalsDisplayConfig = {
+    ...DEFAULT_TOTALS_DISPLAY_CONFIG,
+    ...(preview.totalsDisplayConfig || {}),
+  };
 
   return {
     metadata: {
@@ -211,6 +240,7 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       legacyGrossProfit: legacy?.grossProfit ?? null,
       legacyGrossMargin: legacy?.grossMargin ?? null,
     },
+    totalsDisplayConfig,
     content: {
       headerNotes: div.headerNotesOverrideBlock || org.defaultHeaderNotesBlock || null,
       exclusions: (() => {
@@ -223,6 +253,7 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       terms: div.termsOverrideBlock || org.defaultTermsBlock || null,
       paymentTerms: org.paymentTermsBlock || null,
       additionalCapabilities: div.additionalCapabilitiesBlock || null,
+      commercialRemarks: preview.commercialRemarks || null,
     },
     specDisplay: {
       effectiveKeys: preview.effectiveSpecDisplayKeys,

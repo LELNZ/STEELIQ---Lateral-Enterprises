@@ -397,6 +397,8 @@ export async function generateQuotePdf(
     y = renderTotals(pdf, y, model);
   }
 
+  y = renderCommercialRemarks(pdf, y, model);
+
   if (isSectionVisible(T, "schedule")) {
     onProgress?.("Rendering schedule...");
     y = await renderSchedule(pdf, y, model, onProgress);
@@ -449,6 +451,8 @@ export async function generateQuotePdfBase64(
   if (isSectionVisible(T, "totals")) {
     y = renderTotals(pdf, y, model);
   }
+
+  y = renderCommercialRemarks(pdf, y, model);
 
   if (isSectionVisible(T, "schedule")) {
     onProgress?.("Rendering schedule...");
@@ -653,6 +657,21 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
 
   y = Math.max(custY, rightY) + SECTION_GAP;
   return y;
+}
+
+function renderCommercialRemarks(pdf: Pdf, y: number, model: QuoteRenderModel): number {
+  if (!model.commercialRemarks) return y;
+  y = ensureSpace(pdf, y, 10);
+  y += SECTION_GAP / 2;
+  return renderRichTextPdf(pdf, y, model.commercialRemarks, {
+    fontSize: 9,
+    color: "#374151",
+    boldColor: "#111827",
+    leftMargin: LEFT_MARGIN,
+    contentWidth: CONTENT_WIDTH,
+    lineH: 5,
+    paragraphGap: 3,
+  });
 }
 
 function renderTotals(pdf: Pdf, y: number, model: QuoteRenderModel): number {

@@ -2,6 +2,7 @@ import type {
   QuoteDocumentModel,
   QuoteDocumentItem,
   QuoteDocumentItemPhoto,
+  TotalsDisplayConfig,
 } from "./quote-document";
 import type { QuoteTemplate } from "./quote-template";
 import { resolveQuoteTemplate, type CompanyTemplateConfig } from "./quote-template";
@@ -109,6 +110,7 @@ export interface QuoteRenderModel {
   disclaimerText: string;
   itemCount: number;
   documentLabel: string;
+  commercialRemarks: string | null;
 }
 
 function formatDateNZ(iso: string | null): string {
@@ -124,6 +126,7 @@ function fmtCurrency(n: number): string {
 
 function buildTotals(doc: QuoteDocumentModel): RenderTotals {
   const t = doc.totals;
+  const cfg = doc.totalsDisplayConfig;
   const hasBreakdown = t.itemsSubtotal > 0 || t.installationTotal > 0 || t.deliveryTotal > 0 || (t.removalTotal ?? 0) > 0 || (t.rubbishTotal ?? 0) > 0;
   const hasLegacyOnly = !hasBreakdown && t.legacySell !== null;
 
@@ -134,24 +137,28 @@ function buildTotals(doc: QuoteDocumentModel): RenderTotals {
   const lines: RenderTotalsLine[] = [];
 
   if (hasBreakdown) {
-    if (t.itemsSubtotal > 0) {
+    if (cfg.showItemsSubtotal && t.itemsSubtotal > 0) {
       lines.push({ label: "Items Subtotal", amount: t.itemsSubtotal, formatted: `$${fmtCurrency(t.itemsSubtotal)}`, emphasis: "normal" });
     }
-    if (t.installationTotal > 0) {
+    if (cfg.showInstallation && t.installationTotal > 0) {
       lines.push({ label: "Installation", amount: t.installationTotal, formatted: `$${fmtCurrency(t.installationTotal)}`, emphasis: "normal" });
     }
-    if (t.deliveryTotal > 0) {
+    if (cfg.showDelivery && t.deliveryTotal > 0) {
       lines.push({ label: "Delivery", amount: t.deliveryTotal, formatted: `$${fmtCurrency(t.deliveryTotal)}`, emphasis: "normal" });
     }
-    if ((t.removalTotal ?? 0) > 0) {
+    if (cfg.showRemoval && (t.removalTotal ?? 0) > 0) {
       lines.push({ label: "Removal of Old Windows & Doors", amount: t.removalTotal, formatted: `$${fmtCurrency(t.removalTotal)}`, emphasis: "normal" });
     }
-    if ((t.rubbishTotal ?? 0) > 0) {
+    if (cfg.showRubbish && (t.rubbishTotal ?? 0) > 0) {
       lines.push({ label: "Rubbish Removal", amount: t.rubbishTotal, formatted: `$${fmtCurrency(t.rubbishTotal)}`, emphasis: "normal" });
     }
     lines.push({ label: "", amount: 0, formatted: "", emphasis: "separator" });
-    lines.push({ label: "Subtotal (excl. GST)", amount: t.subtotalExclGst, formatted: `$${fmtCurrency(t.subtotalExclGst)}`, emphasis: "normal" });
-    lines.push({ label: "GST (15%)", amount: t.gstAmount, formatted: `$${fmtCurrency(t.gstAmount)}`, emphasis: "muted" });
+    if (cfg.showSubtotal) {
+      lines.push({ label: "Subtotal (excl. GST)", amount: t.subtotalExclGst, formatted: `$${fmtCurrency(t.subtotalExclGst)}`, emphasis: "normal" });
+    }
+    if (cfg.showGst) {
+      lines.push({ label: "GST (15%)", amount: t.gstAmount, formatted: `$${fmtCurrency(t.gstAmount)}`, emphasis: "muted" });
+    }
     lines.push({ label: "Total (incl. GST)", amount: t.totalInclGst, formatted: `$${fmtCurrency(t.totalInclGst)}`, emphasis: "bold" });
   } else if (hasLegacyOnly) {
     lines.push({ label: "Quoted Price (excl. GST)", amount: t.legacySell!, formatted: `$${fmtCurrency(t.legacySell!)}`, emphasis: "normal" });
@@ -275,6 +282,7 @@ export function buildQuoteRenderModel(
     disclaimerText: "Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.",
     itemCount: doc.items.length,
     documentLabel: doc.org.documentLabel || "Quote",
+    commercialRemarks: doc.content.commercialRemarks || null,
   };
 }
 

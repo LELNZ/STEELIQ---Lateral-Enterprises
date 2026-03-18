@@ -363,6 +363,8 @@ export const quoteRevisions = pgTable("quote_revisions", {
   versionNumber: integer("version_number").notNull(),
   snapshotJson: jsonb("snapshot_json").notNull(),
   specDisplayOverrideJson: jsonb("spec_display_override_json"),
+  totalsDisplayConfigJson: jsonb("totals_display_config_json"),
+  commercialRemarks: text("commercial_remarks"),
   templateKey: text("template_key").notNull().default("base_v1"),
   xeroSyncStatus: text("xero_sync_status"),
   procurementGenerated: boolean("procurement_generated").default(false),
