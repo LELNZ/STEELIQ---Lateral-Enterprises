@@ -1560,6 +1560,7 @@ export async function registerRoutes(
           showRubbish: z.boolean(),
           showSubtotal: z.boolean(),
           showGst: z.boolean(),
+          showCommercialRemarks: z.boolean().optional(),
         }).optional(),
         commercialRemarks: z.string().nullable().optional(),
       }).parse(req.body);

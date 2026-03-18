@@ -282,7 +282,9 @@ export function buildQuoteRenderModel(
     disclaimerText: "Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.",
     itemCount: doc.items.length,
     documentLabel: doc.org.documentLabel || "Quote",
-    commercialRemarks: doc.content.commercialRemarks || null,
+    commercialRemarks: (doc.totalsDisplayConfig.showCommercialRemarks !== false && doc.content.commercialRemarks)
+      ? doc.content.commercialRemarks
+      : null,
   };
 }
 

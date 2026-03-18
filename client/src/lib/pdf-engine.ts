@@ -661,17 +661,42 @@ function renderCustomerProject(pdf: Pdf, y: number, model: QuoteRenderModel): nu
 
 function renderCommercialRemarks(pdf: Pdf, y: number, model: QuoteRenderModel): number {
   if (!model.commercialRemarks) return y;
-  y = ensureSpace(pdf, y, 10);
+  y = ensureSpace(pdf, y, 18);
   y += SECTION_GAP / 2;
-  return renderRichTextPdf(pdf, y, model.commercialRemarks, {
+
+  const PAD_H = 4;
+  const PAD_V = 3.5;
+  const innerLeft = LEFT_MARGIN + PAD_H;
+  const innerWidth = CONTENT_WIDTH - PAD_H * 2;
+  const boxStartY = y;
+
+  // Heading: "DETAILS"
+  y += PAD_V;
+  pdf.setFont(FONT_NORMAL, "bold");
+  pdf.setFontSize(mmSize(6.5));
+  pdf.setTextColor(COLOR_MUTED);
+  pdf.text("DETAILS", innerLeft, y + 2);
+  y += 5.5;
+
+  // Body text
+  const bodyEndY = renderRichTextPdf(pdf, y, model.commercialRemarks, {
     fontSize: 9,
     color: "#374151",
     boldColor: "#111827",
-    leftMargin: LEFT_MARGIN,
-    contentWidth: CONTENT_WIDTH,
-    lineH: 5,
-    paragraphGap: 3,
+    leftMargin: innerLeft,
+    contentWidth: innerWidth,
+    lineH: 4.8,
+    paragraphGap: 2.5,
   });
+
+  const boxEndY = bodyEndY + PAD_V;
+
+  // Draw border rect around the whole block (stroke only — renders on top without covering text)
+  pdf.setDrawColor(COLOR_BORDER);
+  pdf.setLineWidth(0.3);
+  pdf.roundedRect(LEFT_MARGIN, boxStartY, CONTENT_WIDTH, boxEndY - boxStartY, 2, 2, "S");
+
+  return boxEndY + SECTION_GAP / 2;
 }
 
 function renderTotals(pdf: Pdf, y: number, model: QuoteRenderModel): number {

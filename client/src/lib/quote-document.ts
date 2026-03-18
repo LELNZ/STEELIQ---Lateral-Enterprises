@@ -9,6 +9,7 @@ export interface TotalsDisplayConfig {
   showRubbish: boolean;
   showSubtotal: boolean;
   showGst: boolean;
+  showCommercialRemarks: boolean;
 }
 
 export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
@@ -19,6 +20,7 @@ export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
   showRubbish: true,
   showSubtotal: true,
   showGst: true,
+  showCommercialRemarks: true,
 };
 
 export interface PreviewData {

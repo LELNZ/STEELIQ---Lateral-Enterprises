@@ -197,8 +197,19 @@ export default function QuotePreview() {
                 <Separator />
 
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Commercial Remarks</p>
-                  <p className="text-xs text-muted-foreground mb-2">Optional free-text shown to the customer below the quote summary (e.g. payment terms, scope notes, inclusions).</p>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Details Box</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Shows a dedicated &quot;Details&quot; section below Quote Summary.</p>
+                    </div>
+                    <Switch
+                      id="totals-showCommercialRemarks"
+                      checked={effectiveTotalsConfig.showCommercialRemarks ?? true}
+                      onCheckedChange={() => toggleTotalsField("showCommercialRemarks")}
+                      data-testid="switch-totals-showCommercialRemarks"
+                    />
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-3">Customer-facing details text</p>
                   <Textarea
                     value={effectiveRemarks}
                     onChange={e => setLocalRemarks(e.target.value)}
@@ -304,7 +315,20 @@ export default function QuotePreview() {
         )}
 
         {activeModel.commercialRemarks && (
-          <div className="space-y-1.5" data-testid="commercial-remarks-block">
+          <div
+            data-testid="commercial-remarks-block"
+            style={{
+              border: `1px solid ${T.colors.border}`,
+              borderRadius: 6,
+              padding: "12px 16px",
+            }}
+          >
+            <p
+              className="text-xs font-semibold uppercase tracking-wider mb-2"
+              style={{ color: T.colors.headingMuted }}
+            >
+              Details
+            </p>
             <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: T.colors.bodyText }}>
               {activeModel.commercialRemarks}
             </p>
