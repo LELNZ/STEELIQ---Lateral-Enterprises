@@ -98,7 +98,25 @@ function getLayoutSummary(config: QuoteItem) {
   if (cat === "hinge-door") return `${config.hingeSide === "left" ? "Left" : "Right"} Hinge`;
   if (cat === "french-door") return "Double Door";
   if (cat === "bifold-door") return `${config.panels} Leaves`;
-  if (cat === "stacker-door") return `${config.panels} Panels`;
+  if (cat === "stacker-door") {
+    const panelRows = config.panelRows || [];
+    if (panelRows.length > 0) {
+      let awning = 0, fixed = 0, sliding = 0;
+      for (const panel of panelRows) {
+        for (const row of panel) {
+          if (row.type === "awning") awning++;
+          else if (row.type === "sliding") sliding++;
+          else fixed++;
+        }
+      }
+      const parts: string[] = [];
+      if (sliding > 0) parts.push(`${sliding} SLD`);
+      if (awning > 0) parts.push(`${awning} AWN`);
+      if (fixed > 0) parts.push(`${fixed} FIX`);
+      return `${config.panels} Panels (${parts.join(" + ") || "FIX"})`;
+    }
+    return `${config.panels} Panels`;
+  }
   if (cat === "bay-window") return "Bay (3 Panel)";
   return "Standard";
 }
@@ -110,7 +128,7 @@ function makeDefaultColumns(count: number): CustomColumn[] {
   }));
 }
 
-const defaultEntranceDoorRows: EntranceDoorRow[] = [{ height: 0, type: "fixed" }];
+const defaultEntranceDoorRows: EntranceDoorRow[] = [{ height: 0, type: "fixed", slideDirection: "right" }];
 
 const ROOM_OPTIONS = [
   { label: "Kitchen", code: "KIT" },
@@ -872,7 +890,7 @@ export default function QuoteBuilder() {
     const current = w[field] || defaultEntranceDoorRows;
     const next: EntranceDoorRow[] = Array.from({ length: count }, (_, i) => {
       if (i < current.length) return current[i];
-      return { height: 0, type: "fixed" as const };
+      return { height: 0, type: "fixed" as const, slideDirection: "right" as const };
     });
     form.setValue(field, next);
   }
@@ -914,18 +932,20 @@ export default function QuoteBuilder() {
     if (current.length === count) return;
     const next: EntranceDoorRow[][] = Array.from({ length: count }, (_, i) => {
       if (i < current.length) return current[i];
-      return [{ height: 0, type: "fixed" as const }];
+      return [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }];
     });
     form.setValue("panelRows", next);
   }
 
+  const DEFAULT_PANEL_ROW: EntranceDoorRow = { height: 0, type: "fixed", slideDirection: "right" };
+
   function setPanelRowCount(panelIdx: number, count: number) {
     const current = [...(w.panelRows || [])];
-    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
-    const panelCurrent = current[panelIdx] || [{ height: 0, type: "fixed" }];
+    while (current.length <= panelIdx) current.push([{ ...DEFAULT_PANEL_ROW }]);
+    const panelCurrent = current[panelIdx] || [{ ...DEFAULT_PANEL_ROW }];
     const next: EntranceDoorRow[] = Array.from({ length: count }, (_, i) => {
       if (i < panelCurrent.length) return panelCurrent[i];
-      return { height: 0, type: "fixed" as const };
+      return { ...DEFAULT_PANEL_ROW };
     });
     current[panelIdx] = next;
     form.setValue("panelRows", current);
@@ -933,8 +953,8 @@ export default function QuoteBuilder() {
 
   function setPanelRowHeight(panelIdx: number, rowIdx: number, height: number) {
     const current = [...(w.panelRows || [])];
-    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
-    const rows = [...(current[panelIdx] || [{ height: 0, type: "fixed" }])];
+    while (current.length <= panelIdx) current.push([{ ...DEFAULT_PANEL_ROW }]);
+    const rows = [...(current[panelIdx] || [{ ...DEFAULT_PANEL_ROW }])];
     rows[rowIdx] = { ...rows[rowIdx], height };
     current[panelIdx] = rows;
     form.setValue("panelRows", current);
@@ -942,8 +962,8 @@ export default function QuoteBuilder() {
 
   function togglePanelRowType(panelIdx: number, rowIdx: number) {
     const current = [...(w.panelRows || [])];
-    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
-    const rows = [...(current[panelIdx] || [{ height: 0, type: "fixed" }])];
+    while (current.length <= panelIdx) current.push([{ ...DEFAULT_PANEL_ROW }]);
+    const rows = [...(current[panelIdx] || [{ ...DEFAULT_PANEL_ROW }])];
     const cur = rows[rowIdx].type || "fixed";
     let next: "fixed" | "sliding" | "awning";
     if (isStacker) {
@@ -959,8 +979,8 @@ export default function QuoteBuilder() {
 
   function setPanelRowSlideDirection(panelIdx: number, rowIdx: number, dir: "left" | "right") {
     const current = [...(w.panelRows || [])];
-    while (current.length <= panelIdx) current.push([{ height: 0, type: "fixed" }]);
-    const rows = [...(current[panelIdx] || [{ height: 0, type: "fixed" }])];
+    while (current.length <= panelIdx) current.push([{ ...DEFAULT_PANEL_ROW }]);
+    const rows = [...(current[panelIdx] || [{ ...DEFAULT_PANEL_ROW }])];
     rows[rowIdx] = { ...rows[rowIdx], slideDirection: dir };
     current[panelIdx] = rows;
     form.setValue("panelRows", current);
@@ -2211,7 +2231,7 @@ export default function QuoteBuilder() {
                   return (
                     <div className="space-y-2">
                       {Array.from({ length: currentPanels }).map((_, pi) => {
-                        const panelRowDefs: EntranceDoorRow[] = pRows[pi] || [{ height: 0, type: "fixed" }];
+                        const panelRowDefs: EntranceDoorRow[] = pRows[pi] || [{ ...DEFAULT_PANEL_ROW }];
                         const isExpanded = expandedPanels.has(pi);
                         return (
                           <div key={pi} className="border rounded-md bg-muted/20 overflow-hidden" data-testid={`panel-config-${pi}`}>

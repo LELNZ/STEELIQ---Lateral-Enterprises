@@ -1,0 +1,137 @@
+STEELIQ MASTER HANDOVER STACK — FOLLOW-UP HARDENING PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+==================================================
+CURRENT TRUTH
+==================================================
+
+Stacker Door builder parity is now working:
+- FIX
+- SLD
+- AWN
+- left/right arrows for sliding rows
+
+This phase is a hardening pass only.
+
+Open follow-up risks to resolve:
+1. config signature may not yet include stacker sliding-row state
+2. spec/schedule/preview output may not yet fully reflect stacker SLD row state
+3. save/load round-trip of stacker SLD rows needs explicit verification
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these three items:
+
+1. Update config signature logic so stacker sliding-row state is represented if needed for config matching
+2. Verify and fix item spec / schedule / preview output so stacker SLD row state is truthfully reflected where applicable
+3. Verify and harden save/load round-trip for stacker SLD rows
+
+Do NOT broaden scope.
+
+==================================================
+GOAL 1 — CONFIG SIGNATURE HARDENING
+==================================================
+
+Required task:
+- inspect config-signature logic
+- determine whether stacker panelRows row type/state is currently represented
+- if stacker sliding-row state materially affects configuration identity/matching, include it safely
+- do not change config signature unnecessarily if current matching does not depend on it; report truthfully
+
+Required result:
+- configuration identity is not ambiguous for stacker items using SLD rows
+
+==================================================
+GOAL 2 — SPEC / SCHEDULE / PREVIEW TRUTHFULNESS
+==================================================
+
+Required task:
+- inspect where stacker configuration is summarized downstream
+- verify whether SLD row state appears correctly in:
+  - saved item summary
+  - quote schedule/spec readout
+  - preview-facing item description where applicable
+- fix only what is needed so the saved item truthfully reflects the selected stacker row state
+
+Required result:
+- stacker SLD row state is not lost or hidden in downstream readouts if that state is part of the item’s meaningful configuration
+
+==================================================
+GOAL 3 — SAVE / LOAD ROUND-TRIP
+==================================================
+
+Required task:
+- verify that a stacker item with SLD rows and slide directions:
+  - saves correctly
+  - reloads correctly
+  - reopens in the builder with the same row types/directions
+  - redraws correctly after reload
+- fix any state persistence gaps found
+
+Required result:
+- stacker SLD rows round-trip cleanly through save → reload → edit
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved
+3. State whether config signature currently ignores stacker sliding-row state
+4. State where downstream item summary/spec output may miss stacker SLD state
+5. State whether save/load round-trip is already complete or still partial
+6. Then implement
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- Sliding Door still behaves exactly as before
+- Stacker Door FIX / SLD / AWN cycle still works
+- Stacker arrow direction still works
+- saved stacker item reloads with the same row states
+- drawing remains correct after reload
+- no break to quote builder save/update
+- no break to quote preview/PDF
+- no break to existing config matching logic
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact follow-up issues found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless the stacker SLD state is hardened through config signature, downstream readout, and save/load round-trip as appropriate.
