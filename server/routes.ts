@@ -3480,18 +3480,39 @@ async function seedLabourOperations() {
   }
 }
 
+// Glazing time bands — aligned with installation rate bands (0–1 / 1–2 / 2–3 / 3+).
 const DEFAULT_GLAZING_BANDS = [
-  { label: "small",       maxAreaSqm: 0.5,      minutesPerPane: 10, description: "Panes up to 0.5 m²" },
-  { label: "medium",      maxAreaSqm: 1.0,       minutesPerPane: 15, description: "Panes 0.5 – 1.0 m²" },
-  { label: "large",       maxAreaSqm: 1.5,       minutesPerPane: 20, description: "Panes 1.0 – 1.5 m²" },
-  { label: "extra_large", maxAreaSqm: 9999,      minutesPerPane: 25, description: "Panes over 1.5 m²" },
+  { label: "small",       maxAreaSqm: 1.0,  minutesPerPane: 10, description: "Panes up to 1.0 m² (aligned with installation bands)" },
+  { label: "medium",      maxAreaSqm: 2.0,  minutesPerPane: 15, description: "Panes 1.0 – 2.0 m²" },
+  { label: "large",       maxAreaSqm: 3.0,  minutesPerPane: 20, description: "Panes 2.0 – 3.0 m²" },
+  { label: "extra_large", maxAreaSqm: 9999, minutesPerPane: 25, description: "Panes over 3.0 m²" },
 ];
+
+// Old threshold values (0.5/1.0/1.5) that were incorrect; map them to corrected values.
+const GLAZING_BAND_THRESHOLD_MIGRATION: Record<number, number> = { 0.5: 1.0, 1.0: 2.0, 1.5: 3.0 };
 
 async function seedGlazingBands() {
   const existing = await storage.getLibraryEntries("glazing_band");
-  if (existing.length > 0) return;
-  for (let i = 0; i < DEFAULT_GLAZING_BANDS.length; i++) {
-    await storage.createLibraryEntry({ type: "glazing_band", data: DEFAULT_GLAZING_BANDS[i], sortOrder: i });
+  if (existing.length === 0) {
+    for (let i = 0; i < DEFAULT_GLAZING_BANDS.length; i++) {
+      await storage.createLibraryEntry({ type: "glazing_band", data: DEFAULT_GLAZING_BANDS[i], sortOrder: i });
+    }
+    return;
+  }
+  // Migrate any existing records that still have the old incorrect thresholds.
+  // Only entries whose maxAreaSqm exactly matches an old seeded value are updated,
+  // preserving any custom bands staff may have configured with other values.
+  for (const band of existing) {
+    const d = band.data as any;
+    const newMax = GLAZING_BAND_THRESHOLD_MIGRATION[d.maxAreaSqm as number];
+    if (newMax !== undefined) {
+      const defaultEntry = DEFAULT_GLAZING_BANDS.find((b) => b.maxAreaSqm === newMax);
+      if (defaultEntry) {
+        await storage.updateLibraryEntry(band.id, {
+          data: { ...d, maxAreaSqm: newMax, description: defaultEntry.description },
+        });
+      }
+    }
   }
 }
 

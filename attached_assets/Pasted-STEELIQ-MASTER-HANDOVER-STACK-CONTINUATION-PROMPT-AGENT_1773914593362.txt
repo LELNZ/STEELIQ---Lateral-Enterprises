@@ -1,0 +1,304 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT SYSTEM STATE
+==================================================
+
+Confirmed current truth:
+- app is now published
+- Lifecycle Phase 2 is complete enough for LJ operational use
+- invoicing stage completion gap has been fixed
+- manufacturing labour V1 is in place
+- labour model still needs hardening/calibration
+- quote builder is materially more stable
+- Xero is still static-token based; full OAuth callback flow is not implemented yet
+
+This phase is:
+LABOUR HARDENING / CALIBRATION PASS
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Tighten the manufacturing labour model so it is more production-ready and less dependent on manual configuration gaps.
+
+This phase must focus on:
+1. automatic glue pricing
+2. glazing band correction to match installation size bands
+3. legacy/obsolete labour cleanup or safe deprecation
+4. better internal calibration visibility
+
+Do NOT redesign the estimating architecture.
+Do NOT build batch optimization.
+Do NOT broaden into production scheduling.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Automatic glue labour application
+2. Glazing band threshold correction
+3. Legacy labour cleanup / deprecation
+4. Calibration support improvements
+
+Do NOT broaden scope.
+
+==================================================
+DELIVERABLE 1 — AUTOMATIC GLUE LABOUR
+==================================================
+
+Current known issue:
+- glue exists as a master labour operation
+- but it still depends on configurations explicitly including a glue labour row
+- this is not safe enough because relevant items may silently undercount cost
+
+Approved business rule:
+- all outer frame corners require glue
+- all mullion/transom joints require glue
+
+Required result:
+- glue labour must be automatically included where relevant based on item geometry/process rules
+- do NOT rely on staff remembering to add a glue labour row to each configuration
+- avoid double counting if a configuration already has an explicit glue entry
+- preserve internal transparency in the labour breakdown
+
+==================================================
+DELIVERABLE 2 — GLAZING BAND THRESHOLD CORRECTION
+==================================================
+
+Current audit indicates the live glazing thresholds do NOT match the installation rate bands.
+
+Use the same sqm thresholds already used in Installation Labour Rates:
+
+- Small: 0–1 m²
+- Medium: 1–2 m²
+- Large: 2–3 m²
+- Extra Large: 3 m²+
+
+Use glazing minutes:
+- Small = 10 min
+- Medium = 15 min
+- Large = 20 min
+- Extra Large = 25 min
+
+Required result:
+- glazing library bands default to the same thresholds as installation
+- glazing calculation uses those corrected thresholds
+- staff can maintain them operationally in the library/admin surface
+
+==================================================
+DELIVERABLE 3 — LEGACY LABOUR CLEANUP
+==================================================
+
+Current need:
+- remove or safely deprecate any confusing obsolete labour entries that no longer reflect the intended model
+- preserve backward compatibility for historical records if needed
+
+Required result:
+- staff should not see misleading duplicate/obsolete labour choices
+- do not destroy historical meaning
+- if entries must remain for compatibility, hide/deprecate them clearly
+
+==================================================
+DELIVERABLE 4 — CALIBRATION SUPPORT
+==================================================
+
+Current need:
+- labour must be easier to compare against real fabricated jobs
+
+Required result:
+- improve internal labour transparency enough for practical calibration
+- if practical in this phase, add:
+  - total labour minutes
+  - total labour cost
+  - per-operation minutes/cost visibility
+- do NOT clutter the customer-facing quote
+- this is internal only
+
+Do NOT build full back-costing in this phase.
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted pricing logic changes
+- targeted labour library/admin UI cleanup
+- targeted calibration visibility improvements
+
+Not allowed:
+- batch optimization engine
+- production scheduling
+- back-costing system
+- UI/UX table modernization
+- lifecycle redesign
+- Xero OAuth work in this phase
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved
+3. State exactly how glue is currently applied and why that is insufficient
+4. State exactly how glazing thresholds are currently defined and how they will be corrected
+5. State exactly how legacy labour entries will be cleaned up/deprecated safely
+6. State what calibration support you will add
+7. Then implement
+
+If a specific improvement cannot be implemented truthfully from current data, do not fake it. Report it clearly.
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- quote builder still saves/updates correctly
+- pricing still calculates correctly overall
+- manual override still works
+- removal/rubbish/site-cost logic still works
+- frame type persistence still works
+- stacker/french/sliding/hinge items still work
+- preview/PDF still work through current pipeline
+- customer-facing quote still does not expose internal labour detail
+- lifecycle remains unaffected
+
+Labour-specific checks:
+- glue appears automatically where relevant
+- no glue double counting
+- glazing uses 0–1 / 1–2 / 2–3 / 3+ sqm bands
+- obsolete labour rows no longer confuse the library/admin surface
+- labour breakdown remains visible and usable for calibration
+- total labour remains believable on simple vs complex items
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact remaining labour issues found
+4. Exact hardening/calibration design implemented
+5. Behaviour changes
+6. Schema/API changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- glue is automatically and truthfully applied where relevant
+- glazing thresholds are corrected to 0–1 / 1–2 / 2–3 / 3+
+- obsolete labour confusion is reduced safely
+- calibration support is materially better
+- no architecture drift occurred
