@@ -142,6 +142,7 @@ export async function registerRoutes(
   }
 
   await seedLabourOperations();
+  await seedGlazingBands();
   await seedInstallationRates();
   await seedDeliveryRates();
   await seedRemovalRates();
@@ -3433,28 +3434,64 @@ async function seedDirectMaterials() {
   }
 }
 
-const DEFAULT_LABOUR_OPERATIONS = [
-  { name: "cutting", category: "manual", timeMinutes: 15, ratePerHour: 45, description: "" },
-  { name: "milling", category: "manual", timeMinutes: 10, ratePerHour: 45, description: "" },
-  { name: "drilling", category: "manual", timeMinutes: 10, ratePerHour: 45, description: "" },
-  { name: "slotting", category: "manual", timeMinutes: 8, ratePerHour: 45, description: "" },
-  { name: "assembly-crimped", category: "manual", timeMinutes: 20, ratePerHour: 45, description: "" },
-  { name: "assembly-screwed", category: "manual", timeMinutes: 25, ratePerHour: 45, description: "" },
-  { name: "glazing", category: "manual", timeMinutes: 15, ratePerHour: 45, description: "" },
-  { name: "cnc-drilling", category: "cnc", timeMinutes: 5, ratePerHour: 85, description: "" },
-  { name: "cnc-milling", category: "cnc", timeMinutes: 8, ratePerHour: 85, description: "" },
-  { name: "cnc-routing", category: "cnc", timeMinutes: 10, ratePerHour: 85, description: "" },
+// V2 labour operations: setup + driver model.
+// driverType determines how driver quantity is derived from item geometry.
+// Supported driver types: per_item, per_cut_cycle, per_hole, per_slot, per_end,
+//   per_screw, per_corner, per_joint, per_glue_point, per_pane, per_pane_area_band.
+const DEFAULT_LABOUR_OPERATIONS_V2: Array<Record<string, unknown>> = [
+  { name: "cutting",          category: "cnc",    setupMinutes: 5,  driverType: "per_cut_cycle",      minutesPerDriver: 1,   ratePerHour: 65, description: "CNC cutting — 5 min setup + 1 min per member (cuts both ends per cycle)", isActive: true },
+  { name: "drilling",         category: "manual", setupMinutes: 0,  driverType: "per_hole",            minutesPerDriver: 1,   ratePerHour: 45, description: "Outer frame corner drilling — 4 holes per corner × 4 corners = 16 holes", isActive: true },
+  { name: "slotting",         category: "manual", setupMinutes: 0,  driverType: "per_slot",            minutesPerDriver: 5,   ratePerHour: 45, description: "Slotting — 5 min per slot, minimum 2 slots per operation", isActive: true },
+  { name: "milling",          category: "manual", setupMinutes: 0,  driverType: "per_end",             minutesPerDriver: 5,   ratePerHour: 45, description: "Milling — 5 min per mullion/transom end (2 ends per member)", isActive: true },
+  { name: "assembly-screwed", category: "manual", setupMinutes: 0,  driverType: "per_screw",           minutesPerDriver: 0.5, ratePerHour: 45, description: "Assembly screwing — 0.5 min per screw: 16 outer frame screws + 2 per mullion/transom end", isActive: true },
+  { name: "assembly-crimped", category: "manual", setupMinutes: 0,  driverType: "per_item",            minutesPerDriver: 20,  ratePerHour: 45, description: "Assembly crimping — flat 20 min per item", isActive: true },
+  { name: "glue",             category: "manual", setupMinutes: 0,  driverType: "per_glue_point",      minutesPerDriver: 1,   ratePerHour: 45, description: "Gluing — 1 min per glue point: 4 outer corners + 2 per mullion/transom end", isActive: true },
+  { name: "glazing",          category: "manual", setupMinutes: 0,  driverType: "per_pane_area_band",  minutesPerDriver: 10,  ratePerHour: 45, description: "Glazing — time per pane scales with pane area band (configurable in Glazing Bands library)", isActive: true },
 ];
 
 async function seedLabourOperations() {
   const existing = await storage.getLibraryEntries("labour_operation");
+
+  if (existing.length === 0) {
+    for (let i = 0; i < DEFAULT_LABOUR_OPERATIONS_V2.length; i++) {
+      await storage.createLibraryEntry({ type: "labour_operation", data: DEFAULT_LABOUR_OPERATIONS_V2[i], sortOrder: i });
+    }
+    return;
+  }
+
+  // Migrate existing entries that have the legacy flat model (timeMinutes, no driverType).
+  // Preserves ratePerHour set by staff; only adds the new driver fields.
+  const byName = new Map(existing.map((e) => [(e.data as any).name as string, e]));
+
+  for (let i = 0; i < DEFAULT_LABOUR_OPERATIONS_V2.length; i++) {
+    const op = DEFAULT_LABOUR_OPERATIONS_V2[i];
+    const match = byName.get(op.name as string);
+    if (!match) {
+      await storage.createLibraryEntry({ type: "labour_operation", data: op, sortOrder: i });
+    } else if (!(match.data as any).driverType) {
+      // Legacy entry — migrate to driver model, preserving ratePerHour
+      const existingRate = (match.data as any).ratePerHour;
+      await storage.updateLibraryEntry(match.id, {
+        data: { ...op, ratePerHour: existingRate ?? op.ratePerHour },
+        sortOrder: i,
+      });
+    }
+    // If entry already has driverType, leave it alone (may have been customised by staff)
+  }
+}
+
+const DEFAULT_GLAZING_BANDS = [
+  { label: "small",       maxAreaSqm: 0.5,      minutesPerPane: 10, description: "Panes up to 0.5 m²" },
+  { label: "medium",      maxAreaSqm: 1.0,       minutesPerPane: 15, description: "Panes 0.5 – 1.0 m²" },
+  { label: "large",       maxAreaSqm: 1.5,       minutesPerPane: 20, description: "Panes 1.0 – 1.5 m²" },
+  { label: "extra_large", maxAreaSqm: 9999,      minutesPerPane: 25, description: "Panes over 1.5 m²" },
+];
+
+async function seedGlazingBands() {
+  const existing = await storage.getLibraryEntries("glazing_band");
   if (existing.length > 0) return;
-  for (let i = 0; i < DEFAULT_LABOUR_OPERATIONS.length; i++) {
-    await storage.createLibraryEntry({
-      type: "labour_operation",
-      data: DEFAULT_LABOUR_OPERATIONS[i],
-      sortOrder: i,
-    });
+  for (let i = 0; i < DEFAULT_GLAZING_BANDS.length; i++) {
+    await storage.createLibraryEntry({ type: "glazing_band", data: DEFAULT_GLAZING_BANDS[i], sortOrder: i });
   }
 }
 

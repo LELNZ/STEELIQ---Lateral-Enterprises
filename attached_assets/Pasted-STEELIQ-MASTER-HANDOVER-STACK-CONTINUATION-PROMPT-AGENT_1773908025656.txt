@@ -1,0 +1,447 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT SYSTEM STATE
+==================================================
+
+Recent work now in place:
+- lifecycle Phase 2 is substantially implemented
+- quote builder persistence/performance improved
+- Site Costs library grouping is in place
+- stacker/french/override/removal/rubbish features are operational
+- frame type persistence fix is in place
+
+Known next commercial accuracy gap:
+- manufacturing labour logic is still too flat
+- current labour model does not scale accurately with fabrication complexity
+- this creates commercial risk in estimating
+
+This phase is for:
+MANUFACTURING LABOUR MODEL REDESIGN
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Replace the current flat manufacturing labour model with a more accurate setup-plus-driver labour model.
+
+The goal is to make labour scale with actual fabrication complexity:
+- simple units stay simple
+- complex multi-panel/custom units cost more accurately
+- labour is driven by actual counts from configuration geometry, not just one labour row per process per item
+
+Do NOT build batch optimization in this phase.
+Do NOT redesign the full estimating architecture.
+Do NOT broaden into production scheduling.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Small lifecycle hardening: DB-level uniqueness for lifecycle task states
+2. Manufacturing labour model redesign to setup + driver-based calculation
+3. Library/admin surface updates required to manage the new labour model
+4. Quote builder pricing integration for the new labour logic
+5. Truthful cost breakdown visibility for the new labour calculation
+
+Do NOT broaden scope.
+
+==================================================
+DELIVERABLE 1 — SMALL LIFECYCLE HARDENING
+==================================================
+
+Before touching labour, harden Lifecycle Phase 2 storage properly.
+
+Required fix:
+- add a DB-level unique constraint for lifecycle task states on:
+  - lifecycleInstanceId
+  - stageKey
+  - taskKey
+
+Reason:
+- current task upsert logic appears application-level only
+- we need DB-level protection against duplicate task-state rows
+
+Required result:
+- one lifecycle instance can only have one state row per stage/task key
+- no destructive migration
+- if duplicate rows already exist, handle safely and report truthfully
+
+This is a small hardening pass only, not a new lifecycle feature phase.
+
+==================================================
+DELIVERABLE 2 — LABOUR MODEL REDESIGN
+==================================================
+
+Current problem:
+- labour is effectively too flat
+- one labour row per process is applied once per config/task row, then multiplied by item quantity
+- it does not scale properly by:
+  - member count
+  - holes
+  - slots
+  - mullion/transom ends
+  - screws
+  - glue joints
+  - pane count / pane size
+
+That is not commercially accurate enough.
+
+Required redesign:
+Use a hybrid setup-plus-driver labour model.
+
+Formula:
+Total Labour Minutes
+=
+Setup Minutes
++
+(Driver Quantity × Minutes Per Driver)
+
+This phase should be per item, not batched across multiple identical units.
+
+==================================================
+APPROVED DRIVER LOGIC FOR V1
+==================================================
+
+Use these manufacturing labour drivers:
+
+1. CNC Cutting
+- setupMinutes = 5 minutes per item/run
+- driverType = per_cut_cycle
+- minutesPerDriver = 1 minute
+- important: machine cuts two ends in one cycle, so the driver should be based on member count / cut cycles, not raw end count
+
+2. Drilling
+- outer frame corners only
+- 4 holes per outer corner
+- driverType = per_hole
+- minutesPerDriver = 1 minute
+- do NOT apply drilling time to mullion/transom joints in this phase
+
+3. Slotting
+- driverType = per_slot
+- minutesPerDriver = 5 minutes
+- minimum two slots where that process is required
+
+4. Milling
+- driverType = per_end
+- minutesPerDriver = 5 minutes
+- applies to each mullion/transom end
+
+5. Assembly Screwing
+- driverType = per_screw
+- minutesPerDriver = 0.5 minutes (30 sec)
+
+6. Glue
+- 1 minute per outer frame corner
+- 1 minute per mullion/transom joint/end
+- may be represented as:
+  - per_corner
+  - per_joint
+or another safe equivalent, but the final calculated logic must reflect both outer corners and mullion/transom joints
+
+7. Glazing
+Use pane area bands:
+- small = 10 min
+- medium = 15 min
+- large = 20 min
+- extra large = 25 min
+
+These pane-size thresholds must be configurable in the library/admin surface if safely possible in this phase.
+If not safely possible, implement sensible defaults and report the limitation honestly.
+
+==================================================
+BEST-PRACTICE SCOPING RULE FOR V1
+==================================================
+
+Use per-item independent costing in this phase.
+
+Do NOT attempt:
+- shared setup across repeated identical units
+- batch efficiencies
+- CNC nesting optimization
+- cross-item labour pooling
+
+Reason:
+- per-item costing is easier to trust
+- easier to audit
+- safer for commercial accuracy as a first version
+
+Later phases may add batch/shared efficiencies, but not now.
+
+==================================================
+DELIVERABLE 3 — LABOUR LIBRARY / ADMIN SURFACE
+==================================================
+
+The current Manufacturing Labour tab/library surface must be updated so staff can manage the new labour model.
+
+Required result:
+Each labour operation should be able to define at minimum:
+- operation name
+- setup minutes
+- driver type
+- minutes per driver
+- rate per hour or equivalent labour cost basis
+- active/inactive
+- sort order
+- optional notes/help text if useful
+
+Recommended driver types to support in this phase:
+- per_item
+- per_cut_cycle
+- per_hole
+- per_slot
+- per_end
+- per_screw
+- per_corner
+- per_joint
+- per_pane_small
+- per_pane_medium
+- per_pane_large
+- per_pane_extra_large
+
+If a cleaner implementation is to use:
+- per_pane_area_band
+with band rules stored separately, that is acceptable, but keep the admin surface practical.
+
+Important:
+- do not leave the new labour logic hidden in code only
+- staff must be able to maintain it operationally
+
+==================================================
+DELIVERABLE 4 — QUOTE BUILDER PRICING INTEGRATION
+==================================================
+
+The quote builder must use the new labour model for manufacturing labour calculation.
+
+Required task:
+- inspect exactly how current labour is pulled into item pricing
+- replace the flat labour usage with derived labour counts from actual item configuration
+- ensure labour total reflects:
+  - configuration geometry
+  - panel/member count
+  - mullion/transom presence
+  - pane count and pane size
+  - other approved drivers above
+
+Required result:
+- labour cost is materially more accurate
+- simple items do not get overcomplicated
+- complex items do not get undercosted
+
+==================================================
+DELIVERABLE 5 — COST BREAKDOWN / TRANSPARENCY
+==================================================
+
+The internal pricing/cost view must remain understandable.
+
+Required result:
+- staff can see the manufacturing labour cost contribution clearly
+- if practical in this phase, show a concise internal breakdown such as:
+  - cutting
+  - drilling
+  - slotting
+  - milling
+  - screwing
+  - glue
+  - glazing
+- do not clutter the customer-facing quote document
+- this is internal costing transparency only
+
+If a full detailed breakdown is too large for this phase, show at least enough internal visibility to verify the new model is working.
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted schema changes for labour model support
+- targeted library/admin UI changes
+- targeted pricing calculation changes
+- targeted lifecycle task-state uniqueness hardening
+- minimal route/storage updates if strictly required
+
+Not allowed:
+- full production scheduling
+- batch optimization engine
+- quoting workflow redesign
+- UI/UX table modernization in this phase
+- speculative automation
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved for:
+   - lifecycle task-state uniqueness
+   - manufacturing labour model
+   - labour library/admin UI
+   - quote builder pricing integration
+3. State exactly how labour is currently calculated
+4. State exactly how the new setup+driver model will be represented
+5. State how driver quantities will be derived from item geometry/configuration
+6. State what glazing size bands will be used
+7. Then implement
+
+If a specific driver cannot yet be derived truthfully from current item data, do not fake it. Report it clearly and implement the closest safe truthful version.
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- lifecycle task states remain functional
+- lifecycle task state uniqueness is hardened
+- quote builder still saves/updates correctly
+- pricing still calculates correctly overall
+- manual override still works
+- removal/rubbish/site-cost logic still works
+- frame type persistence still works
+- stacker/french/sliding/hinge items still work
+- preview/PDF still work through current pipeline
+- customer-facing quote does not expose unwanted internal labour detail
+
+Labour-specific checks:
+- simple item labour is lower than complex item labour where appropriate
+- member-heavy / pane-heavy configurations cost more appropriately
+- glazing scales by pane size band
+- milling scales by mullion/transom ends
+- drilling scales by outer frame corner holes only
+- glue scales by outer corners and mullion/transom joints
+- CNC cutting includes setup + cycle-based time
+- no double counting of labour drivers
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact current labour model found
+4. Exact new labour design implemented
+5. Behaviour changes
+6. Schema/API changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- lifecycle task-state uniqueness is DB-hardened
+- labour is no longer flat per process per item
+- setup + driver-based labour logic is implemented
+- labour library/admin surface is operationally usable
+- quote builder uses the new labour model
+- internal costing is truthful and testable
+- no architecture drift occurred
