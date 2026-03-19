@@ -3080,16 +3080,15 @@ export default function QuoteBuilder() {
                             <SelectItem value="total_sell">Override Total Sell</SelectItem>
                           </SelectContent>
                         </Select>
-                        {(w.overrideMode || "none") !== "none" && (
-                          <Input
-                            type="number"
-                            className="h-7 text-xs w-24"
-                            placeholder={(w.overrideMode === "per_sqm") ? "$/m²" : "$ total"}
-                            value={w.overrideValue ?? ""}
-                            onChange={(e) => form.setValue("overrideValue", e.target.value ? parseFloat(e.target.value) : null)}
-                            data-testid="input-override-value"
-                          />
-                        )}
+                        <Input
+                          type="number"
+                          className={(w.overrideMode || "none") !== "none" ? "h-7 text-xs w-24" : "h-7 text-xs w-24 invisible pointer-events-none"}
+                          placeholder={(w.overrideMode === "per_sqm") ? "$/m²" : "$ total"}
+                          value={w.overrideValue ?? ""}
+                          onChange={(e) => form.setValue("overrideValue", e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-override-value"
+                          aria-hidden={(w.overrideMode || "none") === "none"}
+                        />
                       </div>
                     </div>
 
