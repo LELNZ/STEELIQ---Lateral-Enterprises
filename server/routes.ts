@@ -233,6 +233,19 @@ export async function registerRoutes(
       divisionCode: undefined,
     });
     console.log("Default admin user created (username: admin, password: SteelIQ2025!)");
+  } else {
+    // Repair: if the stored password is not in the expected scrypt format (hex.salt),
+    // it was stored as plaintext (e.g. after a buggy manual reset). Re-hash the
+    // stored plaintext value so the user can log in with it as-is.
+    const hasDot = existingAdmin.password.includes(".");
+    const looksHashed = hasDot && existingAdmin.password.length >= 100;
+    if (!looksHashed) {
+      const { hashPassword: _repairHash } = await import("./auth");
+      const plaintextValue = existingAdmin.password;
+      const repairedHash = await _repairHash(plaintextValue);
+      await storage.updateUser(existingAdmin.id, { password: repairedHash });
+      console.log(`[startup] Repaired admin password hash (was stored as plaintext). Login with the same password as before.`);
+    }
   }
 
   const ljDiv = await storage.getDivisionSettings("LJ");
