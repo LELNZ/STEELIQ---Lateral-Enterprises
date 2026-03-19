@@ -1,18 +1,31 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   CheckCircle2,
   Circle,
   AlertCircle,
   ChevronRight,
+  ChevronDown,
   Clock,
   User,
   Users,
   ExternalLink,
   Loader2,
+  Square,
+  CheckSquare,
+  Lock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import type { ComputedLifecycleState, ComputedStageState, StageStatus, ResponsibilityType, OwnerRole } from "@shared/lifecycle";
+import type {
+  ComputedLifecycleState,
+  ComputedStageState,
+  ComputedTaskState,
+  StageStatus,
+  ResponsibilityType,
+  OwnerRole,
+} from "@shared/lifecycle";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,9 +38,9 @@ function statusIcon(status: StageStatus) {
     case "blocked":
       return <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />;
     case "not_applicable":
-      return <Circle className="h-4 w-4 text-muted-foreground/40 shrink-0" />;
-    default:
       return <Circle className="h-4 w-4 text-muted-foreground/30 shrink-0" />;
+    default:
+      return <Circle className="h-4 w-4 text-muted-foreground/25 shrink-0" />;
   }
 }
 
@@ -88,90 +101,289 @@ function responsibilityIcon(type: ResponsibilityType) {
   }
 }
 
+function formatCompletedAt(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
+// ─── Task Row ─────────────────────────────────────────────────────────────────
+
+interface TaskRowProps {
+  task: ComputedTaskState;
+  stageKey: string;
+  instanceId: string;
+  pendingKey: string | null;
+  onToggle: (stageKey: string, taskKey: string, completed: boolean) => void;
+}
+
+function TaskRow({ task, stageKey, instanceId: _instanceId, pendingKey, onToggle }: TaskRowProps) {
+  const isPending = pendingKey === `${stageKey}:${task.key}`;
+  const isDisabled = !task.editable || isPending;
+
+  return (
+    <div
+      data-testid={`lifecycle-task-${stageKey}-${task.key}`}
+      className={[
+        "flex items-start gap-2.5 py-1.5 px-1 rounded transition-colors",
+        task.editable && !isPending ? "hover:bg-muted/40 cursor-pointer" : "cursor-default",
+        task.completed ? "opacity-80" : "",
+      ].join(" ")}
+      onClick={() => {
+        if (!isDisabled) onToggle(stageKey, task.key, !task.completed);
+      }}
+    >
+      {/* Checkbox icon */}
+      <div className="mt-0.5 shrink-0">
+        {isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : !task.editable ? (
+          task.completed
+            ? <CheckSquare className="h-4 w-4 text-muted-foreground/40" />
+            : <Square className="h-4 w-4 text-muted-foreground/25" />
+        ) : task.completed ? (
+          <CheckSquare className="h-4 w-4 text-emerald-600" />
+        ) : (
+          <Square className="h-4 w-4 text-muted-foreground/50" />
+        )}
+      </div>
+
+      {/* Task content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={[
+            "text-xs leading-snug",
+            task.completed ? "line-through text-muted-foreground" : "text-foreground",
+          ].join(" ")}>
+            {task.label}
+          </span>
+          {task.required && (
+            <span className="text-[10px] font-medium text-rose-600 dark:text-rose-400 shrink-0">
+              Required
+            </span>
+          )}
+          {task.ownerRole && (
+            <span className="text-[10px] text-muted-foreground/60 shrink-0">
+              · {OWNER_ROLE_LABELS[task.ownerRole] ?? task.ownerRole}
+            </span>
+          )}
+        </div>
+
+        {/* Completion attribution */}
+        {task.completed && (task.completedAt || task.completedByName) && (
+          <div className="flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground/70">
+            <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+            {task.completedByName && <span>{task.completedByName}</span>}
+            {task.completedAt && <span>· {formatCompletedAt(task.completedAt)}</span>}
+          </div>
+        )}
+
+        {/* Description tooltip-style help text */}
+        {task.description && !task.completed && (
+          <div className="text-[10px] text-muted-foreground/50 mt-0.5 italic">{task.description}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Task Checklist ───────────────────────────────────────────────────────────
+
+interface TaskChecklistProps {
+  stage: ComputedStageState;
+  instanceId: string | null;
+  pendingKey: string | null;
+  onToggle: (stageKey: string, taskKey: string, completed: boolean) => void;
+}
+
+function TaskChecklist({ stage, instanceId, pendingKey, onToggle }: TaskChecklistProps) {
+  const tasks = stage.tasks;
+  if (tasks.length === 0) return null;
+
+  const requiredTasks = tasks.filter((t) => t.required);
+  const completedRequired = requiredTasks.filter((t) => t.completed).length;
+  const totalRequired = requiredTasks.length;
+  const allRequired = totalRequired > 0 && completedRequired === totalRequired;
+  const hasInstance = !!instanceId;
+
+  return (
+    <div className="mt-1.5 ml-1 border-l-2 border-border/60 pl-3 space-y-0">
+      {/* Pre-acceptance read-only notice */}
+      {!hasInstance && (
+        <div className="flex items-center gap-1.5 py-1 text-[10px] text-muted-foreground/60 italic">
+          <Lock className="h-3 w-3 shrink-0" />
+          Tasks editable after acceptance
+        </div>
+      )}
+
+      {/* Task rows */}
+      {tasks.map((task) => (
+        <TaskRow
+          key={task.key}
+          task={task}
+          stageKey={stage.key}
+          instanceId={instanceId ?? ""}
+          pendingKey={pendingKey}
+          onToggle={onToggle}
+        />
+      ))}
+
+      {/* Progress summary for task-driven stages */}
+      {stage.taskDriven && totalRequired > 0 && (
+        <div className={[
+          "flex items-center gap-1.5 pt-1.5 pb-0.5 text-[10px]",
+          allRequired ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+        ].join(" ")}>
+          <div className="flex-1 h-0.5 rounded-full bg-border overflow-hidden">
+            <div
+              className={[
+                "h-full rounded-full transition-all",
+                allRequired ? "bg-emerald-500" : "bg-blue-400",
+              ].join(" ")}
+              style={{ width: `${totalRequired > 0 ? (completedRequired / totalRequired) * 100 : 0}%` }}
+            />
+          </div>
+          <span className="shrink-0 tabular-nums">
+            {completedRequired}/{totalRequired} required
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Stage Row ────────────────────────────────────────────────────────────────
 
-function StageRow({ stage, isLast }: { stage: ComputedStageState; isLast: boolean }) {
+interface StageRowProps {
+  stage: ComputedStageState;
+  isLast: boolean;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  instanceId: string | null;
+  pendingKey: string | null;
+  onToggleTask: (stageKey: string, taskKey: string, completed: boolean) => void;
+}
+
+function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendingKey, onToggleTask }: StageRowProps) {
   const isActive = stage.status === "active";
   const isComplete = stage.status === "complete";
   const isNA = stage.status === "not_applicable";
   const isNotStarted = stage.status === "not_started";
   const isBlocked = stage.status === "blocked";
+  const hasTasks = stage.tasks.length > 0;
 
   return (
     <div
       data-testid={`lifecycle-stage-${stage.key}`}
       className={[
-        "flex gap-3 py-2.5 px-3 rounded-md transition-colors",
+        "rounded-md transition-colors",
         isActive ? "bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30" : "",
         isBlocked ? "bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30" : "",
         isNA || isNotStarted ? "opacity-50" : "",
       ].join(" ")}
     >
-      {/* Left — status icon + vertical connector */}
-      <div className="flex flex-col items-center gap-0.5 pt-0.5">
-        {statusIcon(stage.status)}
-        {!isLast && (
-          <div className={[
-            "w-px flex-1 min-h-[12px]",
-            isComplete ? "bg-emerald-300 dark:bg-emerald-700" : "bg-border",
-          ].join(" ")} />
-        )}
-      </div>
-
-      {/* Right — content */}
-      <div className="flex-1 min-w-0 space-y-0.5">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <span
-            data-testid={`lifecycle-stage-label-${stage.key}`}
-            className={[
-              "text-sm font-medium leading-snug",
-              isActive ? "text-blue-800 dark:text-blue-200" : "",
-              isComplete ? "text-emerald-800 dark:text-emerald-200" : "",
-              isBlocked ? "text-amber-800 dark:text-amber-200" : "",
-              isNA || isNotStarted ? "text-muted-foreground" : "text-foreground",
-            ].join(" ")}
-          >
-            {stage.label}
-          </span>
-          {statusBadge(stage.status)}
+      {/* Stage header */}
+      <div
+        className={[
+          "flex gap-3 py-2.5 px-3",
+          hasTasks ? "cursor-pointer select-none" : "",
+        ].join(" ")}
+        onClick={hasTasks ? onToggleExpand : undefined}
+      >
+        {/* Left — status icon + connector */}
+        <div className="flex flex-col items-center gap-0.5 pt-0.5">
+          {statusIcon(stage.status)}
+          {!isLast && (
+            <div className={[
+              "w-px flex-1 min-h-[12px]",
+              isComplete ? "bg-emerald-300 dark:bg-emerald-700" : "bg-border",
+            ].join(" ")} />
+          )}
         </div>
 
-        {/* Meta row — owner role + responsibility */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1">
-            <User className="h-3 w-3" />
-            {OWNER_ROLE_LABELS[stage.ownerRole] ?? stage.ownerRole}
-          </span>
-          <span className="flex items-center gap-1">
-            {responsibilityIcon(stage.responsibility)}
-            {RESPONSIBILITY_LABELS[stage.responsibility] ?? stage.responsibility}
-          </span>
+        {/* Right — content */}
+        <div className="flex-1 min-w-0 space-y-0.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                data-testid={`lifecycle-stage-label-${stage.key}`}
+                className={[
+                  "text-sm font-medium leading-snug",
+                  isActive ? "text-blue-800 dark:text-blue-200" : "",
+                  isComplete ? "text-emerald-800 dark:text-emerald-200" : "",
+                  isBlocked ? "text-amber-800 dark:text-amber-200" : "",
+                  isNA || isNotStarted ? "text-muted-foreground" : "text-foreground",
+                ].join(" ")}
+              >
+                {stage.label}
+              </span>
+              {/* Task count pill */}
+              {hasTasks && (
+                <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                  {stage.tasks.filter((t) => t.completed).length}/{stage.tasks.length}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {statusBadge(stage.status)}
+              {hasTasks && (
+                isExpanded
+                  ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/50" />
+                  : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
+              )}
+            </div>
+          </div>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+            <span className="flex items-center gap-1">
+              <User className="h-3 w-3" />
+              {OWNER_ROLE_LABELS[stage.ownerRole] ?? stage.ownerRole}
+            </span>
+            <span className="flex items-center gap-1">
+              {responsibilityIcon(stage.responsibility)}
+              {RESPONSIBILITY_LABELS[stage.responsibility] ?? stage.responsibility}
+            </span>
+          </div>
+
+          {/* Next action */}
+          {isActive && stage.nextAction && (
+            <div
+              data-testid={`lifecycle-next-action-${stage.key}`}
+              className="flex items-start gap-1 mt-1 text-xs text-blue-700 dark:text-blue-300"
+            >
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>{stage.nextAction}</span>
+            </div>
+          )}
+
+          {/* Blocked reason */}
+          {stage.status === "blocked" && stage.blockedReason && (
+            <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              {stage.blockedReason}
+            </div>
+          )}
+
+          {/* Source note */}
+          {stage.sourceNote && !isNotStarted && (
+            <div className="text-xs text-muted-foreground/60 italic mt-0.5">
+              {stage.sourceNote}
+            </div>
+          )}
+
+          {/* Inline task checklist (expanded) */}
+          {hasTasks && isExpanded && (
+            <TaskChecklist
+              stage={stage}
+              instanceId={instanceId}
+              pendingKey={pendingKey}
+              onToggle={onToggleTask}
+            />
+          )}
         </div>
-
-        {/* Next action — shown only for active stage */}
-        {isActive && stage.nextAction && (
-          <div
-            data-testid={`lifecycle-next-action-${stage.key}`}
-            className="flex items-start gap-1 mt-1 text-xs text-blue-700 dark:text-blue-300"
-          >
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <span>{stage.nextAction}</span>
-          </div>
-        )}
-
-        {/* Blocked reason */}
-        {stage.status === "blocked" && stage.blockedReason && (
-          <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-            {stage.blockedReason}
-          </div>
-        )}
-
-        {/* Source note — subtle context for non-not-started stages */}
-        {stage.sourceNote && !isNotStarted && (
-          <div className="text-xs text-muted-foreground/60 italic mt-0.5">
-            {stage.sourceNote}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -200,11 +412,7 @@ function OverallStatusBadge({ status }: { status: ComputedLifecycleState["overal
         </Badge>
       );
     default:
-      return (
-        <Badge variant="secondary">
-          Not Started
-        </Badge>
-      );
+      return <Badge variant="secondary">Not Started</Badge>;
   }
 }
 
@@ -225,9 +433,86 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
   const { data: lifecycle, isLoading, isError, error } = useQuery<ComputedLifecycleState>({
     queryKey: endpoint ? [endpoint] : ["lifecycle-none"],
     enabled: !!endpoint,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
   });
+
+  // Track which stages are expanded
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+  // Track which task toggle is in-flight: "stageKey:taskKey"
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+
+  // Default-expand active stage and all task-driven stages when lifecycle loads
+  useEffect(() => {
+    if (!lifecycle) return;
+    setExpandedStages((prev) => {
+      const next = new Set(prev);
+      for (const stage of lifecycle.stages) {
+        if (stage.tasks.length > 0) {
+          if (stage.status === "active" || stage.taskDriven) {
+            next.add(stage.key);
+          }
+        }
+      }
+      return next;
+    });
+  }, [lifecycle?.currentStageKey, lifecycle?.instanceId]);
+
+  const toggleExpand = (key: string) => {
+    setExpandedStages((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  // Task toggle mutation
+  const toggleTaskMutation = useMutation({
+    mutationFn: async ({
+      instanceId,
+      stageKey,
+      taskKey,
+      completed,
+    }: {
+      instanceId: string;
+      stageKey: string;
+      taskKey: string;
+      completed: boolean;
+    }) => {
+      setPendingKey(`${stageKey}:${taskKey}`);
+      await apiRequest("PATCH", `/api/lifecycle-instances/${instanceId}/tasks`, {
+        stageKey,
+        taskKey,
+        completed,
+      });
+    },
+    onSuccess: () => {
+      setPendingKey(null);
+      if (endpoint) {
+        queryClient.invalidateQueries({ queryKey: [endpoint] });
+      }
+      // Also invalidate the sibling view (quote panel when on job page and vice versa)
+      if (quoteId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/quotes/${quoteId}/lifecycle`] });
+      }
+      if (jobId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/op-jobs/${jobId}/lifecycle`] });
+      }
+    },
+    onError: () => {
+      setPendingKey(null);
+    },
+  });
+
+  const handleToggleTask = (stageKey: string, taskKey: string, completed: boolean) => {
+    if (!lifecycle?.instanceId) return;
+    toggleTaskMutation.mutate({
+      instanceId: lifecycle.instanceId,
+      stageKey,
+      taskKey,
+      completed,
+    });
+  };
 
   if (!endpoint) return null;
 
@@ -242,7 +527,6 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
 
   if (isError) {
     const errMsg = (error as any)?.message ?? "Could not load lifecycle";
-    // 404 = no template for this division — silent empty state
     if (errMsg?.includes("No lifecycle template")) return null;
     return (
       <div className="text-sm text-muted-foreground italic px-1 py-2">
@@ -259,7 +543,7 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
 
   return (
     <div data-testid="lifecycle-panel" className="space-y-3">
-      {/* Panel Header */}
+      {/* Panel header */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
@@ -276,17 +560,19 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
         </div>
       </div>
 
-      {/* Current stage summary (shown when there's an active stage) */}
+      {/* Current stage summary */}
       {currentStage && (
         <div
           data-testid="lifecycle-current-stage-summary"
           className="flex items-center gap-2 text-sm rounded-md bg-muted/50 px-3 py-2"
         >
           <ChevronRight className="h-4 w-4 text-blue-600 shrink-0" />
-          <span className="text-muted-foreground">Current stage:</span>
+          <span className="text-muted-foreground">Current:</span>
           <span className="font-medium text-foreground">{currentStage.label}</span>
           <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground capitalize">{RESPONSIBILITY_LABELS[currentStage.responsibility]}</span>
+          <span className="text-muted-foreground capitalize">
+            {RESPONSIBILITY_LABELS[currentStage.responsibility]}
+          </span>
         </div>
       )}
 
@@ -299,11 +585,16 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
             key={stage.key}
             stage={stage}
             isLast={idx === lifecycle.stages.length - 1}
+            isExpanded={expandedStages.has(stage.key)}
+            onToggleExpand={() => toggleExpand(stage.key)}
+            instanceId={lifecycle.instanceId}
+            pendingKey={pendingKey}
+            onToggleTask={handleToggleTask}
           />
         ))}
       </div>
 
-      {/* Footer — template assignment info */}
+      {/* Footer */}
       <div className="text-xs text-muted-foreground/60 pt-1 border-t border-border/50">
         {lifecycle.instanceId && lifecycle.assignedAt ? (
           <>
@@ -316,13 +607,9 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
             {" · "}{lifecycle.divisionCode} v{lifecycle.templateVersion}
           </>
         ) : lifecycle.stages.find((s) => s.key === "acceptance")?.status === "complete" ? (
-          <>
-            {lifecycle.divisionCode} v{lifecycle.templateVersion} · Active template (accepted pre-tracking)
-          </>
+          <>{lifecycle.divisionCode} v{lifecycle.templateVersion} · Active template (accepted pre-tracking)</>
         ) : (
-          <>
-            Preview — template will be locked at acceptance · {lifecycle.divisionCode} v{lifecycle.templateVersion}
-          </>
+          <>Preview — template locks at acceptance · {lifecycle.divisionCode} v{lifecycle.templateVersion}</>
         )}
       </div>
     </div>
