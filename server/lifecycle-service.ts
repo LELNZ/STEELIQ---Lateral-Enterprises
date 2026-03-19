@@ -1,22 +1,29 @@
 // ─── Lifecycle Derivation Service ────────────────────────────────────────────
-// Computes lifecycle state from existing system signals (quote, invoices, op-job).
-// No stored stage-state — everything is derived at read time.
-// This keeps historical records immutable and lifecycle visible immediately.
+// Computes lifecycle state from existing system signals (quote, invoices, op-job)
+// plus Phase 2 task state (per-instance task completion records).
 //
-// ARCHITECTURE: deriveLifecycleState accepts the template as a parameter.
-// The caller (route) is responsible for loading the correct template from DB:
-//   - Pre-acceptance: active template for the quote's division
-//   - Post-acceptance: the specific template locked to the lifecycle instance
-// This ensures template versioning is materially real, not just schema-declared.
+// ARCHITECTURE: deriveLifecycleState accepts the template and task states as
+// parameters. The caller (route) is responsible for loading both from DB.
+//
+// Stage derivation rules:
+//   - Signal-driven stages (estimate/quote/acceptance/commercial_setup/site_measure/
+//     invoicing/closeout): system signals govern status; tasks are informational.
+//   - No-signal stages (procurement/manufacture/delivery_install): task completion
+//     governs status when a lifecycle instance exists.
+//
+// Task state safety: tasks never mutate quote/invoice/opJob records.
+// Historical financial records remain immutable.
 
 import {
   ComputedLifecycleState,
   ComputedStageState,
+  ComputedTaskState,
   LifecycleTemplateConfig,
   LifecycleStageTemplate,
+  LifecycleTaskTemplate,
   StageStatus,
 } from "@shared/lifecycle";
-import { type Quote, type Invoice, type OpJob, type LifecycleInstance } from "@shared/schema";
+import { type Quote, type Invoice, type OpJob, type LifecycleInstance, type LifecycleTaskState } from "@shared/schema";
 
 // ─── Next Action Text ─────────────────────────────────────────────────────────
 function nextActionText(stageKey: string, quote: Quote): string {
@@ -49,20 +56,114 @@ function nextActionText(stageKey: string, quote: Quote): string {
   }
 }
 
-// ─── Stage Derivation ─────────────────────────────────────────────────────────
-// computedPrev: map of already-derived stage statuses (for dependency checks)
+// ─── Task-Driven Stages ───────────────────────────────────────────────────────
+// These stages have no system signal in Phase 1. Phase 2 task completion drives them.
+const TASK_DRIVEN_STAGE_KEYS = new Set(["procurement", "manufacture", "delivery_install"]);
+
+// ─── Compute Task States for a Stage ─────────────────────────────────────────
+function computeTaskStates(
+  stageDef: LifecycleStageTemplate,
+  storedStates: LifecycleTaskState[],
+  instanceId: string | null,
+  userDisplayMap: Map<string, string>,
+): { tasks: ComputedTaskState[]; requiredTasksComplete: boolean } {
+  const tasks: ComputedTaskState[] = (stageDef.tasks ?? [])
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((taskDef: LifecycleTaskTemplate) => {
+      const stored = storedStates.find(
+        (s) => s.stageKey === stageDef.key && s.taskKey === taskDef.key,
+      );
+      return {
+        key: taskDef.key,
+        label: taskDef.label,
+        description: taskDef.description,
+        required: taskDef.required,
+        ownerRole: taskDef.ownerRole,
+        sortOrder: taskDef.sortOrder,
+        completed: stored?.completed ?? false,
+        completedAt: stored?.completedAt?.toISOString?.() ?? null,
+        completedByUserId: stored?.completedByUserId ?? null,
+        completedByName: stored?.completedByUserId
+          ? (userDisplayMap.get(stored.completedByUserId) ?? null)
+          : null,
+        note: stored?.note ?? null,
+        editable: !!instanceId,
+      };
+    });
+
+  const requiredTasks = tasks.filter((t) => t.required);
+  const requiredTasksComplete =
+    requiredTasks.length === 0 || requiredTasks.every((t) => t.completed);
+
+  return { tasks, requiredTasksComplete };
+}
+
+// ─── Stage Status Derivation ──────────────────────────────────────────────────
 function deriveStageStatus(
   stage: LifecycleStageTemplate,
   quote: Quote,
   invoices: Invoice[],
   opJob: OpJob | null,
   computedPrev: Map<string, StageStatus>,
+  taskState: { tasks: ComputedTaskState[]; requiredTasksComplete: boolean },
+  hasInstance: boolean,
 ): {
   status: StageStatus;
   completedAt: string | null;
   sourceNote: string | null;
   blockedReason: string | null;
 } {
+  const { tasks, requiredTasksComplete } = taskState;
+
+  // Helper: apply task-driven status for stages with no system signal
+  function taskDrivenStatus(): {
+    status: StageStatus;
+    completedAt: string | null;
+    sourceNote: string | null;
+    blockedReason: string | null;
+  } {
+    if (!hasInstance) {
+      return {
+        status: "not_started",
+        completedAt: null,
+        sourceNote: "Manual tracking — available after quote acceptance",
+        blockedReason: null,
+      };
+    }
+    if (tasks.length === 0) {
+      return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
+    }
+    const anyDone = tasks.some((t) => t.completed);
+    if (requiredTasksComplete) {
+      const lastDoneAt = tasks
+        .filter((t) => t.required && t.completedAt)
+        .map((t) => t.completedAt!)
+        .sort()
+        .pop() ?? null;
+      return {
+        status: "complete",
+        completedAt: lastDoneAt,
+        sourceNote: `${tasks.filter((t) => t.completed).length}/${tasks.length} tasks complete`,
+        blockedReason: null,
+      };
+    }
+    if (anyDone) {
+      const remaining = tasks.filter((t) => t.required && !t.completed).length;
+      return {
+        status: "active",
+        completedAt: null,
+        sourceNote: `${remaining} required task${remaining !== 1 ? "s" : ""} remaining`,
+        blockedReason: null,
+      };
+    }
+    return {
+      status: "not_started",
+      completedAt: null,
+      sourceNote: null,
+      blockedReason: null,
+    };
+  }
+
   switch (stage.key) {
     case "estimate": {
       if (quote.sourceJobId) {
@@ -159,7 +260,6 @@ function deriveStageStatus(
     }
 
     case "site_measure": {
-      // Blocked if commercial_setup is still active (deposit invoice not processed)
       const commercialStatus = computedPrev.get("commercial_setup");
       if (commercialStatus === "active" && !opJob) {
         return {
@@ -186,29 +286,15 @@ function deriveStageStatus(
       };
     }
 
+    // ── Task-driven stages ────────────────────────────────────────────────────
     case "procurement":
-      return {
-        status: "not_started",
-        completedAt: null,
-        sourceNote: "No system signal available — manual tracking in a future phase",
-        blockedReason: null,
-      };
+      return taskDrivenStatus();
 
     case "manufacture":
-      return {
-        status: "not_started",
-        completedAt: null,
-        sourceNote: "No system signal available — manual tracking in a future phase",
-        blockedReason: null,
-      };
+      return taskDrivenStatus();
 
     case "delivery_install":
-      return {
-        status: "not_started",
-        completedAt: null,
-        sourceNote: "No system signal available — manual tracking in a future phase",
-        blockedReason: null,
-      };
+      return taskDrivenStatus();
 
     case "invoicing": {
       if (invoices.length === 0) return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
@@ -248,6 +334,20 @@ function deriveStageStatus(
           blockedReason: null,
         };
       }
+      // No opJob but tasks are all done → allow task-driven closeout
+      if (hasInstance && requiredTasksComplete && tasks.length > 0) {
+        const lastDoneAt = tasks
+          .filter((t) => t.required && t.completedAt)
+          .map((t) => t.completedAt!)
+          .sort()
+          .pop() ?? null;
+        return {
+          status: "complete",
+          completedAt: lastDoneAt,
+          sourceNote: "Closed via task checklist",
+          blockedReason: null,
+        };
+      }
       return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
     }
 
@@ -257,37 +357,35 @@ function deriveStageStatus(
 }
 
 // ─── Main Derivation Function ─────────────────────────────────────────────────
-// template: the LifecycleTemplateConfig to derive from.
-//   - Pre-acceptance: caller passes the active template for the division (DB-loaded).
-//   - Post-acceptance: caller passes the template locked to the instance (by instance.templateId).
-// This makes template versioning materially real: if the template changes after acceptance,
-// the locked instance continues to show the original stage structure.
 export function deriveLifecycleState(
   quote: Quote,
   invoices: Invoice[],
   opJob: OpJob | null,
   instance: LifecycleInstance | null,
   template: LifecycleTemplateConfig,
+  taskStates: LifecycleTaskState[] = [],
+  userDisplayMap: Map<string, string> = new Map(),
 ): ComputedLifecycleState {
   const divisionCode = template.divisionCode;
-  const templateVersion = instance?.templateVersion ?? template.stages.length > 0 ? (instance?.templateVersion ?? 1) : 1;
+  const templateVersion = instance?.templateVersion ?? 1;
+  const hasInstance = !!instance;
 
-  // Derive stages in sort order, carrying forward computed statuses for dependency checks
   const sortedStages = [...template.stages].sort((a, b) => a.order - b.order);
   const computedPrev = new Map<string, StageStatus>();
   const stages: ComputedStageState[] = [];
 
   for (const stageDef of sortedStages) {
+    const taskState = computeTaskStates(stageDef, taskStates, instance?.id ?? null, userDisplayMap);
     const { status, completedAt, sourceNote, blockedReason } = deriveStageStatus(
       stageDef,
       quote,
       invoices,
       opJob,
       computedPrev,
+      taskState,
+      hasInstance,
     );
     computedPrev.set(stageDef.key, status);
-
-    const isActive = status === "active";
 
     stages.push({
       key: stageDef.key,
@@ -298,10 +396,13 @@ export function deriveLifecycleState(
       responsibility: stageDef.responsibility,
       description: stageDef.description,
       status,
-      nextAction: isActive ? nextActionText(stageDef.key, quote) : null,
+      nextAction: status === "active" ? nextActionText(stageDef.key, quote) : null,
       blockedReason,
       completedAt,
       sourceNote,
+      tasks: taskState.tasks,
+      requiredTasksComplete: taskState.requiredTasksComplete,
+      taskDriven: TASK_DRIVEN_STAGE_KEYS.has(stageDef.key),
     });
   }
 

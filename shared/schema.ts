@@ -586,3 +586,20 @@ export const lifecycleInstances = pgTable("lifecycle_instances", {
 }));
 
 export type LifecycleInstance = typeof lifecycleInstances.$inferSelect;
+
+// Phase 2: Stores per-task completion state for a lifecycle instance.
+// The template defines which tasks exist; this table records who completed them and when.
+// Upserted on toggle — one row per (instanceId, stageKey, taskKey).
+export const lifecycleTaskStates = pgTable("lifecycle_task_states", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  lifecycleInstanceId: varchar("lifecycle_instance_id").notNull().references(() => lifecycleInstances.id),
+  stageKey: text("stage_key").notNull(),
+  taskKey: text("task_key").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  completedByUserId: varchar("completed_by_user_id"),
+  note: text("note"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type LifecycleTaskState = typeof lifecycleTaskStates.$inferSelect;
