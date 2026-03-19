@@ -3488,9 +3488,6 @@ const DEFAULT_GLAZING_BANDS = [
   { label: "extra_large", maxAreaSqm: 9999, minutesPerPane: 25, description: "Panes over 3.0 m²" },
 ];
 
-// Old threshold values (0.5/1.0/1.5) that were incorrect; map them to corrected values.
-const GLAZING_BAND_THRESHOLD_MIGRATION: Record<number, number> = { 0.5: 1.0, 1.0: 2.0, 1.5: 3.0 };
-
 async function seedGlazingBands() {
   const existing = await storage.getLibraryEntries("glazing_band");
   if (existing.length === 0) {
@@ -3499,19 +3496,15 @@ async function seedGlazingBands() {
     }
     return;
   }
-  // Migrate any existing records that still have the old incorrect thresholds.
-  // Only entries whose maxAreaSqm exactly matches an old seeded value are updated,
-  // preserving any custom bands staff may have configured with other values.
-  for (const band of existing) {
-    const d = band.data as any;
-    const newMax = GLAZING_BAND_THRESHOLD_MIGRATION[d.maxAreaSqm as number];
-    if (newMax !== undefined) {
-      const defaultEntry = DEFAULT_GLAZING_BANDS.find((b) => b.maxAreaSqm === newMax);
-      if (defaultEntry) {
-        await storage.updateLibraryEntry(band.id, {
-          data: { ...d, maxAreaSqm: newMax, description: defaultEntry.description },
-        });
-      }
+  // Correct any bands whose maxAreaSqm doesn't match the expected value for their label.
+  // Matching by label is idempotent — runs safely on every startup without double-migrating.
+  const byLabel = new Map(existing.map((b) => [(b.data as any).label as string, b]));
+  for (const expected of DEFAULT_GLAZING_BANDS) {
+    const match = byLabel.get(expected.label);
+    if (match && (match.data as any).maxAreaSqm !== expected.maxAreaSqm) {
+      await storage.updateLibraryEntry(match.id, {
+        data: { ...(match.data as any), maxAreaSqm: expected.maxAreaSqm, description: expected.description },
+      });
     }
   }
 }
