@@ -41,3 +41,8 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+XERO_REDIRECT_URI = "https://b4cb1825-fb3c-4e7f-9e61-7c35483f4521-00-3u5zveot63cd.janeway.replit.dev/api/xero/callback"

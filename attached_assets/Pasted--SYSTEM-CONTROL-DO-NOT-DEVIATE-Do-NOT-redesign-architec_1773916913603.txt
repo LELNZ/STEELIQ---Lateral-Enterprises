@@ -1,0 +1,114 @@
+🚨 SYSTEM CONTROL — DO NOT DEVIATE
+- Do NOT redesign architecture
+- Do NOT modify existing invoice logic
+- Do NOT remove static token flow (keep as fallback)
+- Only ADD OAuth flow alongside existing system
+- Ask before changing any schema
+
+---------------------------------------
+
+OBJECTIVE:
+Implement full Xero OAuth 2.0 Authorization Code flow with callback handling and token storage.
+
+---------------------------------------
+
+PART 1 — BACKEND ROUTES
+
+Create the following endpoints:
+
+1. GET /api/xero/connect
+- Redirect user to Xero authorization URL
+- Include:
+  - client_id
+  - redirect_uri
+  - response_type=code
+  - scope:
+    offline_access accounting.transactions accounting.contacts
+  - state (random string for security)
+
+2. GET /api/xero/callback
+- Receive:
+  - code
+  - state
+- Exchange code for:
+  - access_token
+  - refresh_token
+  - expires_in
+- Store token set in database (see below)
+- Return success response
+
+---------------------------------------
+
+PART 2 — DATABASE (MINIMAL)
+
+Create table:
+
+xero_connections
+- id
+- tenantId (nullable for now)
+- accessToken
+- refreshToken
+- expiresAt (timestamp)
+- createdAt
+- updatedAt
+
+DO NOT modify existing invoice tables
+
+---------------------------------------
+
+PART 3 — TOKEN MANAGEMENT
+
+Implement helper:
+
+getValidXeroToken()
+- If expired → refresh using refresh_token
+- Store new tokens
+- Return valid access_token
+
+---------------------------------------
+
+PART 4 — INTEGRATION
+
+Update:
+POST /api/invoices/:id/push-to-xero
+
+- Replace env token usage with:
+  getValidXeroToken()
+
+---------------------------------------
+
+PART 5 — ENV VARIABLES
+
+Add:
+- XERO_CLIENT_ID
+- XERO_CLIENT_SECRET
+- XERO_REDIRECT_URI
+
+---------------------------------------
+
+PART 6 — FRONTEND (MINIMAL)
+
+Add button in admin/settings page:
+
+"Connect to Xero"
+
+- Calls:
+  /api/xero/connect
+
+---------------------------------------
+
+PART 7 — SAFETY
+
+- Do NOT expose tokens to frontend
+- Do NOT log tokens
+- Handle errors gracefully
+
+---------------------------------------
+
+DEFINITION OF DONE:
+
+- Clicking "Connect to Xero" opens Xero login
+- After login → returns to /callback
+- Tokens stored in DB
+- Invoice push works using stored tokens
+- Token refresh works automatically

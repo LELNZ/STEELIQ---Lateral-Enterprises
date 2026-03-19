@@ -181,6 +181,58 @@ export async function tryRefreshXeroToken(): Promise<string> {
   return newAccessToken;
 }
 
+/**
+ * Refreshes a Xero access token using explicit credentials (not env vars).
+ * Used by the DB-backed OAuth path where tokens are stored in xero_connections.
+ * Returns the new access token, refresh token, and expiry seconds.
+ */
+export async function refreshXeroTokenWithCredentials(
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string
+): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+
+  let response: Response;
+  try {
+    response = await fetch(XERO_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    });
+  } catch (networkErr: any) {
+    throw new Error(`Network error reaching Xero token endpoint: ${networkErr.message}`);
+  }
+
+  let body: any;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error(`Xero token endpoint returned HTTP ${response.status} with an unparseable response.`);
+  }
+
+  if (!response.ok) {
+    const detail = body?.error_description ?? body?.error ?? JSON.stringify(body).slice(0, 200);
+    throw new Error(`Xero token refresh failed (HTTP ${response.status}): ${detail}`);
+  }
+
+  const newAccessToken: string = body.access_token;
+  const newRefreshToken: string = body.refresh_token ?? refreshToken;
+  const expiresIn: number = body.expires_in ?? 1800;
+
+  if (!newAccessToken) {
+    throw new Error("Xero token refresh succeeded but response contained no access_token.");
+  }
+
+  return { accessToken: newAccessToken, refreshToken: newRefreshToken, expiresIn };
+}
+
 // ── Payload mapping ──────────────────────────────────────────────────────────
 
 export type XeroInvoicePayload = {

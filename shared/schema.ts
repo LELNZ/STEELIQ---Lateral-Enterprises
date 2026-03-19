@@ -605,3 +605,21 @@ export const lifecycleTaskStates = pgTable("lifecycle_task_states", {
 }));
 
 export type LifecycleTaskState = typeof lifecycleTaskStates.$inferSelect;
+
+// ─── Xero OAuth Connections ──────────────────────────────────────────────────
+
+// Stores OAuth 2.0 token set obtained via the Xero Authorization Code flow.
+// Only one active connection is expected (single-org). The table uses a fixed
+// "singleton" row keyed by id="default" to allow simple upsert semantics.
+// Tokens are NEVER exposed to the browser — all reads are server-side only.
+export const xeroConnections = pgTable("xero_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: text("tenant_id"),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type XeroConnection = typeof xeroConnections.$inferSelect;
