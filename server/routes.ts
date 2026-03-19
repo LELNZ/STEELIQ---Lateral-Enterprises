@@ -489,18 +489,16 @@ export async function registerRoutes(
       const bodySchema = z.object({ items: z.array(jobItemBodySchema) });
       const { items } = bodySchema.parse(req.body);
       await storage.deleteJobItems(jobId);
-      const created: any[] = [];
-      for (let i = 0; i < items.length; i++) {
-        const p = items[i];
-        const item = await storage.addJobItem({
+      // Insert all items in parallel instead of sequentially
+      const created = await Promise.all(
+        items.map((p, i) => storage.addJobItem({
           jobId,
           config: p.config,
           photo: p.photo || null,
           photos: normalizePhotoPrimary(p.photos) || null,
           sortOrder: i,
-        });
-        created.push(item);
-      }
+        }))
+      );
       res.json({ ok: true, count: created.length });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -2910,11 +2908,12 @@ export async function registerRoutes(
       }
 
       const divisionCode = quote.divisionId ?? "LJ";
-      const invoices = await storage.getInvoicesByQuote(quote.id);
-      const opJob = await storage.getOpJobByQuoteId(quote.id) ?? null;
-      const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
+      const [invoices, opJob, instance] = await Promise.all([
+        storage.getInvoicesByQuote(quote.id),
+        storage.getOpJobByQuoteId(quote.id).then((j) => j ?? null),
+        storage.getLifecycleInstanceForQuote(quote.id).then((i) => i ?? null),
+      ]);
 
-      // Load template: use the locked instance templateId post-acceptance, otherwise active template
       const templateRecord = instance
         ? await storage.getLifecycleTemplateById(instance.templateId)
         : await storage.getActiveLifecycleTemplate(divisionCode);
@@ -2923,8 +2922,10 @@ export async function registerRoutes(
         return res.status(404).json({ error: "No lifecycle template available for this division" });
       }
 
+      const taskStates = instance ? await storage.getLifecycleTaskStates(instance.id) : [];
+      const userDisplayMap = await buildUserDisplayMap(taskStates);
       const templateConfig = templateRecord.templateJson as import("@shared/lifecycle").LifecycleTemplateConfig;
-      const lifecycle = deriveLifecycleState(quote, invoices, opJob, instance, templateConfig);
+      const lifecycle = deriveLifecycleState(quote, invoices, opJob, instance, templateConfig, taskStates, userDisplayMap);
       return res.json(lifecycle);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2932,7 +2933,6 @@ export async function registerRoutes(
   });
 
   // GET /api/op-jobs/:id/lifecycle — derive lifecycle state from job context
-  // Uses the same DB-driven template resolution as the quote lifecycle route.
   app.get("/api/op-jobs/:id/lifecycle", async (req, res) => {
     try {
       const job = await storage.getOpJob(req.params.id);
@@ -2952,10 +2952,11 @@ export async function registerRoutes(
       if (!quote) return res.status(404).json({ error: "Source quote not found" });
 
       const divisionCode = quote.divisionId ?? "LJ";
-      const invoices = await storage.getInvoicesByQuote(quote.id);
-      const instance = await storage.getLifecycleInstanceForQuote(quote.id) ?? null;
+      const [invoices, instance] = await Promise.all([
+        storage.getInvoicesByQuote(quote.id),
+        storage.getLifecycleInstanceForQuote(quote.id).then((i) => i ?? null),
+      ]);
 
-      // Load template: use the locked instance templateId post-acceptance, otherwise active template
       const templateRecord = instance
         ? await storage.getLifecycleTemplateById(instance.templateId)
         : await storage.getActiveLifecycleTemplate(divisionCode);
@@ -2964,15 +2965,59 @@ export async function registerRoutes(
         return res.status(404).json({ error: "No lifecycle template available for this division" });
       }
 
+      const taskStates = instance ? await storage.getLifecycleTaskStates(instance.id) : [];
+      const userDisplayMap = await buildUserDisplayMap(taskStates);
       const templateConfig = templateRecord.templateJson as import("@shared/lifecycle").LifecycleTemplateConfig;
-      const lifecycle = deriveLifecycleState(quote, invoices, job, instance, templateConfig);
+      const lifecycle = deriveLifecycleState(quote, invoices, job, instance, templateConfig, taskStates, userDisplayMap);
       return res.json(lifecycle);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
   });
 
+  // PATCH /api/lifecycle-instances/:instanceId/tasks
+  // Toggle a task's completion state. Requires an active lifecycle instance.
+  // Body: { stageKey: string; taskKey: string; completed: boolean; note?: string }
+  app.patch("/api/lifecycle-instances/:instanceId/tasks", requireAuth, async (req, res) => {
+    try {
+      const { instanceId } = req.params;
+      const { stageKey, taskKey, completed, note } = req.body;
+      if (!stageKey || !taskKey || typeof completed !== "boolean") {
+        return res.status(400).json({ error: "stageKey, taskKey, and completed are required" });
+      }
+
+      const userId = (req as any).user?.id ?? null;
+      const taskState = await storage.upsertLifecycleTaskState({
+        lifecycleInstanceId: instanceId,
+        stageKey,
+        taskKey,
+        completed,
+        completedAt: completed ? new Date() : null,
+        completedByUserId: completed ? userId : null,
+        note: note ?? null,
+      });
+      return res.json(taskState);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   return httpServer;
+}
+
+// ─── Helper: build userId → displayName map for task attribution ──────────────
+async function buildUserDisplayMap(taskStates: import("@shared/schema").LifecycleTaskState[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const userIds = [...new Set(taskStates.map((t) => t.completedByUserId).filter(Boolean))] as string[];
+  if (userIds.length === 0) return map;
+  const { storage } = await import("./storage");
+  await Promise.all(
+    userIds.map(async (uid) => {
+      const u = await storage.getUser(uid);
+      if (u) map.set(uid, u.displayName || u.username);
+    }),
+  );
+  return map;
 }
 
 const DEFAULT_LABOR_TASKS = ["cutting", "milling", "drilling", "assembly-crimped", "assembly-screwed", "glazing"];

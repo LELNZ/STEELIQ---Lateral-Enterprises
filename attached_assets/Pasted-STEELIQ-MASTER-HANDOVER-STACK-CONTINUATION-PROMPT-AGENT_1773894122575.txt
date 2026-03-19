@@ -1,0 +1,346 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT SYSTEM STATE
+==================================================
+
+Delivered foundations now include:
+- customer quote display controls
+- details box + quick edit
+- Site Costs library grouping
+- phase 9 estimate/quote workflow fixes
+- lifecycle foundation tightening
+- stacker door SLD hardening
+- frame type persistence fix
+- French / override / removal / rubbish features are present and operational
+
+The next priority is:
+LIFECYCLE PHASE 2 — OPERATIONAL CHECKLIST / TASK PROGRESSION
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Build the first operationally usable lifecycle task/checklist layer on top of the lifecycle foundation.
+
+This phase should allow staff to see and complete stage tasks/checkpoints in a controlled, auditable way.
+
+Do NOT build a full workflow engine.
+Do NOT build an approvals engine.
+Do NOT build notifications.
+Do NOT redesign lifecycle architecture.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Template-defined lifecycle stage tasks/checkpoints
+2. Lifecycle-instance task state storage
+3. Operational UI for viewing/completing tasks on quote/job lifecycle panel
+4. Truthful stage progression based on task completion where configured
+5. Lightweight auditability for task completion
+
+Do NOT broaden scope.
+
+==================================================
+DELIVERABLE 1 — TEMPLATE-DEFINED TASKS
+==================================================
+
+Add support for stage-level task/checkpoint definitions in lifecycle template data.
+
+Requirements:
+- tasks belong to a lifecycle stage
+- tasks are template-defined, not ad hoc per quote for this phase
+- tasks can include at minimum:
+  - key/id
+  - label
+  - optional description/help text
+  - owner role / responsibility type if useful within current model
+  - required boolean
+  - sort order
+
+Important:
+- keep LJ as the only live active template if that is still current
+- but implement in the template structure, not as hardcoded task arrays in UI code
+
+==================================================
+DELIVERABLE 2 — LIFECYCLE-INSTANCE TASK STATE
+==================================================
+
+Implement lifecycle-instance task completion state.
+
+Requirements:
+- task state belongs to a lifecycle instance, not the global template
+- store at minimum:
+  - lifecycleInstanceId
+  - stageKey
+  - taskKey
+  - completed boolean
+  - completedAt
+  - completedBy if current user context allows
+  - optional note/comment if lightweight and safe
+- do not mutate template definitions when completing tasks
+- preserve auditability
+
+You may choose either:
+- a dedicated lifecycle task state table
+or
+- another safe persistent model
+But it must be truthful, durable, and auditable.
+
+==================================================
+DELIVERABLE 3 — OPERATIONAL UI
+==================================================
+
+Implement minimum practical UI on the existing lifecycle surfaces.
+
+Requirements:
+- quote detail lifecycle panel can expand stage tasks
+- op-job detail lifecycle panel can expand stage tasks
+- staff can mark/unmark tasks complete where allowed
+- task owner/responsibility is visible if defined
+- required tasks are visually distinguishable
+- keep UI operationally simple
+
+Do NOT redesign the whole page.
+Extend the current lifecycle panel incrementally.
+
+==================================================
+DELIVERABLE 4 — STAGE PROGRESSION
+==================================================
+
+Stage progression should become partly task-driven where configured.
+
+Requirements:
+- if a stage has required tasks, stage completion should only occur when its required tasks are complete
+- if no tasks are configured for a stage, preserve current signal-based derivation
+- do not fake completion
+- do not break existing lifecycle signals already in place
+
+Important:
+- combine safely with current derived signals
+- do not let editable tasks rewrite frozen commercial history
+- use tasks for operational progression, not for mutating quote acceptance/invoice history
+
+==================================================
+DELIVERABLE 5 — LIGHTWEIGHT AUDITABILITY
+==================================================
+
+Requirements:
+- task completion changes must be traceable
+- at minimum retain who/when if current system supports user attribution
+- if user attribution is not available in this context, retain timestamp and report limitation honestly
+- do not add a heavy audit subsystem if existing patterns already exist
+
+==================================================
+WORKFLOW-FOCUSED UI RULES
+==================================================
+
+This phase is for day-to-day operational usability, not just technical completion.
+
+Design the lifecycle task UI so staff can quickly answer:
+- what stage is this in
+- what is done
+- what is still required
+- who owns the next tasks
+- what is blocked
+
+Keep the visible task presentation compact and workflow-specific.
+Do not create a huge cluttered UI.
+
+Preferred display pattern:
+- stage header stays compact
+- expanding a stage reveals a concise checklist
+- each task row shows:
+  - task label
+  - required marker if applicable
+  - owner/responsibility if defined
+  - completion state
+  - small timestamp / attribution if available
+- blocked state remains prominent at the stage level
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted lifecycle template schema expansion
+- targeted lifecycle instance task state persistence
+- targeted lifecycle panel UI extension
+- targeted stage derivation updates
+- minimal API additions if strictly required
+
+Not allowed:
+- approvals workflow
+- notifications
+- template admin builder
+- permissions redesign
+- dashboard redesign
+- speculative automation engine
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current lifecycle codebase as source of truth
+2. Identify exact files involved
+3. State how template tasks will be represented
+4. State how lifecycle-instance task state will be stored
+5. State how task completion will influence stage completion safely
+6. State any user attribution limitation
+7. Then implement
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- quote detail lifecycle still loads
+- op-job lifecycle still loads
+- accepted quote flow still works
+- convert-to-job flow still works
+- invoice flows still work
+- pre-acceptance lifecycle preview still works
+- locked template/version behaviour still works
+- existing blocked-state derivation still works
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+
+Lifecycle task checks:
+- template-defined tasks render under stages
+- tasks can be completed and uncompleted safely
+- required tasks affect stage completion truthfully
+- task state persists after reload
+- quote and linked job see the same lifecycle task state where appropriate
+- audit fields persist if available
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact lifecycle phase 2 design chosen
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- lifecycle tasks are template-defined
+- lifecycle task state persists per lifecycle instance
+- quote/job lifecycle panels are operationally usable for task completion
+- stage completion is truthfully task-driven where configured
+- auditability is preserved
+- no architecture drift occurred

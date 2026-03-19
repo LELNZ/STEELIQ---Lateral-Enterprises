@@ -20,14 +20,14 @@ import {
   type Project, type InsertProject,
   type Invoice, type InsertInvoice,
   type OpJob, type InsertOpJob,
-  type LifecycleTemplate, type LifecycleInstance,
+  type LifecycleTemplate, type LifecycleInstance, type LifecycleTaskState,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
   orgSettings, divisionSettings, specDictionary,
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, opJobs,
-  lifecycleTemplates, lifecycleInstances,
+  lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -186,6 +186,18 @@ export interface IStorage {
     templateVersion: number;
   }): Promise<LifecycleInstance>;
   updateLifecycleInstanceJob(quoteId: string, opJobId: string): Promise<void>;
+
+  // ── Lifecycle Task State ───────────────────────────────────────────────────
+  getLifecycleTaskStates(lifecycleInstanceId: string): Promise<LifecycleTaskState[]>;
+  upsertLifecycleTaskState(data: {
+    lifecycleInstanceId: string;
+    stageKey: string;
+    taskKey: string;
+    completed: boolean;
+    completedAt: Date | null;
+    completedByUserId: string | null;
+    note: string | null;
+  }): Promise<LifecycleTaskState>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -940,6 +952,66 @@ export class DatabaseStorage implements IStorage {
       .update(lifecycleInstances)
       .set({ opJobId })
       .where(eq(lifecycleInstances.quoteId, quoteId));
+  }
+
+  async getLifecycleTaskStates(lifecycleInstanceId: string): Promise<LifecycleTaskState[]> {
+    return db
+      .select()
+      .from(lifecycleTaskStates)
+      .where(eq(lifecycleTaskStates.lifecycleInstanceId, lifecycleInstanceId))
+      .orderBy(asc(lifecycleTaskStates.stageKey), asc(lifecycleTaskStates.taskKey));
+  }
+
+  async upsertLifecycleTaskState(data: {
+    lifecycleInstanceId: string;
+    stageKey: string;
+    taskKey: string;
+    completed: boolean;
+    completedAt: Date | null;
+    completedByUserId: string | null;
+    note: string | null;
+  }): Promise<LifecycleTaskState> {
+    const existing = await db
+      .select()
+      .from(lifecycleTaskStates)
+      .where(
+        and(
+          eq(lifecycleTaskStates.lifecycleInstanceId, data.lifecycleInstanceId),
+          eq(lifecycleTaskStates.stageKey, data.stageKey),
+          eq(lifecycleTaskStates.taskKey, data.taskKey),
+        ),
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(lifecycleTaskStates)
+        .set({
+          completed: data.completed,
+          completedAt: data.completedAt,
+          completedByUserId: data.completedByUserId,
+          note: data.note,
+          updatedAt: new Date(),
+        })
+        .where(eq(lifecycleTaskStates.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+
+    const [created] = await db
+      .insert(lifecycleTaskStates)
+      .values({
+        lifecycleInstanceId: data.lifecycleInstanceId,
+        stageKey: data.stageKey,
+        taskKey: data.taskKey,
+        completed: data.completed,
+        completedAt: data.completedAt,
+        completedByUserId: data.completedByUserId,
+        note: data.note,
+        updatedAt: new Date(),
+      })
+      .returning();
+    return created;
   }
 }
 

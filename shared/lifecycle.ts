@@ -1,11 +1,10 @@
 // ─── SteelIQ Global Lifecycle Framework ─────────────────────────────────────
 // Phase 1 — Foundation types shared between server and client.
+// Phase 2 — Adds template-defined stage tasks and per-instance task state.
 // This is the single shared type surface for the global lifecycle engine.
 // Division-specific templates are layered on top of this structure.
 
 // ─── Master Stage Keys ───────────────────────────────────────────────────────
-// The canonical shared manufacturing master workflow.
-// Division templates map their stage keys to one of these master keys.
 export const MASTER_STAGE_KEYS = [
   "ESTIMATE",
   "QUOTE",
@@ -41,17 +40,30 @@ export type OwnerRole =
   | "project_manager"
   | "viewer";
 
+// ─── Phase 2: Task Template Types ────────────────────────────────────────────
+// Tasks are template-defined operational checkpoints within a stage.
+// Task definitions belong to the template; task COMPLETION STATE belongs to
+// the lifecycle instance (stored in lifecycleTaskStates table).
+export interface LifecycleTaskTemplate {
+  key: string;           // stable identifier within the stage (e.g. "order_frames")
+  label: string;         // display label
+  description?: string;  // optional help text shown on hover/expand
+  required: boolean;     // required tasks gate stage completion for no-signal stages
+  ownerRole?: OwnerRole; // override stage-level owner if different
+  sortOrder: number;
+}
+
 // ─── Template-Level Types ─────────────────────────────────────────────────────
 // Stored in the DB as lifecycleTemplates.templateJson.
-// Phase 1: tasks within a stage are not modelled (Phase 2+).
 export interface LifecycleStageTemplate {
   key: string;            // division-specific stage key (e.g. "site_measure")
   label: string;          // display label shown in UI
-  masterKey: MasterStageKey;  // maps to shared master workflow
-  order: number;          // sort order within template
+  masterKey: MasterStageKey;
+  order: number;
   ownerRole: OwnerRole;
   responsibility: ResponsibilityType;
-  description: string;    // what this stage covers
+  description: string;
+  tasks?: LifecycleTaskTemplate[];  // Phase 2: optional checklist items for this stage
 }
 
 export interface LifecycleTemplateConfig {
@@ -60,9 +72,26 @@ export interface LifecycleTemplateConfig {
   stages: LifecycleStageTemplate[];
 }
 
+// ─── Phase 2: Computed Task State ────────────────────────────────────────────
+// Merged from template definition + stored completion state (if instance exists).
+export interface ComputedTaskState {
+  key: string;
+  label: string;
+  description?: string;
+  required: boolean;
+  ownerRole?: OwnerRole;
+  sortOrder: number;
+  completed: boolean;
+  completedAt: string | null;       // ISO8601
+  completedByUserId: string | null;
+  completedByName: string | null;   // display name if available
+  note: string | null;
+  editable: boolean;                // false when no lifecycle instance exists (pre-acceptance)
+}
+
 // ─── Computed / Derived Types (returned by API) ───────────────────────────────
-// These are computed at request time from existing system signals.
-// They are NEVER stored — only the template assignment (lifecycleInstance) is stored.
+// Computed at request time from existing system signals + task state.
+// NEVER stored — only the template assignment (lifecycleInstance) is stored.
 export interface ComputedStageState {
   key: string;
   label: string;
@@ -74,17 +103,20 @@ export interface ComputedStageState {
   status: StageStatus;
   nextAction: string | null;
   blockedReason: string | null;
-  completedAt: string | null;   // ISO8601 if known from existing system signal
-  sourceNote: string | null;    // what system signal drove this state (for transparency)
+  completedAt: string | null;
+  sourceNote: string | null;
+  tasks: ComputedTaskState[];           // Phase 2: empty array if stage has no tasks
+  requiredTasksComplete: boolean;       // Phase 2: true when all required tasks are done
+  taskDriven: boolean;                  // Phase 2: true for stages with no system signal
 }
 
 export interface ComputedLifecycleState {
-  templateKey: string;       // divisionCode + version identifier
+  templateKey: string;
   templateVersion: number;
   divisionCode: string;
   currentStageKey: string | null;
   stages: ComputedStageState[];
   overallStatus: "active" | "complete" | "blocked" | "not_started";
-  instanceId: string | null;   // null before quote acceptance (template not yet assigned)
-  assignedAt: string | null;   // when template version was locked to this quote
+  instanceId: string | null;
+  assignedAt: string | null;
 }
