@@ -1,0 +1,335 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT SYSTEM STATE
+==================================================
+
+Manufacturing labour V1 is now in place:
+- setup + driver model implemented
+- glazing bands configurable
+- internal labour breakdown visible in Quote Builder
+- lifecycle task-state uniqueness hardened
+
+However, the labour model is not yet fully production-tight.
+
+Known remaining issues from the latest handover:
+1. Glue is not automatically applied — it only prices if a configuration explicitly includes a glue labour row
+2. Dead legacy CNC labour entries still exist and may confuse staff
+3. Slotting is still a fixed approximation, not truly derived where possible
+4. The new labour model needs calibration against real jobs
+
+This phase is a labour hardening / calibration pass only.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Tighten the new manufacturing labour model so it is more production-ready and less dependent on manual configuration gaps.
+
+This phase should:
+- make glue pricing automatic where it should apply
+- clean up confusing legacy labour rows
+- improve slotting truthfulness if possible
+- support real-world calibration/testing
+
+Do NOT redesign the estimating architecture.
+Do NOT build batch optimization.
+Do NOT broaden into production scheduling.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Automatic glue labour application
+2. Legacy CNC labour cleanup / deprecation
+3. Slotting derivation review and improvement if truthful
+4. Calibration support for real-job comparison
+
+Do NOT broaden scope.
+
+==================================================
+DELIVERABLE 1 — AUTOMATIC GLUE LABOUR
+==================================================
+
+Current problem:
+- glue only prices if each configuration explicitly includes a "glue" labour row
+- this is not safe enough because relevant items may still miss glue pricing
+
+Approved business rule:
+- all outer frame corners require glue
+- all mullion/transom joints require glue
+
+Required result:
+- glue labour must be automatically included where relevant based on item geometry/process rules
+- do NOT rely on staff remembering to add a glue labour row to each configuration
+- preserve internal transparency in the labour breakdown
+
+Implementation direction:
+- if glue should become a geometry-derived labour operation rather than a configuration-listed operation, do that safely
+- avoid double counting if some configurations already include glue rows
+- if migration/cleanup of existing configuration labour rows is needed, handle safely and report clearly
+
+==================================================
+DELIVERABLE 2 — LEGACY CNC LABOUR CLEANUP
+==================================================
+
+Current problem:
+- legacy CNC labour rows such as cnc-drilling / cnc-milling / cnc-routing still exist with flat/zero behaviour
+- they are confusing and no longer reflect the intended model
+
+Required result:
+- clean up or clearly deprecate dead legacy CNC labour rows
+- staff should not see misleading duplicate/obsolete operation choices
+
+Allowed approaches:
+- archive/deactivate/hide obsolete rows
+- migrate them safely to the new model where appropriate
+- keep backward compatibility for historical records
+
+Do NOT destroy historical meaning.
+If a row is obsolete for future estimating but needed for old records, preserve compatibility and hide/deprecate it safely.
+
+==================================================
+DELIVERABLE 3 — SLOTTING REVIEW / IMPROVEMENT
+==================================================
+
+Current problem:
+- slotting is still a fixed approximation (minimum 2)
+- this may undercount more complex items
+
+Required task:
+- inspect whether slot count can already be derived truthfully from current item/configuration data
+- if it can, implement a truthful derived slot count
+- if it cannot, keep the current approximation but make the limitation explicit and operationally understandable
+
+Important:
+- do NOT invent fake geometry
+- only improve slotting if the current data really supports it
+
+Required result:
+- either:
+  a) slotting becomes more truthful from actual config data
+  or
+  b) the current approximation remains, but the system is clearer and safer about that limitation
+
+==================================================
+DELIVERABLE 4 — CALIBRATION SUPPORT
+==================================================
+
+Current need:
+- the labour model now needs comparison against real jobs for tuning
+
+Required result:
+Provide practical support for calibration, such as:
+- clearer labour breakdown visibility
+- consistent minutes/cost output per labour line
+- enough internal transparency that staff can compare quote labour against actual fabrication reality
+
+If practical in this phase, add a lightweight internal total such as:
+- total labour minutes
+- total labour cost
+without cluttering the UI
+
+Do NOT build full back-costing in this phase.
+This is only to make calibration/testing easier.
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted pricing logic changes
+- targeted labour library/admin UI cleanup
+- targeted configuration labour migration/cleanup if strictly required
+- targeted quote builder internal cost transparency improvements
+
+Not allowed:
+- batch optimization engine
+- production scheduling
+- back-costing system
+- UI/UX table modernization
+- lifecycle redesign
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Identify exact files involved
+3. State exactly how glue is currently applied and why that is insufficient
+4. State exactly how legacy CNC rows will be cleaned up/deprecated safely
+5. State whether slotting can be derived truthfully from current data
+6. State what calibration support you will add
+7. Then implement
+
+If a specific improvement cannot be implemented truthfully from current data, do not fake it. Report it clearly.
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- lifecycle task-state uniqueness remains intact
+- quote builder still saves/updates correctly
+- pricing still calculates correctly overall
+- manual override still works
+- removal/rubbish/site-cost logic still works
+- frame type persistence still works
+- stacker/french/sliding/hinge items still work
+- preview/PDF still work through current pipeline
+- customer-facing quote still does not expose internal labour detail
+
+Labour-specific checks:
+- glue appears automatically where relevant
+- no glue double counting
+- dead legacy CNC rows no longer confuse the library/admin surface
+- slotting is improved if truthfully derivable, or limitation is clearly preserved
+- labour breakdown remains visible and usable for calibration
+- total labour remains believable on simple vs complex items
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact remaining labour issues found
+4. Exact hardening/calibration design implemented
+5. Behaviour changes
+6. Schema/API changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- glue is automatically and truthfully applied where relevant
+- obsolete legacy CNC labour rows are cleaned up or safely deprecated
+- slotting is improved if possible, otherwise limitation is clearly preserved
+- calibration support is materially better
+- no architecture drift occurred
+
+Use the same sqm band thresholds already used in Installation Labour Rates for the glazing time bands rate library:
+
+- Small: 0–1 m²
+- Medium: 1–2 m²
+- Large: 2–3 m²
+- Extra Large: 3 m²+
+
+Apply glazing times:
+- Small = 10 min
+- Medium = 15 min
+- Large = 20 min
+- Extra Large = 25 min
+
+This should become the default/library glazing band structure so glazing and installation use the same size thresholds.

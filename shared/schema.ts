@@ -600,6 +600,8 @@ export const lifecycleTaskStates = pgTable("lifecycle_task_states", {
   completedByUserId: varchar("completed_by_user_id"),
   note: text("note"),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (t) => ({
+  uniqueTaskState: uniqueIndex("uq_lifecycle_task_state").on(t.lifecycleInstanceId, t.stageKey, t.taskKey),
+}));
 
 export type LifecycleTaskState = typeof lifecycleTaskStates.$inferSelect;

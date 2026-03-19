@@ -2588,6 +2588,20 @@ function DirectAccessoryDialog({ entry, divisionCode, onClose }: { entry: Librar
   );
 }
 
+const DRIVER_TYPE_OPTIONS = [
+  { value: "per_item",           label: "Per Item (flat)" },
+  { value: "per_cut_cycle",      label: "Per Cut Cycle (CNC: 1 cycle = 1 member)" },
+  { value: "per_hole",           label: "Per Hole (outer frame: 16 holes)" },
+  { value: "per_slot",           label: "Per Slot (min 2 slots)" },
+  { value: "per_end",            label: "Per Mullion/Transom End" },
+  { value: "per_screw",          label: "Per Screw (16 frame + 2 per mullion/transom end)" },
+  { value: "per_corner",         label: "Per Outer Corner (4 corners)" },
+  { value: "per_joint",          label: "Per Mullion/Transom Joint" },
+  { value: "per_glue_point",     label: "Per Glue Point (4 corners + mullion/transom ends)" },
+  { value: "per_pane",           label: "Per Pane (flat rate per pane)" },
+  { value: "per_pane_area_band", label: "Per Pane — Area Band (uses Glazing Bands table)" },
+];
+
 function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | null }) {
   const { toast } = useToast();
   const { data: operations = [], isLoading } = useLibraryEntries("labour_operation", divisionCode);
@@ -2618,6 +2632,11 @@ function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | 
         </Button>
       </div>
 
+      <div className="text-xs text-muted-foreground bg-muted/40 rounded px-3 py-2 border">
+        Each operation uses a <strong>setup + driver</strong> model: <em>Total time = Setup minutes + (Driver quantity × Minutes per driver)</em>.
+        Driver quantity is derived automatically from item geometry (member count, pane count, etc.).
+      </div>
+
       <LabourCategoryGroup title="Manual Processes" operations={manual} onEdit={setEditOp} onDelete={setDeleteId} />
       <LabourCategoryGroup title="CNC Processes" operations={cnc} onEdit={setEditOp} onDelete={setDeleteId} />
 
@@ -2625,6 +2644,8 @@ function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | 
         <LabourOperationDialog entry={editOp} divisionCode={divisionCode} onClose={() => { setEditOp(null); setAdding(false); }} />
       )}
       <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
+
+      <GlazingBandSection divisionCode={divisionCode} />
     </div>
   );
 }
@@ -2655,9 +2676,10 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
               <TableHeader>
                 <TableRow>
                   <TableHead>Operation</TableHead>
-                  <TableHead>Time (min)</TableHead>
+                  <TableHead>Setup (min)</TableHead>
+                  <TableHead>Driver Type</TableHead>
+                  <TableHead>Min/Driver</TableHead>
                   <TableHead>Rate ($/hr)</TableHead>
-                  <TableHead>Cost/Unit ($)</TableHead>
                   <TableHead>Scope</TableHead>
                   <TableHead className="w-20"></TableHead>
                 </TableRow>
@@ -2665,13 +2687,20 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
               <TableBody>
                 {operations.map((o) => {
                   const d = o.data as any;
-                  const cost = ((parseFloat(d.timeMinutes) || 0) / 60) * (parseFloat(d.ratePerHour) || 0);
+                  const isLegacy = !d.driverType;
+                  const driverLabel = DRIVER_TYPE_OPTIONS.find((x) => x.value === d.driverType)?.label ?? d.driverType ?? "—";
                   return (
                     <TableRow key={o.id} data-testid={`row-labour-${o.id}`}>
-                      <TableCell className="font-medium">{d.name}</TableCell>
-                      <TableCell>{d.timeMinutes}</TableCell>
+                      <TableCell className="font-medium">
+                        {d.name}
+                        {isLegacy && <Badge variant="outline" className="ml-2 text-[10px]">legacy</Badge>}
+                      </TableCell>
+                      <TableCell>{isLegacy ? d.timeMinutes : (d.setupMinutes ?? 0)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate" title={driverLabel}>
+                        {isLegacy ? "flat" : driverLabel}
+                      </TableCell>
+                      <TableCell>{isLegacy ? "—" : d.minutesPerDriver}</TableCell>
                       <TableCell>${d.ratePerHour}</TableCell>
-                      <TableCell className="font-semibold">${cost.toFixed(2)}</TableCell>
                       <TableCell><ScopeBadge entry={o} /></TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -2687,7 +2716,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
                   );
                 })}
                 {operations.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-4">No operations</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No operations</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -2703,21 +2732,26 @@ function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: Librar
   const isEdit = !!entry;
   const d = entry ? (entry.data as any) : {};
   const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
+  const isLegacy = isEdit && !d.driverType;
   const [values, setValues] = useState({
     name: d.name || "",
     category: d.category || "manual",
-    timeMinutes: d.timeMinutes || 15,
+    setupMinutes: d.setupMinutes ?? (isLegacy ? (d.timeMinutes ?? 0) : 0),
+    driverType: d.driverType || "per_item",
+    minutesPerDriver: d.minutesPerDriver ?? (isLegacy ? 0 : 1),
     ratePerHour: d.ratePerHour || 45,
     description: d.description || "",
+    isActive: d.isActive !== false,
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const ds = scopeValue === "__shared__" ? null : scopeValue;
+      const payload = { ...values };
       if (isEdit) {
-        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: ds });
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: payload, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type: "labour_operation", data: values, sortOrder: 0, divisionScope: ds });
+        await apiRequest("POST", "/api/library", { type: "labour_operation", data: payload, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
@@ -2727,14 +2761,25 @@ function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: Librar
     },
   });
 
-  const cost = ((values.timeMinutes || 0) / 60) * (values.ratePerHour || 0);
+  const exampleMemberCount = 5;
+  const exampleDriverQty: Record<string, number> = {
+    per_item: 1, per_cut_cycle: exampleMemberCount, per_hole: 16, per_slot: 2,
+    per_end: 2, per_screw: 20, per_corner: 4, per_joint: 2,
+    per_glue_point: 6, per_pane: 2, per_pane_area_band: 2,
+  };
+  const qty = exampleDriverQty[values.driverType] ?? 1;
+  const exampleMins = (values.setupMinutes || 0) + qty * (values.minutesPerDriver || 0);
+  const exampleCost = (exampleMins / 60) * (values.ratePerHour || 0);
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent data-testid="dialog-labour-operation">
+      <DialogContent className="max-w-lg" data-testid="dialog-labour-operation">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Operation" : "Add Operation"}</DialogTitle>
-          <DialogDescription>Set time and rate for this manufacturing operation.</DialogDescription>
+          <DialogDescription>
+            Total time per item = Setup minutes + (Driver quantity × Minutes per driver).
+            Driver quantity is derived automatically from item geometry.
+          </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -2752,15 +2797,35 @@ function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: Librar
             </Select>
           </div>
           <div>
-            <Label>Time (minutes)</Label>
-            <Input type="number" value={values.timeMinutes} onChange={(e) => setValues({ ...values, timeMinutes: parseFloat(e.target.value) || 0 })} data-testid="input-labour-time" />
+            <Label>Setup Minutes</Label>
+            <Input type="number" min={0} step={0.5} value={values.setupMinutes} onChange={(e) => setValues({ ...values, setupMinutes: parseFloat(e.target.value) || 0 })} data-testid="input-labour-setup" />
           </div>
           <div>
             <Label>Rate ($/hr NZD)</Label>
-            <Input type="number" value={values.ratePerHour} onChange={(e) => setValues({ ...values, ratePerHour: parseFloat(e.target.value) || 0 })} data-testid="input-labour-rate" />
+            <Input type="number" min={0} value={values.ratePerHour} onChange={(e) => setValues({ ...values, ratePerHour: parseFloat(e.target.value) || 0 })} data-testid="input-labour-rate" />
           </div>
-          <div className="col-span-2 text-sm text-muted-foreground">
-            Calculated cost per unit: <span className="font-semibold text-foreground">${cost.toFixed(2)}</span>
+          <div className="col-span-2">
+            <Label>Driver Type</Label>
+            <Select value={values.driverType} onValueChange={(v) => setValues({ ...values, driverType: v })}>
+              <SelectTrigger data-testid="select-labour-driver-type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {DRIVER_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-2">
+            <Label>Minutes per Driver Unit</Label>
+            <Input type="number" min={0} step={0.5} value={values.minutesPerDriver} onChange={(e) => setValues({ ...values, minutesPerDriver: parseFloat(e.target.value) || 0 })} data-testid="input-labour-mins-per-driver" />
+          </div>
+          <div className="col-span-2 text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2">
+            Example (simple 4-member frame + 1 mullion = {exampleMemberCount} members):
+            <span className="font-semibold text-foreground ml-1">{exampleMins.toFixed(1)} min → ${exampleCost.toFixed(2)}</span>
+          </div>
+          <div className="col-span-2">
+            <Label>Description / Notes</Label>
+            <Input value={values.description} onChange={(e) => setValues({ ...values, description: e.target.value })} data-testid="input-labour-description" />
           </div>
           <div className="col-span-2">
             <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
@@ -2769,6 +2834,147 @@ function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: Librar
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={() => saveMutation.mutate()} disabled={!values.name.trim() || saveMutation.isPending} data-testid="button-save-labour">
+            {saveMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function GlazingBandSection({ divisionCode }: { divisionCode?: string | null }) {
+  const { toast } = useToast();
+  const { data: bands = [], isLoading } = useLibraryEntries("glazing_band", divisionCode);
+  const [editBand, setEditBand] = useState<LibraryEntry | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/library"] }); setDeleteId(null); toast({ title: "Band deleted" }); },
+  });
+
+  return (
+    <Collapsible defaultOpen>
+      <Card>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-2 cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ChevronDown className="w-4 h-4" />
+              <span>Glazing Time Bands</span>
+              <Badge variant="secondary" className="ml-auto">{bands.length}</Badge>
+              <Button size="sm" variant="outline" className="ml-2 h-6 text-xs px-2" onClick={(e) => { e.stopPropagation(); setAdding(true); }} data-testid="button-add-glazing-band">
+                <Plus className="w-3 h-3 mr-1" /> Add Band
+              </Button>
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-3">
+              These bands configure minutes per pane for glazing, based on pane area (m²). Used when glazing driver type is <em>per_pane_area_band</em>.
+              Bands are sorted by max area; pane area is calculated as (width × height) ÷ pane count.
+            </p>
+            {isLoading ? <div className="text-muted-foreground text-sm">Loading...</div> : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Max Pane Area (m²)</TableHead>
+                    <TableHead>Min per Pane</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...bands].sort((a, b) => (a.data as any).maxAreaSqm - (b.data as any).maxAreaSqm).map((b) => {
+                    const d = b.data as any;
+                    return (
+                      <TableRow key={b.id} data-testid={`row-glazing-band-${b.id}`}>
+                        <TableCell className="font-medium capitalize">{d.label}</TableCell>
+                        <TableCell>{d.maxAreaSqm >= 9999 ? "∞ (catch-all)" : `≤ ${d.maxAreaSqm}`}</TableCell>
+                        <TableCell>{d.minutesPerPane} min</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{d.description}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditBand(b)} data-testid={`button-edit-glazing-band-${b.id}`}><Pencil className="w-3 h-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteId(b.id)} data-testid={`button-delete-glazing-band-${b.id}`}><Trash2 className="w-3 h-3" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {bands.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No bands configured — defaults (small/medium/large/extra-large) are used.</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+      {(editBand || adding) && (
+        <GlazingBandDialog entry={editBand} divisionCode={divisionCode} onClose={() => { setEditBand(null); setAdding(false); }} />
+      )}
+      <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
+    </Collapsible>
+  );
+}
+
+function GlazingBandDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const isEdit = !!entry;
+  const d = entry ? (entry.data as any) : {};
+  const [values, setValues] = useState({
+    label: d.label || "",
+    maxAreaSqm: d.maxAreaSqm ?? 0.5,
+    minutesPerPane: d.minutesPerPane ?? 10,
+    description: d.description || "",
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const ds = divisionCode || null;
+      if (isEdit) {
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: ds });
+      } else {
+        await apiRequest("POST", "/api/library", { type: "glazing_band", data: values, sortOrder: 0, divisionScope: ds });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({ title: isEdit ? "Band updated" : "Band added" });
+      onClose();
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent data-testid="dialog-glazing-band">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Edit Glazing Band" : "Add Glazing Band"}</DialogTitle>
+          <DialogDescription>Panes with area ≤ Max Pane Area will use this band's minutes per pane. Sort order is by max area ascending.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Label</Label>
+            <Input value={values.label} onChange={(e) => setValues({ ...values, label: e.target.value })} placeholder="e.g. small, medium, large" data-testid="input-glazing-label" />
+          </div>
+          <div>
+            <Label>Max Pane Area (m²)</Label>
+            <Input type="number" min={0} step={0.1} value={values.maxAreaSqm} onChange={(e) => setValues({ ...values, maxAreaSqm: parseFloat(e.target.value) || 0 })} data-testid="input-glazing-max-area" />
+            <p className="text-xs text-muted-foreground mt-1">Use 9999 for the catch-all (largest) band.</p>
+          </div>
+          <div className="col-span-2">
+            <Label>Minutes per Pane</Label>
+            <Input type="number" min={0} step={1} value={values.minutesPerPane} onChange={(e) => setValues({ ...values, minutesPerPane: parseFloat(e.target.value) || 0 })} data-testid="input-glazing-mins-per-pane" />
+          </div>
+          <div className="col-span-2">
+            <Label>Description</Label>
+            <Input value={values.description} onChange={(e) => setValues({ ...values, description: e.target.value })} data-testid="input-glazing-description" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => saveMutation.mutate()} disabled={!values.label.trim() || saveMutation.isPending} data-testid="button-save-glazing-band">
             {saveMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>

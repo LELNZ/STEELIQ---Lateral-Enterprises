@@ -6,7 +6,7 @@ import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue 
 import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory, getLockTypeForCategory, getLocksForCategory, isDoorCategory } from "@shared/item-options";
 import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
 import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
-import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
+import { calculatePricing, type PricingBreakdown, type ItemGeometry, type GlazingBandEntry } from "@/lib/pricing";
 import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -320,6 +320,11 @@ export default function QuoteBuilder() {
   const { data: masterProfiles = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_profile"], queryFn: fetchLib("direct_profile") });
   const { data: masterAccessories = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "direct_accessory"], queryFn: fetchLib("direct_accessory") });
   const { data: masterLabour = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "labour_operation"], queryFn: fetchLib("labour_operation") });
+  const { data: rawGlazingBands = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "glazing_band"], queryFn: fetchLib("glazing_band") });
+  const glazingBands: GlazingBandEntry[] = rawGlazingBands.map((b) => {
+    const d = b.data as any;
+    return { label: d.label ?? "", maxAreaSqm: parseFloat(d.maxAreaSqm) || 9999, minutesPerPane: parseFloat(d.minutesPerPane) || 10 };
+  });
   const { data: deliveryRates = [] } = useQuery<LibraryEntry[]>({ queryKey: ["/api/library", "delivery_rate"], queryFn: fetchLib("delivery_rate") });
 
   const persistJobField = useCallback((field: string, value: any) => {
@@ -643,14 +648,27 @@ export default function QuoteBuilder() {
     const salePriceOverride = oMode === "total_sell" && oVal ? oVal
       : oMode === "per_sqm" && oVal ? oVal * sqmForPricing
       : null;
+    const derivedPaneCount = Math.max(1,
+      configSignature.awningCount + configSignature.fixedCount +
+      configSignature.hingeCount + configSignature.slidingCount
+    );
+    const itemGeometry: ItemGeometry = {
+      mullionCount: configSignature.mullionCount,
+      transomCount: configSignature.transomCount,
+      paneCount: derivedPaneCount,
+      widthMm: w.width || 0,
+      heightMm: w.height || 0,
+    };
     return calculatePricing(
       w.width || 0, w.height || 0, w.quantity || 1,
       configProfiles, configAccessories, configLabor,
       usdToNzdRate, w.pricePerSqm || 500,
       { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined },
-      { masterProfiles, masterAccessories, masterLabour }
+      { masterProfiles, masterAccessories, masterLabour },
+      itemGeometry,
+      glazingBands
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour]);
+  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -3062,16 +3080,15 @@ export default function QuoteBuilder() {
                             <SelectItem value="total_sell">Override Total Sell</SelectItem>
                           </SelectContent>
                         </Select>
-                        {(w.overrideMode || "none") !== "none" && (
-                          <Input
-                            type="number"
-                            className="h-7 text-xs w-24"
-                            placeholder={(w.overrideMode === "per_sqm") ? "$/m²" : "$ total"}
-                            value={w.overrideValue ?? ""}
-                            onChange={(e) => form.setValue("overrideValue", e.target.value ? parseFloat(e.target.value) : null)}
-                            data-testid="input-override-value"
-                          />
-                        )}
+                        <Input
+                          type="number"
+                          className={(w.overrideMode || "none") !== "none" ? "h-7 text-xs w-24" : "h-7 text-xs w-24 invisible pointer-events-none"}
+                          placeholder={(w.overrideMode === "per_sqm") ? "$/m²" : "$ total"}
+                          value={w.overrideValue ?? ""}
+                          onChange={(e) => form.setValue("overrideValue", e.target.value ? parseFloat(e.target.value) : null)}
+                          data-testid="input-override-value"
+                          aria-hidden={(w.overrideMode || "none") === "none"}
+                        />
                       </div>
                     </div>
 
@@ -3084,6 +3101,16 @@ export default function QuoteBuilder() {
                           <span className="text-right font-medium" data-testid="text-accessories-cost">${currentPricing.accessoriesCostNzd.toFixed(2)}</span>
                           <span className="text-muted-foreground">Labor (NZD)</span>
                           <span className="text-right font-medium" data-testid="text-labor-cost">${currentPricing.laborCostNzd.toFixed(2)}</span>
+                          {currentPricing.labourBreakdown.length > 0 && (
+                            <div className="col-span-2 pl-3 border-l-2 border-muted space-y-0.5" data-testid="labour-breakdown">
+                              {currentPricing.labourBreakdown.map((lb) => (
+                                <div key={lb.taskName} className="grid grid-cols-2 gap-x-4 text-[10px] text-muted-foreground" data-testid={`labour-line-${lb.taskName}`}>
+                                  <span className="capitalize">{lb.taskName} <span className="opacity-60">({lb.totalMinutes.toFixed(1)} min)</span></span>
+                                  <span className="text-right">${lb.costNzd.toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {currentPricing.glassCostNzd > 0 && (
                             <>
                               <span className="text-muted-foreground">Glass (NZD)</span>

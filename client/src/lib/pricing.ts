@@ -18,6 +18,7 @@ export interface PricingBreakdown {
   salePriceNzd: number;
   marginNzd: number;
   marginPercent: number;
+  labourBreakdown: LabourLineBreakdown[];
 }
 
 export interface MasterData {
@@ -42,6 +43,95 @@ export interface PricingExtras {
   openingPanelCount?: number;
   wanzBar?: WanzBarPricingInput;
   salePriceOverride?: number | null;
+}
+
+export interface ItemGeometry {
+  mullionCount: number;
+  transomCount: number;
+  paneCount: number;
+  widthMm: number;
+  heightMm: number;
+}
+
+export interface GlazingBandEntry {
+  label: string;
+  maxAreaSqm: number;
+  minutesPerPane: number;
+}
+
+export interface LabourLineBreakdown {
+  taskName: string;
+  driverType: string;
+  driverQuantity: number;
+  setupMinutes: number;
+  driverMinutes: number;
+  totalMinutes: number;
+  costNzd: number;
+}
+
+const DEFAULT_GLAZING_BANDS: GlazingBandEntry[] = [
+  { label: "small", maxAreaSqm: 0.5, minutesPerPane: 10 },
+  { label: "medium", maxAreaSqm: 1.0, minutesPerPane: 15 },
+  { label: "large", maxAreaSqm: 1.5, minutesPerPane: 20 },
+  { label: "extra_large", maxAreaSqm: Infinity, minutesPerPane: 25 },
+];
+
+function resolveGlazingMinutesPerPane(
+  paneAreaSqm: number,
+  bands: GlazingBandEntry[]
+): number {
+  const sorted = [...bands].sort((a, b) => a.maxAreaSqm - b.maxAreaSqm);
+  const band = sorted.find((b) => paneAreaSqm <= b.maxAreaSqm);
+  return band ? band.minutesPerPane : (sorted[sorted.length - 1]?.minutesPerPane ?? 15);
+}
+
+function computeDriverResult(
+  driverType: string,
+  minutesPerDriver: number,
+  geo: ItemGeometry,
+  glazingBands: GlazingBandEntry[]
+): { driverQuantity: number; driverMinutes: number } {
+  const allEnds = geo.mullionCount * 2 + geo.transomCount * 2;
+  const memberCount = 4 + geo.mullionCount + geo.transomCount;
+  const panes = geo.paneCount > 0 ? geo.paneCount : 1;
+
+  switch (driverType) {
+    case "per_item":
+      return { driverQuantity: 1, driverMinutes: minutesPerDriver };
+    case "per_cut_cycle":
+      return { driverQuantity: memberCount, driverMinutes: memberCount * minutesPerDriver };
+    case "per_hole":
+      return { driverQuantity: 16, driverMinutes: 16 * minutesPerDriver };
+    case "per_slot":
+      return { driverQuantity: 2, driverMinutes: 2 * minutesPerDriver };
+    case "per_end":
+      return { driverQuantity: allEnds, driverMinutes: allEnds * minutesPerDriver };
+    case "per_screw": {
+      const screws = 16 + allEnds * 2;
+      return { driverQuantity: screws, driverMinutes: screws * minutesPerDriver };
+    }
+    case "per_corner":
+      return { driverQuantity: 4, driverMinutes: 4 * minutesPerDriver };
+    case "per_joint":
+      return { driverQuantity: allEnds, driverMinutes: allEnds * minutesPerDriver };
+    case "per_glue_point": {
+      const gluePoints = 4 + allEnds;
+      return { driverQuantity: gluePoints, driverMinutes: gluePoints * minutesPerDriver };
+    }
+    case "per_pane":
+      return { driverQuantity: panes, driverMinutes: panes * minutesPerDriver };
+    case "per_pane_area_band": {
+      const paneAreaSqm = geo.widthMm > 0 && geo.heightMm > 0
+        ? (geo.widthMm * geo.heightMm) / (panes * 1_000_000)
+        : 0;
+      const minsPerPane = glazingBands.length > 0
+        ? resolveGlazingMinutesPerPane(paneAreaSqm, glazingBands)
+        : minutesPerDriver;
+      return { driverQuantity: panes, driverMinutes: panes * minsPerPane };
+    }
+    default:
+      return { driverQuantity: 1, driverMinutes: minutesPerDriver };
+  }
 }
 
 function calcProfileLength(
@@ -73,7 +163,9 @@ export function calculatePricing(
   usdToNzdRate: number,
   salePricePerSqm: number,
   extras?: PricingExtras,
-  masterData?: MasterData
+  masterData?: MasterData,
+  geometry?: ItemGeometry,
+  glazingBands?: GlazingBandEntry[]
 ): PricingBreakdown {
   const sqm = (widthMm * heightMm * quantity) / 1_000_000;
   const perimeterM = 2 * (widthMm / 1000 + heightMm / 1000);
@@ -132,22 +224,76 @@ export function calculatePricing(
     }
   }
 
+  const geo: ItemGeometry = geometry ?? {
+    mullionCount: 0,
+    transomCount: 0,
+    paneCount: 1,
+    widthMm,
+    heightMm,
+  };
+  const bands = glazingBands && glazingBands.length > 0 ? glazingBands : DEFAULT_GLAZING_BANDS;
+
   let laborCostNzd = 0;
   let laborHours = 0;
+  const labourBreakdown: LabourLineBreakdown[] = [];
+
   for (const l of laborTasks) {
     const master = masterLabourMap.get(l.taskName);
-    const configCost = parseFloat(l.costNzd || "0") || 0;
-    if (master && configCost === 0) {
-      const timeMins = parseFloat(master.timeMinutes) || 0;
-      const rate = parseFloat(master.ratePerHour) || 0;
-      laborHours += (timeMins / 60) * quantity;
-      laborCostNzd += (timeMins / 60) * rate * quantity;
+    const configCostOverride = parseFloat(l.costNzd || "0") || 0;
+    const rate = master ? (parseFloat(master.ratePerHour) || 0) : 0;
+
+    if (configCostOverride > 0) {
+      const costTotal = configCostOverride * quantity;
+      const minsTotal = rate > 0 ? (configCostOverride / rate) * 60 : 0;
+      laborHours += (minsTotal / 60) * quantity;
+      laborCostNzd += costTotal;
+      labourBreakdown.push({
+        taskName: l.taskName,
+        driverType: "manual_override",
+        driverQuantity: 0,
+        setupMinutes: 0,
+        driverMinutes: minsTotal,
+        totalMinutes: minsTotal,
+        costNzd: costTotal,
+      });
+      continue;
+    }
+
+    if (!master) continue;
+
+    if (master.driverType) {
+      const setupMins = parseFloat(master.setupMinutes) || 0;
+      const minsPerDriver = parseFloat(master.minutesPerDriver) || 0;
+      const { driverQuantity, driverMinutes } = computeDriverResult(
+        master.driverType, minsPerDriver, geo, bands
+      );
+      const totalMins = setupMins + driverMinutes;
+      const cost = (totalMins / 60) * rate * quantity;
+      laborHours += (totalMins / 60) * quantity;
+      laborCostNzd += cost;
+      labourBreakdown.push({
+        taskName: l.taskName,
+        driverType: master.driverType,
+        driverQuantity,
+        setupMinutes: setupMins,
+        driverMinutes,
+        totalMinutes: totalMins,
+        costNzd: cost,
+      });
     } else {
-      const rate = master ? (parseFloat(master.ratePerHour) || 0) : 0;
-      if (rate > 0) {
-        laborHours += (configCost / rate) * quantity;
-      }
-      laborCostNzd += configCost * quantity;
+      const timeMins = parseFloat(master.timeMinutes) || 0;
+      const cost = (timeMins / 60) * rate * quantity;
+      laborHours += (timeMins / 60) * quantity;
+      laborCostNzd += cost;
+      labourBreakdown.push({
+        taskName: l.taskName,
+        driverType: "flat",
+        driverQuantity: 1,
+        setupMinutes: timeMins,
+        driverMinutes: 0,
+        totalMinutes: timeMins,
+        costNzd: cost,
+      });
     }
   }
 
@@ -203,5 +349,6 @@ export function calculatePricing(
     salePriceNzd,
     marginNzd,
     marginPercent,
+    labourBreakdown,
   };
 }
