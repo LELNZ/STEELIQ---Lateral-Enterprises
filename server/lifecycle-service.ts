@@ -297,24 +297,67 @@ function deriveStageStatus(
       return taskDrivenStatus();
 
     case "invoicing": {
-      if (invoices.length === 0) return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
-      const finalised = invoices.filter((inv) =>
-        ["approved", "pushed_to_xero_draft"].includes(inv.status ?? ""),
-      );
-      if (finalised.length > 0) {
+      // Pre-instance (no lifecycle assigned yet): invoice-signal only.
+      if (!hasInstance) {
+        if (invoices.length === 0) return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
+        const finalised = invoices.filter((inv) =>
+          ["approved", "pushed_to_xero_draft"].includes(inv.status ?? ""),
+        );
+        if (finalised.length > 0) {
+          return {
+            status: "active",
+            completedAt: null,
+            sourceNote: `${finalised.length} invoice(s) in Xero or approved`,
+            blockedReason: null,
+          };
+        }
         return {
           status: "active",
           completedAt: null,
-          sourceNote: `${finalised.length} invoice(s) in Xero or approved`,
+          sourceNote: `${invoices.length} invoice(s) present`,
           blockedReason: null,
         };
       }
-      return {
-        status: "active",
-        completedAt: null,
-        sourceNote: `${invoices.length} invoice(s) present`,
-        blockedReason: null,
-      };
+
+      // Lifecycle instance exists: task-driven with invoice signals as context.
+      // Required tasks: issue_final_invoice + payment_received.
+      if (requiredTasksComplete && tasks.length > 0) {
+        const lastDoneAt = tasks
+          .filter((t) => t.required && t.completedAt)
+          .map((t) => t.completedAt!)
+          .sort()
+          .pop() ?? null;
+        return {
+          status: "complete",
+          completedAt: lastDoneAt,
+          sourceNote: `${tasks.filter((t) => t.completed).length}/${tasks.length} invoicing tasks complete`,
+          blockedReason: null,
+        };
+      }
+
+      const anyTaskDone = tasks.some((t) => t.completed);
+      if (anyTaskDone || invoices.length > 0) {
+        const finalised = invoices.filter((inv) =>
+          ["approved", "pushed_to_xero_draft"].includes(inv.status ?? ""),
+        );
+        const invoiceNote = finalised.length > 0
+          ? `${finalised.length} invoice(s) approved or in Xero`
+          : invoices.length > 0
+          ? `${invoices.length} invoice(s) present`
+          : null;
+        const remaining = tasks.filter((t) => t.required && !t.completed).length;
+        const taskNote = remaining > 0
+          ? `${remaining} required task${remaining !== 1 ? "s" : ""} remaining`
+          : null;
+        return {
+          status: "active",
+          completedAt: null,
+          sourceNote: [invoiceNote, taskNote].filter(Boolean).join(" — ") || null,
+          blockedReason: null,
+        };
+      }
+
+      return { status: "not_started", completedAt: null, sourceNote: null, blockedReason: null };
     }
 
     case "closeout": {

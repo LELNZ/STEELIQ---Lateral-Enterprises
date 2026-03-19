@@ -67,12 +67,16 @@ export interface LabourLineBreakdown {
   driverMinutes: number;
   totalMinutes: number;
   costNzd: number;
+  isAutoInjected?: boolean;
 }
 
+// Fallback glazing bands — aligned with installation rate bands (0–1 / 1–2 / 2–3 / 3+).
+// These are used only when no glazing_band library entries exist in the DB.
+// Staff can override these thresholds in Library → Manufacturing Labour → Glazing Time Bands.
 const DEFAULT_GLAZING_BANDS: GlazingBandEntry[] = [
-  { label: "small", maxAreaSqm: 0.5, minutesPerPane: 10 },
-  { label: "medium", maxAreaSqm: 1.0, minutesPerPane: 15 },
-  { label: "large", maxAreaSqm: 1.5, minutesPerPane: 20 },
+  { label: "small",       maxAreaSqm: 1.0,     minutesPerPane: 10 },
+  { label: "medium",      maxAreaSqm: 2.0,     minutesPerPane: 15 },
+  { label: "large",       maxAreaSqm: 3.0,     minutesPerPane: 20 },
   { label: "extra_large", maxAreaSqm: Infinity, minutesPerPane: 25 },
 ];
 
@@ -295,6 +299,35 @@ export function calculatePricing(
         costNzd: cost,
       });
     }
+  }
+
+  // ── Auto-inject glue ──────────────────────────────────────────────────────
+  // Glue is applied to all outer frame corners and mullion/transom joints.
+  // If the configuration already has an explicit "glue" labour row, skip
+  // auto-injection to avoid double-counting.
+  const hasExplicitGlue = laborTasks.some((l) => l.taskName === "glue");
+  const glueMaster = masterLabourMap.get("glue");
+  if (!hasExplicitGlue && glueMaster && glueMaster.driverType === "per_glue_point") {
+    const setupMins = parseFloat(glueMaster.setupMinutes) || 0;
+    const minsPerDriver = parseFloat(glueMaster.minutesPerDriver) || 1;
+    const glueRate = parseFloat(glueMaster.ratePerHour) || 45;
+    const { driverQuantity, driverMinutes } = computeDriverResult(
+      "per_glue_point", minsPerDriver, geo, bands
+    );
+    const totalMins = setupMins + driverMinutes;
+    const cost = (totalMins / 60) * glueRate * quantity;
+    laborHours += (totalMins / 60) * quantity;
+    laborCostNzd += cost;
+    labourBreakdown.push({
+      taskName: "glue",
+      driverType: "per_glue_point",
+      driverQuantity,
+      setupMinutes: setupMins,
+      driverMinutes,
+      totalMinutes: totalMins,
+      costNzd: cost,
+      isAutoInjected: true,
+    });
   }
 
   const glassPricePerSqm = extras?.glassPricePerSqm ?? null;

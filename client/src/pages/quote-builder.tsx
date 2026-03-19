@@ -3105,10 +3105,26 @@ export default function QuoteBuilder() {
                             <div className="col-span-2 pl-3 border-l-2 border-muted space-y-0.5" data-testid="labour-breakdown">
                               {currentPricing.labourBreakdown.map((lb) => (
                                 <div key={lb.taskName} className="grid grid-cols-2 gap-x-4 text-[10px] text-muted-foreground" data-testid={`labour-line-${lb.taskName}`}>
-                                  <span className="capitalize">{lb.taskName} <span className="opacity-60">({lb.totalMinutes.toFixed(1)} min)</span></span>
+                                  <span className="capitalize">
+                                    {lb.taskName}
+                                    {lb.isAutoInjected && <span className="ml-1 text-amber-500">(auto)</span>}
+                                    {lb.driverType === "manual_override" && <span className="ml-1 opacity-50">(override)</span>}
+                                    {" "}<span className="opacity-60">
+                                      {lb.driverQuantity > 0 && lb.driverType !== "manual_override"
+                                        ? `${lb.driverQuantity} pts · ${lb.totalMinutes.toFixed(1)} min`
+                                        : `${lb.totalMinutes.toFixed(1)} min`}
+                                    </span>
+                                  </span>
                                   <span className="text-right">${lb.costNzd.toFixed(2)}</span>
                                 </div>
                               ))}
+                              <div className="grid grid-cols-2 gap-x-4 text-[10px] font-medium text-muted-foreground border-t border-muted pt-0.5 mt-0.5" data-testid="labour-total-minutes">
+                                <span>Total labour / item</span>
+                                <span className="text-right">
+                                  {((currentPricing.laborHours / Math.max(w.quantity || 1, 1)) * 60).toFixed(0)} min
+                                  {(w.quantity || 1) > 1 && <span className="ml-1 opacity-60">({(currentPricing.laborHours * 60).toFixed(0)} min × {w.quantity})</span>}
+                                </span>
+                              </div>
                             </div>
                           )}
                           {currentPricing.glassCostNzd > 0 && (

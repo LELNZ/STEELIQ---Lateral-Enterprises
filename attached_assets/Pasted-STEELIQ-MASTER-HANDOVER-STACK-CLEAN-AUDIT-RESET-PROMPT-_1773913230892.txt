@@ -1,0 +1,159 @@
+STEELIQ MASTER HANDOVER STACK — CLEAN AUDIT / RESET PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+HANDOVER TRUTHFULNESS RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+FINAL RULE FOR THIS CHAT
+
+This chat is an AUDIT / RESET chat only.
+
+Do NOT implement new features yet.
+Do NOT modify code yet.
+Do NOT run speculative fixes yet.
+
+Your job in this chat is to inspect the current repo/app state and produce a truthful current-state report so the next implementation phase starts from clean ground.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+WHY THIS AUDIT IS REQUIRED
+==================================================
+
+Recent Replit handovers have drifted:
+- old Phase 7 work keeps being re-reported
+- some handovers do not cleanly match actual PR scope
+- phase boundaries are no longer fully trustworthy
+
+So before any more implementation, you must scan the current app/codebase and report exact current truth.
+
+==================================================
+AUDIT OBJECTIVE
+==================================================
+
+Produce a clean, truthful, current-state audit of the app with special focus on:
+
+1. Lifecycle current state
+2. Manufacturing labour current state
+3. Quote builder current stability
+4. Xero/OAuth current state
+5. Any clear regressions / partial implementations / mismatches between code and handovers
+
+Do NOT build anything in this chat unless explicitly asked later.
+
+==================================================
+REQUIRED AUDIT TASKS
+==================================================
+
+Review the current codebase and report the exact current truth for:
+
+A. Lifecycle
+- Is Lifecycle Phase 2 truly complete or still partial?
+- Are template-defined tasks present?
+- Is lifecycle task state persisted?
+- Is the quote/job lifecycle panel operational?
+- Is DB-level uniqueness for lifecycle task state in place?
+- Are there any lifecycle gaps still remaining?
+
+B. Manufacturing labour
+- What labour model is currently live in code?
+- Is it still flat, or setup+driver?
+- Is glue automatic yet or still configuration-dependent?
+- Are glazing bands present and what thresholds are live?
+- Are legacy CNC entries still present?
+- What labour limitations still remain?
+
+C. Quote Builder
+- Is first-action slowness materially improved?
+- Are frame type persistence and stacker sliding persistence fixed?
+- Are there any obvious remaining builder regressions?
+
+D. Xero
+- What is the actual current Xero integration state in code?
+- Is it still static-token based?
+- Is there a real OAuth callback flow implemented or not?
+- If not, state that clearly
+
+E. Current risks
+- Identify any obvious areas where the app is partial, inconsistent, or likely to confuse staff
+
+==================================================
+REQUIRED METHOD
+==================================================
+
+Before answering:
+1. Review the actual codebase/repo as source of truth
+2. Compare it mentally against the recent handover claims
+3. Explicitly identify mismatches
+4. Separate clearly:
+   - confirmed complete
+   - partial
+   - unverified
+   - known gaps
+5. Do not say a phase is complete unless the current code genuinely supports that claim
+
+==================================================
+DO NOT IMPLEMENT YET
+==================================================
+
+In this chat:
+- do not write code
+- do not modify files
+- do not run migrations
+- do not produce a build handover pretending work was implemented
+
+This chat is for inspection and truth reporting only.
+
+==================================================
+MANDATORY AUDIT OUTPUT FORMAT
+==================================================
+
+Return the audit in this exact structure:
+
+1. Files / modules reviewed
+2. Current lifecycle truth
+3. Current manufacturing labour truth
+4. Current quote builder truth
+5. Current Xero truth
+6. Confirmed complete items
+7. Partial / unverified items
+8. Known gaps / risks
+9. Mismatches between prior handovers and current code
+10. Recommended next single implementation phase
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This audit is successful only if:
+- it is truthful
+- it is based on current code, not old handovers
+- it clearly tells us what the next single phase should be
+- it does not mix completed old phases with current work

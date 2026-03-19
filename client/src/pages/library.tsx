@@ -2632,9 +2632,10 @@ function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | 
         </Button>
       </div>
 
-      <div className="text-xs text-muted-foreground bg-muted/40 rounded px-3 py-2 border">
-        Each operation uses a <strong>setup + driver</strong> model: <em>Total time = Setup minutes + (Driver quantity × Minutes per driver)</em>.
-        Driver quantity is derived automatically from item geometry (member count, pane count, etc.).
+      <div className="text-xs text-muted-foreground bg-muted/40 rounded px-3 py-2 border space-y-1">
+        <p>Each operation uses a <strong>setup + driver</strong> model: <em>Total time = Setup minutes + (Driver quantity × Minutes per driver)</em>.
+        Driver quantity is derived automatically from item geometry (member count, pane count, etc.).</p>
+        <p className="text-amber-600 dark:text-amber-400"><strong>Glue is automatically applied</strong> to all items based on geometry (4 outer corners + mullion/transom joints). Do not add a separate glue row to frame configurations — it will be counted twice.</p>
       </div>
 
       <LabourCategoryGroup title="Manual Processes" operations={manual} onEdit={setEditOp} onDelete={setDeleteId} />
@@ -2688,12 +2689,14 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
                 {operations.map((o) => {
                   const d = o.data as any;
                   const isLegacy = !d.driverType;
+                  const isInactive = d.isActive === false;
                   const driverLabel = DRIVER_TYPE_OPTIONS.find((x) => x.value === d.driverType)?.label ?? d.driverType ?? "—";
                   return (
-                    <TableRow key={o.id} data-testid={`row-labour-${o.id}`}>
+                    <TableRow key={o.id} data-testid={`row-labour-${o.id}`} className={isInactive ? "opacity-40" : undefined}>
                       <TableCell className="font-medium">
                         {d.name}
                         {isLegacy && <Badge variant="outline" className="ml-2 text-[10px]">legacy</Badge>}
+                        {isInactive && <Badge variant="outline" className="ml-2 text-[10px] text-muted-foreground">inactive</Badge>}
                       </TableCell>
                       <TableCell>{isLegacy ? d.timeMinutes : (d.setupMinutes ?? 0)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate" title={driverLabel}>
