@@ -1,0 +1,130 @@
+STEELIQ MASTER HANDOVER STACK — FIRST-ACTION PERFORMANCE DEBUG PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+==================================================
+CURRENT ISSUE
+==================================================
+
+Live testing shows this specific pattern in Quote Builder:
+
+- the first Add to Quote / Update Item action is slow (around 15–20 seconds)
+- later actions can be much faster
+
+So this appears to be a cold-path / first-action performance problem, not simply a constant per-action delay.
+
+This phase is only for diagnosing and materially improving that first-action latency.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Investigate and improve only these first-action paths:
+
+1. First Add to Quote on a newly opened / newly created estimate
+2. First Update Item after initial load
+3. Any first-save initialization work that is blocking these actions
+
+Do NOT broaden scope.
+
+==================================================
+REQUIRED TASKS
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Trace the exact execution path for the FIRST Add to Quote
+3. Trace the exact execution path for the FIRST Update Item
+4. Identify what one-time or cold-path work is making the first interaction slow
+5. State the exact bottlenecks found
+6. Then implement the minimum safe changes to materially reduce first-action latency
+
+==================================================
+AREAS TO INSPECT
+==================================================
+
+Inspect specifically for:
+- first creation of the job/estimate shell
+- first bulk item persistence
+- first expensive config normalization or item serialization
+- first render/rebuild of downstream summaries/spec/drawing after persistence
+- first query invalidation/refetch warming caches
+- any first-run customer-link or follow-up call
+- any first-run navigation or remount side effect
+- any expensive effect/hooks that only trigger after the first persisted state exists
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Target behaviour:
+- first Add to Quote is materially faster
+- first Update Item is materially faster
+- later actions remain correct
+- do not break persistence integrity
+- do not fake success by only changing toast timing
+
+If some one-time work can safely be moved earlier (pre-warmed) or deferred until after the UI action completes, do that carefully.
+
+==================================================
+IMPORTANT DESIGN DIRECTION
+==================================================
+
+Prefer:
+- pre-creating / pre-warming required state earlier if safe
+- reducing blocking cold-path work on the first item action
+- keeping the UI responsive while preserving data correctness
+
+Do NOT:
+- remove persistence safeguards
+- introduce hidden eventual-consistency issues
+- make the UI claim success before critical persistence is actually safe
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- first Add to Quote still persists correctly
+- first item on new estimate still does not get lost
+- first Update Item still persists correctly
+- later adds/updates still work
+- no break to saveJob integrity
+- no break to preview/spec summary/drawing updates
+- no break to quote generation/update flows
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact first-action bottlenecks found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless the first Add to Quote / first Update Item path is materially faster in real use.

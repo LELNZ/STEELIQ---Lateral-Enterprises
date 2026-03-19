@@ -1011,9 +1011,12 @@ export default function QuoteBuilder() {
     if (findMatchingConfiguration(sig, configurations)) return null;
     const baseConfig = configurations[0];
     try {
-      const baseProfiles = await fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []);
-      const baseAccessories = await fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []);
-      const baseLabor = await fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []);
+      // Fetch base config data in parallel (3 requests → 1 round-trip)
+      const [baseProfiles, baseAccessories, baseLabor] = await Promise.all([
+        fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []),
+        fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []),
+        fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []),
+      ]);
       const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
         frameTypeId: currentFrameTypeLibId,
         name: sig.label,
@@ -1022,36 +1025,37 @@ export default function QuoteBuilder() {
         sortOrder: configurations.length,
       });
       const newConfig = await newConfigRes.json();
-      for (const p of baseProfiles) {
+
+      // Build all profile post calls, including optional mullion, then fire in parallel
+      const profilePosts = baseProfiles.map((p: any) => {
         let qty = p.quantityPerSet || 1;
         if (p.role === "sash-frame") qty = Math.max(1, sig.awningCount + sig.hingeCount + sig.slidingCount);
-        await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+        return apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
           configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
           kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
           quantityPerSet: qty, lengthFormula: p.lengthFormula, sortOrder: p.sortOrder,
         });
+      });
+      if (sig.mullionCount > 0 && !baseProfiles.some((p: any) => p.role === "mullion")) {
+        profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+          configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
+          kgPerMetre: "0.78", pricePerKgUsd: "5.60",
+          quantityPerSet: sig.mullionCount, lengthFormula: "height", sortOrder: 99,
+        }));
       }
-      if (sig.mullionCount > 0) {
-        const hasMullion = baseProfiles.some((p: any) => p.role === "mullion");
-        if (!hasMullion) {
-          await apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-            configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
-            kgPerMetre: "0.78", pricePerKgUsd: "5.60",
-            quantityPerSet: sig.mullionCount, lengthFormula: "height", sortOrder: 99,
-          });
-        }
-      }
-      for (const a of baseAccessories) {
-        await apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
+
+      // Fire profiles, accessories and labor all in parallel (N+M+L → 1 round-trip)
+      await Promise.all([
+        ...profilePosts,
+        ...baseAccessories.map((a: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
           configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
           priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
-        });
-      }
-      for (const l of baseLabor) {
-        await apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
+        })),
+        ...baseLabor.map((l: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
           configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
-        });
-      }
+        })),
+      ]);
+
       queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });
       toast({ title: "Configuration created", description: `"${sig.label}" auto-generated and added to library.` });
       return newConfig.id;
@@ -1065,41 +1069,58 @@ export default function QuoteBuilder() {
 
   async function onSubmit(data: InsertQuoteItem) {
     const wasNewJob = !savedJobId;
-    if (wasNewJob && !editingId) {
-      const newJobId = await ensureJobExists();
-      if (!newJobId) return;
-    }
     const sig = deriveConfigSignature(data as QuoteItem);
     const matchingConfig = findMatchingConfiguration(sig, configurations);
-    let finalData = { ...data };
-    if (!matchingConfig && configurations.length > 0 && currentFrameTypeLibId) {
-      const newConfigId = await autoGenerateConfiguration(sig);
-      if (newConfigId) {
-        const baseConfig = configurations[0];
-        finalData = { ...finalData, configurationId: newConfigId, pricePerSqm: baseConfig?.defaultSalePricePerSqm || finalData.pricePerSqm || 500 };
-      }
-    }
     const cachedWeightKg = currentPricing?.totalWeightKg ?? 0;
-    const itemWithWeight = { ...finalData, cachedWeightKg };
-    if (editingId) {
-      setItems(items.map((iwp) => {
-        if (iwp.uiId !== editingId) return iwp;
-        const preservedId = iwp.item.id;
-        return { ...iwp, item: ensureConfigId({ ...itemWithWeight, id: preservedId }) };
+    const itemWithWeight = { ...data, cachedWeightKg };
+
+    // ── Optimistic update: add/update item in state immediately so the UI responds
+    //    at once. All network work (job creation, config generation) runs in the
+    //    background and does not block this path.
+    let targetItemId: string;
+    const capturedEditingId = editingId;
+    if (capturedEditingId) {
+      const existing = items.find((i) => i.uiId === capturedEditingId);
+      targetItemId = existing?.item.id || crypto.randomUUID();
+      setItems((prev) => prev.map((iwp) => {
+        if (iwp.uiId !== capturedEditingId) return iwp;
+        return { ...iwp, item: ensureConfigId({ ...itemWithWeight, id: iwp.item.id }) };
       }));
       setEditingId(null);
-      toast({ title: "Item updated", description: `${finalData.name} has been updated.` });
+      toast({ title: "Item updated", description: `${data.name} has been updated.` });
     } else {
-      const newItem: QuoteItem = { ...itemWithWeight, id: crypto.randomUUID() };
-      setItems([...items, { uiId: crypto.randomUUID(), item: newItem }]);
-      toast({ title: "Item added", description: `${finalData.name} added to quote.` });
+      targetItemId = crypto.randomUUID();
+      const targetUiId = crypto.randomUUID();
+      const newItem: QuoteItem = { ...itemWithWeight, id: targetItemId };
+      setItems((prev) => [...prev, { uiId: targetUiId, item: newItem }]);
+      toast({ title: "Item added", description: `${data.name} added to quote.` });
     }
-    setHasUnsavedChanges(true);
-    if (wasNewJob) {
-      immediateAutoSaveRef.current = true;
-    }
+
     form.reset(getNewItemDefaults(siteType));
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
+
+    // For a brand-new job, kick off job creation in the background.
+    // The auto-save effect watches savedJobId; once it is set the 0-ms save fires.
+    if (wasNewJob && !capturedEditingId) {
+      immediateAutoSaveRef.current = true;
+      ensureJobExists().catch(() => {});
+    }
+    setHasUnsavedChanges(true);
+
+    // If no matching config exists, auto-generate one in the background and
+    // patch the item's configurationId + pricePerSqm once it is ready.
+    if (!matchingConfig && configurations.length > 0 && currentFrameTypeLibId) {
+      autoGenerateConfiguration(sig).then((newConfigId) => {
+        if (!newConfigId) return;
+        const baseConfig = configurations[0];
+        const newPricePerSqm = baseConfig?.defaultSalePricePerSqm || data.pricePerSqm || 500;
+        setItems((prev) => prev.map((iwp) => {
+          if (iwp.item.id !== targetItemId) return iwp;
+          return { ...iwp, item: { ...iwp.item, configurationId: newConfigId, pricePerSqm: newPricePerSqm } };
+        }));
+        setHasUnsavedChanges(true);
+      });
+    }
   }
 
   function scrollConfigToTop() {

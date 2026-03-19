@@ -489,18 +489,16 @@ export async function registerRoutes(
       const bodySchema = z.object({ items: z.array(jobItemBodySchema) });
       const { items } = bodySchema.parse(req.body);
       await storage.deleteJobItems(jobId);
-      const created: any[] = [];
-      for (let i = 0; i < items.length; i++) {
-        const p = items[i];
-        const item = await storage.addJobItem({
+      // Insert all items in parallel instead of sequentially
+      const created = await Promise.all(
+        items.map((p, i) => storage.addJobItem({
           jobId,
           config: p.config,
           photo: p.photo || null,
           photos: normalizePhotoPrimary(p.photos) || null,
           sortOrder: i,
-        });
-        created.push(item);
-      }
+        }))
+      );
       res.json({ ok: true, count: created.length });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
