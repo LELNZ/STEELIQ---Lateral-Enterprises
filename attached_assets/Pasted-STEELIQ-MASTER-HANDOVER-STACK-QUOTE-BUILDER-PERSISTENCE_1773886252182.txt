@@ -1,0 +1,113 @@
+STEELIQ MASTER HANDOVER STACK — QUOTE BUILDER PERSISTENCE BUG PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+==================================================
+CURRENT ISSUE
+==================================================
+
+Live testing shows a Quote Builder persistence/hydration bug:
+
+- Frame Type is not persisting correctly across various windows and doors when returning to saved items
+- In the item editor, the Frame Type select can appear blank / placeholder even though the item itself is saved and other fields are present
+- Save performance is now much better, so this issue should be treated separately as a field persistence / form rehydration bug
+
+This phase is only for diagnosing and fixing Frame Type persistence/hydration.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Investigate and fix only this issue:
+
+1. Frame Type not persisting / not restoring correctly in Quote Builder for saved items across relevant window/door categories
+
+Do NOT broaden scope.
+
+==================================================
+REQUIRED TASKS
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Trace where Frame Type is stored in the item/config model
+3. Trace how saved item data is loaded back into the Quote Builder form
+4. Identify whether the problem is:
+   - not being saved
+   - saved under the wrong key/value
+   - overwritten during item load
+   - select option/value mismatch
+   - category-specific reset logic
+5. State the exact root cause
+6. Then implement the minimum safe fix
+
+==================================================
+AREAS TO INSPECT
+==================================================
+
+Inspect specifically:
+- the form field bound to Frame Type
+- saved item/config payload shape
+- item edit/load hydration path when selecting an existing item
+- category-specific default/reset logic
+- select option values vs stored values
+- async loading of frame options/library data that may cause blank display after hydration
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Target behaviour:
+- Frame Type persists correctly when adding/updating items
+- selecting an existing saved item restores the correct Frame Type visibly in the Quote Builder
+- this works across the relevant window/door categories that use Frame Type
+- no silent fallback to blank placeholder when a valid saved frame exists
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- new item save still works
+- saved item reload still works
+- switching between multiple saved items preserves/restores the correct Frame Type
+- no break to other item specifics fields
+- no break to quote builder save/update flow
+- no break to preview/spec summary/drawing
+- no break to French / stacker / sliding / hinge categories
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact root cause found
+4. Behaviour changes
+5. Schema/API changes
+6. UI changes
+7. Architecture verification
+8. Risks/limitations
+9. Updated current system state
+10. Updated recommended next tasks
+11. Regression checks
+
+Do not claim completion unless Frame Type visibly restores correctly when re-opening/editing saved items.

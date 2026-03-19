@@ -289,6 +289,7 @@ export default function QuoteBuilder() {
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
   const skipCategoryResetRef = useRef(false);
+  const expectedFrameTypeRef = useRef<string>("");
   const hydratedJobRef = useRef(false);
   const didAutoCollapseOnFocusRef = useRef(false);
   const lastAutoWindZone = useRef<string>("");
@@ -744,10 +745,17 @@ export default function QuoteBuilder() {
   }, [category]);
 
   useEffect(() => {
+    // When library data arrives, re-validate the current frameType against
+    // the (now DB-backed) options for the current category. This handles the
+    // race where the category useEffect ran with the static fallback before
+    // the server responded, leaving a value that's no longer in the option list.
+    const currentCategory = form.getValues("category") || "windows-standard";
     const currentFrameType = form.getValues("frameType");
-    if (currentFrameType) return;
-    const frameTypes = libFrameTypesForCategory(category);
-    if (frameTypes.length > 0) form.setValue("frameType", frameTypes[0].value);
+    const opts = libFrameTypesForCategory(currentCategory);
+    const stillValid = currentFrameType && opts.some((o) => o.value === currentFrameType);
+    if (!stillValid && opts.length > 0) {
+      form.setValue("frameType", opts[0].value);
+    }
   }, [libFrameTypes]);
 
   useEffect(() => {
@@ -763,6 +771,13 @@ export default function QuoteBuilder() {
       lastAutoWindZone.current = "";
     }
   }, [w.frameType]);
+
+  useEffect(() => {
+    if (!editingId || !expectedFrameTypeRef.current) return;
+    if (!w.frameType) {
+      form.setValue("frameType", expectedFrameTypeRef.current);
+    }
+  }, [w.frameType, editingId]);
 
   useEffect(() => {
     if (configurations.length === 0) return;
@@ -1132,9 +1147,27 @@ export default function QuoteBuilder() {
 
   function editItem(iwp: ItemWithPhoto) {
     const { id, ...rest } = iwp.item;
+    const itemForForm = { ...rest };
+
+    // Guard: if the saved frameType is blank or, once real DB options have loaded,
+    // the value isn't valid for the item's category (stale / category mismatch),
+    // fall back to the first valid option so the Select never renders blank.
+    // We skip the validity check when libFrameTypes hasn't loaded yet to avoid
+    // overwriting a value like "ES127-SlidingDoor" (valid in DB) with the static
+    // fallback "ES127-StackerDoor" before the library arrives.
+    const savedCat = (itemForForm.category as string) || "windows-standard";
+    const availOpts = libFrameTypesForCategory(savedCat);
+    const dbLoaded = libFrameTypes.length > 0;
+    const frameTypeBlank = !itemForForm.frameType;
+    const frameTypeMismatch = dbLoaded && !availOpts.some((o) => o.value === itemForForm.frameType);
+    if ((frameTypeBlank || frameTypeMismatch) && availOpts.length > 0) {
+      itemForForm.frameType = availOpts[0].value;
+    }
+
     skipCategoryResetRef.current = true;
+    expectedFrameTypeRef.current = (itemForForm.frameType as string) || "";
     lastAutoWindZone.current = "";
-    form.reset(rest);
+    form.reset(itemForForm);
     setEditingId(iwp.uiId);
     if (!isLargeScreen) {
       setMobileTab("config");
