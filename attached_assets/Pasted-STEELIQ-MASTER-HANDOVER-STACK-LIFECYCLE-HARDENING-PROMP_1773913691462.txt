@@ -1,0 +1,127 @@
+STEELIQ MASTER HANDOVER STACK — LIFECYCLE HARDENING PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+==================================================
+CURRENT TRUTH
+==================================================
+
+Lifecycle Phase 2 is substantially implemented.
+
+The confirmed current lifecycle gap is:
+- the invoicing stage never reaches "complete"
+
+Current audit indicates:
+- lifecycle templates exist
+- lifecycle task state persistence exists
+- lifecycle panel UI exists
+- DB uniqueness for lifecycle task state exists
+- invoicing stage logic is still incomplete
+
+This phase is only for hardening the invoicing stage completion logic.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only this:
+
+1. Make the invoicing lifecycle stage able to reach a truthful complete state
+
+Do NOT broaden scope.
+
+==================================================
+DESIGN DIRECTION
+==================================================
+
+SteelIQ does not yet appear to have full payment reconciliation as system truth.
+
+Therefore:
+- do NOT fake invoicing completion purely from incomplete finance signals
+- do NOT pretend Xero push = payment received
+
+Best-practice direction for this phase:
+- make invoicing stage completion task-driven when a lifecycle instance exists
+- keep invoice data/status as supporting signal
+- use required invoicing checklist tasks to drive true completion
+
+Examples of acceptable invoicing tasks:
+- deposit invoice issued
+- final invoice issued
+- payment received
+
+Use the current lifecycle template/task architecture already in place.
+Do not redesign lifecycle.
+
+==================================================
+REQUIRED TASKS
+==================================================
+
+Before implementing:
+1. Review the current lifecycle codebase as source of truth
+2. Confirm the exact current invoicing-stage logic in lifecycle-service.ts
+3. Confirm the invoicing tasks currently present in the LJ template
+4. State the cleanest safe completion rule
+5. Then implement only the minimum safe fix
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Target behaviour:
+- invoicing stage can become complete
+- completion is truthful
+- lifecycle panel no longer leaves invoicing permanently active once required invoicing tasks are genuinely complete
+- no mutation of frozen financial/commercial history
+- no fake accounting truth
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- lifecycle quote view still loads
+- lifecycle op-job view still loads
+- task toggle still works
+- other task-driven stages still work
+- existing blocked-state logic still works
+- no break to accepted quote flow
+- no break to invoice creation/push flows
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact invoicing-stage gap found
+4. Exact completion rule implemented
+5. Behaviour changes
+6. Schema/API changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+Do not claim completion unless the invoicing stage can now truthfully reach complete.
