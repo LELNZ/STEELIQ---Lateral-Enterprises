@@ -1,6 +1,8 @@
 import { forwardRef } from "react";
 import type { InsertQuoteItem, CustomColumn, EntranceDoorRow } from "@shared/schema";
 
+const DEFAULT_DOOR_ROW: EntranceDoorRow = { height: 0, type: "fixed", slideDirection: "right" };
+
 const FRAME_WIN = 52;
 const FRAME_SLIDE = 127;
 const FRAME_BIFOLD = 70;
@@ -241,9 +243,9 @@ function computeEntranceDoorMetrics(config: InsertQuoteItem, frameSize: number):
   const { width: W, height: H, sidelightWidth, sidelightEnabled, sidelightSide } = config;
   const minPane = frameSize * 2;
   const rawSl = sidelightWidth > 0 ? sidelightWidth : 400;
-  const doorRows: EntranceDoorRow[] = config.entranceDoorRows || [{ height: 0, type: "fixed" }];
-  const slRows: EntranceDoorRow[] = config.entranceSidelightRows || [{ height: 0, type: "fixed" }];
-  const slLeftRows: EntranceDoorRow[] = config.entranceSidelightLeftRows || [{ height: 0, type: "fixed" }];
+  const doorRows: EntranceDoorRow[] = config.entranceDoorRows || [{ ...DEFAULT_DOOR_ROW }];
+  const slRows: EntranceDoorRow[] = config.entranceSidelightRows || [{ ...DEFAULT_DOOR_ROW }];
+  const slLeftRows: EntranceDoorRow[] = config.entranceSidelightLeftRows || [{ ...DEFAULT_DOOR_ROW }];
 
   const doorRowHeights = distributeSpaces(H, doorRows.map(r => r.height || 0));
   const doorRowMmHeights = distributeMmLabels(H, doorRows.map(r => r.height || 0));
@@ -360,9 +362,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   if (category === "entrance-door") {
     const metrics = computeEntranceDoorMetrics(config, frameSize);
     const { sections, doorRowHeights, slRowHeights, slLeftRowHeights } = metrics;
-    const doorRows: import("@shared/schema").EntranceDoorRow[] = config.entranceDoorRows || [{ height: 0, type: "fixed" }];
-    const slRows: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightRows || [{ height: 0, type: "fixed" }];
-    const slLeftRowsDef: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightLeftRows || [{ height: 0, type: "fixed" }];
+    const doorRows: import("@shared/schema").EntranceDoorRow[] = config.entranceDoorRows || [{ ...DEFAULT_DOOR_ROW }];
+    const slRows: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightRows || [{ ...DEFAULT_DOOR_ROW }];
+    const slLeftRowsDef: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightLeftRows || [{ ...DEFAULT_DOOR_ROW }];
     const elements: JSX.Element[] = [];
 
     for (const sec of sections) {
@@ -424,7 +426,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   }
 
   if (category === "hinge-door") {
-    const hdRows: EntranceDoorRow[] = config.hingeDoorRows || [{ height: 0, type: "fixed" }];
+    const hdRows: EntranceDoorRow[] = config.hingeDoorRows || [{ ...DEFAULT_DOOR_ROW }];
     const rowHeights = distributeSpaces(H, hdRows.map(r => r.height || 0));
     const elements: JSX.Element[] = [];
     let yOff = 0;
@@ -467,8 +469,8 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   }
 
   if (category === "french-door") {
-    const leftRows: EntranceDoorRow[] = config.frenchDoorLeftRows || [{ height: 0, type: "fixed" }];
-    const rightRows: EntranceDoorRow[] = config.frenchDoorRightRows || [{ height: 0, type: "fixed" }];
+    const leftRows: EntranceDoorRow[] = config.frenchDoorLeftRows || [{ ...DEFAULT_DOOR_ROW }];
+    const rightRows: EntranceDoorRow[] = config.frenchDoorRightRows || [{ ...DEFAULT_DOOR_ROW }];
     const halfW = W / 2;
     const leftRowHeights = distributeSpaces(H, leftRows.map(r => r.height || 0));
     const rightRowHeights = distributeSpaces(H, rightRows.map(r => r.height || 0));
@@ -540,7 +542,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const elements: JSX.Element[] = [];
 
     for (let i = 0; i < leafCount; i++) {
-      const leafRows = pRows[i] || [{ height: 0, type: "fixed" }];
+      const leafRows = pRows[i] || [{ ...DEFAULT_DOOR_ROW }];
       const rowHeights = distributeSpaces(H, leafRows.map(r => r.height || 0));
       const px = i * lw;
 
@@ -592,7 +594,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const elements: JSX.Element[] = [];
 
     for (let i = 0; i < panelCount; i++) {
-      const panelRowDefs = pRows[i] || [{ height: 0, type: "fixed" }];
+      const panelRowDefs = pRows[i] || [{ ...DEFAULT_DOOR_ROW }];
       const rowHeights = distributeSpaces(H, panelRowDefs.map(r => r.height || 0));
       const px = i * pw;
 
@@ -698,13 +700,13 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
   }
 
   const isHingeDoorStd = category === "hinge-door" && layout !== "custom";
-  const hingeDoorRowDefs: EntranceDoorRow[] = config.hingeDoorRows || [{ height: 0, type: "fixed" }];
+  const hingeDoorRowDefs: EntranceDoorRow[] = config.hingeDoorRows || [{ ...DEFAULT_DOOR_ROW }];
   const hingeDoorRowHeights = isHingeDoorStd ? distributeSpaces(H, hingeDoorRowDefs.map(r => r.height || 0)) : [];
   const hingeDoorRowMmHeights = isHingeDoorStd ? distributeMmLabels(H, hingeDoorRowDefs.map(r => r.height || 0)) : [];
 
   const isFrenchDoor = category === "french-door";
-  const frenchLeftRows: EntranceDoorRow[] = config.frenchDoorLeftRows || [{ height: 0, type: "fixed" }];
-  const frenchRightRows: EntranceDoorRow[] = config.frenchDoorRightRows || [{ height: 0, type: "fixed" }];
+  const frenchLeftRows: EntranceDoorRow[] = config.frenchDoorLeftRows || [{ ...DEFAULT_DOOR_ROW }];
+  const frenchRightRows: EntranceDoorRow[] = config.frenchDoorRightRows || [{ ...DEFAULT_DOOR_ROW }];
   const frenchLeftRowHeights = isFrenchDoor ? distributeSpaces(H, frenchLeftRows.map(r => r.height || 0)) : [];
   const frenchLeftRowMmHeights = isFrenchDoor ? distributeMmLabels(H, frenchLeftRows.map(r => r.height || 0)) : [];
   const frenchRightRowHeights = isFrenchDoor ? distributeSpaces(H, frenchRightRows.map(r => r.height || 0)) : [];
@@ -718,7 +720,7 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
   const panelRowMmHeightsAll: number[][] = [];
   if (isBifoldDoor || isStackerDoor) {
     for (let i = 0; i < panelCount; i++) {
-      const pRowDefs = panelRowsDef[i] || [{ height: 0, type: "fixed" }];
+      const pRowDefs = panelRowsDef[i] || [{ ...DEFAULT_DOOR_ROW }];
       panelRowHeightsAll.push(distributeSpaces(H, pRowDefs.map(r => r.height || 0)));
       panelRowMmHeightsAll.push(distributeMmLabels(H, pRowDefs.map(r => r.height || 0)));
     }

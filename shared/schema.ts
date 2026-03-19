@@ -120,7 +120,8 @@ export type CustomColumn = z.infer<typeof customColumnSchema>;
 
 export const entranceDoorRowSchema = z.object({
   height: z.number().min(0).default(0),
-  type: z.enum(["fixed", "awning"]).default("fixed"),
+  type: z.enum(["fixed", "awning", "sliding"]).default("fixed"),
+  slideDirection: z.enum(["left", "right"]).default("right"),
 });
 
 export type EntranceDoorRow = z.infer<typeof entranceDoorRowSchema>;

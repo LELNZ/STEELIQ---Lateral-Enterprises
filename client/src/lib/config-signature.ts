@@ -1,4 +1,4 @@
-import type { QuoteItem, CustomColumn } from "@shared/schema";
+import type { QuoteItem, CustomColumn, EntranceDoorRow } from "@shared/schema";
 import type { FrameConfiguration } from "@shared/schema";
 
 export interface ConfigSignature {
@@ -25,6 +25,18 @@ function countPanelTypes(columns: CustomColumn[]): { awning: number; fixed: numb
     }
   }
   return { awning, fixed, sliding, hinge };
+}
+
+function countStackerRowTypes(panelRows: EntranceDoorRow[][]): { awning: number; fixed: number; sliding: number } {
+  let awning = 0, fixed = 0, sliding = 0;
+  for (const panel of panelRows) {
+    for (const row of panel) {
+      if (row.type === "awning") awning++;
+      else if (row.type === "sliding") sliding++;
+      else fixed++;
+    }
+  }
+  return { awning, fixed, sliding };
 }
 
 function countTransoms(columns: CustomColumn[]): number {
@@ -115,7 +127,40 @@ export function deriveConfigSignature(item: QuoteItem): ConfigSignature {
     };
   }
 
-  if (cat === "sliding-window" || cat === "sliding-door" || cat === "stacker-door") {
+  if (cat === "stacker-door") {
+    const panels = item.panels || 2;
+    const mullionCount = Math.max(0, panels - 1);
+    const panelRows = item.panelRows || [];
+    if (panelRows.length > 0) {
+      const { awning, fixed, sliding } = countStackerRowTypes(panelRows);
+      const label = buildLabel({ awning, fixed, sliding, hinge: 0 }, mullionCount, 0);
+      return {
+        signature: `stacker:${label}`,
+        label,
+        awningCount: awning,
+        fixedCount: fixed,
+        slidingCount: sliding,
+        hingeCount: 0,
+        mullionCount,
+        transomCount: 0,
+      };
+    }
+    const fixedCount = Math.ceil(panels / 2);
+    const slidingCount = panels - fixedCount;
+    const label = buildLabel({ awning: 0, fixed: fixedCount, sliding: slidingCount, hinge: 0 }, mullionCount, 0);
+    return {
+      signature: `stacker:${label}`,
+      label,
+      awningCount: 0,
+      fixedCount,
+      slidingCount,
+      hingeCount: 0,
+      mullionCount,
+      transomCount: 0,
+    };
+  }
+
+  if (cat === "sliding-window" || cat === "sliding-door") {
     if (item.layout === "custom" && item.customColumns && item.customColumns.length > 0) {
       const counts = countPanelTypes(item.customColumns);
       const totalCols = item.customColumns.length;
