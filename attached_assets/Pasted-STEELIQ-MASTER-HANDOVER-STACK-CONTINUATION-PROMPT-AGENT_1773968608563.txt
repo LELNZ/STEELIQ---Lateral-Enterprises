@@ -1,0 +1,283 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT ISSUE
+==================================================
+
+The live/published production app is missing library/reference/configuration data that exists in development.
+
+Observed result:
+- production quote builder does not show detailed pricing breakdown
+- production library is effectively empty/incomplete
+- development has the library data and configuration data needed for pricing/config matching
+
+This phase is:
+SAFE DEV → PRODUCTION REFERENCE DATA MIGRATION
+
+Do NOT broaden scope.
+
+==================================================
+IMPORTANT BUSINESS CONTEXT
+==================================================
+
+This is not about migrating live operational quote/job/invoice records.
+
+This phase is ONLY about migrating reference/admin/configuration data required for the system to operate in production, such as:
+- library entries
+- frame configuration records
+- linked configuration component rows
+- pricing reference data
+- labour/reference setup data
+- other non-transactional admin data required for the quote builder/pricing engine
+
+Do NOT migrate live business transaction records unless explicitly instructed.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Audit which dev reference/configuration data is missing in production
+2. Define the safe set of reference/admin/configuration tables/data to migrate
+3. Migrate that safe reference/configuration data from dev to production
+4. Ensure production pricing/configuration parity for the live quote builder
+5. Return a truthful handover
+
+Do NOT broaden scope.
+
+==================================================
+STRICT MIGRATION RULES
+==================================================
+
+MIGRATE:
+- reference data
+- admin data
+- library data
+- frame configuration data
+- linked config component rows
+- non-transactional operational setup data required by the engine
+
+DO NOT MIGRATE:
+- live quotes
+- quote revisions
+- invoices
+- customers
+- contacts
+- jobs/op-jobs
+- lifecycle instances
+- lifecycle task states
+- Xero connection/token records
+- audit logs
+- user activity/history
+- any frozen commercial/financial transactional record
+
+If unsure whether a table is reference/config vs live transaction data, stop and report it before migrating.
+
+==================================================
+REQUIRED AUDIT TASKS
+==================================================
+
+Before changing anything:
+1. Inspect the current codebase and schema as source of truth
+2. Identify exactly which tables/data sets are reference/configuration data required for:
+   - library screens
+   - quote builder configuration matching
+   - pricing breakdown
+   - labour breakdown
+3. Compare dev vs production for those data sets
+4. Produce the exact list of missing production data
+5. Then implement the minimum safe migration
+
+==================================================
+REQUIRED MIGRATION APPROACH
+==================================================
+
+Use a safe, repeatable, idempotent migration approach.
+
+Requirements:
+- must be idempotent
+- must not duplicate records on repeated runs
+- must preserve stable identifiers/keys where needed for linked configuration data
+- must preserve division scope and ownership boundaries
+- must not overwrite production transactional records
+- must not wipe production DB
+
+Preferred pattern:
+- upsert reference/configuration data by stable business keys
+- then upsert linked child/config rows against the correct parent records
+
+If stable keys are missing, report that clearly and use the safest available matching strategy.
+
+==================================================
+DATA SETS TO AUDIT FIRST
+==================================================
+
+You must inspect and report on these likely candidates first:
+
+- library_entries and related library/reference rows
+- frame type records
+- frame configuration records
+- configuration signature / mapping records
+- configuration profile links
+- configuration accessory links
+- configuration labour links
+- glazing band / labour operation / site cost entries
+- any other non-transactional admin/config data required for pricing and breakdown rendering
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Target outcome:
+- production library/admin reference data is present
+- production quote builder can match valid configurations
+- production pricing breakdown renders for the tested live case
+- migration is safe and idempotent
+- no live commercial/financial data is copied from dev into production
+
+==================================================
+IMPLEMENTATION RULES
+==================================================
+
+Allowed:
+- targeted migration scripts
+- targeted server/admin seed/migration helpers
+- targeted production reference data repair
+- targeted parity verification
+
+Not allowed:
+- database redesign
+- broad production DB reset
+- copying transactional business records
+- speculative cleanup unrelated to the migration
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- production library screens now show expected data
+- production quote builder shows detailed pricing breakdown for the tested affected case
+- dev environment remains unchanged
+- no duplicate reference data on rerun
+- no live transactional data migrated
+- no break to manual override
+- no break to labour breakdown
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- no break to lifecycle or Xero code
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact data sets audited
+4. Exact migration scope chosen
+5. Exact migration method implemented
+6. Behaviour changes
+7. Schema/API/data changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- the missing production reference/configuration data has been migrated safely
+- the migration is idempotent
+- production pricing/config matching is restored for the tested case
+- no transactional business records were copied from dev into production
+- no architecture drift occurred
