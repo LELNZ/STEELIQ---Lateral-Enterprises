@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { sessionMiddleware } from "./auth";
 import { pool } from "./storage";
 import { runRefDataMigration } from "./ref-data-migration";
+import { runDedupMigration } from "./dedup-migration";
 
 const PUBLIC_API_PATHS = new Set([
   "/api/auth/login",
@@ -121,9 +122,11 @@ app.use((req, res, next) => {
       // never blocks startup/health-check promotion. It is idempotent and
       // safe to run on every boot.
       setImmediate(() => {
-        runRefDataMigration(pool).catch((err) =>
-          console.error("[ref-data-migration] Failed:", err)
-        );
+        runRefDataMigration(pool)
+          .then(() => runDedupMigration(pool))
+          .catch((err) =>
+            console.error("[startup-migrations] Failed:", err)
+          );
       });
     },
   );

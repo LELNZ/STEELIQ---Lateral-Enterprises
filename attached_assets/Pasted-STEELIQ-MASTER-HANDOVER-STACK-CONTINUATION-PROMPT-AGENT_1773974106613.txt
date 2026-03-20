@@ -1,0 +1,231 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT ISSUE
+==================================================
+
+The production reference-data migration restored the library, but it has introduced duplicate frame type/configuration records in production.
+
+Observed result:
+- duplicate frame types/configurations are visible in the production library UI
+- these must NOT be deleted manually because they may have linked child rows and matching dependencies
+
+This phase is:
+SAFE PRODUCTION DEDUPLICATION OF REFERENCE / CONFIGURATION DATA
+
+Do NOT broaden scope.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Audit exact duplicate reference/configuration records introduced in production
+2. Identify the canonical records to keep
+3. Safely relink any child/config rows if required
+4. Remove only true duplicate parent records
+5. Ensure configuration matching and pricing pathways still work correctly
+6. Return a truthful handover
+
+Do NOT broaden scope.
+
+==================================================
+STRICT SAFETY RULES
+==================================================
+
+DO NOT:
+- manually delete records blindly
+- wipe production reference tables
+- touch transactional business records
+- touch quotes, quote revisions, jobs, invoices, customers, contacts, lifecycle instances, task states, Xero connections, audit records
+
+ONLY work on duplicated reference/configuration data and its linked child rows where required.
+
+==================================================
+REQUIRED AUDIT TASKS
+==================================================
+
+Before changing anything:
+1. Inspect the current production data as source of truth
+2. Identify exactly which tables now contain duplicate records
+3. For each duplicate set, identify:
+   - duplicate IDs
+   - business key / natural key
+   - canonical record to keep
+   - linked child rows affected
+4. Confirm whether duplicates were caused by migration matching by ID instead of business key
+5. Then implement only the minimum safe deduplication
+
+==================================================
+LIKELY TABLES TO AUDIT FIRST
+==================================================
+
+Audit these first:
+- frame_types / equivalent parent frame type table
+- frame_configurations
+- configuration_profiles
+- configuration_accessories
+- configuration_labor
+- any other linked non-transactional configuration child tables
+
+Determine whether child rows are duplicated too, or whether only parent rows duplicated.
+
+==================================================
+REQUIRED DEDUPLICATION APPROACH
+==================================================
+
+Use a safe, explicit canonicalization approach.
+
+Required pattern:
+- choose the canonical parent record by stable business logic
+- re-point linked child rows if needed
+- delete only duplicate parents after confirming children/pathways are safe
+- ensure rerunning the fix does not create further damage
+
+If needed, also patch the migration logic so it does not recreate the duplicates again.
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Target outcome:
+- production library no longer shows duplicate frame types/configurations
+- linked profiles/accessories/labour pathways remain correct
+- quote builder configuration matching still works
+- pricing breakdown still works in production
+- migration path is safer moving forward
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- production library UI no longer shows the duplicate records for the affected case
+- production quote builder still matches the correct configuration
+- production detailed pricing breakdown still renders
+- no break to manual override
+- no break to labour breakdown
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- no break to lifecycle
+- no break to Xero work
+- no transactional data touched
+
+Use this exact production case as a regression check:
+- ES52 Window
+- configuration: 1 Awning + 1 Fixed, 1 Mullion
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact duplicate root cause found
+4. Exact canonicalization / deduplication method implemented
+5. Behaviour changes
+6. Schema/API/data changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- the production duplicates are safely removed
+- the correct linked pathways remain intact
+- production quote builder matching/pricing still works
+- the migration logic is prevented from recreating the same duplicate issue
+- no architecture drift occurred
