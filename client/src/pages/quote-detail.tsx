@@ -1398,6 +1398,21 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
   );
 }
 
+type InvoiceAllocation = {
+  acceptedValueExcl: number;
+  acceptedValueIncl: number;
+  totalInvoicedExcl: number;
+  totalInvoicedIncl: number;
+  remainingExcl: number;
+  remainingIncl: number;
+  depositInvoicedExcl: number;
+  depositAllowancePct: number;
+  depositAllowanceExcl: number;
+  depositAllowanceRemainingExcl: number;
+  depositAllowanceFullyUsed: boolean;
+  activeInvoiceCount: number;
+};
+
 function InvoiceSection({
   quoteId,
   acceptedValue,
@@ -1415,6 +1430,7 @@ function InvoiceSection({
 }) {
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
+  const [invoiceType, setInvoiceType] = useState<"deposit" | "progress" | "variation" | "final">("deposit");
   const [depositMode, setDepositMode] = useState<"percentage" | "fixed">("percentage");
   const [depositPct, setDepositPct] = useState("50");
   const [depositFixed, setDepositFixed] = useState("");
@@ -1427,32 +1443,70 @@ function InvoiceSection({
     queryFn: () => fetch(`/api/quotes/${quoteId}/invoices`).then((r) => r.json()),
   });
 
+  const { data: allocation } = useQuery<InvoiceAllocation>({
+    queryKey: ["/api/quotes", quoteId, "invoice-allocation"],
+    queryFn: () => fetch(`/api/quotes/${quoteId}/invoice-allocation`).then((r) => r.json()),
+    enabled: !!quoteId,
+  });
+
   const GST_RATE = 0.15;
-  const exclGst = depositMode === "percentage"
-    ? (acceptedValue * (parseFloat(depositPct) || 0)) / 100
-    : fixedGstBasis === "incl"
+
+  const exclGst = (() => {
+    if (invoiceType === "deposit") {
+      return depositMode === "percentage"
+        ? (acceptedValue * (parseFloat(depositPct) || 0)) / 100
+        : fixedGstBasis === "incl"
+          ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
+          : parseFloat(depositFixed) || 0;
+    }
+    if (invoiceType === "final" && allocation) {
+      return depositFixed === ""
+        ? allocation.remainingExcl
+        : fixedGstBasis === "incl"
+          ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
+          : parseFloat(depositFixed) || 0;
+    }
+    return fixedGstBasis === "incl"
       ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
       : parseFloat(depositFixed) || 0;
+  })();
+
   const gst = exclGst * GST_RATE;
   const inclGst = exclGst + gst;
 
+  const openCreateDialog = () => {
+    setInvoiceType("deposit");
+    setDepositMode("percentage");
+    setDepositPct("50");
+    setDepositFixed("");
+    setFixedGstBasis("excl");
+    setShowCreate(true);
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
+      const isDeposit = invoiceType === "deposit";
+      const descriptionMap: Record<string, string> = {
+        deposit: depositMode === "percentage"
+          ? `${depositPct}% deposit on accepted quotation`
+          : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+        progress: `Progress claim — NZD ${inclGst.toFixed(2)} incl. GST`,
+        variation: `Variation invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+        final: `Final invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+      };
       const res = await apiRequest("POST", "/api/invoices", {
         quoteId,
         divisionCode,
         customerId: customerId ?? null,
         projectId: projectId ?? null,
         quoteRevisionId: acceptedRevisionId ?? null,
-        type: "deposit",
-        depositType: depositMode,
-        depositPercentage: depositMode === "percentage" ? parseFloat(depositPct) : null,
+        type: invoiceType,
+        depositType: isDeposit ? depositMode : null,
+        depositPercentage: isDeposit && depositMode === "percentage" ? parseFloat(depositPct) : null,
         amountExclGst: exclGst,
         gstAmount: gst,
         amountInclGst: inclGst,
-        description: depositMode === "percentage"
-          ? `${depositPct}% deposit on accepted quotation`
-          : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST (fixed amount)`,
+        description: descriptionMap[invoiceType] ?? "",
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -1462,8 +1516,9 @@ function InvoiceSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       setShowCreate(false);
-      toast({ title: "Deposit invoice created" });
+      toast({ title: `${INVOICE_TYPE_LABELS[invoiceType] ?? "Invoice"} created` });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -1487,6 +1542,7 @@ function InvoiceSection({
     onSuccess: () => {
       setXeroMissingCustomer(false);
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       toast({ title: "Invoice marked ready for Xero" });
     },
     onError: (e: any) => {
@@ -1510,6 +1566,7 @@ function InvoiceSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       toast({ title: "Invoice returned to draft" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -1526,6 +1583,7 @@ function InvoiceSection({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       if (data.xeroMode === "live") {
         toast({
           title: "Pushed to Xero (Live)",
@@ -1548,6 +1606,7 @@ function InvoiceSection({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       if (data.xeroWarning) setXeroWarn(data.xeroWarning);
       toast({ title: "Invoice returned to draft" });
     },
@@ -1565,10 +1624,13 @@ function InvoiceSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       toast({ title: "Invoice approved" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const fmt = (n: number) => `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-4">
@@ -1577,10 +1639,48 @@ function InvoiceSection({
           <ReceiptText className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoices</h2>
         </div>
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCreate(true)} data-testid="button-create-invoice">
-          <Plus className="h-3 w-3 mr-1" /> Create Deposit Invoice
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openCreateDialog} data-testid="button-create-invoice">
+          <Plus className="h-3 w-3 mr-1" /> Create Invoice
         </Button>
       </div>
+
+      {allocation && (
+        <div className="rounded-lg border bg-card p-3 space-y-2" data-testid="panel-invoice-allocation">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-xs text-muted-foreground">Contract Value</p>
+              <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Invoiced</p>
+              <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.totalInvoicedExcl)} excl.</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Remaining</p>
+              <p className={`text-sm font-semibold ${allocation.remainingExcl <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
+                {fmt(allocation.remainingExcl)} excl.
+              </p>
+            </div>
+          </div>
+          {allocation.acceptedValueExcl > 0 && (
+            <div className="space-y-1">
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (allocation.totalInvoicedExcl / allocation.acceptedValueExcl) * 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Deposit: {fmt(allocation.depositInvoicedExcl)} of {fmt(allocation.depositAllowanceExcl)} allowance ({allocation.depositAllowancePct}%)</span>
+                <span>{allocation.depositAllowanceFullyUsed
+                  ? <span className="text-amber-600 dark:text-amber-400 font-medium">Deposit fully used</span>
+                  : <span>{fmt(allocation.depositAllowanceRemainingExcl)} deposit remaining</span>
+                }</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {xeroWarn && (
         <Alert variant="destructive">
@@ -1768,69 +1868,114 @@ function InvoiceSection({
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Create Deposit Invoice</DialogTitle>
+            <DialogTitle>Create Invoice</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Deposit Type</Label>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={depositMode === "percentage" ? "default" : "outline"}
-                  onClick={() => setDepositMode("percentage")}
-                  data-testid="button-deposit-percentage"
-                >
-                  Percentage
-                </Button>
-                <Button
-                  size="sm"
-                  variant={depositMode === "fixed" ? "default" : "outline"}
-                  onClick={() => setDepositMode("fixed")}
-                  data-testid="button-deposit-fixed"
-                >
-                  Fixed Amount
-                </Button>
+              <Label>Invoice Type</Label>
+              <div className="grid grid-cols-4 gap-1">
+                {(["deposit", "progress", "variation", "final"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    size="sm"
+                    variant={invoiceType === t ? "default" : "outline"}
+                    onClick={() => { setInvoiceType(t); setDepositFixed(""); }}
+                    className="text-xs capitalize"
+                    data-testid={`button-invoice-type-${t}`}
+                  >
+                    {t === "deposit" ? "Deposit" : t === "progress" ? "Progress" : t === "variation" ? "Variation" : "Final"}
+                  </Button>
+                ))}
               </div>
             </div>
-            {depositMode === "percentage" ? (
-              <div>
-                <Label>Deposit Percentage</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={depositPct}
-                    onChange={(e) => setDepositPct(e.target.value)}
-                    className="w-24"
-                    data-testid="input-deposit-percentage"
-                  />
-                  <span className="text-sm text-muted-foreground">%</span>
+
+            {invoiceType === "deposit" && allocation && (
+              <div className={`rounded-md px-3 py-2 text-xs space-y-0.5 ${allocation.depositAllowanceFullyUsed ? "bg-destructive/10 border border-destructive/30 text-destructive" : "bg-muted/50"}`} data-testid="panel-deposit-allowance">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Deposit allowance ({allocation.depositAllowancePct}% of contract)</span>
+                  <span className="font-medium">{fmt(allocation.depositAllowanceExcl)} excl.</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Already invoiced (deposit)</span>
+                  <span className="font-medium">{fmt(allocation.depositInvoicedExcl)} excl.</span>
+                </div>
+                <div className="flex justify-between border-t pt-0.5 mt-0.5">
+                  <span className={allocation.depositAllowanceFullyUsed ? "text-destructive font-medium" : "text-muted-foreground"}>Remaining deposit allowance</span>
+                  <span className={`font-semibold ${allocation.depositAllowanceFullyUsed ? "text-destructive" : "text-green-600 dark:text-green-400"}`}>
+                    {fmt(allocation.depositAllowanceRemainingExcl)} excl.
+                  </span>
+                </div>
+                {allocation.depositAllowanceFullyUsed && (
+                  <p className="text-destructive font-medium pt-1">Deposit allocation already fully used for this quote.</p>
+                )}
               </div>
-            ) : (
+            )}
+
+            {invoiceType === "final" && allocation && (
+              <div className="rounded-md px-3 py-2 text-xs bg-muted/50 space-y-0.5" data-testid="panel-final-remaining">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Remaining balance</span>
+                  <span className="font-semibold text-green-600 dark:text-green-400">{fmt(allocation.remainingExcl)} excl.</span>
+                </div>
+                <p className="text-muted-foreground">Final invoice pre-filled with remaining balance. Adjust below if needed.</p>
+              </div>
+            )}
+
+            {invoiceType === "deposit" ? (
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <Label>Deposit Type</Label>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={depositMode === "percentage" ? "default" : "outline"}
+                    onClick={() => setDepositMode("percentage")}
+                    data-testid="button-deposit-percentage"
+                  >
+                    Percentage
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={depositMode === "fixed" ? "default" : "outline"}
+                    onClick={() => setDepositMode("fixed")}
+                    data-testid="button-deposit-fixed"
+                  >
+                    Fixed Amount
+                  </Button>
+                </div>
+                {depositMode === "percentage" ? (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={depositPct}
+                        onChange={(e) => setDepositPct(e.target.value)}
+                        className="w-24"
+                        data-testid="input-deposit-percentage"
+                      />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1 ml-auto">
+                        <Button size="sm" variant={fixedGstBasis === "excl" ? "default" : "outline"} onClick={() => setFixedGstBasis("excl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-excl">Excl. GST</Button>
+                        <Button size="sm" variant={fixedGstBasis === "incl" ? "default" : "outline"} onClick={() => setFixedGstBasis("incl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-incl">Incl. GST</Button>
+                      </div>
+                    </div>
+                    <Input type="number" min="0" step="0.01" value={depositFixed} onChange={(e) => setDepositFixed(e.target.value)} placeholder="0.00" data-testid="input-deposit-fixed" />
+                  </div>
+                )}
+              </div>
+            ) : invoiceType === "final" ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
                   <Label>Amount (NZD)</Label>
-                  <div className="flex gap-1 ml-auto">
-                    <Button
-                      size="sm"
-                      variant={fixedGstBasis === "excl" ? "default" : "outline"}
-                      onClick={() => setFixedGstBasis("excl")}
-                      className="h-6 px-2 text-xs"
-                      data-testid="button-gst-basis-excl"
-                    >
-                      Excl. GST
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={fixedGstBasis === "incl" ? "default" : "outline"}
-                      onClick={() => setFixedGstBasis("incl")}
-                      className="h-6 px-2 text-xs"
-                      data-testid="button-gst-basis-incl"
-                    >
-                      Incl. GST
-                    </Button>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant={fixedGstBasis === "excl" ? "default" : "outline"} onClick={() => setFixedGstBasis("excl")} className="h-6 px-2 text-xs">Excl. GST</Button>
+                    <Button size="sm" variant={fixedGstBasis === "incl" ? "default" : "outline"} onClick={() => setFixedGstBasis("incl")} className="h-6 px-2 text-xs">Incl. GST</Button>
                   </div>
                 </div>
                 <Input
@@ -1839,26 +1984,36 @@ function InvoiceSection({
                   step="0.01"
                   value={depositFixed}
                   onChange={(e) => setDepositFixed(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-deposit-fixed"
+                  placeholder={allocation ? (fixedGstBasis === "incl" ? (allocation.remainingExcl * 1.15).toFixed(2) : allocation.remainingExcl.toFixed(2)) : "0.00"}
+                  data-testid="input-amount-fixed"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Enter amount {fixedGstBasis === "incl" ? "including" : "excluding"} GST — breakdown shown below.
-                </p>
+                <p className="text-xs text-muted-foreground">Leave blank to use remaining balance ({allocation ? fmt(allocation.remainingExcl) + " excl." : "—"})</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Amount (NZD)</Label>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant={fixedGstBasis === "excl" ? "default" : "outline"} onClick={() => setFixedGstBasis("excl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-excl">Excl. GST</Button>
+                    <Button size="sm" variant={fixedGstBasis === "incl" ? "default" : "outline"} onClick={() => setFixedGstBasis("incl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-incl">Incl. GST</Button>
+                  </div>
+                </div>
+                <Input type="number" min="0" step="0.01" value={depositFixed} onChange={(e) => setDepositFixed(e.target.value)} placeholder="0.00" data-testid="input-amount-fixed" />
               </div>
             )}
+
             <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Excl. GST</span>
-                <span>${exclGst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span>{fmt(exclGst)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">GST (15%)</span>
-                <span>${gst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span>{fmt(gst)}</span>
               </div>
               <div className="flex justify-between font-semibold border-t pt-1">
                 <span>Incl. GST</span>
-                <span data-testid="text-deposit-incl-gst">${inclGst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span data-testid="text-deposit-incl-gst">{fmt(inclGst)}</span>
               </div>
             </div>
           </div>
@@ -1866,11 +2021,11 @@ function InvoiceSection({
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending || exclGst <= 0}
+              disabled={createMutation.isPending || exclGst <= 0 || (invoiceType === "deposit" && allocation?.depositAllowanceFullyUsed)}
               data-testid="button-save-invoice"
             >
               {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-              Create Invoice
+              Create {INVOICE_TYPE_LABELS[invoiceType] ?? "Invoice"}
             </Button>
           </DialogFooter>
         </DialogContent>

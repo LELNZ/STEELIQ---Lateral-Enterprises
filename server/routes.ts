@@ -2469,6 +2469,56 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Invoice Allocation Endpoint ──────────────────────────────────────────
+  // Returns allocation state for a quote: how much has been invoiced, how much
+  // remains, and deposit allowance tracking. Counts "active" statuses only
+  // (draft, ready_for_xero, pushed_to_xero_draft, approved). returned_to_draft
+  // invoices are excluded as they have been retracted by the operator.
+  app.get("/api/quotes/:id/invoice-allocation", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      const allInvoices = await storage.getInvoicesByQuote(req.params.id);
+      const ACTIVE_STATUSES = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+      const MAX_DEPOSIT_PCT = 50;
+      const GST_RATE = 0.15;
+
+      const active = allInvoices.filter((inv) => ACTIVE_STATUSES.includes(inv.status));
+      const acceptedValue = quote.acceptedValue ?? 0;
+
+      const depositInvoicedExcl = active.filter((i) => i.type === "deposit").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const progressInvoicedExcl = active.filter((i) => i.type === "progress").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const finalInvoicedExcl = active.filter((i) => i.type === "final").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const variationInvoicedExcl = active.filter((i) => i.type === "variation").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const totalInvoicedExcl = active.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const remainingExcl = Math.max(0, acceptedValue - totalInvoicedExcl);
+
+      const depositAllowanceExcl = acceptedValue * (MAX_DEPOSIT_PCT / 100);
+      const depositAllowanceRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
+
+      return res.json({
+        acceptedValueExcl: acceptedValue,
+        acceptedValueIncl: acceptedValue * (1 + GST_RATE),
+        totalInvoicedExcl,
+        totalInvoicedIncl: totalInvoicedExcl * (1 + GST_RATE),
+        remainingExcl,
+        remainingIncl: remainingExcl * (1 + GST_RATE),
+        depositInvoicedExcl,
+        progressInvoicedExcl,
+        finalInvoicedExcl,
+        variationInvoicedExcl,
+        depositAllowancePct: MAX_DEPOSIT_PCT,
+        depositAllowanceExcl,
+        depositAllowanceRemainingExcl,
+        depositAllowanceFullyUsed: depositAllowanceRemainingExcl <= 0.001,
+        activeInvoiceCount: active.length,
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/invoices", async (req, res) => {
     const schema = z.object({
       quoteId: z.string().optional().nullable(),
@@ -2512,6 +2562,64 @@ export async function registerRoutes(
           projectId: quote.projectId ?? null,
           divisionCode: quote.divisionId ?? null,
         };
+
+        // ── Invoice allocation guard ─────────────────────────────────────────
+        // Policy: max deposit = 50% of accepted contract value (excl. GST).
+        // Total of all active invoices must not exceed accepted value.
+        // Active = draft | ready_for_xero | pushed_to_xero_draft | approved.
+        // returned_to_draft invoices are excluded (operator has retracted them).
+        const ALLOC_ACTIVE = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+        const MAX_DEPOSIT_PCT = 50;
+        const existingInvoices = await storage.getInvoicesByQuote(parsed.data.quoteId);
+        const activeInvoices = existingInvoices.filter((inv) => ALLOC_ACTIVE.includes(inv.status));
+        const contractValue = quote.acceptedValue ?? 0;
+        const newAmountExcl = parsed.data.amountExclGst ?? 0;
+        const invoiceType = parsed.data.type ?? "deposit";
+
+        if (contractValue > 0 && newAmountExcl > 0) {
+          const totalInvoicedExcl = activeInvoices.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+
+          // Overall contract cap
+          if (totalInvoicedExcl + newAmountExcl > contractValue + 0.005) {
+            const remainingExcl = Math.max(0, contractValue - totalInvoicedExcl);
+            return res.status(422).json({
+              error: `Invoice amount exceeds remaining contract value. Remaining to invoice: $${remainingExcl.toFixed(2)} excl. GST (contract: $${contractValue.toFixed(2)}).`,
+              code: "OVER_CONTRACT_VALUE",
+              remainingExcl,
+              contractValue,
+            });
+          }
+
+          // Deposit-specific cap (50% of contract)
+          if (invoiceType === "deposit") {
+            const depositAllowanceExcl = contractValue * (MAX_DEPOSIT_PCT / 100);
+            const depositInvoicedExcl = activeInvoices
+              .filter((i) => i.type === "deposit")
+              .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+            const depositRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
+
+            if (depositRemainingExcl <= 0.005) {
+              return res.status(422).json({
+                error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full.`,
+                code: "DEPOSIT_ALLOWANCE_EXHAUSTED",
+                depositAllowanceExcl,
+                depositInvoicedExcl,
+                depositRemainingExcl: 0,
+              });
+            }
+
+            if (newAmountExcl > depositRemainingExcl + 0.005) {
+              return res.status(422).json({
+                error: `Deposit amount exceeds remaining deposit allowance. Only $${depositRemainingExcl.toFixed(2)} excl. GST remains of the ${MAX_DEPOSIT_PCT}% deposit allowance.`,
+                code: "OVER_DEPOSIT_ALLOWANCE",
+                depositAllowanceExcl,
+                depositInvoicedExcl,
+                depositRemainingExcl,
+              });
+            }
+          }
+        }
+        // ────────────────────────────────────────────────────────────────────
       }
 
       const number = await storage.getNextInvoiceNumber();
@@ -2604,6 +2712,29 @@ export async function registerRoutes(
               code: "MISSING_CUSTOMER",
               quoteId: invoice.quoteId ?? null,
             });
+          }
+
+          // Hard allocation check at ready_for_xero gate
+          if (invoice.quoteId) {
+            const allocQuote = await storage.getQuote(invoice.quoteId);
+            if (allocQuote?.acceptedValue && allocQuote.acceptedValue > 0) {
+              const allQuoteInvoices = await storage.getInvoicesByQuote(invoice.quoteId);
+              const ALLOC_ACTIVE_RFX = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+              const otherActive = allQuoteInvoices.filter(
+                (inv) => inv.id !== invoice.id && ALLOC_ACTIVE_RFX.includes(inv.status)
+              );
+              const otherTotal = otherActive.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+              const thisAmount = invoice.amountExclGst ?? 0;
+              if (otherTotal + thisAmount > allocQuote.acceptedValue + 0.005) {
+                const remaining = Math.max(0, allocQuote.acceptedValue - otherTotal);
+                return res.status(422).json({
+                  error: `Invoice cannot proceed: total invoiced would exceed the contract value. Remaining uninvoiced: $${remaining.toFixed(2)} excl. GST.`,
+                  code: "OVER_CONTRACT_VALUE",
+                  remainingExcl: remaining,
+                  contractValue: allocQuote.acceptedValue,
+                });
+              }
+            }
           }
         }
 
