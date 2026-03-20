@@ -1,0 +1,274 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not modify production data blindly.
+- Do not broaden scope into unrelated UX redesign, navigation redesign, or future module work in this phase.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not report this phase complete unless the live-impacting persistence and workflow verification concerns are actually resolved or clearly separated as dev-only vs production-only.
+- Do not claim success based only on dev behavior.
+- Do not mark numbering persistence fixed unless save + reload works with the correct persisted values.
+- Do not mark invoice workflow complete unless the action surfaces and operational flow are verified coherently.
+
+Definition of done for this phase:
+- Exact production-parity status is identified
+- Numbering persistence root cause is confirmed for production, not guessed
+- Invoice workflow changes are verified against the current architecture
+- Any required schema sync step is clearly identified and safely executed or explicitly handed off
+- No architecture drift
+- No unintended schema/API drift beyond what is already present and required
+
+IMPORTANT EXECUTION RULE
+Before changing anything:
+1. Briefly list the exact files you will inspect
+2. Briefly list the exact routes, schema fields, and storage methods you will verify
+3. State whether this phase is:
+   - verification only
+   - schema parity repair
+   - or tiny code correction
+4. Then execute only that scope
+
+If handover docs and code differ, treat the current repo code as source of truth and report the mismatch explicitly.
+
+SYSTEM CONTEXT — CURRENT TRUTH
+
+We have:
+- separate development and production databases
+- live production app with live quotes and at least one live deposit invoice
+- live Xero OAuth connection working in production
+- new invoice action controls reportedly added in dev/repo
+- new job-detail invoice summary reportedly added in dev/repo
+- numbering settings still not persisting correctly in the live app
+
+Reported latest work:
+1. Global /invoices page now has action buttons
+2. Op-job detail now has invoice summary + manage-in-quote link
+3. Numbering persistence likely failed in production because the relevant columns may not exist yet in production DB
+4. db:push was run, but it is not yet confirmed whether that was dev-only or production too
+
+This phase is to verify and safely resolve production parity and workflow truth.
+
+LOCKED ARCHITECTURE — MUST NOT CHANGE
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY this phase:
+
+PHASE: PRODUCTION PARITY + WORKFLOW VERIFICATION
+
+Required objectives:
+1. Verify the new invoicing UI changes are correctly implemented in code
+2. Verify whether those changes are present in the live published production app
+3. Verify the exact root cause of numbering persistence failure in production
+4. Confirm whether production schema is missing:
+   - quoteNumberPrefix
+   - quoteNumberUseDivisionSuffix
+   - jobNumberPrefix
+   - jobNumberUseDivisionSuffix
+   or equivalent fields actually used by current code
+5. If production schema parity is missing, apply the minimum safe schema sync required
+6. Re-verify numbering save + reload behavior
+7. Re-verify invoice workflow surfaces after parity is restored
+8. Return a truthful handover with clear dev vs production separation
+
+DO NOT broaden scope beyond this.
+
+REQUIRED REVIEW BEFORE IMPLEMENTING
+
+Before changing anything:
+1. Inspect the actual current schema for org/settings numbering fields
+2. Inspect the PATCH /api/settings/org route and current validation
+3. Inspect the storage update/load path for numbering settings
+4. Inspect the current /invoices page actions implementation
+5. Inspect the current op-job detail invoice panel implementation
+6. Determine whether the problem is:
+   - code bug
+   - production schema drift
+   - production deploy mismatch
+   - or a combination
+7. State the exact root cause
+8. Then implement only the minimum safe fix
+
+SPECIFIC NUMBERING SETTINGS TO VERIFY
+
+The live app must persist these values correctly:
+- Quote Prefix = SE
+- Quote Add Division Suffix = ON
+- Job Prefix = JOB
+- Job Add Division Suffix = ON
+
+Verification must include:
+- save values
+- reload page
+- confirm values still display
+- confirm preview values reflect saved settings
+- confirm historical records are not renumbered
+
+SPECIFIC INVOICE WORKFLOW TO VERIFY
+
+Verify current operational workflow truth for:
+- /invoices list actions
+- quote-detail invoice actions
+- op-job detail invoice summary/navigation
+- deposit invoice flow
+- push-to-xero flow
+- approve flow
+- return-to-draft flow
+
+You are not to redesign invoice architecture in this phase.
+You are only verifying that the newly implemented surfaces are correctly wired and operational.
+
+STRICT RULES
+
+DO NOT:
+- redesign the billing model
+- add progress/final invoice creation in this phase
+- change lifecycle architecture in this phase
+- add new statuses in this phase
+- add speculative UI/UX redesign in this phase
+- touch production transactional data manually
+- claim production fixed if only dev is fixed
+- assume db:push was run against production unless you verify it
+
+ALLOWED ACTIONS
+
+Allowed:
+- inspect schema
+- inspect routes/storage/UI
+- apply a minimal schema sync required for existing fields
+- apply a tiny corrective code patch only if strictly necessary
+- redeploy if needed after parity repair
+- verify save/reload behavior
+- verify invoice action surfaces
+
+Not allowed:
+- broad refactor
+- nav redesign
+- new module expansion
+- speculative cleanup
+
+MANDATORY HANDOVER FORMAT
+
+Return final handover in this exact structure:
+
+1. Files inspected
+List every file inspected with a short reason.
+
+2. Files changed
+List every modified file with a short explanation.
+If none: explicitly state "None".
+
+3. Planned tasks summary
+List the exact tasks you executed.
+
+4. Exact root cause found
+Separate clearly:
+- numbering persistence root cause
+- invoice workflow verification findings
+- production vs dev parity findings
+
+5. Exact logic / method implemented
+Document the precise fix method used, including whether schema sync was required.
+
+6. Behaviour changes
+Explain exactly what changed in:
+- numbering settings save/reload
+- /invoices page
+- op-job invoice surface
+- live production behavior
+
+7. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+Be explicit whether changes were:
+- dev only
+- production only
+- both
+If none: explicitly state "None".
+
+8. UI Changes
+Document visible UI/admin changes.
+If none: explicitly state "None".
+
+9. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+
+10. Risks / Limitations
+Document any edge cases or remaining limitations.
+
+11. Updated Current System State
+Update the current-state notes for:
+- production parity
+- numbering settings persistence
+- invoicing operational surface
+- Xero
+
+12. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+13. Regression Checks
+Confirm the following still work:
+- Library CRUD
+- Quote builder item creation
+- Snapshot generation
+- Quote preview rendering
+- PDF generation
+- Schedule pagination rules
+- Pricing breakdown
+- Labour breakdown
+- Production-safe startup
+- Quote acceptance
+- Convert to job
+- Deposit invoice creation
+- Push to Xero
+- Approve invoice
+- Return invoice to draft
+- Xero OAuth connected state
+- Numbering settings save/reload
+
+FINAL INSTRUCTION
+
+Implement exactly this:
+Production Parity + Workflow Verification.
+
+Do not redesign architecture.
+Do not broaden scope.
+If production schema sync is the real blocker, fix that safely first.
+Then verify numbering persistence and invoice workflow truthfully.

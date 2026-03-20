@@ -1296,6 +1296,22 @@ function InvoiceSection({
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const approveMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "approved" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Approve failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      toast({ title: "Invoice approved" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -1442,6 +1458,18 @@ function InvoiceSection({
                             Push to Xero
                           </Button>
                         </>
+                      )}
+                      {inv.status === "pushed_to_xero_draft" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
+                          onClick={() => approveMutation.mutate(inv.id)}
+                          disabled={approveMutation.isPending}
+                          data-testid={`button-approve-${inv.id}`}
+                        >
+                          Approve
+                        </Button>
                       )}
                       {["pushed_to_xero_draft", "approved"].includes(inv.status) && (
                         <Button
