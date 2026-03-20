@@ -85,8 +85,19 @@ async function seedLibraryDefaults() {
 // ── Xero OAuth state store ────────────────────────────────────────────────────
 // Short-lived CSRF state tokens for the OAuth 2.0 Authorization Code flow.
 // State is stored server-side only — never exposed to the browser as a value.
-// Each entry: state → expiry timestamp (ms). Cleaned up after use or on expiry.
-const _oauthStates = new Map<string, number>();
+// Each entry: state → { expiry ms, redirectUri }.  The redirect URI is derived
+// at connect-time and re-used in the callback so both sides always match.
+const _oauthStates = new Map<string, { expiry: number; redirectUri: string }>();
+
+/** Derives the Xero callback URI from the incoming request's host.
+ *  Uses XERO_REDIRECT_URI env var as an explicit override if set,
+ *  otherwise auto-builds from the request host (works on any domain). */
+function getXeroRedirectUri(req: any): string {
+  if (process.env.XERO_REDIRECT_URI) return process.env.XERO_REDIRECT_URI;
+  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
+  return `${proto}://${host}/api/xero/callback`;
+}
 
 const XERO_CONNECTIONS_URL = "https://api.xero.com/connections";
 
@@ -1513,26 +1524,24 @@ export async function registerRoutes(
     }
 
     const clientId = process.env.XERO_CLIENT_ID;
-    const redirectUri = process.env.XERO_REDIRECT_URI;
 
     if (!clientId) {
       return res.status(500).json({
         error: "XERO_CLIENT_ID is not configured. Set it in environment variables before connecting.",
       });
     }
-    if (!redirectUri) {
-      return res.status(500).json({
-        error: "XERO_REDIRECT_URI is not configured. Set it in environment variables before connecting.",
-      });
-    }
+
+    const redirectUri = getXeroRedirectUri(req);
 
     // Generate and store a short-lived CSRF state token (10 min TTL)
+    // The redirect URI is stored alongside the state so the callback can
+    // reconstruct the exact same value for the token exchange.
     const state = crypto.randomBytes(24).toString("hex");
-    _oauthStates.set(state, Date.now() + 10 * 60 * 1000);
+    _oauthStates.set(state, { expiry: Date.now() + 10 * 60 * 1000, redirectUri });
 
     // Clean up expired states
-    for (const [s, exp] of _oauthStates) {
-      if (exp < Date.now()) _oauthStates.delete(s);
+    for (const [s, entry] of _oauthStates) {
+      if (entry.expiry < Date.now()) _oauthStates.delete(s);
     }
 
     const params = new URLSearchParams({
@@ -1557,9 +1566,9 @@ export async function registerRoutes(
       return res.redirect("/#/settings?xero=error&reason=" + encodeURIComponent(xeroError));
     }
 
-    // Validate state (CSRF check)
-    const stateExpiry = _oauthStates.get(state ?? "");
-    if (!stateExpiry || stateExpiry < Date.now()) {
+    // Validate state (CSRF check) and retrieve the redirect URI stored at connect-time
+    const stateEntry = _oauthStates.get(state ?? "");
+    if (!stateEntry || stateEntry.expiry < Date.now()) {
       console.error("[Xero OAuth] Invalid or expired state parameter.");
       return res.redirect("/#/settings?xero=error&reason=invalid_state");
     }
@@ -1567,9 +1576,10 @@ export async function registerRoutes(
 
     const clientId = process.env.XERO_CLIENT_ID;
     const clientSecret = process.env.XERO_CLIENT_SECRET;
-    const redirectUri = process.env.XERO_REDIRECT_URI;
+    // Use the exact URI that was sent in the authorisation request (stored in state)
+    const redirectUri = stateEntry.redirectUri;
 
-    if (!clientId || !clientSecret || !redirectUri) {
+    if (!clientId || !clientSecret) {
       console.error("[Xero OAuth] Missing required env vars for token exchange.");
       return res.redirect("/#/settings?xero=error&reason=missing_env");
     }
@@ -1666,7 +1676,7 @@ export async function registerRoutes(
     const dbConn = await storage.getXeroConnection();
     const hasDbConnection = !!dbConn && !!dbConn.tenantId;
     const dbTokenExpired = dbConn ? dbConn.expiresAt.getTime() <= Date.now() : false;
-    const redirectUriSet = !!process.env.XERO_REDIRECT_URI;
+    const redirectUriSet = true; // auto-detected from request host; XERO_REDIRECT_URI override is optional
 
     let mode: "not_configured" | "scaffold" | "live_wired";
     let status: string;
