@@ -530,6 +530,19 @@ export type Invoice = typeof invoices.$inferSelect;
 export const OP_JOB_STATUSES = ["active", "on_hold", "completed", "cancelled"] as const;
 export type OpJobStatus = typeof OP_JOB_STATUSES[number];
 
+export const MEASUREMENT_REQUIREMENTS = ["pre_quote", "post_acceptance", "not_required"] as const;
+export type MeasurementRequirement = typeof MEASUREMENT_REQUIREMENTS[number];
+
+export const DIMENSION_SOURCES = [
+  "site_measure",
+  "confirmed_drawings",
+  "client_supplied",
+  "engineer_drawings",
+  "architectural_drawings",
+  "other",
+] as const;
+export type DimensionSource = typeof DIMENSION_SOURCES[number];
+
 export const opJobs = pgTable("op_jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   jobNumber: text("job_number").notNull().unique(),
@@ -541,6 +554,8 @@ export const opJobs = pgTable("op_jobs", {
   sourceQuoteId: varchar("source_quote_id"),
   acceptedRevisionId: varchar("accepted_revision_id"),
   notes: text("notes"),
+  measurementRequirement: text("measurement_requirement"),
+  dimensionSource: text("dimension_source"),
   archivedAt: timestamp("archived_at"),
   isDemoRecord: boolean("is_demo_record").default(false),
   createdByUserId: varchar("created_by_user_id"),

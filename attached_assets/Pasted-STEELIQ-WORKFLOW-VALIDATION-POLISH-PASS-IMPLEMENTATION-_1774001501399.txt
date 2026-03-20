@@ -1,0 +1,294 @@
+STEELIQ WORKFLOW VALIDATION + POLISH PASS
+IMPLEMENTATION CONTROL HEADER
+
+Implement exactly as specified.
+Do not redesign the app architecture.
+Do not convert to microservices.
+Do not alter or replace the existing QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+Do not introduce schema creep outside the scope below unless required to complete listed functionality.
+Do not mark this pass complete unless the required UI and workflow behavior is tested and working.
+Define done in terms of production-safe workflow behavior, not just code changes.
+
+CURRENT STATUS
+Core workflow appears to be in place:
+- estimate -> quote customer auto-link/create
+- project-first accepted quote flow
+- downstream inheritance to project/job/invoice
+- server-side ready_for_xero validation
+- projects pages/dashboard
+
+This pass is NOT for architecture redesign.
+This pass is for validation, edge cases, lifecycle logic, UI behavior, and Xero-test readiness.
+
+PRIMARY GOALS
+1. Validate the implemented customer/project/job/invoice workflow end-to-end.
+2. Eliminate duplicate / unsafe customer-link behavior.
+3. Implement correct site-measure / verification lifecycle logic.
+4. Fix card-collapse interaction so controls inside cards do not collapse them.
+5. Improve project dashboard usefulness and keep project context strong.
+6. Make invoice push to Xero reliably testable.
+
+==================================================
+PHASE A - VALIDATION + DATA SAFETY
+==================================================
+
+OBJECTIVE
+Confirm the new workflow works in real scenarios and harden weak points.
+
+IMPLEMENT / VERIFY
+1. Customer matching safety
+- Review estimate -> quote auto-customer-link/create logic.
+- Confirm it does not create easy duplicates.
+- Matching priority should remain safe and deterministic:
+  a. existing linked customerId
+  b. exact name
+  c. email if present
+  d. phone if present
+- If confidence is ambiguous, do NOT silently link the wrong customer.
+- Add a safe warning or review state if needed.
+
+2. Downstream linkage validation
+- Verify and fix if needed:
+  - quote.customerId
+  - quote.projectId
+  - job.customerId
+  - job.projectId
+  - invoice.customerId
+  - invoice.projectId
+- Ensure changes happen consistently from accepted quote onward.
+
+3. Controlled relink safeguards
+- If customer/project is changed after downstream objects exist:
+  - warn clearly
+  - do not silently break invoice/Xero linkage
+  - do not rewrite already-pushed Xero relationships
+- Improve messaging if needed.
+
+4. Add visible relationship badges/cards
+- On quote, project, job, and invoice detail surfaces, clearly show linked:
+  - customer
+  - project
+  - source quote
+  - source job/op-job where relevant
+
+ACCEPTANCE CRITERIA
+- No obvious customer-duplicate bug in estimate -> quote flow.
+- Customer/project linkage is visible and trustworthy on downstream records.
+- Unsafe relink attempts are warned and controlled.
+
+==================================================
+PHASE B - LIFECYCLE MEASUREMENT LOGIC
+==================================================
+
+OBJECTIVE
+Replace the rigid “Site Measure / Review” stage with configurable real-world workflow logic.
+
+BUSINESS REQUIREMENT
+Measurement can be:
+1. required before estimate/quote
+2. required after quote acceptance for final verification
+3. not required at all for SED / supply-only / confirmed-drawing jobs
+
+IMPLEMENT
+1. Add measurement requirement model
+- Add a field for measurement requirement with values:
+  - pre_quote_required
+  - post_acceptance_required
+  - not_required
+
+2. Add dimension source field
+- Add a field for dimension source with values such as:
+  - site_measure
+  - confirmed_drawings
+  - client_supplied_dimensions
+  - engineer_drawings
+  - architectural_drawings
+  - other
+
+3. Lifecycle rendering rules
+- If pre_quote_required:
+  show measurement stage before estimate completion
+- If post_acceptance_required:
+  show measurement stage after acceptance and before downstream production/install
+- If not_required:
+  hide measurement stage entirely
+
+4. Dynamic stage labeling
+- pre_quote_required -> “Pre-Quote Site Measure”
+- post_acceptance_required -> “Final Site Verification”
+- not_required -> hidden
+
+5. Defaults
+Where sensible, set default behavior:
+- renovation -> pre_quote_required
+- supply-only / confirmed drawings -> not_required
+- install-sensitive / final-manufacture verification -> post_acceptance_required
+
+ACCEPTANCE CRITERIA
+- Lifecycle behaves correctly in all three measurement scenarios.
+- Irrelevant measurement stage is hidden.
+- User can understand why measurement is or is not required.
+
+==================================================
+PHASE C - CARD / COLLAPSE INTERACTION FIX
+==================================================
+
+OBJECTIVE
+Fix annoying collapse behavior.
+
+PROBLEM
+The top-level card currently collapses when interacting with controls inside the card body.
+
+IMPLEMENT
+1. Collapse/expand should trigger ONLY from:
+- header row click
+- dedicated chevron/toggle button
+
+2. Interacting with controls inside the card body must NOT collapse the card:
+- radio buttons
+- checkboxes
+- links
+- buttons
+- dropdowns
+- inputs
+- textareas
+
+3. Review this behavior across:
+- lifecycle cards
+- quote collapsible cards
+- project dashboard collapsible sections
+
+ACCEPTANCE CRITERIA
+- Clicking radio buttons or other controls no longer closes the card.
+- Only header/toggle interaction collapses sections.
+
+==================================================
+PHASE D - PROJECT DASHBOARD POLISH
+==================================================
+
+OBJECTIVE
+Make the project page truly useful as the umbrella workspace.
+
+IMPLEMENT
+1. Strengthen project summary cards
+- customer
+- address
+- project status
+- quote count
+- job count
+- invoice count
+- total quoted
+- total accepted
+- total invoiced
+- outstanding / uninvoiced if feasible
+
+2. Improve inline sections
+- Quotes, Jobs, and Invoices must remain inline-accessible.
+- Each section should support:
+  - inline inspection
+  - status visibility
+  - amount/value visibility
+  - open-full-record link without losing project context
+
+3. Preserve project context
+- “Open” links should open normally, but project page must remain the control centre.
+- Add back-to-project UX where appropriate if missing.
+
+4. Empty states
+- If no jobs yet -> explain next step
+- If no invoices yet -> explain next step
+- If no quotes linked -> explain next step
+
+ACCEPTANCE CRITERIA
+- Project page feels like the umbrella dashboard for a live project.
+- Quotes/jobs/invoices are understandable from one page without forced navigation.
+
+==================================================
+PHASE E - XERO TEST READINESS
+==================================================
+
+OBJECTIVE
+Make invoice push to Xero reliably testable now that core linkage exists.
+
+IMPLEMENT / VERIFY
+1. Confirm server-side ready_for_xero guard remains authoritative.
+2. Improve any remaining UI messages around:
+- missing customer
+- missing Xero contact mapping
+- blocked invoice state
+3. Create and test at least one fully valid path:
+- estimate
+- quote
+- accepted quote
+- project
+- job
+- invoice
+- ready_for_xero
+- push to xero
+
+4. If credentials are scaffold/live mixed, report exact observed behavior.
+5. If push still fails, identify whether failure is:
+- data mapping
+- customer/Xero contact issue
+- credential issue
+- transport/API issue
+
+ACCEPTANCE CRITERIA
+- There is a documented successful or near-successful test path.
+- Remaining Xero failures, if any, are precisely categorized.
+
+==================================================
+REQUIRED TEST CASES
+==================================================
+
+Run and report these exact tests:
+
+TEST 1
+New customer estimate -> quote
+- confirm customer auto-created or correctly matched
+
+TEST 2
+Accepted quote -> create project
+- confirm name/address/customer prefill
+
+TEST 3
+Create job after project
+- confirm project/customer inheritance
+
+TEST 4
+Create invoice
+- confirm project/customer inheritance
+
+TEST 5
+Mark ready for Xero invalid case
+- confirm server-side block
+
+TEST 6
+Mark ready for Xero valid case
+- confirm allowed
+
+TEST 7
+Push to Xero
+- document exact result
+
+TEST 8
+Lifecycle measurement scenarios
+- pre-quote required
+- post-acceptance required
+- not required
+
+TEST 9
+Collapse interaction
+- confirm controls inside body do not collapse cards
+
+==================================================
+DELIVERABLES REQUIRED
+==================================================
+
+Do not report complete unless all of these are provided:
+1. concise summary of fixes
+2. exact files changed
+3. exact server routes/validation changed
+4. exact UI surfaces changed
+5. test results for all required tests
+6. known remaining gaps, if any

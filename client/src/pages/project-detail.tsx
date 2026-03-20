@@ -239,8 +239,9 @@ export default function ProjectDetail() {
         data-testid="section-project-quotes"
       >
         {pQuotes.length === 0 ? (
-          <div className="p-6 text-center">
-            <p className="text-sm text-muted-foreground">No quotes linked to this project.</p>
+          <div className="p-6 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">No quotes linked to this project yet.</p>
+            <p className="text-xs text-muted-foreground/70">Open a quote and link it to this project via the Customer &amp; Project section.</p>
           </div>
         ) : (
           <Table>
@@ -249,6 +250,7 @@ export default function ProjectDetail() {
                 <TableHead>Number</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right hidden sm:table-cell">Accepted</TableHead>
                 <TableHead className="hidden md:table-cell">Created</TableHead>
                 <TableHead />
               </TableRow>
@@ -264,6 +266,9 @@ export default function ProjectDetail() {
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {q.totalValue != null ? `$${fmt(q.totalValue)}` : "—"}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm hidden sm:table-cell">
+                    {q.status === "accepted" && q.acceptedValue != null ? fmtMoney(q.acceptedValue) : "—"}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm hidden md:table-cell">
                     {q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-NZ") : "—"}
@@ -290,8 +295,9 @@ export default function ProjectDetail() {
         data-testid="section-project-jobs"
       >
         {pJobs.length === 0 ? (
-          <div className="p-6 text-center">
-            <p className="text-sm text-muted-foreground">No jobs linked to this project.</p>
+          <div className="p-6 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">No jobs linked to this project yet.</p>
+            <p className="text-xs text-muted-foreground/70">Accept a linked quote and convert it to a job to see it here.</p>
           </div>
         ) : (
           <Table>
@@ -339,8 +345,9 @@ export default function ProjectDetail() {
         data-testid="section-project-invoices"
       >
         {pInvoices.length === 0 ? (
-          <div className="p-6 text-center">
-            <p className="text-sm text-muted-foreground">No invoices linked to this project.</p>
+          <div className="p-6 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">No invoices linked to this project yet.</p>
+            <p className="text-xs text-muted-foreground/70">Invoices are created from accepted quotes and will appear here once raised.</p>
           </div>
         ) : (
           <Table>

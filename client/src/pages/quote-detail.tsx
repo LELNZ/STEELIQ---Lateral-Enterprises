@@ -430,6 +430,19 @@ export default function QuoteDetail() {
             </Button>
           </div>
         )}
+        {quote.projectId && (
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Project</p>
+            <Button
+              variant="ghost"
+              className="p-0 h-auto text-sm underline"
+              onClick={() => navigate(`/projects/${quote.projectId}`)}
+              data-testid="link-header-project"
+            >
+              View Project
+            </Button>
+          </div>
+        )}
         <div className="rounded-lg border bg-card p-3">
           <p className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" /> Last Sent</p>
           {quote.sentAt ? (
@@ -945,9 +958,14 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
   const [editing, setEditing] = useState(false);
   const [selCustomer, setSelCustomer] = useState(customerId ?? "__none__");
   const [selProject, setSelProject] = useState(projectId ?? "__none__");
+  const [relinkWarningOpen, setRelinkWarningOpen] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: invoices = [] } = useQuery<Invoice[]>({
+    queryKey: ["/api/quotes", quoteId, "invoices"],
+    queryFn: () => fetch(`/api/quotes/${quoteId}/invoices`).then((r) => r.json()),
+  });
 
   const customer = customers.find((c) => c.id === customerId);
   const project = projects.find((p) => p.id === projectId);
@@ -1054,7 +1072,11 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
               setSelCustomer(customerId ?? "__none__");
               setSelProject(projectId ?? "__none__");
-              setEditing(true);
+              if (invoices.length > 0 && (customerId || projectId)) {
+                setRelinkWarningOpen(true);
+              } else {
+                setEditing(true);
+              }
             }} data-testid="button-edit-linkage">
               <Link2 className="h-3 w-3 mr-1" />
               {customer ? "Change" : "Link"}
@@ -1131,6 +1153,38 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
           </div>
         </div>
       )}
+
+      {/* Relink Warning Dialog */}
+      <AlertDialog open={relinkWarningOpen} onOpenChange={setRelinkWarningOpen}>
+        <AlertDialogContent data-testid="dialog-relink-warning">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" /> Changing Customer or Project
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                This quote has <strong>{invoices.length} invoice{invoices.length !== 1 ? "s" : ""}</strong> already raised.
+              </span>
+              <span className="block">
+                Changing the linked customer or project will <strong>not</strong> update existing invoices — those remain associated with the original customer. This may cause mismatches if you are using Xero.
+              </span>
+              <span className="block text-muted-foreground">
+                Only proceed if you are correcting a data entry error and understand the implications.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-relink">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => { setRelinkWarningOpen(false); setEditing(true); }}
+              data-testid="button-confirm-relink"
+            >
+              I understand — Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create Project Dialog */}
       <Dialog open={createProjectOpen} onOpenChange={setCreateProjectOpen}>

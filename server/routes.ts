@@ -3282,6 +3282,8 @@ export async function registerRoutes(
         title: z.string().min(1).optional(),
         status: z.enum(["active", "on_hold", "completed", "cancelled"]).optional(),
         notes: z.string().nullable().optional(),
+        measurementRequirement: z.enum(["pre_quote", "post_acceptance", "not_required"]).nullable().optional(),
+        dimensionSource: z.enum(["site_measure", "confirmed_drawings", "client_supplied", "engineer_drawings", "architectural_drawings", "other"]).nullable().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
