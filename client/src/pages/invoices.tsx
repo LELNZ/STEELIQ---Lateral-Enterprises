@@ -4,10 +4,11 @@ import type { Invoice } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, ArrowRight } from "lucide-react";
+import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, ArrowRight, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -38,18 +39,42 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
   return "secondary";
 }
 
+class MissingCustomerError extends Error {
+  quoteId: string | null;
+  constructor(message: string, quoteId: string | null) {
+    super(message);
+    this.quoteId = quoteId;
+  }
+}
+
 function InvoiceActions({ inv, onMutate }: { inv: EnrichedInvoice; onMutate: (id: string) => void }) {
   const { toast } = useToast();
+  const [missingCustomerQuoteId, setMissingCustomerQuoteId] = useState<string | null>(null);
 
   const patchMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const res = await apiRequest("PATCH", `/api/invoices/${id}`, { status });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.code === "MISSING_CUSTOMER") {
+          throw new MissingCustomerError(body.error ?? "No customer linked", body.quoteId ?? null);
+        }
+        throw new Error(body.error ?? "Action failed");
+      }
       return res.json();
     },
     onSuccess: () => {
+      setMissingCustomerQuoteId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
     },
-    onError: (err: Error) => toast({ title: "Action failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      if (err instanceof MissingCustomerError) {
+        setMissingCustomerQuoteId(err.quoteId);
+      } else {
+        setMissingCustomerQuoteId(null);
+        toast({ title: "Action failed", description: err.message, variant: "destructive" });
+      }
+    },
   });
 
   const pushToXeroMutation = useMutation({
@@ -207,8 +232,24 @@ function InvoiceActions({ inv, onMutate }: { inv: EnrichedInvoice; onMutate: (id
     );
   }
 
-  if (actions.length === 0) return null;
-  return <div className="flex items-center gap-1 flex-wrap">{actions}</div>;
+  if (actions.length === 0 && !missingCustomerQuoteId) return null;
+  return (
+    <div className="space-y-2">
+      {missingCustomerQuoteId && (
+        <Alert data-testid={`alert-missing-customer-${inv.id}`}>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-xs">
+            No customer linked — required for Xero.{" "}
+            <Link href={`/quote/${missingCustomerQuoteId}`} className="underline font-medium">
+              Link a customer on the quote
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      )}
+      {actions.length > 0 && <div className="flex items-center gap-1 flex-wrap">{actions}</div>}
+    </div>
+  );
 }
 
 export default function InvoicesPage() {

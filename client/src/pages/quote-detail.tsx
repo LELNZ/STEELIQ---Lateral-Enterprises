@@ -23,9 +23,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle } from "lucide-react";
+import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG, type TotalsDisplayConfig } from "@/lib/quote-document";
 import type { PreviewData } from "@/lib/quote-document";
 import { buildQuoteRenderModel } from "@/lib/quote-renderer";
@@ -513,66 +513,61 @@ export default function QuoteDetail() {
         </div>
       )}
 
-      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} />
+      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} />
 
       {currentRevisionForDetails && (
-        <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="section-details-quick-edit">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Customer-facing Details</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Shown as a dedicated block below the quote summary in the customer PDF and preview.</p>
+        <CollapsibleCard title="Customer-facing Details" defaultOpen={false} data-testid="section-details-quick-edit">
+          <div className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">Shown as a dedicated block below the quote summary in the customer PDF and preview.</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <Label htmlFor="details-show-toggle" className="text-xs text-muted-foreground">Show</Label>
+                <Switch
+                  id="details-show-toggle"
+                  checked={effectiveShowDetails}
+                  onCheckedChange={(v) => setLocalShowDetails(v)}
+                  data-testid="switch-details-show"
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Label htmlFor="details-show-toggle" className="text-xs text-muted-foreground">Show</Label>
-              <Switch
-                id="details-show-toggle"
-                checked={effectiveShowDetails}
-                onCheckedChange={(v) => setLocalShowDetails(v)}
-                data-testid="switch-details-show"
-              />
+            <Textarea
+              value={effectiveDetailsText}
+              onChange={e => setLocalDetailsText(e.target.value)}
+              placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
+              rows={4}
+              className="text-sm resize-none"
+              data-testid="textarea-details-quick-edit"
+            />
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground h-7 px-2"
+                onClick={() => navigate(`/quote/${quoteId}/preview`)}
+                data-testid="link-open-quote-display-settings"
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                Open Quote Display Settings
+              </Button>
+              <Button
+                size="sm"
+                disabled={!hasUnsavedDetails || detailsMutation.isPending}
+                onClick={() => detailsMutation.mutate()}
+                data-testid="button-save-details"
+              >
+                {detailsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+                Save
+              </Button>
             </div>
           </div>
-          <Textarea
-            value={effectiveDetailsText}
-            onChange={e => setLocalDetailsText(e.target.value)}
-            placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
-            rows={4}
-            className="text-sm resize-none"
-            data-testid="textarea-details-quick-edit"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground h-7 px-2"
-              onClick={() => navigate(`/quote/${quoteId}/preview`)}
-              data-testid="link-open-quote-display-settings"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              Open Quote Display Settings
-            </Button>
-            <Button
-              size="sm"
-              disabled={!hasUnsavedDetails || detailsMutation.isPending}
-              onClick={() => detailsMutation.mutate()}
-              data-testid="button-save-details"
-            >
-              {detailsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
-              Save
-            </Button>
-          </div>
-        </div>
+        </CollapsibleCard>
       )}
 
       <Separator />
 
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Revisions</h2>
-        </div>
+      <CollapsibleCard title={`Revisions${quote.revisions && quote.revisions.length > 0 ? ` (${quote.revisions.length})` : ""}`} icon={<History className="h-4 w-4 text-muted-foreground" />} defaultOpen={false} data-testid="section-revisions">
         {quote.revisions && quote.revisions.length > 0 ? (
-          <div className="rounded-lg border bg-card overflow-x-auto">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -615,24 +610,24 @@ export default function QuoteDetail() {
             </Table>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No revisions yet.</p>
+          <p className="text-sm text-muted-foreground p-4">No revisions yet.</p>
         )}
-      </div>
+      </CollapsibleCard>
 
-      {quote.sourceJobId && <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />}
-
-      <Separator />
-
-      <div data-testid="section-lifecycle" className="rounded-lg border bg-card p-4">
-        <LifecyclePanel quoteId={quote.id} />
-      </div>
+      {quote.sourceJobId && (
+        <CollapsibleCard title="Related Quotes" icon={<FileText className="h-4 w-4 text-muted-foreground" />} defaultOpen={false}>
+          <div className="p-0">
+            <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />
+          </div>
+        </CollapsibleCard>
+      )}
 
       {quote.status === "accepted" && (
         <>
           <Separator />
           <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} customerId={quote.customerId ?? undefined} projectId={quote.projectId ?? undefined} acceptedRevisionId={quote.acceptedRevisionId ?? undefined} />
           <Separator />
-          <ConvertToJobSection quoteId={quote.id} />
+          <ConvertToJobSection quoteId={quote.id} projectId={quote.projectId} />
           <Separator />
           <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-revert-to-draft">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -654,6 +649,12 @@ export default function QuoteDetail() {
           </div>
         </>
       )}
+
+      <Separator />
+
+      <div data-testid="section-lifecycle" className="rounded-lg border bg-card p-4">
+        <LifecyclePanel quoteId={quote.id} />
+      </div>
 
       <Separator />
 
@@ -908,7 +909,38 @@ const INVOICE_TYPE_LABELS: Record<string, string> = {
   credit_note: "Credit Note",
 };
 
-function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: string; customerId?: string | null; projectId?: string | null }) {
+function CollapsibleCard({
+  title,
+  icon,
+  defaultOpen = true,
+  children,
+  "data-testid": testId,
+}: {
+  title: string;
+  icon?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+  "data-testid"?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-lg border bg-card" data-testid={testId}>
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-sm font-semibold">{title}</span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+      </button>
+      {open && <div className="border-t">{children}</div>}
+    </div>
+  );
+}
+
+function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, sourceJobId }: { quoteId: string; customerId?: string | null; projectId?: string | null; quoteStatus?: string; sourceJobId?: string }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [selCustomer, setSelCustomer] = useState(customerId ?? "__none__");
@@ -944,23 +976,83 @@ function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: s
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  // Create Project dialog state
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [cpName, setCpName] = useState("");
+  const [cpAddress, setCpAddress] = useState("");
+  const [cpDescription, setCpDescription] = useState("");
+
+  // Fetch source job for address prefill (only when creating project)
+  const { data: sourceJob } = useQuery<any>({
+    queryKey: ["/api/jobs", sourceJobId],
+    queryFn: async () => {
+      const res = await fetch(`/api/jobs/${sourceJobId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!sourceJobId && createProjectOpen,
+  });
+
+  const createProjectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/quotes/${quoteId}/create-project`, {
+        name: cpName,
+        address: cpAddress || null,
+        description: cpDescription || null,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to create project");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Project created and linked to quote" });
+      setCreateProjectOpen(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const openCreateProject = () => {
+    setCpName(customer?.name ? `${customer.name} – Project` : "");
+    setCpAddress(sourceJob?.address ?? "");
+    setCpDescription("");
+    setCreateProjectOpen(true);
+  };
+
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Link2 className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Customer & Project</h3>
         </div>
-        {!editing && (
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
-            setSelCustomer(customerId ?? "__none__");
-            setSelProject(projectId ?? "__none__");
-            setEditing(true);
-          }} data-testid="button-edit-linkage">
-            <Link2 className="h-3 w-3 mr-1" />
-            {customer ? "Change" : "Link"}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {!editing && quoteStatus === "accepted" && !projectId && customerId && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={openCreateProject}
+              data-testid="button-create-project-from-quote"
+            >
+              <Plus className="h-3 w-3 mr-1" /> Create Project
+            </Button>
+          )}
+          {!editing && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+              setSelCustomer(customerId ?? "__none__");
+              setSelProject(projectId ?? "__none__");
+              setEditing(true);
+            }} data-testid="button-edit-linkage">
+              <Link2 className="h-3 w-3 mr-1" />
+              {customer ? "Change" : "Link"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {!editing ? (
@@ -970,15 +1062,30 @@ function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: s
             {customer ? (
               <p className="text-sm font-medium" data-testid="text-linked-customer">{customer.name}</p>
             ) : (
-              <p className="text-sm text-muted-foreground italic">Not linked</p>
+              <div>
+                <p className="text-sm text-muted-foreground italic">Not linked</p>
+                {quoteStatus === "accepted" && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Link a customer to enable Xero invoicing</p>
+                )}
+              </div>
             )}
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Project</p>
             {project ? (
-              <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
+              <div>
+                <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
+                <a href={`/projects/${project.id}`} className="text-xs text-muted-foreground hover:underline flex items-center gap-1 mt-0.5" data-testid="link-view-project">
+                  <ExternalLink className="h-2.5 w-2.5" /> View project
+                </a>
+              </div>
             ) : (
-              <p className="text-sm text-muted-foreground italic">Not linked</p>
+              <div>
+                <p className="text-sm text-muted-foreground italic">Not linked</p>
+                {quoteStatus === "accepted" && !customerId && (
+                  <p className="text-xs text-muted-foreground mt-1">Link a customer first to create a project</p>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1016,11 +1123,66 @@ function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: s
           </div>
         </div>
       )}
+
+      {/* Create Project Dialog */}
+      <Dialog open={createProjectOpen} onOpenChange={setCreateProjectOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" /> Create Project from Quote
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <Alert>
+              <AlertDescription>
+                A new project will be created and automatically linked to this quote. The project will be owned by {customer?.name ?? "the linked customer"}.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label>Project Name</Label>
+              <Input
+                value={cpName}
+                onChange={(e) => setCpName(e.target.value)}
+                placeholder="e.g. 23 Main St – Window Package"
+                data-testid="input-create-project-name"
+              />
+            </div>
+            <div>
+              <Label className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Site Address <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                value={cpAddress}
+                onChange={(e) => setCpAddress(e.target.value)}
+                placeholder="Site or delivery address"
+                data-testid="input-create-project-address"
+              />
+            </div>
+            <div>
+              <Label>Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                value={cpDescription}
+                onChange={(e) => setCpDescription(e.target.value)}
+                placeholder="Brief notes about this project"
+                data-testid="input-create-project-description"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateProjectOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => createProjectMutation.mutate()}
+              disabled={!cpName.trim() || createProjectMutation.isPending}
+              data-testid="button-confirm-create-project"
+            >
+              {createProjectMutation.isPending ? "Creating…" : "Create Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function ConvertToJobSection({ quoteId }: { quoteId: string }) {
+function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectId?: string | null }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [showDialog, setShowDialog] = useState(false);
@@ -1102,6 +1264,14 @@ function ConvertToJobSection({ quoteId }: { quoteId: string }) {
           <Briefcase className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Convert to Job</h3>
         </div>
+        {!projectId && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              No project linked yet. Consider linking a project before converting so the job is automatically grouped under the project.
+            </AlertDescription>
+          </Alert>
+        )}
         <p className="text-sm text-muted-foreground">
           This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision.
         </p>
@@ -1225,20 +1395,35 @@ function InvoiceSection({
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const [xeroMissingCustomer, setXeroMissingCustomer] = useState(false);
+
   const markReadyMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
       const res = await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "ready_for_xero" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        if (body.code === "MISSING_CUSTOMER") {
+          const err = new Error(body.error || "No customer linked");
+          (err as any).missingCustomer = true;
+          throw err;
+        }
         throw new Error(body.error || "Failed to mark ready");
       }
       return res.json();
     },
     onSuccess: () => {
+      setXeroMissingCustomer(false);
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
       toast({ title: "Invoice marked ready for Xero" });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      if (e?.missingCustomer) {
+        setXeroMissingCustomer(true);
+      } else {
+        setXeroMissingCustomer(false);
+        toast({ title: "Error", description: e.message, variant: "destructive" });
+      }
+    },
   });
 
   const unmarkReadyMutation = useMutation({
@@ -1328,6 +1513,15 @@ function InvoiceSection({
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="text-sm font-medium">{xeroWarn}</AlertDescription>
+        </Alert>
+      )}
+
+      {xeroMissingCustomer && (
+        <Alert data-testid="alert-xero-missing-customer">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            A customer must be linked to this quote before marking an invoice ready for Xero. Link one in the <strong>Customer &amp; Project</strong> section above.
+          </AlertDescription>
         </Alert>
       )}
 

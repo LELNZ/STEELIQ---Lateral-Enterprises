@@ -154,6 +154,9 @@ export interface IStorage {
   createProject(data: InsertProject): Promise<Project>;
   updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined>;
   archiveProject(id: string): Promise<Project | undefined>;
+  getQuotesByProject(projectId: string): Promise<Quote[]>;
+  getOpJobsByProject(projectId: string): Promise<OpJob[]>;
+  getInvoicesByProject(projectId: string): Promise<Invoice[]>;
 
   getNextInvoiceNumber(): Promise<string>;
   createInvoice(data: InsertInvoice): Promise<Invoice>;
@@ -753,6 +756,24 @@ export class DatabaseStorage implements IStorage {
   async archiveProject(id: string): Promise<Project | undefined> {
     const [updated] = await db.update(projects).set({ archivedAt: new Date() } as any).where(eq(projects.id, id)).returning();
     return updated;
+  }
+
+  async getQuotesByProject(projectId: string): Promise<Quote[]> {
+    return db.select().from(quotes)
+      .where(and(eq(quotes.projectId, projectId), isNull(quotes.deletedAt)))
+      .orderBy(desc(quotes.createdAt));
+  }
+
+  async getOpJobsByProject(projectId: string): Promise<OpJob[]> {
+    return db.select().from(opJobs)
+      .where(and(eq(opJobs.projectId, projectId), isNull(opJobs.archivedAt)))
+      .orderBy(desc(opJobs.createdAt));
+  }
+
+  async getInvoicesByProject(projectId: string): Promise<Invoice[]> {
+    return db.select().from(invoices)
+      .where(eq(invoices.projectId, projectId))
+      .orderBy(desc(invoices.createdAt));
   }
 
   async getNextInvoiceNumber(): Promise<string> {

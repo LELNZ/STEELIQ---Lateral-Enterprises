@@ -1055,10 +1055,49 @@ export async function registerRoutes(
         const number = formatQuoteNumber(seqResult.rows[0].current_value, quotePrefix, divisionCode, quoteUseDivSuffix);
 
         const newQuoteSellValue = (snapshot as any).totals?.sell ?? null;
+
+        // Auto-carry customer linkage from source estimate if available
+        let autoCustomerId: string | null = null;
+        if (sourceJobId) {
+          const srcJob = await client.query(`SELECT customer_id FROM jobs WHERE id = $1`, [sourceJobId]);
+          if (srcJob.rows.length > 0 && srcJob.rows[0].customer_id) {
+            autoCustomerId = srcJob.rows[0].customer_id;
+          } else {
+            // No customer_id on job — try auto-match/create from client fields on job
+            const srcJobFull = await client.query(
+              `SELECT client_name, client_email, client_phone FROM jobs WHERE id = $1`, [sourceJobId]
+            );
+            if (srcJobFull.rows.length > 0) {
+              const { client_name, client_email, client_phone } = srcJobFull.rows[0];
+              if (client_name) {
+                const existingCustomers = await storage.getAllCustomers();
+                const nameLower = client_name.trim().toLowerCase();
+                const match = existingCustomers.find((c) =>
+                  c.name.toLowerCase() === nameLower ||
+                  (client_email && c.email && c.email.toLowerCase() === client_email.toLowerCase()) ||
+                  (client_phone && (c.phone === client_phone))
+                );
+                if (match) {
+                  autoCustomerId = match.id;
+                } else {
+                  const newCustomer = await storage.createCustomer({
+                    name: client_name.trim(),
+                    email: client_email || undefined,
+                    phone: client_phone || undefined,
+                  });
+                  autoCustomerId = newCustomer.id;
+                }
+                // Back-link the customerId to the source job too
+                await client.query(`UPDATE jobs SET customer_id = $1 WHERE id = $2`, [autoCustomerId, sourceJobId]);
+              }
+            }
+          }
+        }
+
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, total_value, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, $6, NOW(), NOW()) RETURNING *`,
-          [number, sourceJobId || null, divisionCode, customer, quoteType || null, newQuoteSellValue]
+          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, total_value, customer_id, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, $6, $7, NOW(), NOW()) RETURNING *`,
+          [number, sourceJobId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId]
         );
         const quote = quoteInsert.rows[0];
 
@@ -2294,6 +2333,65 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Project Sub-queries (quotes/jobs/invoices per project) ───────────────
+  app.get("/api/projects/:id/quotes", async (req, res) => {
+    try {
+      return res.json(await storage.getQuotesByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/projects/:id/jobs", async (req, res) => {
+    try {
+      return res.json(await storage.getOpJobsByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/projects/:id/invoices", async (req, res) => {
+    try {
+      return res.json(await storage.getInvoicesByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Create Project from Quote ────────────────────────────────────────────
+  app.post("/api/quotes/:id/create-project", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (!quote.customerId) {
+        return res.status(422).json({ error: "A customer must be linked to this quote before creating a project." });
+      }
+
+      const schema = z.object({
+        name: z.string().min(1),
+        address: z.string().optional().nullable(),
+        description: z.string().optional().nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const project = await storage.createProject({
+        customerId: quote.customerId,
+        name: parsed.data.name,
+        address: parsed.data.address ?? null,
+        description: parsed.data.description ?? null,
+        divisionCode: quote.divisionId ?? null,
+      });
+
+      // Auto-link project back to this quote
+      await storage.updateQuote(quote.id, { projectId: project.id });
+
+      return res.status(201).json({ project });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // ─── Quote Acceptance ─────────────────────────────────────────────────────
   app.post("/api/quotes/:id/accept", async (req, res) => {
     try {
@@ -2488,6 +2586,27 @@ export async function registerRoutes(
             error: `Cannot transition invoice from "${currentStatus}" to "${targetStatus}". Allowed: ${allowed.join(", ") || "none"}.`,
           });
         }
+
+        // Xero readiness validation — must have a customer before marking ready
+        if (targetStatus === "ready_for_xero") {
+          let customerValid = false;
+          if (invoice.customerId) {
+            const customer = await storage.getCustomer(invoice.customerId);
+            customerValid = !!(customer && customer.name);
+          }
+          if (!customerValid && invoice.quoteId) {
+            const linkedQuote = await storage.getQuote(invoice.quoteId);
+            customerValid = !!(linkedQuote?.customerId || linkedQuote?.customer);
+          }
+          if (!customerValid) {
+            return res.status(422).json({
+              error: "Invoice cannot be marked ready for Xero: no customer is linked. Open the source quote and link a customer first.",
+              code: "MISSING_CUSTOMER",
+              quoteId: invoice.quoteId ?? null,
+            });
+          }
+        }
+
         logActivity("invoice_updated", "invoice", invoice.id, userId, { from: currentStatus, to: targetStatus });
       }
 

@@ -1,0 +1,423 @@
+STEELIQ CRM / PROJECT / QUOTE / JOB / XERO WORKFLOW REBUILD
+IMPLEMENTATION CONTROL HEADER
+
+Implement exactly as specified.
+Do not redesign the app architecture.
+Do not convert to microservices.
+Do not alter or replace the existing QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+Do not introduce schema creep outside the scope below unless required to complete listed functionality.
+Do not invent extra endpoints outside the specified workflow unless needed to complete a listed feature.
+Do not hardcode business rules only in UI components.
+Do not mark any phase complete unless required UI/admin/operator surfaces for that phase are working.
+Define done in terms of internal operational readiness and testability, not backend-only completion.
+
+CURRENT-STATE CONSTRAINTS
+- Existing app is a centralized TypeScript Express + React system.
+- Existing jobs, quotes, accepted quote conversion, invoices, admin/library patterns, customers, contacts, projects, and op-jobs already exist.
+- There is already Xero push logic and current invoice push failure occurs when no customer name or Xero contact ID is available.
+- We must preserve existing app structure and improve the customer/project/job workflow so Xero push can be tested reliably.
+
+PRIMARY GOALS
+1. Ensure estimate -> quote automatically preserves and links customer correctly.
+2. Ensure customer is auto-created or auto-linked when estimate becomes quote.
+3. Keep ability to unlink/reassign customer later with safeguards.
+4. Keep Projects as a first-class umbrella record.
+5. Make Project creation happen before Job creation in the accepted-quote workflow.
+6. Ensure project is created using source estimate/job name and address by default.
+7. Ensure Job is created only after Project exists, and links to quote + project + customer.
+8. Ensure invoices inherit valid customer/project context so Xero push can be tested successfully.
+9. Improve quote detail UX:
+   - quote cards collapsible
+   - default collapsed
+   - lifecycle section moved near bottom
+10. Add a real Project dashboard page where quotes, jobs, and invoices are accessible inline without forcing navigation away.
+
+DEFINITIONS TO LOCK
+- Customer = who the work is for
+- Project = umbrella site/contract/grouping for related scopes
+- Quote = commercial proposal
+- Job = internal execution record created after accepted quote and linked to project
+- Invoice = billing record linked to quote/customer/project
+
+TARGET WORKFLOW
+Estimate -> Quote -> Accepted Quote -> Create Project -> Create Job -> Create Invoice(s)
+
+IMPORTANT BUSINESS RULES
+- Customer should be effectively required by the time a quote exists.
+- Project should remain optional at quote stage, but preferred/strongly guided once quote is accepted.
+- Job should not be created before project in the preferred accepted-quote workflow.
+- Invoice can be created only if customer linkage is valid enough for Xero payload generation.
+- “Ready for Xero” must not be allowed if required customer/Xero linkage is missing.
+
+==================================================
+PHASE 1 - CUSTOMER LINKING + XERO-READY FOUNDATION
+==================================================
+
+OBJECTIVE
+Fix the root data-linking problem so estimate -> quote creates a real customer relationship and invoices can be tested for Xero push.
+
+IMPLEMENT
+1. Estimate -> Quote customer carry-forward logic
+   - When estimate converts to quote:
+     a. If estimate already has customerId, carry it forward automatically.
+     b. If no customerId exists, attempt to find an existing customer by matching:
+        - exact name first
+        - then email if present
+        - then phone if present
+     c. If no safe match exists, auto-create a new customer record from estimate customer details.
+     d. Link quote.customerId automatically.
+     e. Preserve visible customer snapshot fields on quote for historical document consistency.
+
+2. Customer unlink/relink flexibility
+   - On quote detail, provide:
+     - Linked Customer card
+     - Change customer
+     - Unlink customer
+   - If downstream records already exist (project/job/invoice), show confirmation warning before unlink/reassign.
+   - Do not silently rewrite downstream finance records already pushed to Xero.
+
+3. Xero readiness validation
+   - Add a validation layer before invoice status becomes "ready_for_xero".
+   - Block transition to ready_for_xero unless:
+     - invoice has linked customerId OR valid customer name snapshot
+     - and customer has enough information to build Xero payload
+   - Prefer valid linked customer record.
+   - If system requires xeroContactId in your workflow, clearly show that requirement.
+   - If name-only mode is acceptable for payload mapping, allow it.
+   - Error messaging must be specific and actionable.
+
+4. Invoice push error improvements
+   - Improve push-to-Xero error UI so user sees:
+     - why it failed
+     - whether customer is missing
+     - whether Xero contact ID is missing
+     - direct action buttons/links:
+       - Open quote
+       - Open customer
+       - Link customer
+   - Preserve existing push behavior otherwise.
+
+5. Quote detail page UX cleanup
+   - All quote cards/sections should be collapsible.
+   - Default state = collapsed for all non-critical sections.
+   - Keep quote summary/header open.
+   - Move Lifecycle section near bottom of page.
+
+PHASE 1 UI REQUIREMENTS
+- Quote detail page:
+  - collapsible cards
+  - linked customer section
+  - clear linked/unlinked state
+  - customer change/unlink actions
+  - lifecycle lower on page
+- Invoice detail/list:
+  - clear Xero readiness validation state
+  - clear reason why push is blocked
+- Customer selection UX:
+  - show whether selected customer is existing linked record or auto-created record
+
+PHASE 1 ACCEPTANCE CRITERIA
+- Converting estimate to quote always results in a usable customer linkage path.
+- Quote displays linked customer correctly.
+- User can unlink/reassign customer with safeguards.
+- Invoice cannot enter ready_for_xero if customer linkage is invalid.
+- Xero push testing can proceed on at least one invoice with a valid customer.
+- Quote cards are collapsible and default collapsed.
+- Lifecycle is moved lower on the quote page.
+
+==================================================
+PHASE 2 - PROJECT-FIRST ACCEPTED QUOTE WORKFLOW
+==================================================
+
+OBJECTIVE
+Make Project the umbrella before Job creation and align accepted quote flow to real business use.
+
+IMPLEMENT
+1. Accepted Quote action redesign
+   - On accepted quote, primary next action should be:
+     - Create Project
+   - Secondary actions:
+     - Create Deposit Invoice
+     - Create Progress Invoice
+     - Create Final Invoice
+     - Create Job (disabled or discouraged until project exists, depending on logic below)
+
+2. Project creation from accepted quote
+   - Add "Create Project from Quote" action.
+   - Prefill project fields from source quote/estimate:
+     - customerId from quote
+     - name from source estimate/job/site name if available
+     - address from source estimate/job address
+     - division where useful
+     - description/notes from quote context if applicable
+   - On save:
+     - link project back to quote
+     - keep customer link
+     - show project on quote page immediately
+
+3. Project-first job logic
+   - Preferred rule:
+     - Create Job button appears only after project exists for that accepted quote
+     OR
+     - if clicked early, system prompts user to create/select project first
+   - Job creation must carry:
+     - sourceQuoteId
+     - acceptedRevisionId
+     - customerId
+     - projectId
+     - title from quote/project
+     - address/site context
+
+4. Quote/project linkage visibility
+   - Quote detail page should clearly show:
+     - linked customer
+     - linked project
+     - source estimate/job relationship
+   - If no project linked yet:
+     - show empty-state prompt to create project
+
+5. Invoice inheritance
+   - When invoice is created from accepted quote:
+     - inherit customerId
+     - inherit projectId if project exists
+     - inherit accepted revision
+     - inherit division
+   - If project exists later and invoice is still draft/not pushed, allow controlled relink.
+
+PHASE 2 UI REQUIREMENTS
+- Accepted quote action area redesigned
+- Create Project flow from accepted quote
+- Clear project card on quote page
+- Job creation flow tied to project
+- Clear linked source relationship display
+
+PHASE 2 ACCEPTANCE CRITERIA
+- Accepted quote can create project directly with prefilled values.
+- Project is linked back to quote automatically.
+- Job creation uses linked project and quote.
+- Invoice created after project exists inherits project automatically.
+- User understands clear sequence:
+  Accepted Quote -> Project -> Job -> Invoice(s)
+
+==================================================
+PHASE 3 - PROJECT DASHBOARD / CONTROL CENTRE
+==================================================
+
+OBJECTIVE
+Make Project a true umbrella record with inline access to all related quotes, jobs, and invoices.
+
+IMPLEMENT
+1. Add Projects menu/page
+   - Visible navigation entry for Projects.
+   - Project list page with:
+     - customer
+     - project name
+     - address
+     - status
+     - counts of quotes/jobs/invoices
+     - total quoted
+     - total invoiced
+
+2. Project detail dashboard
+   - Build a real Project detail page that acts as the control centre.
+   - Top summary cards:
+     - customer
+     - address
+     - status
+     - number of quotes
+     - number of jobs
+     - number of invoices
+     - total quoted value
+     - total accepted value
+     - total invoiced value
+     - outstanding/uninvoiced estimate if feasible
+
+3. Inline sections on project page
+   - Quotes section:
+     - list cards or table inline
+     - expandable inline detail preview
+     - no forced redirect just to inspect
+     - optional “open full quote” action
+   - Jobs section:
+     - list inline
+     - expandable preview
+     - optional “open full job”
+   - Invoices section:
+     - list inline
+     - expandable preview
+     - Xero status visible
+     - optional “open full invoice”
+
+4. Project creation/edit flow
+   - Create/edit/archive project UI
+   - Customer-specific project selection logic
+   - If customer selected and no projects exist, show:
+     - no projects message
+     - quick create project action
+
+5. Relationship integrity
+   - Project contains many quotes
+   - Project contains many jobs
+   - Project contains many invoices
+   - Quotes/jobs/invoices must remain accessible from project page without requiring user to navigate away just to view them
+
+PHASE 3 UI REQUIREMENTS
+- Projects nav/menu
+- Project list page
+- Project detail dashboard
+- Inline quotes/jobs/invoices sections
+- Quick actions from project page
+
+PHASE 3 ACCEPTANCE CRITERIA
+- User can open a project and understand full commercial + operational + finance status from one page.
+- Quotes/jobs/invoices are accessible inline on project page.
+- Project works as umbrella across structural steel, laser, joinery, etc.
+
+==================================================
+PHASE 4 - POLISH, SAFEGUARDS, AND TESTABILITY
+==================================================
+
+OBJECTIVE
+Make workflow robust enough for real testing and ongoing use.
+
+IMPLEMENT
+1. Safeguards
+   - Warn before changing customer/project after:
+     - job exists
+     - invoice exists
+     - invoice pushed to Xero
+   - Prevent dangerous silent linkage changes.
+
+2. Audit visibility
+   - Record linkage events:
+     - customer auto-created
+     - customer linked/unlinked
+     - project created from quote
+     - project linked/unlinked
+     - job created from quote
+   - Show simple history where useful.
+
+3. Better empty states
+   - No linked customer
+   - No project yet
+   - No customer projects found
+   - Invoice not Xero-ready
+
+4. Testing support
+   - Add clear seed/demo pathway or admin test utility if needed to create:
+     - customer
+     - accepted quote
+     - project
+     - invoice ready for Xero
+   - But do not create unsafe destructive tools in production mode.
+
+PHASE 4 ACCEPTANCE CRITERIA
+- Linkage changes are safe and understandable.
+- Xero test flow is easy to execute.
+- Project/customer/job/quote relationships are visible and trustworthy.
+
+==================================================
+IMPLEMENTATION DETAILS
+==================================================
+
+BACKEND / DATA LOGIC
+- Preserve current architecture.
+- Extend existing quote/customer/project/op-job/invoice models rather than replacing them.
+- Reuse current route/storage patterns.
+- Add or update service functions for:
+  - auto-match/create customer on estimate -> quote
+  - project creation from quote
+  - project-linked job creation
+  - invoice Xero readiness validation
+
+UI / UX LOGIC
+- Default to low-friction flow:
+  Estimate -> Quote auto-links customer
+- Preferred accepted-quote flow:
+  Create Project first
+- Job is execution record after project
+- Project page becomes umbrella dashboard
+
+TERMINOLOGY TO USE IN UI
+- Customer: who the work is for
+- Project: overall site/contract/grouping for related work
+- Job: internal execution record created from accepted work
+
+NON-GOALS
+- Do not redesign the entire CRM.
+- Do not replace invoice/Xero integration architecture.
+- Do not remove Projects.
+- Do not force Project before quote stage.
+- Do not create Job before Project in the preferred accepted-quote path.
+- Do not touch quote PDF rendering pipeline.
+
+==================================================
+TEST PLAN - XERO PRIORITY
+==================================================
+
+You must verify these test cases:
+
+TEST 1
+Estimate -> Quote
+- Convert estimate with customer details and no existing customer link
+- Confirm customer is auto-created or matched and linked
+
+TEST 2
+Quote Accepted -> Create Project
+- Accept quote
+- Create project from quote
+- Confirm name/address/customer prefill correctly
+- Confirm quote now shows linked project
+
+TEST 3
+Create Job
+- Create job only after project exists
+- Confirm job links to quote + customer + project
+
+TEST 4
+Create Invoice
+- Create invoice from accepted quote
+- Confirm inherited customerId and projectId
+
+TEST 5
+Ready for Xero validation
+- Try to mark invoice ready without valid customer linkage
+- Confirm blocked with actionable error
+- Fix customer linkage
+- Confirm status can now move to ready_for_xero
+
+TEST 6
+Push to Xero
+- Push valid invoice
+- If credentials are configured, verify live/scaffold behavior works as designed
+- If payload fails, error must clearly indicate missing linkage or mapping issue
+
+TEST 7
+Project dashboard
+- Open project
+- Confirm quotes, jobs, and invoices visible inline
+- Confirm no forced redirect needed to inspect them
+
+==================================================
+DELIVERABLES REQUIRED
+==================================================
+
+Do not report complete unless all of these exist:
+1. Updated backend logic
+2. Updated quote detail UI
+3. Accepted-quote project-first flow
+4. Project list page
+5. Project detail dashboard
+6. Working customer auto-create/auto-link logic
+7. Working Xero readiness validation
+8. Tested invoice push flow
+9. Clear before/after summary of what changed
+
+At completion provide:
+- concise architecture summary
+- list of new/updated files
+- database changes
+- endpoints changed/added
+- UI surfaces changed/added
+- exact test cases run and outcomes
+- any remaining known gaps
