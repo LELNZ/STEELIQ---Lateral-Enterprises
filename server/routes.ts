@@ -90,12 +90,16 @@ async function seedLibraryDefaults() {
 const _oauthStates = new Map<string, { expiry: number; redirectUri: string }>();
 
 /** Derives the Xero callback URI from the incoming request's host.
- *  Uses XERO_REDIRECT_URI env var as an explicit override if set,
- *  otherwise auto-builds from the request host (works on any domain). */
+ *  Always derived from the actual request — never from a static env var —
+ *  so that live → live and dev → dev are guaranteed regardless of any
+ *  XERO_REDIRECT_URI secret that may have been set previously. */
 function getXeroRedirectUri(req: any): string {
-  if (process.env.XERO_REDIRECT_URI) return process.env.XERO_REDIRECT_URI;
-  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
+  // x-forwarded-proto and x-forwarded-host may be comma-separated when multiple
+  // proxies are in the chain; take only the first (leftmost = original client value).
+  const rawProto = req.headers["x-forwarded-proto"] as string | undefined;
+  const rawHost  = req.headers["x-forwarded-host"]  as string | undefined;
+  const proto = (rawProto?.split(",")[0].trim()) || "https";
+  const host  = (rawHost?.split(",")[0].trim())  || (req.headers.host as string) || "";
   return `${proto}://${host}/api/xero/callback`;
 }
 
@@ -1532,6 +1536,7 @@ export async function registerRoutes(
     }
 
     const redirectUri = getXeroRedirectUri(req);
+    console.log("[Xero OAuth] connect → derived redirect_uri:", redirectUri);
 
     // Generate and store a short-lived CSRF state token (10 min TTL)
     // The redirect URI is stored alongside the state so the callback can
