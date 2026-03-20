@@ -1,0 +1,250 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT ISSUE
+==================================================
+
+The latest publish is failing during Promote.
+
+Observed production failure:
+- build succeeds
+- bundle succeeds
+- deployment fails because the app does not open port 5000 in time during startup
+
+Most likely cause:
+- the newly added dev→production reference data migration is blocking startup
+- current handover says:
+  - server/ref-data-migration.ts contains a large inline snapshot
+  - runRefDataMigration(pool) is executed during startup seed sequence
+- this is likely delaying the app from listening on the port quickly enough for Replit promotion
+
+This phase is:
+EMERGENCY STARTUP / PUBLISH RECOVERY + SAFE REFERENCE DATA MIGRATION REFACTOR
+
+Do NOT broaden scope.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Recover successful publishing first.
+
+Then move the heavy reference-data migration out of the critical app startup path into a safer model.
+
+Do NOT redesign the whole system.
+Do NOT redesign the pricing engine.
+Do NOT redesign deployment.
+Do NOT introduce new architecture beyond what is necessary to:
+- restore publish success
+- keep reference-data migration safe and repeatable
+- avoid blocking server boot
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Identify whether the ref-data migration is causing startup blocking
+2. Remove heavy reference-data migration from the critical startup boot path
+3. Restore successful app publish/startup
+4. Replace the startup-blocking migration with a safer forward model
+5. Return a truthful handover
+
+Do NOT broaden scope.
+
+==================================================
+STRICT REQUIREMENTS
+==================================================
+
+Required priorities in this exact order:
+
+Priority 1:
+- app must bind/listen quickly enough to publish successfully
+
+Priority 2:
+- reference data migration must remain available in a safe form
+
+Priority 3:
+- long-term cleanliness should improve only if it does not delay Priority 1
+
+Do NOT hold startup hostage to a large data import.
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing anything:
+1. Review current code as source of truth
+2. Inspect exactly where runRefDataMigration(pool) is called
+3. Confirm whether startup is blocked before app listen/bind
+4. State exactly what will be changed to restore publish
+5. State exactly what safer migration model will replace the current startup-blocking approach
+6. Then implement only the minimum safe fix
+
+==================================================
+APPROVED SAFE REPLACEMENT PATTERNS
+==================================================
+
+Use one of these safe approaches:
+
+A. Preferred:
+- move reference-data migration into a one-off/manual admin/import route or script
+- not executed on every startup
+
+B. Acceptable:
+- gate it behind an explicit env flag so it only runs when deliberately enabled
+
+C. Acceptable:
+- defer it until after the server begins listening, if truly safe
+
+Do NOT leave a huge inline migration running synchronously in the startup path of every production boot.
+
+==================================================
+IMPORTANT DATA SAFETY RULES
+==================================================
+
+- Do not migrate transactional business data
+- Do not wipe production
+- Do not duplicate reference rows
+- Keep migration idempotent
+- Preserve reference/config FK chains
+- If moving from inline file to a better mechanism, preserve the same safe migration scope only
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Target outcome:
+- publish succeeds
+- app starts and listens promptly
+- reference-data migration is no longer a startup blocker
+- long-term path is cleaner than a 455KB inline data file executed at every boot
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- publish succeeds
+- app listens on port normally
+- production library/reference data can still be restored/migrated safely
+- no break to quote builder pricing/config matching
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- no break to lifecycle
+- no break to Xero work
+- no break to admin/settings surfaces
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact startup blocking root cause found
+4. Exact recovery/refactor implemented
+5. Behaviour changes
+6. Schema/API/data changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- publish/startup succeeds again
+- the heavy migration is no longer blocking boot
+- the reference-data migration path remains safe
+- no architecture drift occurred

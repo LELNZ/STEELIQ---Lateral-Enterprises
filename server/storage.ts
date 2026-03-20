@@ -21,6 +21,7 @@ import {
   type Invoice, type InsertInvoice,
   type OpJob, type InsertOpJob,
   type LifecycleTemplate, type LifecycleInstance, type LifecycleTaskState,
+  type XeroConnection,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -28,6 +29,7 @@ import {
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
+  xeroConnections,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -198,6 +200,15 @@ export interface IStorage {
     completedByUserId: string | null;
     note: string | null;
   }): Promise<LifecycleTaskState>;
+
+  // ── Xero OAuth Connection ─────────────────────────────────────────────────
+  getXeroConnection(): Promise<XeroConnection | undefined>;
+  upsertXeroConnection(data: {
+    tenantId: string | null;
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: Date;
+  }): Promise<XeroConnection>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1010,6 +1021,35 @@ export class DatabaseStorage implements IStorage {
         note: data.note,
         updatedAt: new Date(),
       })
+      .returning();
+    return created;
+  }
+
+  // ── Xero OAuth Connection ─────────────────────────────────────────────────
+
+  async getXeroConnection(): Promise<XeroConnection | undefined> {
+    const [row] = await db.select().from(xeroConnections).where(eq(xeroConnections.id, "default"));
+    return row;
+  }
+
+  async upsertXeroConnection(data: {
+    tenantId: string | null;
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: Date;
+  }): Promise<XeroConnection> {
+    const existing = await this.getXeroConnection();
+    if (existing) {
+      const [updated] = await db
+        .update(xeroConnections)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(xeroConnections.id, "default"))
+        .returning();
+      return updated;
+    }
+    const [created] = await db
+      .insert(xeroConnections)
+      .values({ id: "default", ...data })
       .returning();
     return created;
   }

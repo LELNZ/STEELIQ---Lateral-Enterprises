@@ -3,6 +3,9 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { sessionMiddleware } from "./auth";
+import { pool } from "./storage";
+import { runRefDataMigration } from "./ref-data-migration";
+import { runDedupMigration } from "./dedup-migration";
 
 const PUBLIC_API_PATHS = new Set([
   "/api/auth/login",
@@ -115,6 +118,16 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      // Run the reference-data migration AFTER the port is bound so it
+      // never blocks startup/health-check promotion. It is idempotent and
+      // safe to run on every boot.
+      setImmediate(() => {
+        runRefDataMigration(pool)
+          .then(() => runDedupMigration(pool))
+          .catch((err) =>
+            console.error("[startup-migrations] Failed:", err)
+          );
+      });
     },
   );
 })();

@@ -1,0 +1,239 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT CONTEXT
+==================================================
+
+Current real issue:
+- Xero OAuth connect flow still fails before consent
+- Xero returns:
+  - unauthorized_client
+  - Invalid scope for client
+
+Current likely cause:
+- the scope string in GET /api/xero/connect is still incorrect for this new Xero app
+- previous scope correction was not sufficient
+
+Current user state:
+- XERO_CLIENT_ID is set
+- XERO_CLIENT_SECRET is set
+- Redirect URIs are configured in Xero Developer app
+- OAuth routes and token storage exist
+- The failure is still at Xero auth request scope validation
+
+This phase is:
+XERO OAUTH SCOPE CORRECTION ONLY
+
+Do NOT broaden scope beyond this.
+
+==================================================
+LOCKED ARCHITECTURE
+==================================================
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+==================================================
+OBJECTIVE OF THIS PHASE
+==================================================
+
+Fix the Xero OAuth authorization request so the user reaches the Xero consent screen without:
+- unauthorized_client
+- Invalid scope for client
+
+This phase is NOT for redesigning OAuth.
+This phase is NOT for changing token storage.
+This phase is NOT for changing invoice push behaviour beyond what is strictly required by the corrected scopes.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Review the exact current scope string used by GET /api/xero/connect
+2. Identify which requested scope(s) are invalid for the current Xero app
+3. Replace them with the exact valid Xero granular scopes needed for our current workflow
+4. Verify the auth request reaches Xero consent without the invalid scope error
+5. Return a truthful handover
+
+Do NOT broaden scope.
+
+==================================================
+CURRENT WORKFLOW REQUIREMENTS
+==================================================
+
+The current app only needs OAuth scopes required for:
+- refresh/offline access
+- creating/pushing invoices to Xero
+- reading contacts
+- creating/writing contacts if needed for invoice push fallback/contact creation
+
+Do NOT request unrelated scopes.
+
+==================================================
+IMPORTANT IMPLEMENTATION RULES
+==================================================
+
+- Stop guessing scope names
+- Check the current Xero granular scope requirements properly
+- Only request the minimum valid scopes required for the current SteelIQ workflow
+- Do not change redirect/callback flow unless you find an exact mismatch and must report it
+- Do not touch unrelated Xero code
+- Do not touch quote, invoice, lifecycle, or UI architecture beyond the minimum needed
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing code:
+1. Review the current codebase as source of truth
+2. Inspect the exact scope string currently used in GET /api/xero/connect
+3. Identify the exact invalid scope(s)
+4. State the exact new scope string you will use
+5. Then implement only the minimum safe fix
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- the invalid scope error is gone
+- the Xero consent screen opens successfully
+- no unrelated Xero/OAuth logic was changed
+- no architecture drift occurred
+
+Do NOT claim success merely because the code compiles.
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- GET /api/xero/connect still builds a valid auth redirect
+- GET /api/xero/callback remains unchanged unless strictly necessary
+- xero_connections token storage remains intact
+- push-to-xero route remains intact
+- settings page Connect to Xero button still works
+- no break to existing static-token fallback path
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact scope issue found
+4. Exact new scope string implemented
+5. Behaviour changes
+6. Schema/API changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+ADDITIONAL IMPORTANT NOTES
+==================================================
+
+- Do not ask me for secrets
+- Do not ask me to create a new Xero app
+- Do not suggest manual static tokens as the fix
+- Do not report “Phase 7” or unrelated historical work
+- This is a narrow Xero OAuth scope-fix phase only

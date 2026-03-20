@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, pool, formatQuoteNumber } from "./storage";
-import { isXeroConfigured, hasRefreshToken, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, XeroPushError } from "./xero-client";
+import { isXeroConfigured, hasRefreshToken, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, XeroPushError, refreshXeroTokenWithCredentials } from "./xero-client";
 import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
@@ -80,6 +80,74 @@ async function seedLibraryDefaults() {
   await seedType("wanz_bar", WANZ_BAR_DEFAULTS.map((wb) => ({
     data: { value: wb.value, label: wb.label, sectionNumber: wb.sectionNumber, kgPerMetre: wb.kgPerMetre, pricePerKgUsd: wb.pricePerKgUsd, priceNzdPerLinM: wb.priceNzdPerLinM }
   })));
+}
+
+// ── Xero OAuth state store ────────────────────────────────────────────────────
+// Short-lived CSRF state tokens for the OAuth 2.0 Authorization Code flow.
+// State is stored server-side only — never exposed to the browser as a value.
+// Each entry: state → expiry timestamp (ms). Cleaned up after use or on expiry.
+const _oauthStates = new Map<string, number>();
+
+const XERO_CONNECTIONS_URL = "https://api.xero.com/connections";
+
+/**
+ * Returns a valid Xero { accessToken, tenantId } pair for API calls.
+ *
+ * Priority order:
+ *  1. DB connection (xero_connections table) — preferred when OAuth flow has run.
+ *     If the stored token is expired, refreshes it using the stored refresh token,
+ *     updates the DB row, and returns the new access token.
+ *  2. Env-var fallback — uses getXeroConfig() (existing static token path).
+ *     Returns null if neither source is available.
+ */
+async function getValidXeroToken(): Promise<{ accessToken: string; tenantId: string } | null> {
+  const conn = await storage.getXeroConnection();
+
+  if (conn) {
+    const tenantId = conn.tenantId;
+    if (!tenantId) {
+      console.warn("[Xero] DB connection found but tenantId is null — skipping DB token path.");
+    } else {
+      // Check expiry with a 60-second buffer
+      if (conn.expiresAt.getTime() > Date.now() + 60_000) {
+        return { accessToken: conn.accessToken, tenantId };
+      }
+
+      // Token expired — attempt refresh
+      const clientId = process.env.XERO_CLIENT_ID;
+      const clientSecret = process.env.XERO_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        console.warn("[Xero] DB token expired but XERO_CLIENT_ID/XERO_CLIENT_SECRET not set — cannot refresh.");
+      } else {
+        try {
+          const { accessToken, refreshToken, expiresIn } = await refreshXeroTokenWithCredentials(
+            clientId,
+            clientSecret,
+            conn.refreshToken
+          );
+          const expiresAt = new Date(Date.now() + expiresIn * 1000);
+          await storage.upsertXeroConnection({ tenantId, accessToken, refreshToken, expiresAt });
+          console.log("[Xero] DB token refreshed and stored successfully.");
+          return { accessToken, tenantId };
+        } catch (refreshErr: any) {
+          console.error("[Xero] DB token refresh failed:", refreshErr.message);
+          // Fall through to env-var path
+        }
+      }
+    }
+  }
+
+  // Env-var fallback (existing static token path)
+  if (isXeroConfigured()) {
+    try {
+      const config = getXeroConfig();
+      return { accessToken: config.accessToken, tenantId: config.tenantId };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 export async function registerRoutes(
@@ -165,6 +233,19 @@ export async function registerRoutes(
       divisionCode: undefined,
     });
     console.log("Default admin user created (username: admin, password: SteelIQ2025!)");
+  } else {
+    // Repair: if the stored password is not in the expected scrypt format (hex.salt),
+    // it was stored as plaintext (e.g. after a buggy manual reset). Re-hash the
+    // stored plaintext value so the user can log in with it as-is.
+    const hasDot = existingAdmin.password.includes(".");
+    const looksHashed = hasDot && existingAdmin.password.length >= 100;
+    if (!looksHashed) {
+      const { hashPassword: _repairHash } = await import("./auth");
+      const plaintextValue = existingAdmin.password;
+      const repairedHash = await _repairHash(plaintextValue);
+      await storage.updateUser(existingAdmin.id, { password: repairedHash });
+      console.log(`[startup] Repaired admin password hash (was stored as plaintext). Login with the same password as before.`);
+    }
   }
 
   const ljDiv = await storage.getDivisionSettings("LJ");
@@ -1421,6 +1502,148 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Xero OAuth 2.0 — Connect ─────────────────────────────────────────────
+  // Initiates the Authorization Code flow. Redirects the browser to Xero's
+  // authorization endpoint. A random state parameter is stored server-side for
+  // CSRF validation when the callback arrives.
+  app.get("/api/xero/connect", (req, res) => {
+    const reqUser = (req as any).user;
+    if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    const clientId = process.env.XERO_CLIENT_ID;
+    const redirectUri = process.env.XERO_REDIRECT_URI;
+
+    if (!clientId) {
+      return res.status(500).json({
+        error: "XERO_CLIENT_ID is not configured. Set it in environment variables before connecting.",
+      });
+    }
+    if (!redirectUri) {
+      return res.status(500).json({
+        error: "XERO_REDIRECT_URI is not configured. Set it in environment variables before connecting.",
+      });
+    }
+
+    // Generate and store a short-lived CSRF state token (10 min TTL)
+    const state = crypto.randomBytes(24).toString("hex");
+    _oauthStates.set(state, Date.now() + 10 * 60 * 1000);
+
+    // Clean up expired states
+    for (const [s, exp] of _oauthStates) {
+      if (exp < Date.now()) _oauthStates.delete(s);
+    }
+
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: "offline_access accounting.invoices accounting.contacts",
+      state,
+    });
+
+    return res.redirect(`https://login.xero.com/identity/connect/authorize?${params.toString()}`);
+  });
+
+  // ─── Xero OAuth 2.0 — Callback ────────────────────────────────────────────
+  // Xero redirects here after the user grants access. Exchanges the code for
+  // tokens, fetches the tenant list, and stores everything in xero_connections.
+  app.get("/api/xero/callback", async (req, res) => {
+    const { code, state, error: xeroError } = req.query as Record<string, string>;
+
+    if (xeroError) {
+      console.error("[Xero OAuth] Callback returned error:", xeroError);
+      return res.redirect("/#/settings?xero=error&reason=" + encodeURIComponent(xeroError));
+    }
+
+    // Validate state (CSRF check)
+    const stateExpiry = _oauthStates.get(state ?? "");
+    if (!stateExpiry || stateExpiry < Date.now()) {
+      console.error("[Xero OAuth] Invalid or expired state parameter.");
+      return res.redirect("/#/settings?xero=error&reason=invalid_state");
+    }
+    _oauthStates.delete(state);
+
+    const clientId = process.env.XERO_CLIENT_ID;
+    const clientSecret = process.env.XERO_CLIENT_SECRET;
+    const redirectUri = process.env.XERO_REDIRECT_URI;
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      console.error("[Xero OAuth] Missing required env vars for token exchange.");
+      return res.redirect("/#/settings?xero=error&reason=missing_env");
+    }
+
+    // Exchange authorization code for tokens
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    let tokenBody: any;
+    try {
+      const tokenRes = await fetch("https://identity.xero.com/connect/token", {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+        }),
+      });
+      tokenBody = await tokenRes.json();
+      if (!tokenRes.ok) {
+        const detail = tokenBody?.error_description ?? tokenBody?.error ?? JSON.stringify(tokenBody).slice(0, 200);
+        console.error("[Xero OAuth] Token exchange failed:", detail);
+        return res.redirect("/#/settings?xero=error&reason=" + encodeURIComponent("token_exchange_failed: " + detail));
+      }
+    } catch (err: any) {
+      console.error("[Xero OAuth] Network error during token exchange:", err.message);
+      return res.redirect("/#/settings?xero=error&reason=network_error");
+    }
+
+    const accessToken: string = tokenBody.access_token;
+    const refreshToken: string = tokenBody.refresh_token;
+    const expiresIn: number = tokenBody.expires_in ?? 1800;
+
+    if (!accessToken || !refreshToken) {
+      console.error("[Xero OAuth] Token exchange response missing access_token or refresh_token.");
+      return res.redirect("/#/settings?xero=error&reason=incomplete_token_response");
+    }
+
+    // Fetch tenant list to get the tenantId
+    let tenantId: string | null = null;
+    try {
+      const connRes = await fetch(XERO_CONNECTIONS_URL, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (connRes.ok) {
+        const connections: any[] = await connRes.json();
+        if (connections.length > 0) {
+          tenantId = connections[0].tenantId ?? null;
+        }
+      } else {
+        console.warn("[Xero OAuth] Could not fetch tenant list — tenantId will be null.");
+      }
+    } catch (err: any) {
+      console.warn("[Xero OAuth] Network error fetching tenant list:", err.message);
+    }
+
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+
+    try {
+      await storage.upsertXeroConnection({ tenantId, accessToken, refreshToken, expiresAt });
+      console.log(`[Xero OAuth] Connection stored. tenantId=${tenantId ?? "null"}, expires=${expiresAt.toISOString()}`);
+    } catch (dbErr: any) {
+      console.error("[Xero OAuth] Failed to store connection in DB:", dbErr.message);
+      return res.redirect("/#/settings?xero=error&reason=db_error");
+    }
+
+    return res.redirect("/#/settings?xero=connected");
+  });
+
   // ─── Xero Configuration Status ───────────────────────────────────────────
   app.get("/api/settings/xero-status", async (req, res) => {
     const reqUser = (req as any).user;
@@ -1439,9 +1662,20 @@ export async function registerRoutes(
     const accountCode = orgConfig?.xeroAccountCode?.trim() || "200";
     const taxType = orgConfig?.xeroTaxType?.trim() || "OUTPUT2";
 
+    // Check DB OAuth connection
+    const dbConn = await storage.getXeroConnection();
+    const hasDbConnection = !!dbConn && !!dbConn.tenantId;
+    const dbTokenExpired = dbConn ? dbConn.expiresAt.getTime() <= Date.now() : false;
+    const redirectUriSet = !!process.env.XERO_REDIRECT_URI;
+
     let mode: "not_configured" | "scaffold" | "live_wired";
     let status: string;
-    if (allRequiredPresent) {
+    if (hasDbConnection) {
+      mode = "live_wired";
+      status = dbTokenExpired
+        ? "OAuth connected (token expired — will refresh automatically on next push)"
+        : "OAuth connected — live push active";
+    } else if (allRequiredPresent) {
       mode = "live_wired";
       status = refreshTokenPresent
         ? "Live push wired — all credentials + refresh token present. Auto-refresh on 401 enabled."
@@ -1458,8 +1692,11 @@ export async function registerRoutes(
       mode,
       configured: allRequiredPresent,
       livePushWired: true,
-      liveCapable: allRequiredPresent,
+      liveCapable: allRequiredPresent || hasDbConnection,
       hasRefreshToken: refreshTokenPresent,
+      hasDbConnection,
+      dbTokenExpired,
+      redirectUriSet,
       status,
       requiredFields: REQUIRED_FIELDS,
       optionalFields: OPTIONAL_FIELDS,
@@ -1467,7 +1704,7 @@ export async function registerRoutes(
       missingFields: REQUIRED_FIELDS.filter((f) => !process.env[f]),
       accountCode,
       taxType,
-      scaffoldNote: allRequiredPresent
+      scaffoldNote: (allRequiredPresent || hasDbConnection)
         ? null
         : "Live Xero push is wired but credentials are missing. Set XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_ACCESS_TOKEN, and XERO_TENANT_ID to enable live push. Until then, pushes run in scaffold mode.",
       tokenNote: allRequiredPresent
@@ -2244,7 +2481,10 @@ export async function registerRoutes(
       const userId = req.user?.id ?? null;
 
       // ── Live push path ──────────────────────────────────────────────────────
-      if (isXeroConfigured()) {
+      // Resolve valid credentials: DB OAuth connection first, env-var fallback second.
+      const xeroTokens = await getValidXeroToken();
+
+      if (xeroTokens) {
         let customer: { name?: string | null; xeroContactId?: string | null } | null = null;
         if (invoice.customerId) {
           customer = await storage.getCustomer(invoice.customerId) ?? null;
@@ -2277,8 +2517,7 @@ export async function registerRoutes(
 
         let xeroResult: { xeroInvoiceId: string; xeroInvoiceNumber: string; xeroStatus: string };
         try {
-          const config = getXeroConfig();
-          xeroResult = await createXeroInvoice(xeroPayload, config);
+          xeroResult = await createXeroInvoice(xeroPayload, xeroTokens);
         } catch (xeroErr: any) {
           // Live push failed — do NOT update invoice state
           const isAuthError = xeroErr instanceof XeroPushError && xeroErr.detail.code === 401;
@@ -2292,7 +2531,7 @@ export async function registerRoutes(
             xeroMode: "live_failed",
             recoverable: true,
             hint: isAuthError
-              ? "The Xero access token has expired or is invalid. Update XERO_ACCESS_TOKEN with a fresh token from the Xero Developer Portal."
+              ? "The Xero access token has expired or is invalid. Re-connect via Settings → Xero → Connect to Xero, or update XERO_ACCESS_TOKEN manually."
               : "The invoice remains in 'ready_for_xero' status and can be retried once the issue is resolved.",
           });
         }
@@ -2343,8 +2582,8 @@ export async function registerRoutes(
         invoice: updated,
         xeroMode: "scaffold",
         xeroNote:
-          "Scaffold push — Xero credentials are not fully configured. Mock identifiers stored for workflow testing. " +
-          "Set XERO_CLIENT_ID, XERO_CLIENT_SECRET, XERO_ACCESS_TOKEN, and XERO_TENANT_ID to enable live push.",
+          "Scaffold push — no Xero credentials available. Mock identifiers stored for workflow testing. " +
+          "Use Settings → Xero → Connect to Xero to link via OAuth, or set XERO_ACCESS_TOKEN / XERO_TENANT_ID manually.",
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3488,9 +3727,6 @@ const DEFAULT_GLAZING_BANDS = [
   { label: "extra_large", maxAreaSqm: 9999, minutesPerPane: 25, description: "Panes over 3.0 m²" },
 ];
 
-// Old threshold values (0.5/1.0/1.5) that were incorrect; map them to corrected values.
-const GLAZING_BAND_THRESHOLD_MIGRATION: Record<number, number> = { 0.5: 1.0, 1.0: 2.0, 1.5: 3.0 };
-
 async function seedGlazingBands() {
   const existing = await storage.getLibraryEntries("glazing_band");
   if (existing.length === 0) {
@@ -3499,19 +3735,15 @@ async function seedGlazingBands() {
     }
     return;
   }
-  // Migrate any existing records that still have the old incorrect thresholds.
-  // Only entries whose maxAreaSqm exactly matches an old seeded value are updated,
-  // preserving any custom bands staff may have configured with other values.
-  for (const band of existing) {
-    const d = band.data as any;
-    const newMax = GLAZING_BAND_THRESHOLD_MIGRATION[d.maxAreaSqm as number];
-    if (newMax !== undefined) {
-      const defaultEntry = DEFAULT_GLAZING_BANDS.find((b) => b.maxAreaSqm === newMax);
-      if (defaultEntry) {
-        await storage.updateLibraryEntry(band.id, {
-          data: { ...d, maxAreaSqm: newMax, description: defaultEntry.description },
-        });
-      }
+  // Correct any bands whose maxAreaSqm doesn't match the expected value for their label.
+  // Matching by label is idempotent — runs safely on every startup without double-migrating.
+  const byLabel = new Map(existing.map((b) => [(b.data as any).label as string, b]));
+  for (const expected of DEFAULT_GLAZING_BANDS) {
+    const match = byLabel.get(expected.label);
+    if (match && (match.data as any).maxAreaSqm !== expected.maxAreaSqm) {
+      await storage.updateLibraryEntry(match.id, {
+        data: { ...(match.data as any), maxAreaSqm: expected.maxAreaSqm, description: expected.description },
+      });
     }
   }
 }

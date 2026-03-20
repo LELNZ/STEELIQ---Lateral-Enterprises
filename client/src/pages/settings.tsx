@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield, Hash } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield, Hash, ExternalLink, CheckCircle2, XCircle } from "lucide-react";
 import { useSystemMode, type SystemMode } from "@/hooks/use-system-mode";
 import { useAuth } from "@/lib/auth-context";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
@@ -1887,6 +1887,9 @@ type XeroStatusResponse = {
   livePushWired: boolean;
   liveCapable: boolean;
   hasRefreshToken: boolean;
+  hasDbConnection: boolean;
+  dbTokenExpired: boolean;
+  redirectUriSet: boolean;
   status: string;
   requiredFields: string[];
   optionalFields: string[];
@@ -1918,6 +1921,27 @@ function XeroStatusTab() {
       setTaxType(xeroStatus.taxType ?? "OUTPUT2");
     }
   }, [xeroStatus?.accountCode, xeroStatus?.taxType]);
+
+  // Show toast when returning from Xero OAuth callback
+  useEffect(() => {
+    const hash = window.location.hash;
+    const match = hash.match(/[?&]xero=([^&]+)(&reason=([^&]*))?/);
+    if (!match) return;
+    const outcome = match[1];
+    const reason = match[3] ? decodeURIComponent(match[3]) : null;
+    if (outcome === "connected") {
+      toast({ title: "Xero connected", description: "OAuth connection established. Live push is now active." });
+      refetch();
+    } else if (outcome === "error") {
+      toast({
+        title: "Xero connection failed",
+        description: reason ? `Error: ${reason}` : "An unknown error occurred. Check server logs for details.",
+        variant: "destructive",
+      });
+    }
+    // Strip the xero params from the hash to avoid re-triggering
+    window.history.replaceState(null, "", window.location.pathname + window.location.search + "#/settings");
+  }, []);
 
   const saveAccountingConfig = async () => {
     if (!accountCode.trim()) {
@@ -1956,6 +1980,78 @@ function XeroStatusTab() {
 
   return (
     <div className="space-y-4">
+      {/* ── OAuth Connection Card ────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            Connect to Xero
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Use OAuth 2.0 to authorise this system to push invoices to your Xero organisation.
+            Tokens are stored securely in the database and refreshed automatically.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  {xeroStatus?.hasDbConnection ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-green-700 dark:text-green-400" data-testid="text-xero-oauth-status">
+                          OAuth Connected
+                        </p>
+                        {xeroStatus?.dbTokenExpired && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            Token expired — will refresh automatically on next push
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <p className="text-sm text-muted-foreground" data-testid="text-xero-oauth-status">
+                        Not connected via OAuth
+                      </p>
+                    </>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant={xeroStatus?.hasDbConnection ? "outline" : "default"}
+                  className="shrink-0 gap-1.5"
+                  data-testid="button-xero-connect"
+                  onClick={() => { window.location.href = "/api/xero/connect"; }}
+                  disabled={!xeroStatus?.redirectUriSet}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {xeroStatus?.hasDbConnection ? "Re-connect" : "Connect to Xero"}
+                </Button>
+              </div>
+
+              {!xeroStatus?.redirectUriSet && (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                  <p className="font-semibold">XERO_REDIRECT_URI not set</p>
+                  <p>
+                    Set <span className="font-mono">XERO_REDIRECT_URI</span> to{" "}
+                    <span className="font-mono">{window.location.origin}/api/xero/callback</span> in environment variables,
+                    and register the same URI in your Xero Developer app settings before connecting.
+                  </p>
+                </div>
+              )}
+
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ── Integration Status ──────────────────────────────────────────── */}
       <Card>
         <CardHeader>
