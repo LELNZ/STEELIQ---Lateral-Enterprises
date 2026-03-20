@@ -1,0 +1,278 @@
+STEELIQ MASTER HANDOVER STACK — CONTINUATION PROMPT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle without explicit instruction.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep outside the requested phase.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+AGENT EXECUTION RULES
+
+Before implementing:
+1. Briefly list the tasks you will perform
+2. Then execute them
+
+If running tasks in parallel, all changes must remain compatible with:
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- existing schema and live data
+- existing routes unless explicitly changed in the prompt
+
+OPERATIONAL COMPLETION RULE
+
+Do not mark a phase complete if the feature exists only in backend/schema/API form without the minimum operational UI/admin surface required for staff use.
+
+Where a feature is intended for internal business use, implement both:
+- backend support
+- minimum practical UI/admin surface
+in the same phase unless explicitly told otherwise.
+
+If required operational surfaces are missing, report the phase as partial, not complete.
+
+ENTERPRISE SAFETY RULES
+
+Preserve:
+- auditability
+- historical reproducibility
+- safe state transitions
+- accounting integrity
+- division ownership boundaries
+- backward compatibility
+
+Do not implement any design that makes historical commercial or financial records ambiguous or mutable.
+
+HANDOVER TRUTHFULNESS RULE
+
+Do not report a phase complete unless all required deliverables are implemented.
+Separate clearly:
+- completed
+- partial
+- not implemented
+- known gaps
+
+MODULE CONTRACT RULE
+
+Every new or updated module must define and preserve:
+- its input contract
+- its owned editable state
+- its downstream output contract
+
+Do not let modules mutate upstream frozen commercial records.
+
+FINAL RULE
+
+If handover docs and code ever differ, treat the current codebase as the source of truth and report the mismatch explicitly.
+
+==================================================
+CURRENT SOURCE OF TRUTH
+==================================================
+
+Repository:
+- LELNZ/STEELIQ---Lateral-Enterprises
+
+Do NOT use:
+- LELNZ/STEELIQ
+That repo is abandoned and is NOT a source of truth.
+
+==================================================
+CURRENT ISSUE
+==================================================
+
+Production library still contains duplicate entries after the previous dedup pass.
+
+Confirmed affected areas from live screenshots:
+- Frame Types
+- Glass
+- Manufacturing Labour
+
+Confirmed unaffected or less affected areas:
+- simpler library types such as Frame Colors appear clean
+
+This strongly indicates the current dedup logic is too generic and is not using the correct business key per library entry type.
+
+This phase is:
+TYPE-SPECIFIC REFERENCE DATA DEDUPLICATION FIX
+
+Do NOT broaden scope.
+
+==================================================
+BUSINESS CONTEXT
+==================================================
+
+The current production app is live/internal-use and must remain operational.
+
+These duplicate entries must NOT be manually deleted because they may affect:
+- configuration matching
+- pricing breakdown
+- labour breakdown
+- glass selection
+- frame type/configuration linkage
+
+This must be fixed safely and repeatably.
+
+==================================================
+THIS PHASE — EXACT SCOPE
+==================================================
+
+Implement only these deliverables:
+
+1. Audit remaining duplicate library entries in production
+2. Identify why the generic dedup logic missed these types
+3. Define correct type-specific business keys
+4. Safely deduplicate the affected types
+5. Ensure no break to pricing/configuration pathways
+6. Ensure future startup dedup uses the corrected per-type logic
+7. Return a truthful handover
+
+Do NOT broaden scope.
+
+==================================================
+REQUIRED AUDIT TASKS
+==================================================
+
+Before changing anything:
+1. Inspect current codebase and production data as source of truth
+2. Identify exact duplicate groups still present in:
+   - frame_type
+   - glass
+   - labour_operation / manufacturing labour entries
+3. For each affected type, inspect the actual data payload shape in library_entries.data
+4. Determine the true business identity for each type
+5. Identify exactly why the previous generic COALESCE-based key failed
+6. Then implement the minimum safe fix
+
+==================================================
+STRICT DEDUPLICATION RULES
+==================================================
+
+You must use TYPE-SPECIFIC business keys, not a one-size-fits-all COALESCE rule.
+
+Required direction:
+
+A. frame_type
+- Use the true stable business identity for frame types
+- Likely based on normalized value/code, not display name alone
+- Normalize with:
+  - TRIM
+  - LOWER
+  - whitespace cleanup if needed
+
+B. manufacturing labour
+- Use the true identity of a labour entry
+- This is NOT just the label/name if multiple rows can share the same label
+- Include the correct distinguishing fields, likely based on operation + driverType or equivalent actual payload fields
+- Confirm from real data, do not guess
+
+C. glass
+- Use the true identity of a glass entry
+- This is NOT just display label if duplicate labels can exist for different payload shapes
+- Use the correct combination/composite identity from the actual stored data
+- Confirm from real data, do not guess
+
+For each type:
+- pick the canonical row safely
+- preserve downstream link integrity
+- delete only true duplicates
+- keep the fix idempotent
+
+==================================================
+IMPORTANT SAFETY RULES
+==================================================
+
+DO NOT:
+- manually delete records blindly
+- wipe production reference tables
+- touch transactional business records
+- touch quotes, quote revisions, jobs, invoices, customers, contacts, lifecycle instances, task states, Xero connections, audit logs
+
+ONLY work on duplicated reference/configuration data and its linked pathways where required.
+
+==================================================
+REQUIRED CANONICALIZATION APPROACH
+==================================================
+
+For each duplicate set:
+1. identify canonical record to keep using explicit business logic
+2. confirm whether any linked rows depend on the duplicate IDs
+3. re-point linked rows if required
+4. delete only the non-canonical true duplicates
+5. ensure rerunning the migration does not recreate or re-delete incorrectly
+
+If the previous ref-data migration or previous dedup logic would recreate the same duplicates on future boots, patch that safely too.
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Target outcome:
+- production library no longer shows duplicate entries for:
+  - Frame Types
+  - Glass
+  - Manufacturing Labour
+- quote builder continues to work correctly
+- pricing breakdown continues to work correctly
+- labour breakdown continues to work correctly
+- dedup logic is type-aware and idempotent
+
+==================================================
+REGRESSION REQUIREMENTS
+==================================================
+
+Must verify:
+- production library UI no longer shows the duplicate rows in the affected sections
+- production quote builder still matches the correct configuration
+- production detailed pricing breakdown still renders
+- production labour breakdown still renders
+- production glass selection still behaves correctly
+- no break to manual override
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- no break to lifecycle
+- no break to Xero work
+- no transactional data touched
+
+Use these real production checks:
+- Frame Types tab: ES52 Window should appear once
+- Manufacturing Labour tab: drilling / glue / glazing etc. should not appear as duplicated business rows unless they are truly distinct by correct driver identity
+- Glass tab: repeated visible duplicate rows should be removed where they are true business duplicates
+- Quote builder: test ES52 Window pricing/configuration path still works
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+2. Planned tasks summary
+3. Exact duplicate root cause found
+4. Exact type-specific deduplication logic implemented
+5. Behaviour changes
+6. Schema/API/data changes
+7. UI changes
+8. Architecture verification
+9. Risks/limitations
+10. Updated current system state
+11. Updated recommended next tasks
+12. Regression checks
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+This phase is complete only if:
+- the remaining production duplicates are safely removed
+- the correct type-specific business keys are now being used
+- quote builder matching/pricing still works
+- the dedup logic will not miss these same duplicate patterns again
+- no architecture drift occurred
