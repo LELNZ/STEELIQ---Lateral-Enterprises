@@ -513,7 +513,7 @@ export default function QuoteDetail() {
         </div>
       )}
 
-      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} />
+      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} quoteLabel={quote.customer ?? quote.number} />
 
       {currentRevisionForDetails && (
         <CollapsibleCard title="Customer-facing Details" defaultOpen={false} data-testid="section-details-quick-edit">
@@ -940,7 +940,7 @@ function CollapsibleCard({
   );
 }
 
-function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, sourceJobId }: { quoteId: string; customerId?: string | null; projectId?: string | null; quoteStatus?: string; sourceJobId?: string }) {
+function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, sourceJobId, quoteLabel }: { quoteId: string; customerId?: string | null; projectId?: string | null; quoteStatus?: string; sourceJobId?: string; quoteLabel?: string }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [selCustomer, setSelCustomer] = useState(customerId ?? "__none__");
@@ -1017,7 +1017,15 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
   });
 
   const openCreateProject = () => {
-    setCpName(customer?.name ? `${customer.name} – Project` : "");
+    // Prefill priority: (a) source job/site name, (b) quote label/reference, (c) customer name fallback
+    const defaultName = sourceJob?.name
+      ? sourceJob.name
+      : quoteLabel && quoteLabel !== customer?.name
+      ? quoteLabel
+      : customer?.name
+      ? customer.name
+      : "";
+    setCpName(defaultName);
     setCpAddress(sourceJob?.address ?? "");
     setCpDescription("");
     setCreateProjectOpen(true);
@@ -1264,20 +1272,31 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
           <Briefcase className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Convert to Job</h3>
         </div>
-        {!projectId && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              No project linked yet. Consider linking a project before converting so the job is automatically grouped under the project.
-            </AlertDescription>
-          </Alert>
+        {!projectId ? (
+          <>
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm font-medium">
+                A project must be created first before converting to a job.
+                <span className="block text-xs font-normal text-muted-foreground mt-0.5">
+                  Use the <strong>Create Project</strong> button in the Customer &amp; Project section above, then return here to convert.
+                </span>
+              </AlertDescription>
+            </Alert>
+            <Button size="sm" disabled data-testid="button-convert-to-job">
+              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision and project.
+            </p>
+            <Button size="sm" onClick={() => setShowDialog(true)} data-testid="button-convert-to-job">
+              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
+            </Button>
+          </>
         )}
-        <p className="text-sm text-muted-foreground">
-          This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision.
-        </p>
-        <Button size="sm" onClick={() => setShowDialog(true)} data-testid="button-convert-to-job">
-          <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
-        </Button>
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
