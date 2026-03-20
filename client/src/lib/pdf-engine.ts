@@ -1159,28 +1159,38 @@ async function renderPhotosFromCache(
 function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[], x: number, w: number): number {
   const rowH = DENSITY_SPEC_ROW_H;
   const labelW = w * 0.45;
+  const valueW = w - labelW - 4;
+  const valueFontPt = mmSize(T.typography.specValueSize);
+  const lineSpacingMm = valueFontPt * 1.15 * 0.352778;
 
   for (let i = 0; i < specs.length; i++) {
-    if (y + rowH > MAX_Y) break;
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(mmSize(T.typography.specLabelSize));
+    const labelLines = wrapText(pdf, specs[i].label, labelW - 2);
+
+    pdf.setFontSize(valueFontPt);
+    const valLines = wrapText(pdf, specs[i].value, valueW);
+
+    const nLines = Math.max(labelLines.length, valLines.length);
+    const dynamicRowH = nLines <= 1 ? rowH : rowH + (nLines - 1) * lineSpacingMm;
+
+    if (y + dynamicRowH > MAX_Y) break;
 
     if (i % 2 === 0) {
       pdf.setFillColor(COLOR_BG_MUTED);
-      pdf.rect(x, y, w, rowH, "F");
+      pdf.rect(x, y, w, dynamicRowH, "F");
     }
 
     pdf.setFont(FONT_NORMAL, "normal");
     pdf.setFontSize(mmSize(T.typography.specLabelSize));
     pdf.setTextColor(COLOR_MUTED);
+    pdf.text(labelLines, x + 2, y + 3.2);
 
-    const labelLines = wrapText(pdf, specs[i].label, labelW - 2);
-    pdf.text(labelLines[0] || specs[i].label, x + 2, y + 3.2);
-
-    pdf.setFontSize(mmSize(T.typography.specValueSize));
+    pdf.setFontSize(valueFontPt);
     pdf.setTextColor(COLOR_BLACK);
-    const valLines = wrapText(pdf, specs[i].value, w - labelW - 4);
-    pdf.text(valLines[0] || specs[i].value, x + labelW, y + 3.2);
+    pdf.text(valLines, x + labelW, y + 3.2);
 
-    y += rowH;
+    y += dynamicRowH;
   }
 
   return y;
