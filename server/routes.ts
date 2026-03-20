@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, pool, formatQuoteNumber } from "./storage";
-import { runRefDataMigration } from "./ref-data-migration";
 import { isXeroConfigured, hasRefreshToken, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, XeroPushError, refreshXeroTokenWithCredentials } from "./xero-client";
 import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
@@ -219,7 +218,6 @@ export async function registerRoutes(
   await seedOrgAndDivisions();
   await seedSpecDictionary();
   await seedLifecycleTemplates();
-  await runRefDataMigration(pool);
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
