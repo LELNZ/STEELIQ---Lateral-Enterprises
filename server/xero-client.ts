@@ -496,7 +496,7 @@ function extractXeroErrorDetail(httpStatus: number, body: any): XeroErrorDetail 
       code: 403,
       message:
         "Xero returned 403 Forbidden. Possible causes: " +
-        "(1) OAuth app lacks 'accounting.transactions' write scope — check app permissions in Xero Developer Portal; " +
+        "(1) OAuth app lacks 'accounting.invoices' scope — check app permissions in Xero Developer Portal; " +
         "(2) Incorrect XERO_TENANT_ID — verify against Xero → Settings → Connected Apps.",
       validationErrors,
     };

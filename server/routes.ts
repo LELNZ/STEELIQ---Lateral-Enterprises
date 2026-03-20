@@ -1539,7 +1539,7 @@ export async function registerRoutes(
       response_type: "code",
       client_id: clientId,
       redirect_uri: redirectUri,
-      scope: "offline_access accounting.transactions.write accounting.contacts.read accounting.contacts.write",
+      scope: "offline_access accounting.invoices accounting.contacts",
       state,
     });
 
