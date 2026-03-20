@@ -1,13 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Invoice } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ReceiptText, Search } from "lucide-react";
+import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 
 type EnrichedInvoice = Invoice & { customerName: string | null; projectName: string | null };
 
@@ -33,6 +36,179 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
   if (status === "returned_to_draft") return "destructive";
   if (status === "ready_for_xero") return "outline";
   return "secondary";
+}
+
+function InvoiceActions({ inv, onMutate }: { inv: EnrichedInvoice; onMutate: (id: string) => void }) {
+  const { toast } = useToast();
+
+  const patchMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/invoices/${id}`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    },
+    onError: (err: Error) => toast({ title: "Action failed", description: err.message, variant: "destructive" }),
+  });
+
+  const pushToXeroMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/invoices/${id}/push-to-xero`, {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (data?.xeroInvoiceNumber) {
+        toast({ title: `Pushed to Xero as ${data.xeroInvoiceNumber}` });
+      } else {
+        toast({ title: "Pushed to Xero" });
+      }
+    },
+    onError: (err: Error) => toast({ title: "Push to Xero failed", description: err.message, variant: "destructive" }),
+  });
+
+  const returnToDraftMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/invoices/${id}/return-to-draft`, {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (data?.xeroWarning) {
+        toast({ title: "Returned to draft", description: data.xeroWarning, variant: "destructive" });
+      } else {
+        toast({ title: "Returned to draft" });
+      }
+    },
+    onError: (err: Error) => toast({ title: "Action failed", description: err.message, variant: "destructive" }),
+  });
+
+  const isPending = patchMutation.isPending || pushToXeroMutation.isPending || returnToDraftMutation.isPending;
+
+  const actions: JSX.Element[] = [];
+
+  if (inv.status === "draft") {
+    actions.push(
+      <Button
+        key="mark-ready"
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs"
+        disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "ready_for_xero" })}
+        data-testid={`button-mark-ready-${inv.id}`}
+      >
+        <FileCheck className="h-3 w-3 mr-1" /> Mark Ready
+      </Button>
+    );
+  }
+
+  if (inv.status === "ready_for_xero") {
+    actions.push(
+      <Button
+        key="push-xero"
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs"
+        disabled={isPending}
+        onClick={() => pushToXeroMutation.mutate(inv.id)}
+        data-testid={`button-push-xero-${inv.id}`}
+      >
+        <Send className="h-3 w-3 mr-1" /> Push to Xero
+      </Button>
+    );
+    actions.push(
+      <Button
+        key="back-draft"
+        size="sm"
+        variant="ghost"
+        className="h-7 text-xs text-muted-foreground"
+        disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "draft" })}
+        data-testid={`button-back-draft-${inv.id}`}
+      >
+        <RotateCcw className="h-3 w-3 mr-1" /> Back to Draft
+      </Button>
+    );
+  }
+
+  if (inv.status === "pushed_to_xero_draft") {
+    actions.push(
+      <Button
+        key="approve"
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
+        disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "approved" })}
+        data-testid={`button-approve-${inv.id}`}
+      >
+        <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+      </Button>
+    );
+    actions.push(
+      <Button
+        key="return-draft"
+        size="sm"
+        variant="ghost"
+        className="h-7 text-xs text-muted-foreground"
+        disabled={isPending}
+        onClick={() => returnToDraftMutation.mutate(inv.id)}
+        data-testid={`button-return-draft-${inv.id}`}
+      >
+        <RotateCcw className="h-3 w-3 mr-1" /> Return to Draft
+      </Button>
+    );
+  }
+
+  if (inv.status === "approved") {
+    actions.push(
+      <Button
+        key="return-draft"
+        size="sm"
+        variant="ghost"
+        className="h-7 text-xs text-muted-foreground"
+        disabled={isPending}
+        onClick={() => returnToDraftMutation.mutate(inv.id)}
+        data-testid={`button-return-draft-approved-${inv.id}`}
+      >
+        <RotateCcw className="h-3 w-3 mr-1" /> Return to Draft
+      </Button>
+    );
+  }
+
+  if (inv.status === "returned_to_draft") {
+    actions.push(
+      <Button
+        key="mark-ready"
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs"
+        disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "ready_for_xero" })}
+        data-testid={`button-mark-ready-rtd-${inv.id}`}
+      >
+        <FileCheck className="h-3 w-3 mr-1" /> Mark Ready
+      </Button>
+    );
+    actions.push(
+      <Button
+        key="back-draft"
+        size="sm"
+        variant="ghost"
+        className="h-7 text-xs text-muted-foreground"
+        disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "draft" })}
+        data-testid={`button-to-draft-rtd-${inv.id}`}
+      >
+        <RotateCcw className="h-3 w-3 mr-1" /> Back to Draft
+      </Button>
+    );
+  }
+
+  if (actions.length === 0) return null;
+  return <div className="flex items-center gap-1 flex-wrap">{actions}</div>;
 }
 
 export default function InvoicesPage() {
@@ -97,6 +273,7 @@ export default function InvoicesPage() {
                 <TableHead className="text-right">Excl. GST</TableHead>
                 <TableHead className="text-right">Incl. GST</TableHead>
                 <TableHead>Quote</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -141,6 +318,9 @@ export default function InvoicesPage() {
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <InvoiceActions inv={inv} onMutate={() => {}} />
                   </TableCell>
                 </TableRow>
               ))}

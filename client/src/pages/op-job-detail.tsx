@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useSystemMode } from "@/hooks/use-system-mode";
-import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, OP_JOB_STATUSES } from "@shared/schema";
+import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, type Invoice, OP_JOB_STATUSES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle,
+  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle, ReceiptText, ExternalLink,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import LifecyclePanel from "@/components/lifecycle-panel";
@@ -68,6 +68,16 @@ export default function OpJobDetail() {
 
   const { data: sourceQuote } = useQuery<QuoteWithRevisions>({
     queryKey: ["/api/quotes", job?.sourceQuoteId],
+    enabled: !!job?.sourceQuoteId,
+  });
+
+  const { data: invoices = [] } = useQuery<Invoice[]>({
+    queryKey: ["/api/quotes", job?.sourceQuoteId, "invoices"],
+    queryFn: async () => {
+      const res = await fetch(`/api/quotes/${job?.sourceQuoteId}/invoices`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
     enabled: !!job?.sourceQuoteId,
   });
 
@@ -409,6 +419,77 @@ export default function OpJobDetail() {
             )}
           </div>
         </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3" data-testid="section-invoices-job">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ReceiptText className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoices</h2>
+            {invoices.length > 0 && (
+              <span className="text-xs text-muted-foreground">({invoices.length})</span>
+            )}
+          </div>
+          {job?.sourceQuoteId && (
+            <button
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+              onClick={() => navigate(`/quote/${job.sourceQuoteId}`)}
+              data-testid="link-manage-invoices"
+            >
+              Manage in quote <ExternalLink className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+
+        {invoices.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No invoices yet for this job's source quote.</p>
+        ) : (
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Number</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Type</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Incl. GST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => {
+                  const INVOICE_STATUS_LABELS: Record<string, string> = {
+                    draft: "Draft", ready_for_xero: "Ready for Xero",
+                    pushed_to_xero_draft: "Pushed to Xero", approved: "Approved",
+                    returned_to_draft: "Returned to Draft",
+                  };
+                  const INVOICE_TYPE_LABELS: Record<string, string> = {
+                    deposit: "Deposit", progress: "Progress", variation: "Variation",
+                    final: "Final", retention_release: "Retention Release", credit_note: "Credit Note",
+                  };
+                  const statusColor: Record<string, string> = {
+                    draft: "secondary", ready_for_xero: "outline",
+                    pushed_to_xero_draft: "secondary", approved: "default", returned_to_draft: "destructive",
+                  };
+                  return (
+                    <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/20" data-testid={`row-job-invoice-${inv.id}`}>
+                      <td className="px-3 py-2 font-mono font-medium" data-testid={`text-job-invoice-number-${inv.id}`}>{inv.number}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</td>
+                      <td className="px-3 py-2">
+                        <Badge variant={(statusColor[inv.status] || "secondary") as any} className="text-xs" data-testid={`badge-job-invoice-status-${inv.id}`}>
+                          {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium" data-testid={`text-job-invoice-amount-${inv.id}`}>
+                        ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <Separator />

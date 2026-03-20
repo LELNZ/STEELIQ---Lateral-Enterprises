@@ -1337,9 +1337,36 @@ export async function registerRoutes(
     }
   });
 
+  const orgSettingsPatchSchema = z.object({
+    legalName: z.string().optional(),
+    businessDisplayName: z.string().nullable().optional(),
+    gstNumber: z.string().nullable().optional(),
+    nzbn: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+    email: z.string().nullable().optional(),
+    bankDetails: z.string().nullable().optional(),
+    defaultHeaderNotesBlock: z.string().nullable().optional(),
+    defaultTermsBlock: z.string().nullable().optional(),
+    defaultExclusionsBlock: z.string().nullable().optional(),
+    paymentTermsBlock: z.string().nullable().optional(),
+    quoteValidityDays: z.number().int().min(1).optional(),
+    documentLabel: z.string().nullable().optional(),
+    quoteNumberPrefix: z.string().max(10).nullable().optional(),
+    quoteNumberUseDivisionSuffix: z.boolean().nullable().optional(),
+    jobNumberPrefix: z.string().max(10).nullable().optional(),
+    jobNumberUseDivisionSuffix: z.boolean().nullable().optional(),
+    xeroAccountCode: z.string().nullable().optional(),
+    xeroTaxType: z.string().nullable().optional(),
+    systemMode: z.enum(["development", "production"]).optional(),
+    templateConfigJson: z.any().optional(),
+  });
+
   app.patch("/api/settings/org", async (req, res) => {
+    const parsed = orgSettingsPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const org = await storage.upsertOrgSettings(req.body);
+      const org = await storage.upsertOrgSettings(parsed.data as any);
       res.json(org);
     } catch (e: any) {
       res.status(400).json({ error: e.message });

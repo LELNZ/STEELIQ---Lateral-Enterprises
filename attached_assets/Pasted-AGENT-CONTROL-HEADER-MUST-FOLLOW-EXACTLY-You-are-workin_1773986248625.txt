@@ -1,0 +1,300 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not modify production data blindly.
+- Do not change unrelated library, pricing, rendering, snapshot, pagination, or Xero architecture.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless the operational UI/admin surfaces required for invoicing are actually usable by staff.
+- Do not mark anything complete because backend support exists without UI/admin access.
+- Do not report the numbering settings fix complete unless values persist after save and reload.
+
+Definition of done for this phase:
+- Operational invoicing surfaces are improved in the exact scope below
+- Numbering settings persist correctly after save and reload
+- Existing architecture is preserved
+- No unintended schema/API drift
+- No regression to quote rendering, snapshots, library flows, pricing flows, lifecycle, Xero OAuth, or pagination
+
+IMPORTANT EXECUTION RULE
+Before changing code:
+1. Briefly list the exact files you will inspect
+2. Briefly list the exact changes you will make
+3. Then make only those changes
+
+If handover docs and code differ, treat the current repo code as source of truth and report the mismatch explicitly.
+
+SYSTEM CONTEXT — CURRENT TRUTH
+
+This is a live internal-use production system with:
+- separate development and production databases
+- live quotes in production
+- at least one live deposit invoice created in production
+- live Xero OAuth connection working from the published app
+- lifecycle/job workflow partially operational
+- invoicing workflow partially operational
+
+Current observed operational issues:
+1. Invoice workflow is fragmented and not yet operationally strong enough
+   - /invoices list is too passive
+   - invoice actions are not surfaced where staff need them
+   - non-deposit invoice creation is not yet operationally surfaced
+   - job page lifecycle references invoicing but billing controls are weak
+
+2. Numbering settings are not persisting correctly in the live app
+   - On Settings -> # Numbering:
+     - Quote Prefix should persist as: SE
+     - Quote "Add division suffix" should persist as: ON
+     - Job Prefix should persist as: JOB
+     - Job "Add division suffix" should persist as: ON
+   - User changes these values and clicks save, but after reload the live app does not retain them
+
+LOCKED ARCHITECTURE — MUST NOT CHANGE
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY these two workstreams:
+
+WORKSTREAM A — Operational Invoicing Surface Completion
+Make invoicing operationally usable without redesigning architecture.
+
+Required deliverables:
+1. Add invoice action controls to the global /invoices page using the existing backend actions where already supported
+2. Add the missing "Approve" operational path if the backend transition already exists
+3. Improve the job-detail operational invoicing surface so staff can understand and reach invoice actions from the job workflow
+4. Add support for creating more than just deposit invoices ONLY if the backend already supports those invoice types safely and the UI addition can be done incrementally without redesign
+
+WORKSTREAM B — Numbering Settings Persistence Fix
+Fix the live settings persistence bug for quote/job numbering so these settings save and reload correctly:
+- quote prefix = SE
+- quote add division suffix = true
+- job prefix = JOB
+- job add division suffix = true
+
+Do NOT broaden scope beyond these two workstreams.
+
+STRICT SCOPE RULES
+
+DO NOT:
+- redesign invoice architecture
+- redesign lifecycle architecture
+- redesign numbering architecture
+- add speculative new invoice states unless required by an existing supported backend path
+- add unapproved endpoints if existing ones already support the needed actions
+- modify quote acceptance logic unless directly required by the invoicing surface
+- touch production transactional records manually
+- change Xero OAuth flow again unless a direct invoice-action bug requires it
+- rebuild settings architecture from scratch
+
+REQUIRED REVIEW BEFORE IMPLEMENTING
+
+Before changing anything:
+1. Inspect the exact current implementation of:
+   - global invoices page
+   - quote-detail invoice section
+   - op-job-detail page and lifecycle/invoice-related surfaces
+   - invoice routes and status transitions
+   - numbering settings UI state, save handler, API route, storage path, and persistence fields
+2. Identify the exact root cause of the numbering persistence bug
+3. State whether the invoice action surfaces can be completed with existing backend routes or require a tiny safe extension
+4. Then implement only the minimum safe fix set
+
+WORKSTREAM A — INVOICING REQUIREMENTS
+
+Goal:
+Move the system closer to serious internal operational-system behaviour by reducing workflow fragmentation.
+
+Required minimum operational outcome:
+- Staff can see invoices globally and act on them from /invoices
+- Staff are not forced to always navigate back to the quote page to manage invoice state
+- Job workflow has a meaningful invoicing surface/linkage
+- Existing deposit workflow remains intact
+- If supported already, pushed_to_xero_draft -> approved becomes operationally reachable
+
+Preferred direction:
+1. On /invoices page, add action buttons using existing safe transitions:
+   - Mark Ready (where valid)
+   - Push to Xero (where valid)
+   - Approve (if backend transition already exists)
+   - Return to Draft (where valid)
+2. Preserve existing quote-detail invoice controls; do not remove them
+3. On job-detail page, add a clear invoice summary / navigation / relevant action entry point if this can be done surgically
+4. If backend already supports invoice types beyond deposit, add an incremental invoice type selector where safest:
+   - deposit
+   - progress
+   - variation
+   - final
+   Do not redesign the full billing model to do this
+
+Important:
+- Reuse existing backend logic wherever possible
+- Do not invent a new invoice subsystem
+- Keep UI/admin surfaces operational, not decorative
+
+WORKSTREAM B — NUMBERING SETTINGS PERSISTENCE REQUIREMENTS
+
+This is a real live bug and must be fixed truthfully.
+
+Observed required values:
+- Quote Prefix should persist as "SE"
+- Quote division suffix should persist as ON
+- Job Prefix should persist as "JOB"
+- Job division suffix should persist as ON
+
+You must inspect:
+- current settings UI local state
+- current fetch/load path for numbering settings
+- current save payload
+- current backend route
+- current storage/update logic
+- current DB fields / org or settings persistence mapping
+
+You must identify exactly why save + reload does not persist the values.
+
+Possible classes of failure to inspect:
+- UI fields not sending the right payload
+- backend route ignoring the fields
+- storage update not writing booleans correctly
+- load path reading a different field than save path writes
+- values being overwritten by defaults on reload/startup
+- division suffix flags not persisted in the same place as prefixes
+
+Do not guess.
+Confirm from real code.
+
+REQUIRED TEST / VERIFICATION
+
+After implementation, verify and report:
+
+For invoicing:
+1. /invoices page now exposes the intended operational actions
+2. Existing live deposit invoice workflow is not broken
+3. If Approve is added, it is only shown when the backend transition is valid
+4. Any job-detail invoice surface added works and does not duplicate architecture
+5. Xero push path still uses the working live OAuth connection
+
+For numbering:
+1. Save quote prefix = SE
+2. Save quote division suffix = ON
+3. Save job prefix = JOB
+4. Save job division suffix = ON
+5. Refresh page
+6. Values still display correctly
+7. Confirm newly generated preview values reflect the saved settings
+8. Confirm no historical records are renumbered
+
+If you cannot verify against production, verify thoroughly in dev and explain exactly what remains to be confirmed in production.
+
+MANDATORY HANDOVER FORMAT
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause found
+Separate clearly:
+- invoicing operational gaps addressed
+- numbering persistence bug root cause
+
+4. Exact logic / method implemented
+Document the precise fix method for both workstreams.
+
+5. Behaviour changes
+Explain exactly what changed in:
+- /invoices
+- quote-detail invoice controls
+- op-job-detail invoice surface
+- numbering settings save/reload behaviour
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If none: explicitly state "None".
+
+7. UI Changes
+Document all visible UI/admin changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+
+9. Risks / Limitations
+Document any edge cases or remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- invoicing
+- lifecycle linkage
+- Xero
+- numbering settings persistence
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Library CRUD
+- Quote builder item creation
+- Snapshot generation
+- Quote preview rendering
+- PDF generation
+- Schedule pagination rules
+- Pricing breakdown
+- Labour breakdown
+- Production-safe startup
+- Quote acceptance
+- Convert to job
+- Deposit invoice creation
+- Push to Xero
+- Xero OAuth connected state
+- Numbering settings save/reload
+
+FINAL INSTRUCTION
+
+Implement exactly these two workstreams:
+1. Operational Invoicing Surface Completion
+2. Numbering Settings Persistence Fix
+
+Do it with minimal safe edits.
+Do not redesign architecture.
+If anything appears to require a structural change, stop and explain before changing it.
