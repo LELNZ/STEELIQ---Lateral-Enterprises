@@ -355,6 +355,8 @@ export const quotes = pgTable("quotes", {
   archivedAt: timestamp("archived_at"),
   deletedAt: timestamp("deleted_at"),
   isDemoRecord: boolean("is_demo_record").default(false),
+  retentionPercentage: real("retention_percentage"),
+  retentionHeldValue: real("retention_held_value"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

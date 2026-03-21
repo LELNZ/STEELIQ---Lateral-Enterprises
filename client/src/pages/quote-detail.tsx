@@ -23,7 +23,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle, ChevronDown, ChevronUp, MapPin } from "lucide-react";
+import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle, ChevronDown, ChevronUp, MapPin, ShieldCheck, Percent } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, type ReactNode } from "react";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG, type TotalsDisplayConfig } from "@/lib/quote-document";
@@ -1411,13 +1411,25 @@ type InvoiceAllocation = {
   depositAllowanceRemainingExcl: number;
   depositAllowanceFullyUsed: boolean;
   activeInvoiceCount: number;
-  // Variation-expanded fields (may be absent on older API responses)
+  // Variation-expanded fields
   approvedVariationTotalExcl?: number;
   approvedVariationTotalIncl?: number;
   totalInvoiceableExcl?: number;
   totalInvoiceableIncl?: number;
   variations?: Variation[];
   variationInvoicedByVariationId?: Record<string, number>;
+  // Retention fields
+  retentionPercentage?: number | null;
+  retentionHeldValue?: number;
+  retentionHeldValueIncl?: number;
+  retentionReleasedExcl?: number;
+  retentionReleasedIncl?: number;
+  retentionRemainingExcl?: number;
+  retentionRemainingIncl?: number;
+  retentionConfigured?: boolean;
+  standardCeilingExcl?: number;
+  standardInvoicedExcl?: number;
+  standardRemainingExcl?: number;
 };
 
 function InvoiceSection({
@@ -1437,7 +1449,7 @@ function InvoiceSection({
 }) {
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
-  const [invoiceType, setInvoiceType] = useState<"deposit" | "progress" | "variation" | "final">("deposit");
+  const [invoiceType, setInvoiceType] = useState<"deposit" | "progress" | "variation" | "final" | "retention_release">("deposit");
   const [depositMode, setDepositMode] = useState<"percentage" | "fixed">("percentage");
   const [depositPct, setDepositPct] = useState("50");
   const [depositFixed, setDepositFixed] = useState("");
@@ -1445,6 +1457,8 @@ function InvoiceSection({
   const [selectedVariationId, setSelectedVariationId] = useState<string>("");
   const [xeroWarn, setXeroWarn] = useState<string | null>(null);
   const [xeroReturnInvoice, setXeroReturnInvoice] = useState<Invoice | null>(null);
+  const [showRetentionConfig, setShowRetentionConfig] = useState(false);
+  const [retentionPctInput, setRetentionPctInput] = useState("");
 
   const { data: invoices = [] } = useQuery<Invoice[]>({
     queryKey: ["/api/quotes", quoteId, "invoices"],
@@ -1475,6 +1489,23 @@ function InvoiceSection({
 
   const GST_RATE = 0.15;
 
+  const retentionConfigureMutation = useMutation({
+    mutationFn: async (pct: number | null) => {
+      const res = await apiRequest("PATCH", `/api/quotes/${quoteId}/retention`, { retentionPercentage: pct });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      setShowRetentionConfig(false);
+      toast({ title: "Retention configured" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const retentionRemainingExcl = allocation?.retentionRemainingExcl ?? 0;
+
   const exclGst = (() => {
     if (invoiceType === "deposit") {
       return depositMode === "percentage"
@@ -1484,15 +1515,24 @@ function InvoiceSection({
           : parseFloat(depositFixed) || 0;
     }
     if (invoiceType === "variation") {
-      // If a variation is selected and no manual override provided, default to its remaining value
       if (selectedVariation && depositFixed === "") return variationRemainingExcl;
       return fixedGstBasis === "incl"
         ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
         : parseFloat(depositFixed) || 0;
     }
-    if (invoiceType === "final" && allocation) {
+    if (invoiceType === "retention_release" && allocation) {
+      // Default to full remaining retention
       return depositFixed === ""
-        ? (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl) - allocation.totalInvoicedExcl
+        ? retentionRemainingExcl
+        : fixedGstBasis === "incl"
+          ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
+          : parseFloat(depositFixed) || 0;
+    }
+    if (invoiceType === "final" && allocation) {
+      // Final auto-suggests standard remaining (excl. retention) not total remaining
+      const standardRemaining = allocation.standardRemainingExcl ?? Math.max(0, (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl) - allocation.totalInvoicedExcl);
+      return depositFixed === ""
+        ? standardRemaining
         : fixedGstBasis === "incl"
           ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
           : parseFloat(depositFixed) || 0;
@@ -1525,6 +1565,7 @@ function InvoiceSection({
         progress: `Progress claim — NZD ${inclGst.toFixed(2)} incl. GST`,
         variation: `Variation invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
         final: `Final invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+        retention_release: `Retention release — NZD ${inclGst.toFixed(2)} incl. GST`,
       };
       const res = await apiRequest("POST", "/api/invoices", {
         quoteId,
@@ -1678,57 +1719,84 @@ function InvoiceSection({
       </div>
 
       {allocation && (
-        <div className="rounded-lg border bg-card p-3 space-y-2" data-testid="panel-invoice-allocation">
-          {/* If there are approved variations, show expanded breakdown */}
-          {(allocation.approvedVariationTotalExcl ?? 0) > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-              <div>
-                <p className="text-xs text-muted-foreground">Base Contract</p>
-                <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
-              </div>
+        <div className="rounded-lg border bg-card p-3 space-y-3" data-testid="panel-invoice-allocation">
+          {/* Billing summary — always show full breakdown */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div>
+              <p className="text-xs text-muted-foreground">Base Contract</p>
+              <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
+            </div>
+            {(allocation.approvedVariationTotalExcl ?? 0) > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground">Approved Variations</p>
                 <p className="text-sm font-semibold text-blue-600 dark:text-blue-400" data-testid="text-variation-total">+{fmt(allocation.approvedVariationTotalExcl!)} excl.</p>
               </div>
+            )}
+            {allocation.retentionConfigured && (allocation.retentionHeldValue ?? 0) > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground">Total Invoiced</p>
-                <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.totalInvoicedExcl)} excl.</p>
+                <p className="text-xs text-muted-foreground">Retention Held ({allocation.retentionPercentage}%)</p>
+                <p className="text-sm font-semibold text-amber-600 dark:text-amber-400" data-testid="text-retention-held">−{fmt(allocation.retentionHeldValue!)} excl.</p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Remaining</p>
-                <p className={`text-sm font-semibold ${(allocation.totalInvoiceableExcl! - allocation.totalInvoicedExcl) <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
-                  {fmt(Math.max(0, allocation.totalInvoiceableExcl! - allocation.totalInvoicedExcl))} excl.
-                </p>
-              </div>
+            )}
+            <div>
+              <p className="text-xs text-muted-foreground">Std. Invoiced</p>
+              <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.standardInvoicedExcl ?? allocation.totalInvoicedExcl)} excl.</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-xs text-muted-foreground">Contract Value</p>
-                <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
+            <div>
+              <p className="text-xs text-muted-foreground">Std. Remaining</p>
+              <p className={`text-sm font-semibold ${(allocation.standardRemainingExcl ?? allocation.remainingExcl) <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
+                {fmt(Math.max(0, allocation.standardRemainingExcl ?? allocation.remainingExcl))} excl.
+              </p>
+            </div>
+          </div>
+
+          {/* Retention row — shown when retention is configured */}
+          {allocation.retentionConfigured && (allocation.retentionHeldValue ?? 0) > 0 && (
+            <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 space-y-1" data-testid="panel-retention-summary">
+              <div className="flex items-center gap-1.5 mb-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Retention — {allocation.retentionPercentage}% of base contract</span>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Total Invoiced</p>
-                <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.totalInvoicedExcl)} excl.</p>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <p className="text-muted-foreground">Held</p>
+                  <p className="font-semibold text-amber-700 dark:text-amber-300" data-testid="text-retention-held-value">{fmt(allocation.retentionHeldValue!)} excl.</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Released</p>
+                  <p className="font-semibold" data-testid="text-retention-released">{fmt(allocation.retentionReleasedExcl ?? 0)} excl.</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Remaining to Release</p>
+                  <p className={`font-semibold ${(allocation.retentionRemainingExcl ?? 0) > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600"}`} data-testid="text-retention-remaining">
+                    {fmt(allocation.retentionRemainingExcl ?? 0)} excl.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Remaining</p>
-                <p className={`text-sm font-semibold ${allocation.remainingExcl <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
-                  {fmt(allocation.remainingExcl)} excl.
+              {(allocation.retentionReleasedExcl ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground pt-0.5">
+                  Total incl. retention released: {fmt(allocation.totalInvoicedExcl)} excl.
                 </p>
-              </div>
+              )}
             </div>
           )}
+
           {allocation.acceptedValueExcl > 0 && (
             <div className="space-y-1">
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div className="h-2 rounded-full bg-muted overflow-hidden flex">
                 <div
-                  className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${Math.min(100, (allocation.totalInvoicedExcl / (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl)) * 100)}%` }}
+                  className="h-full bg-primary rounded-l-full transition-all"
+                  style={{ width: `${Math.min(100, ((allocation.standardInvoicedExcl ?? allocation.totalInvoicedExcl) / (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl)) * 100)}%` }}
                 />
+                {(allocation.retentionReleasedExcl ?? 0) > 0 && (
+                  <div
+                    className="h-full bg-amber-400 dark:bg-amber-600 transition-all"
+                    style={{ width: `${Math.min(100, ((allocation.retentionReleasedExcl ?? 0) / (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl)) * 100)}%` }}
+                  />
+                )}
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Deposit: {fmt(allocation.depositInvoicedExcl)} of {fmt(allocation.depositAllowanceExcl)} allowance ({allocation.depositAllowancePct}%)</span>
+                <span>Deposit: {fmt(allocation.depositInvoicedExcl)} of {fmt(allocation.depositAllowanceExcl)} ({allocation.depositAllowancePct}%)</span>
                 <span>{allocation.depositAllowanceFullyUsed
                   ? <span className="text-amber-600 dark:text-amber-400 font-medium">Deposit fully used</span>
                   : <span>{fmt(allocation.depositAllowanceRemainingExcl)} deposit remaining</span>
@@ -1736,6 +1804,26 @@ function InvoiceSection({
               </div>
             </div>
           )}
+
+          {/* Retention configuration control */}
+          <div className="flex items-center justify-between pt-1 border-t">
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              {allocation.retentionConfigured
+                ? `Retention: ${allocation.retentionPercentage}% (${fmt(allocation.retentionHeldValue!)} held)`
+                : "No retention configured"}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 text-xs px-2"
+              onClick={() => { setRetentionPctInput(allocation.retentionPercentage?.toString() ?? ""); setShowRetentionConfig(true); }}
+              data-testid="button-configure-retention"
+            >
+              <Percent className="h-3 w-3 mr-1" />
+              {allocation.retentionConfigured ? "Edit Retention" : "Set Retention"}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1951,6 +2039,18 @@ function InvoiceSection({
                   </Button>
                 ))}
               </div>
+              {allocation?.retentionConfigured && (allocation.retentionRemainingExcl ?? 0) > 0.001 && (
+                <Button
+                  size="sm"
+                  variant={invoiceType === "retention_release" ? "default" : "outline"}
+                  onClick={() => { setInvoiceType("retention_release"); setDepositFixed(""); }}
+                  className="w-full text-xs border-amber-400 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                  data-testid="button-invoice-type-retention_release"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
+                  Retention Release ({fmt(allocation.retentionRemainingExcl ?? 0)} available)
+                </Button>
+              )}
             </div>
 
             {invoiceType === "deposit" && allocation && (
@@ -2023,12 +2123,39 @@ function InvoiceSection({
             {invoiceType === "final" && allocation && (
               <div className="rounded-md px-3 py-2 text-xs bg-muted/50 space-y-0.5" data-testid="panel-final-remaining">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Remaining balance</span>
+                  <span className="text-muted-foreground">Standard remaining balance</span>
                   <span className="font-semibold text-green-600 dark:text-green-400">
-                    {fmt(Math.max(0, (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl) - allocation.totalInvoicedExcl))} excl.
+                    {fmt(Math.max(0, allocation.standardRemainingExcl ?? (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl) - allocation.totalInvoicedExcl))} excl.
                   </span>
                 </div>
-                <p className="text-muted-foreground">Final invoice pre-filled with remaining balance. Adjust below if needed.</p>
+                <p className="text-muted-foreground">Pre-filled with standard remaining balance (excludes retention). Adjust below if needed.</p>
+                {allocation.retentionConfigured && (allocation.retentionRemainingExcl ?? 0) > 0 && (
+                  <p className="text-amber-600 dark:text-amber-400 font-medium pt-0.5">
+                    Retention ({fmt(allocation.retentionRemainingExcl ?? 0)}) is withheld — release separately using "Retention Release" invoice type.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {invoiceType === "retention_release" && allocation && (
+              <div className="rounded-md px-3 py-2 text-xs bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-0.5" data-testid="panel-retention-release-info">
+                <div className="flex items-center gap-1 mb-1">
+                  <ShieldCheck className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  <span className="font-semibold text-amber-700 dark:text-amber-300">Retention Release</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total retention held</span>
+                  <span className="font-medium">{fmt(allocation.retentionHeldValue ?? 0)} excl.</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Already released</span>
+                  <span className="font-medium">{fmt(allocation.retentionReleasedExcl ?? 0)} excl.</span>
+                </div>
+                <div className="flex justify-between border-t pt-0.5 mt-0.5">
+                  <span className="text-amber-700 dark:text-amber-300 font-medium">Available to release</span>
+                  <span className="font-semibold text-amber-700 dark:text-amber-300">{fmt(retentionRemainingExcl)} excl.</span>
+                </div>
+                <p className="text-muted-foreground pt-0.5">Pre-filled with full remaining retention. Adjust if releasing only part of the retention.</p>
               </div>
             )}
 
@@ -2137,6 +2264,61 @@ function InvoiceSection({
             >
               {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
               Create {INVOICE_TYPE_LABELS[invoiceType] ?? "Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Retention configuration dialog */}
+      <Dialog open={showRetentionConfig} onOpenChange={setShowRetentionConfig}>
+        <DialogContent className="max-w-sm" data-testid="dialog-retention-config">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-amber-600" />
+              Configure Retention
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-300 space-y-1">
+              <p className="font-medium">Retention is withheld from the base contract value.</p>
+              <p className="text-muted-foreground">Standard invoices (deposit/progress/final/variation) are capped at the contract minus retention held. Retention is released via a separate Retention Release invoice type.</p>
+              <p className="text-muted-foreground">Set to 0 or clear to remove retention.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Retention Percentage (% of base contract)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={retentionPctInput}
+                  onChange={(e) => setRetentionPctInput(e.target.value)}
+                  placeholder="e.g. 5"
+                  className="w-28"
+                  data-testid="input-retention-percentage"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+                {retentionPctInput && parseFloat(retentionPctInput) > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    = {fmt(acceptedValue * parseFloat(retentionPctInput) / 100)} excl. held
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRetentionConfig(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                const pct = parseFloat(retentionPctInput);
+                retentionConfigureMutation.mutate(isNaN(pct) || pct <= 0 ? null : pct);
+              }}
+              disabled={retentionConfigureMutation.isPending}
+              data-testid="button-save-retention"
+            >
+              {retentionConfigureMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+              Save Retention
             </Button>
           </DialogFooter>
         </DialogContent>
