@@ -327,42 +327,52 @@ export default function Contacts() {
         <div className="rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Customer / Company</TableHead>
-                <TableHead className="hidden sm:table-cell">Email</TableHead>
-                <TableHead className="hidden md:table-cell">Phone</TableHead>
+              <TableRow className="bg-muted/50">
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer / Company</TableHead>
+                <TableHead className="hidden sm:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</TableHead>
+                <TableHead className="hidden md:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phone</TableHead>
                 <TableHead className="w-8" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {contacts.map((contact) => (
-                <TableRow key={contact.id} data-testid={`row-contact-${contact.id}`}>
-                  <TableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm" data-testid={`text-contact-name-${contact.id}`}>{contactDisplayName(contact)}</span>
-                        {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
+              {contacts.map((contact) => {
+                const initials = [contact.firstName, contact.lastName]
+                  .filter(Boolean)
+                  .map((n) => n![0].toUpperCase())
+                  .join("") || "?";
+                return (
+                <TableRow key={contact.id} className="hover:bg-muted/30" data-testid={`row-contact-${contact.id}`}>
+                  <TableCell className="py-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 select-none">
+                        {initials}
                       </div>
-                      {contact.roleTitle && <span className="text-xs text-muted-foreground">{contact.roleTitle}</span>}
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm" data-testid={`text-contact-name-${contact.id}`}>{contactDisplayName(contact)}</span>
+                          {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
+                        </div>
+                        {contact.roleTitle && <span className="text-xs text-muted-foreground">{contact.roleTitle}</span>}
+                      </div>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-3">
                     <Badge variant={CATEGORY_VARIANTS[contact.category || "other"] ?? "outline"} className="text-xs" data-testid={`badge-contact-category-${contact.id}`}>
                       {CATEGORY_LABELS[contact.category || "other"] ?? contact.category}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground" data-testid={`text-contact-customer-${contact.id}`}>
-                    {customerMap[contact.customerId] ?? "—"}
+                  <TableCell className="text-sm py-3" data-testid={`text-contact-customer-${contact.id}`}>
+                    <span className="font-medium">{customerMap[contact.customerId] ?? "—"}</span>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
-                    {contact.email ?? "—"}
+                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-3">
+                    {contact.email ?? <span className="text-xs opacity-50">—</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground hidden md:table-cell">
-                    {contact.phone ?? contact.mobile ?? "—"}
+                  <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-3">
+                    {contact.phone ?? contact.mobile ?? <span className="text-xs opacity-50">—</span>}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-3">
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
@@ -386,7 +396,8 @@ export default function Contacts() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+              })}
             </TableBody>
           </Table>
         </div>

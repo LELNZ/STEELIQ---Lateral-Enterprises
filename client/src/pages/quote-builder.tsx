@@ -3253,9 +3253,8 @@ export default function QuoteBuilder() {
         <div className={isLargeScreen
           ? `flex-1 min-h-0 flex flex-col ${quoteListPosition === "right" ? "lg:flex-row" : "lg:flex-col"} overflow-hidden`
           : "flex-1 min-h-0 flex flex-col overflow-hidden"}>
-          <div className="flex-1 flex items-center justify-center p-4 min-h-0"
-            style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)" }}>
-            <div className="w-full h-full max-w-3xl max-h-[600px]" data-testid="drawing-preview">
+          <div className="flex-1 flex items-center justify-center p-4 sm:p-6 min-h-0 bg-muted/30 dark:bg-muted/10">
+            <div className="w-full h-full max-w-3xl max-h-[600px] rounded-lg overflow-hidden shadow-sm ring-1 ring-border/50 bg-background" data-testid="drawing-preview">
               <DrawingCanvas ref={drawingRef} config={drawingConfig} />
             </div>
           </div>

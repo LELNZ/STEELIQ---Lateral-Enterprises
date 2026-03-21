@@ -2275,7 +2275,7 @@ export default function Settings() {
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           <Tabs defaultValue="application">
             <TabsList className="mb-4 overflow-x-auto">
               <TabsTrigger value="application" data-testid="tab-application">Application</TabsTrigger>

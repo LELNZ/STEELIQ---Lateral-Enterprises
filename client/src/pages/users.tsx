@@ -568,13 +568,13 @@ export default function Users() {
       <div className="rounded-lg border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Division</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
+            <TableRow className="bg-muted/50">
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">User</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Role</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Division</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Created</TableHead>
               <TableHead className="w-[130px]" />
             </TableRow>
           </TableHeader>
@@ -590,8 +590,8 @@ export default function Users() {
               </TableRow>
             )}
             {users.map((u) => (
-              <TableRow key={u.id} data-testid={`row-user-${u.id}`} className={u.isActive ? "" : "opacity-50"}>
-                <TableCell>
+              <TableRow key={u.id} data-testid={`row-user-${u.id}`} className={u.isActive ? "hover:bg-muted/30" : "opacity-50 hover:bg-muted/30"}>
+                <TableCell className="py-3">
                   <div>
                     <p className="font-medium text-sm" data-testid={`text-display-name-${u.id}`}>
                       {u.displayName || <span className="text-xs text-muted-foreground italic">No display name</span>}
@@ -602,28 +602,28 @@ export default function Users() {
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="text-sm" data-testid={`text-email-${u.id}`}>
+                <TableCell className="text-sm py-3" data-testid={`text-email-${u.id}`}>
                   {u.email || <span className="text-xs text-muted-foreground italic">—</span>}
                 </TableCell>
-                <TableCell>
+                <TableCell className="py-3">
                   <Badge variant={ROLE_COLORS[u.role] ?? "secondary"} className="text-xs" data-testid={`badge-role-${u.id}`}>
                     {ROLE_LABELS[u.role] ?? u.role}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-sm font-mono" data-testid={`text-division-${u.id}`}>
+                <TableCell className="text-sm font-mono py-3" data-testid={`text-division-${u.id}`}>
                   {u.divisionCode || <span className="text-xs text-muted-foreground">All</span>}
                 </TableCell>
-                <TableCell>
+                <TableCell className="py-3">
                   {u.isActive ? (
                     <Badge variant="outline" className="text-xs text-green-600 border-green-300" data-testid={`badge-status-${u.id}`}>Active</Badge>
                   ) : (
                     <Badge variant="outline" className="text-xs text-muted-foreground" data-testid={`badge-status-${u.id}`}>Inactive</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground" data-testid={`text-created-${u.id}`}>
+                <TableCell className="text-xs text-muted-foreground py-3" data-testid={`text-created-${u.id}`}>
                   {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-NZ") : "—"}
                 </TableCell>
-                <TableCell>
+                <TableCell className="py-3">
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost" size="sm" className="h-7 w-7 p-0"
