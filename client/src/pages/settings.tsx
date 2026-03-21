@@ -491,7 +491,21 @@ function LogoUploadField({ logoUrl, onLogoChange }: { logoUrl: string; onLogoCha
   const [uploading, setUploading] = useState(false);
   const [showUrlFallback, setShowUrlFallback] = useState(false);
 
-  const isUploadedLogo = logoUrl.startsWith("/api/drawing-images/");
+  const isUploadedLogo = logoUrl.startsWith("/api/drawing-images/") || logoUrl.startsWith("data:");
+
+  useEffect(() => {
+    if (!logoUrl.startsWith("/api/drawing-images/")) return;
+    fetch(logoUrl)
+      .then(res => res.ok ? res.blob() : Promise.reject())
+      .then(blob => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .then(dataUrl => { onLogoChange(dataUrl); })
+      .catch(() => {});
+  }, [logoUrl]);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -527,17 +541,9 @@ function LogoUploadField({ logoUrl, onLogoChange }: { logoUrl: string; onLogoCha
       ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(blobUrl);
 
-      const pngBlob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed to convert"))), "image/png");
-      });
-
-      const formData = new FormData();
-      formData.append("file", pngBlob, "logo.png");
-      const res = await fetch("/api/drawing-images", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
-      const { key } = await res.json();
-      onLogoChange(`/api/drawing-images/${key}`);
-      toast({ title: "Logo uploaded" });
+      const dataUrl = canvas.toDataURL("image/png");
+      onLogoChange(dataUrl);
+      toast({ title: "Logo ready — save settings to persist" });
     } catch (err) {
       toast({ title: "Upload failed", variant: "destructive" });
     } finally {
@@ -586,7 +592,7 @@ function LogoUploadField({ logoUrl, onLogoChange }: { logoUrl: string; onLogoCha
           data-testid="button-upload-logo"
         >
           <Upload className="w-3.5 h-3.5 mr-1.5" />
-          {uploading ? "Uploading..." : "Upload Logo"}
+          {uploading ? "Processing..." : "Upload Logo"}
         </Button>
         <Button
           variant="ghost"

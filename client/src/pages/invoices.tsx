@@ -301,20 +301,20 @@ export default function InvoicesPage() {
           {search ? "No invoices match your search." : "No invoices yet. Invoices are created from accepted quotes."}
         </div>
       ) : (
-        <div className="rounded-lg border bg-card overflow-x-auto">
+        <div className="rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Number</TableHead>
-                <TableHead>Type</TableHead>
+                <TableHead className="w-[110px]">Number</TableHead>
+                <TableHead className="hidden md:table-cell w-[90px]">Type</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Xero #</TableHead>
+                <TableHead className="hidden xl:table-cell w-[110px]">Xero #</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Project</TableHead>
-                <TableHead className="text-right">Excl. GST</TableHead>
-                <TableHead className="text-right">Incl. GST</TableHead>
-                <TableHead>Quote</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead className="hidden lg:table-cell">Project</TableHead>
+                <TableHead className="text-right w-[110px]">Excl. GST</TableHead>
+                <TableHead className="hidden xl:table-cell text-right w-[110px]">Incl. GST</TableHead>
+                <TableHead className="hidden lg:table-cell w-[90px]">Quote</TableHead>
+                <TableHead className="w-[60px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -323,7 +323,7 @@ export default function InvoicesPage() {
                   <TableCell className="font-mono text-sm font-medium" data-testid={`text-invoice-number-${inv.id}`}>
                     {inv.number}
                   </TableCell>
-                  <TableCell className="text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
+                  <TableCell className="hidden md:table-cell text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
                   <TableCell>
                     <div className="space-y-0.5">
                       <Badge variant={statusVariant(inv.status)} className="text-xs" data-testid={`badge-status-${inv.id}`}>
@@ -336,22 +336,22 @@ export default function InvoicesPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
+                  <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
                     {inv.xeroInvoiceNumber ?? <span className="opacity-40">—</span>}
                   </TableCell>
                   <TableCell className="text-sm" data-testid={`text-customer-${inv.id}`}>
                     {inv.customerName ?? <span className="text-xs text-muted-foreground">—</span>}
                   </TableCell>
-                  <TableCell className="text-sm" data-testid={`text-project-${inv.id}`}>
+                  <TableCell className="hidden lg:table-cell text-sm" data-testid={`text-project-${inv.id}`}>
                     {inv.projectName ?? <span className="text-xs text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-right text-sm">
                     ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className="text-right text-sm font-medium">
+                  <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
                     ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="hidden lg:table-cell text-sm">
                     {inv.quoteId ? (
                       <Link href={`/quote/${inv.quoteId}`} className="text-primary underline underline-offset-2 hover:no-underline text-xs" data-testid={`link-quote-${inv.id}`}>
                         View quote
