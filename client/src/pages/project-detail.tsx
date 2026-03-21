@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation, Link } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Project, Customer, Quote, OpJob, Invoice } from "@shared/schema";
+import type { Project, Customer, Quote, OpJob, Invoice, Variation } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,11 +15,23 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  FolderOpen, Building2, MapPin, FileText, HardHat, ReceiptText,
-  ArrowLeftCircle, ChevronDown, ChevronUp, ExternalLink, Pencil, Check, X,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  FolderOpen, Building2, MapPin, FileText, HardHat, ReceiptText, GitBranch,
+  ArrowLeftCircle, ChevronDown, ChevronUp, ExternalLink, Pencil, Check, X, Plus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+
+const VARIATION_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft", sent: "Sent", approved: "Approved",
+  declined: "Declined", invoiced: "Invoiced",
+};
+const VARIATION_STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  approved: "default", invoiced: "outline", declined: "destructive", sent: "secondary", draft: "secondary",
+};
+const GST_RATE = 0.15;
 
 const QUOTE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft", review: "In Review", sent: "Sent",
@@ -75,6 +87,197 @@ function CollapsibleSection({
       </button>
       {open && <div className="border-t">{children}</div>}
     </div>
+  );
+}
+
+// ─── Variations Section ────────────────────────────────────────────────────────
+function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; acceptedQuoteId?: string }) {
+  const { toast } = useToast();
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({ title: "", reason: "", amountExclGst: "" });
+
+  const { data: variations = [], isLoading } = useQuery<Variation[]>({
+    queryKey: ["/api/projects", projectId, "variations"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/variations`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const amountExcl = parseFloat(form.amountExclGst);
+      if (!form.title.trim() || isNaN(amountExcl) || amountExcl <= 0) throw new Error("Invalid fields");
+      const gst = Math.round(amountExcl * GST_RATE * 100) / 100;
+      const res = await apiRequest("POST", "/api/variations", {
+        projectId,
+        quoteId: acceptedQuoteId ?? null,
+        title: form.title.trim(),
+        reason: form.reason.trim() || null,
+        amountExclGst: amountExcl,
+        gstAmount: gst,
+        amountInclGst: Math.round((amountExcl + gst) * 100) / 100,
+        status: "draft",
+      });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error ?? "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "variations"] });
+      setAddOpen(false);
+      setForm({ title: "", reason: "", amountExclGst: "" });
+      toast({ title: "Variation created" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const patchMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/variations/${id}`, { status });
+      if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error ?? "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "variations"] });
+      toast({ title: "Variation updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <CollapsibleSection
+      title="Variations"
+      icon={<GitBranch className="h-4 w-4 text-muted-foreground" />}
+      count={variations.length}
+      defaultOpen={variations.length > 0}
+      data-testid="section-variations"
+    >
+      <div className="p-4 space-y-3">
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} data-testid="button-add-variation">
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Variation
+          </Button>
+        </div>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground text-center py-4">Loading…</p>
+        ) : variations.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">No variations yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Excl. GST</TableHead>
+                <TableHead className="text-right">Incl. GST</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {variations.map((v) => (
+                <TableRow key={v.id} data-testid={`row-variation-${v.id}`}>
+                  <TableCell className="font-medium text-sm">{v.title}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{v.reason ?? "—"}</TableCell>
+                  <TableCell>
+                    <Badge variant={VARIATION_STATUS_VARIANT[v.status] ?? "secondary"} className="text-xs">
+                      {VARIATION_STATUS_LABELS[v.status] ?? v.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">{v.amountExclGst != null ? fmtMoney(v.amountExclGst) : "—"}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{v.amountInclGst != null ? fmtMoney(v.amountInclGst) : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {v.status === "draft" && (
+                        <>
+                          <Button size="sm" variant="outline" className="h-7 text-xs"
+                            onClick={() => patchMutation.mutate({ id: v.id, status: "sent" })}
+                            disabled={patchMutation.isPending}
+                            data-testid={`button-send-variation-${v.id}`}>
+                            Sent
+                          </Button>
+                          <Button size="sm" variant="default" className="h-7 text-xs"
+                            onClick={() => patchMutation.mutate({ id: v.id, status: "approved" })}
+                            disabled={patchMutation.isPending}
+                            data-testid={`button-approve-variation-${v.id}`}>
+                            <Check className="h-3 w-3 mr-1" /> Approve
+                          </Button>
+                          <Button size="sm" variant="destructive" className="h-7 text-xs"
+                            onClick={() => patchMutation.mutate({ id: v.id, status: "declined" })}
+                            disabled={patchMutation.isPending}
+                            data-testid={`button-decline-variation-${v.id}`}>
+                            <X className="h-3 w-3 mr-1" /> Decline
+                          </Button>
+                        </>
+                      )}
+                      {v.status === "sent" && (
+                        <>
+                          <Button size="sm" variant="default" className="h-7 text-xs"
+                            onClick={() => patchMutation.mutate({ id: v.id, status: "approved" })}
+                            disabled={patchMutation.isPending}
+                            data-testid={`button-approve-variation-${v.id}`}>
+                            <Check className="h-3 w-3 mr-1" /> Approve
+                          </Button>
+                          <Button size="sm" variant="destructive" className="h-7 text-xs"
+                            onClick={() => patchMutation.mutate({ id: v.id, status: "declined" })}
+                            disabled={patchMutation.isPending}
+                            data-testid={`button-decline-variation-${v.id}`}>
+                            <X className="h-3 w-3 mr-1" /> Decline
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      {/* Add Variation Dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New Variation</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Title <span className="text-destructive">*</span></Label>
+              <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                placeholder="e.g. Additional sliding door" data-testid="input-variation-title" />
+            </div>
+            <div>
+              <Label>Reason <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Textarea value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
+                placeholder="Brief description of what changed and why" rows={3} data-testid="input-variation-reason" />
+            </div>
+            <div>
+              <Label>Amount excl. GST <span className="text-destructive">*</span></Label>
+              <Input type="number" min="0" step="0.01" value={form.amountExclGst}
+                onChange={(e) => setForm((f) => ({ ...f, amountExclGst: e.target.value }))}
+                placeholder="0.00" data-testid="input-variation-amount" />
+              {form.amountExclGst && !isNaN(parseFloat(form.amountExclGst)) && parseFloat(form.amountExclGst) > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  GST: {fmtMoney(parseFloat(form.amountExclGst) * GST_RATE)} · Incl. GST: {fmtMoney(parseFloat(form.amountExclGst) * (1 + GST_RATE))}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={!form.title.trim() || !form.amountExclGst || createMutation.isPending}
+              data-testid="button-save-variation">
+              {createMutation.isPending ? "Saving…" : "Create Variation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </CollapsibleSection>
   );
 }
 
@@ -390,6 +593,12 @@ export default function ProjectDetail() {
           </Table>
         )}
       </CollapsibleSection>
+
+      {/* Variations */}
+      <VariationsSection
+        projectId={projectId}
+        acceptedQuoteId={pQuotes.find((q) => q.status === "accepted")?.id}
+      />
 
       {/* Edit Project Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

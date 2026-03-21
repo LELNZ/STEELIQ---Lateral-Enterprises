@@ -22,6 +22,7 @@ import {
   type OpJob, type InsertOpJob,
   type LifecycleTemplate, type LifecycleInstance, type LifecycleTaskState,
   type XeroConnection,
+  type Variation, type InsertVariation,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -29,7 +30,7 @@ import {
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
-  xeroConnections,
+  xeroConnections, variations,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -203,6 +204,14 @@ export interface IStorage {
     completedByUserId: string | null;
     note: string | null;
   }): Promise<LifecycleTaskState>;
+
+  // ── Variations ────────────────────────────────────────────────────────────
+  createVariation(data: InsertVariation): Promise<Variation>;
+  getVariation(id: string): Promise<Variation | undefined>;
+  getVariationsByProject(projectId: string): Promise<Variation[]>;
+  getVariationsByQuote(quoteId: string): Promise<Variation[]>;
+  getVariationsForAllocation(quoteId: string, projectId: string | null): Promise<Variation[]>;
+  updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined>;
 
   // ── Xero OAuth Connection ─────────────────────────────────────────────────
   getXeroConnection(): Promise<XeroConnection | undefined>;
@@ -831,6 +840,7 @@ export class DatabaseStorage implements IStorage {
       amountInclGst: row.amount_incl_gst,
       description: row.description,
       notes: row.notes,
+      variationId: row.variation_id,
       xeroInvoiceId: row.xero_invoice_id,
       xeroInvoiceNumber: row.xero_invoice_number,
       xeroStatus: row.xero_status,
@@ -1052,6 +1062,50 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.select().from(xeroConnections).where(eq(xeroConnections.id, "default"));
     return row;
   }
+
+  // ── Variations ────────────────────────────────────────────────────────────
+
+  async createVariation(data: InsertVariation): Promise<Variation> {
+    const [row] = await db.insert(variations).values(data as any).returning();
+    return row;
+  }
+
+  async getVariation(id: string): Promise<Variation | undefined> {
+    const [row] = await db.select().from(variations).where(eq(variations.id, id));
+    return row;
+  }
+
+  async getVariationsByProject(projectId: string): Promise<Variation[]> {
+    return db.select().from(variations).where(eq(variations.projectId, projectId)).orderBy(desc(variations.createdAt));
+  }
+
+  async getVariationsByQuote(quoteId: string): Promise<Variation[]> {
+    return db.select().from(variations).where(eq(variations.quoteId, quoteId)).orderBy(desc(variations.createdAt));
+  }
+
+  async getVariationsForAllocation(quoteId: string, projectId: string | null): Promise<Variation[]> {
+    // Returns variations linked directly to this quote, PLUS any project-level variations
+    // (no quoteId set) that belong to the same project. Deduplication by id handles any overlap.
+    const byQuote = await db.select().from(variations).where(eq(variations.quoteId, quoteId));
+    const byProject = projectId
+      ? await db.select().from(variations).where(
+          and(eq(variations.projectId, projectId), isNull(variations.quoteId))
+        )
+      : [];
+    const seen = new Set<string>();
+    const combined: Variation[] = [];
+    for (const v of [...byQuote, ...byProject]) {
+      if (!seen.has(v.id)) { seen.add(v.id); combined.push(v); }
+    }
+    return combined;
+  }
+
+  async updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined> {
+    const [row] = await db.update(variations).set({ ...data, updatedAt: new Date() } as any).where(eq(variations.id, id)).returning();
+    return row;
+  }
+
+  // ── Xero OAuth Connection ─────────────────────────────────────────────────
 
   async upsertXeroConnection(data: {
     tenantId: string | null;

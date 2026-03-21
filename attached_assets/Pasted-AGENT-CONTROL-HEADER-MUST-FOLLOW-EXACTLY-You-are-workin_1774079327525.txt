@@ -1,0 +1,379 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep beyond the exact scope below.
+- Do not add unapproved endpoints unless strictly required for the exact workflow below.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change unrelated Xero OAuth, PDF rendering, library architecture, or pagination.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless the commercial rules are operationally explicit in both backend logic and usable UI/admin surfaces.
+- Do not claim success just because invoice types exist.
+- Do not treat “variation” as complete unless it is modeled as an actual approved commercial record, not merely a label on an invoice.
+
+Definition of done for this phase:
+- Commercial billing doctrine is implemented clearly and safely
+- Variation is introduced as a first-class approved commercial record
+- Billing rules become explicit for deposit, progress, final, variation, and retention
+- No architecture drift
+- No regression to quote rendering, Xero push, snapshots, project/job linking, or list-page improvements
+
+CURRENT CONTEXT — MUST TREAT AS CURRENT TRUTH
+
+The system now has:
+- working production state
+- working live Xero invoice upload
+- project-first workflow materially improved
+- customer/project/job/invoice relationships materially improved
+- list page width/layout significantly improved
+- PDF rendering materially improved
+- division logo persistence materially improved
+
+We are now working on:
+- layering of projects / jobs / invoices / quotes
+- how multiple invoice types should work:
+  - deposit
+  - progress
+  - variation
+  - retention
+  - final
+
+This phase is to lock and implement the commercial rules properly.
+
+LOCKED BUSINESS MODEL — MUST RESPECT
+
+Customer = who is buying
+Project = umbrella site / contract / grouped work
+Quote = commercial proposal
+Job = internal execution record created from accepted quote
+Invoice = billing event linked to quote/customer/project/job context
+
+IMPORTANT NEW RULE TO IMPLEMENT
+
+Variation must NOT be treated as merely an invoice type.
+
+Variation must become:
+- a separate commercial record
+- with its own description, reason, value, and approval state
+- linked to project
+- linked to source quote
+- linked to job where relevant
+- only approved variations increase total invoiceable value
+- variation invoices are created from approved variations
+
+THIS PHASE — EXACT SCOPE
+
+Implement two workstreams only:
+
+WORKSTREAM A — COMMERCIAL BILLING RULES LOCK
+WORKSTREAM B — VARIATION RECORD + VARIATION INVOICE FLOW
+
+Do not broaden beyond that.
+
+==================================================
+WORKSTREAM A — COMMERCIAL BILLING RULES LOCK
+==================================================
+
+OBJECTIVE
+Make invoiceable value and invoice-type behavior explicit, safe, and operationally coherent.
+
+Required business rules to implement and/or make explicit in code + UI:
+
+1. Base contract value
+- Accepted quote value is the base contract value.
+
+2. Deposit invoices
+- Deposit invoices draw down only against the allowed deposit allocation.
+- Existing deposit cap logic remains in force.
+- UI must clearly show:
+  - base contract value
+  - deposit allowance
+  - deposit already invoiced
+  - deposit remaining
+
+3. Progress invoices
+- Progress invoices invoice against the remaining uninvoiced base contract value.
+- They do not increase contract value.
+
+4. Final invoice
+- Final invoice should represent the remaining balance:
+  base contract value
+  + approved variation total
+  - already invoiced
+- It should auto-suggest the remaining amount.
+
+5. Retention
+- Retention must be explicitly modeled as withheld contract value, not an accidental leftover.
+- Required behavior:
+  - support retention percentage or amount on the accepted commercial scope if feasible in current model
+  - retention release invoice can only draw from retention held
+- If full retention implementation is too large for this phase, implement the model groundwork + UI placeholders and explain the exact next step.
+
+6. Over-invoicing protection
+- The system must prevent:
+  - invoicing above base accepted value + approved variations
+  - deposit invoicing above deposit allowance
+  - retention release above retained amount
+
+7. Status/locking rules
+- Once invoice is pushed to Xero, commercial edits affecting financial meaning must be controlled and warned.
+
+==================================================
+WORKSTREAM B — VARIATION RECORD + VARIATION INVOICE FLOW
+==================================================
+
+OBJECTIVE
+Implement variation as a proper commercial object, not merely an invoice label.
+
+Required behavior:
+
+1. Add variation record model
+A variation must include at minimum:
+- id
+- projectId
+- quoteId
+- jobId (nullable where appropriate)
+- customerId
+- title
+- reason / description
+- amountExclGst
+- status
+
+Recommended statuses:
+- draft
+- sent
+- approved
+- declined
+- invoiced
+
+2. Approved variation total
+- Only approved variations increase total invoiceable value.
+- Unapproved variations must not affect invoice allowance.
+
+3. Variation UI surfaces
+At minimum provide operational surfaces on:
+- Project detail page
+- Job detail page if job-linked
+- possibly Quote detail if source-quote-linked context is useful
+
+Required UI actions:
+- create variation
+- edit draft variation
+- mark variation approved / declined
+- create invoice from approved variation
+
+4. Variation invoice creation
+- Variation invoice must be created from an approved variation record
+- It must inherit:
+  - customer
+  - project
+  - source quote
+  - source job if linked
+  - source variation
+- Variation invoice amount must not exceed approved variation value remaining to invoice
+
+5. Commercial visibility
+On relevant pages show:
+- total approved variation value
+- total variation invoiced
+- remaining variation value to invoice
+
+6. Preserve existing invoice list / Xero flow
+- Variation invoices should still use existing invoice/Xero pipeline
+- Do not create a parallel finance/export system
+
+==================================================
+REQUIRED UI / ADMIN SURFACES
+==================================================
+
+This phase is not backend-only.
+
+Required visible surfaces:
+- accepted quote / invoice allocation area updated with approved variation total
+- project page variation section
+- variation create/edit/approve actions
+- create invoice from approved variation
+- clear billing summary showing:
+  - base contract
+  - approved variations
+  - total invoiceable
+  - total invoiced
+  - remaining
+  - retention held/released if implemented in this phase
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing anything:
+1. Inspect current invoice model and allocation logic
+2. Inspect current project detail and job detail surfaces
+3. State exactly how you will introduce variation without breaking current invoice/Xero flow
+4. State whether retention will be:
+   - fully implemented now
+   - or groundwork + explicit placeholder now
+5. Then implement only the minimum safe scope required
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+- redesign the project/job/customer/quote architecture
+- treat variation as only an invoice dropdown option
+- create parallel billing logic outside existing invoice system
+- weaken Xero push rules
+- weaken existing invoice allocation controls
+- touch quote preview/PDF pipeline except where billing summaries must reflect new totals
+- broaden into full navigation redesign in this phase
+
+==================================================
+TEST / VERIFICATION REQUIREMENTS
+==================================================
+
+Run and report these exact tests:
+
+TC-001
+Accepted quote with base contract value
+Create deposit invoice
+Expected:
+- deposit allowance correct
+- total remaining correct
+
+TC-002
+Create progress invoice
+Expected:
+- does not exceed remaining base value
+- total invoiced updates correctly
+
+TC-003
+Create draft variation
+Expected:
+- does not change invoiceable total yet
+
+TC-004
+Approve variation
+Expected:
+- approved variation value increases total invoiceable amount
+
+TC-005
+Create variation invoice from approved variation
+Expected:
+- invoice inherits project/quote/customer/job context
+- amount cannot exceed approved variation remaining
+
+TC-006
+Create final invoice
+Expected:
+- auto-suggests remaining amount from:
+  base + approved variations - prior invoices
+
+TC-007
+Attempt over-invoicing
+Expected:
+- blocked correctly
+
+TC-008
+Push a valid variation/final/progress invoice through existing Xero flow
+Expected:
+- existing Xero pipeline still works
+
+TC-009
+If retention implemented now:
+- retention release cannot exceed retention held
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause / business-rule issue found
+Explain exactly why the previous model was insufficient for variation / billing maturity.
+
+4. Exact logic / method implemented
+Document the precise commercial rule logic now implemented.
+
+5. Behaviour changes
+Explain exactly what changed in:
+- quote/project/job commercial surfaces
+- invoice creation
+- approved variation handling
+- final invoice calculation
+- retention handling
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If retention is only partial, say so explicitly.
+
+7. UI Changes
+Document all visible UI/admin changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+- Xero OAuth flow architecture
+
+9. Risks / Limitations
+Document any remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- billing model
+- variation model
+- invoice allocation model
+- retention state
+- project/job/quote layering
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Quote acceptance
+- Create project from quote
+- Create job from quote/project
+- Deposit invoice creation
+- Progress/final/variation invoice creation
+- Invoice allocation controls
+- Xero push
+- Project dashboard
+- Quote preview rendering
+- PDF export
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this commercial billing rules lock + variation workflow phase.
+Do not redesign architecture.
+Do not broaden into unrelated UX redesign or navigation changes in this phase.

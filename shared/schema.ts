@@ -515,6 +515,7 @@ export const invoices = pgTable("invoices", {
   amountInclGst: real("amount_incl_gst"),
   description: text("description"),
   notes: text("notes"),
+  variationId: varchar("variation_id"),
   xeroInvoiceId: text("xero_invoice_id"),
   xeroInvoiceNumber: text("xero_invoice_number"),
   xeroStatus: text("xero_status"),
@@ -526,6 +527,33 @@ export const invoices = pgTable("invoices", {
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoices.$inferSelect;
+
+// ─── Variations ──────────────────────────────────────────────────────────────
+
+export const VARIATION_STATUSES = ["draft", "sent", "approved", "declined", "invoiced"] as const;
+export type VariationStatus = typeof VARIATION_STATUSES[number];
+
+export const variations = pgTable("variations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id"),
+  quoteId: varchar("quote_id"),
+  jobId: varchar("job_id"),
+  customerId: varchar("customer_id"),
+  divisionCode: text("division_code"),
+  title: text("title").notNull(),
+  reason: text("reason"),
+  amountExclGst: real("amount_excl_gst").notNull(),
+  status: text("status").notNull().default("draft"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertVariationSchema = createInsertSchema(variations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertVariation = z.infer<typeof insertVariationSchema>;
+export type Variation = typeof variations.$inferSelect;
+
+// ─── Operational Jobs ─────────────────────────────────────────────────────────
 
 export const OP_JOB_STATUSES = ["active", "on_hold", "completed", "cancelled"] as const;
 export type OpJobStatus = typeof OP_JOB_STATUSES[number];

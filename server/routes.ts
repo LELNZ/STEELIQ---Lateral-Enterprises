@@ -8,6 +8,7 @@ import {
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
   VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
+  VARIATION_STATUSES,
 } from "@shared/schema";
 import { z } from "zod";
 import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
@@ -2358,6 +2359,78 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Variations ───────────────────────────────────────────────────────────
+
+  app.get("/api/projects/:id/variations", async (req, res) => {
+    try {
+      return res.json(await storage.getVariationsByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/quotes/:id/variations", async (req, res) => {
+    try {
+      return res.json(await storage.getVariationsByQuote(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/variations", async (req, res) => {
+    const schema = z.object({
+      projectId: z.string().optional().nullable(),
+      quoteId: z.string().optional().nullable(),
+      jobId: z.string().optional().nullable(),
+      customerId: z.string().optional().nullable(),
+      divisionCode: z.string().optional().nullable(),
+      title: z.string().min(1, "Title is required"),
+      reason: z.string().optional().nullable(),
+      amountExclGst: z.number().positive("Amount must be positive"),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const userId = req.user?.id ?? null;
+      const v = await storage.createVariation({
+        ...parsed.data,
+        status: "draft",
+        createdByUserId: userId ?? undefined,
+      } as any);
+      return res.status(201).json(v);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/variations/:id", async (req, res) => {
+    const schema = z.object({
+      title: z.string().min(1).optional(),
+      reason: z.string().optional().nullable(),
+      amountExclGst: z.number().positive().optional(),
+      status: z.enum(VARIATION_STATUSES).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const existing = await storage.getVariation(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Variation not found" });
+
+      // Cannot edit amount/title/reason once approved or invoiced
+      const locked = ["approved", "invoiced"].includes(existing.status);
+      if (locked && (parsed.data.amountExclGst !== undefined || parsed.data.title !== undefined || parsed.data.reason !== undefined)) {
+        if (parsed.data.status === undefined) {
+          return res.status(409).json({ error: "Cannot edit a variation that is approved or invoiced. Change status first." });
+        }
+      }
+
+      const updated = await storage.updateVariation(req.params.id, parsed.data as any);
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // ─── Create Project from Quote ────────────────────────────────────────────
   app.post("/api/quotes/:id/create-project", async (req, res) => {
     try {
@@ -2487,19 +2560,39 @@ export async function registerRoutes(
       const active = allInvoices.filter((inv) => ACTIVE_STATUSES.includes(inv.status));
       const acceptedValue = quote.acceptedValue ?? 0;
 
+      // Approved variation total: only approved/invoiced variations count towards invoiceable
+      // Use combined query: variations linked to this quoteId OR project-level variations without quoteId
+      const allVariations = await storage.getVariationsForAllocation(req.params.id, quote.projectId ?? null);
+      const approvedVariationTotalExcl = allVariations
+        .filter((v) => ["approved", "invoiced"].includes(v.status))
+        .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
+
+      const totalInvoiceableExcl = acceptedValue + approvedVariationTotalExcl;
+
       const depositInvoicedExcl = active.filter((i) => i.type === "deposit").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
       const progressInvoicedExcl = active.filter((i) => i.type === "progress").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
       const finalInvoicedExcl = active.filter((i) => i.type === "final").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
       const variationInvoicedExcl = active.filter((i) => i.type === "variation").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
       const totalInvoicedExcl = active.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
-      const remainingExcl = Math.max(0, acceptedValue - totalInvoicedExcl);
+      const remainingExcl = Math.max(0, totalInvoiceableExcl - totalInvoicedExcl);
 
       const depositAllowanceExcl = acceptedValue * (MAX_DEPOSIT_PCT / 100);
       const depositAllowanceRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
 
+      // Per-variation invoiced totals for guard
+      const variationInvoicedByVariationId: Record<string, number> = {};
+      for (const inv of active.filter((i) => i.type === "variation" && (i as any).variationId)) {
+        const vid = (inv as any).variationId as string;
+        variationInvoicedByVariationId[vid] = (variationInvoicedByVariationId[vid] ?? 0) + (inv.amountExclGst ?? 0);
+      }
+
       return res.json({
         acceptedValueExcl: acceptedValue,
         acceptedValueIncl: acceptedValue * (1 + GST_RATE),
+        approvedVariationTotalExcl,
+        approvedVariationTotalIncl: approvedVariationTotalExcl * (1 + GST_RATE),
+        totalInvoiceableExcl,
+        totalInvoiceableIncl: totalInvoiceableExcl * (1 + GST_RATE),
         totalInvoicedExcl,
         totalInvoicedIncl: totalInvoicedExcl * (1 + GST_RATE),
         remainingExcl,
@@ -2513,6 +2606,8 @@ export async function registerRoutes(
         depositAllowanceRemainingExcl,
         depositAllowanceFullyUsed: depositAllowanceRemainingExcl <= 0.001,
         activeInvoiceCount: active.length,
+        variations: allVariations,
+        variationInvoicedByVariationId,
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2534,6 +2629,7 @@ export async function registerRoutes(
       amountInclGst: z.number().optional().nullable(),
       description: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
+      variationId: z.string().optional().nullable(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -2565,7 +2661,7 @@ export async function registerRoutes(
 
         // ── Invoice allocation guard ─────────────────────────────────────────
         // Policy: max deposit = 50% of accepted contract value (excl. GST).
-        // Total of all active invoices must not exceed accepted value.
+        // Total of all active invoices must not exceed accepted value + approved variations.
         // Active = draft | ready_for_xero | pushed_to_xero_draft | approved.
         // returned_to_draft invoices are excluded (operator has retracted them).
         const ALLOC_ACTIVE = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
@@ -2576,21 +2672,30 @@ export async function registerRoutes(
         const newAmountExcl = parsed.data.amountExclGst ?? 0;
         const invoiceType = parsed.data.type ?? "deposit";
 
-        if (contractValue > 0 && newAmountExcl > 0) {
+        // Approved variation total — these expand the invoiceable ceiling
+        const allVariations = await storage.getVariationsForAllocation(parsed.data.quoteId, quote.projectId ?? null);
+        const approvedVariationTotalExcl = allVariations
+          .filter((v) => ["approved", "invoiced"].includes(v.status))
+          .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
+        const totalInvoiceableExcl = contractValue + approvedVariationTotalExcl;
+
+        if (totalInvoiceableExcl > 0 && newAmountExcl > 0) {
           const totalInvoicedExcl = activeInvoices.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
 
-          // Overall contract cap
-          if (totalInvoicedExcl + newAmountExcl > contractValue + 0.005) {
-            const remainingExcl = Math.max(0, contractValue - totalInvoicedExcl);
+          // Overall invoiceable cap (base + approved variations)
+          if (totalInvoicedExcl + newAmountExcl > totalInvoiceableExcl + 0.005) {
+            const remainingExcl = Math.max(0, totalInvoiceableExcl - totalInvoicedExcl);
             return res.status(422).json({
-              error: `Invoice amount exceeds remaining contract value. Remaining to invoice: $${remainingExcl.toFixed(2)} excl. GST (contract: $${contractValue.toFixed(2)}).`,
+              error: `Invoice amount exceeds remaining invoiceable value. Remaining: $${remainingExcl.toFixed(2)} excl. GST (base contract: $${contractValue.toFixed(2)}, approved variations: $${approvedVariationTotalExcl.toFixed(2)}).`,
               code: "OVER_CONTRACT_VALUE",
               remainingExcl,
               contractValue,
+              approvedVariationTotalExcl,
+              totalInvoiceableExcl,
             });
           }
 
-          // Deposit-specific cap (50% of contract)
+          // Deposit-specific cap (50% of base contract only, not variations)
           if (invoiceType === "deposit") {
             const depositAllowanceExcl = contractValue * (MAX_DEPOSIT_PCT / 100);
             const depositInvoicedExcl = activeInvoices
@@ -2615,6 +2720,38 @@ export async function registerRoutes(
                 depositAllowanceExcl,
                 depositInvoicedExcl,
                 depositRemainingExcl,
+              });
+            }
+          }
+
+          // Variation invoice cap — must link to an approved variation, cannot exceed remaining variation value
+          if (invoiceType === "variation") {
+            const variationId = parsed.data.variationId;
+            if (!variationId) {
+              return res.status(422).json({
+                error: "Variation invoices must be linked to an approved variation record.",
+                code: "VARIATION_REQUIRED",
+              });
+            }
+            const variation = await storage.getVariation(variationId);
+            if (!variation) return res.status(404).json({ error: "Variation record not found." });
+            if (variation.status !== "approved") {
+              return res.status(422).json({
+                error: `Cannot invoice against a variation with status '${variation.status}'. Only approved variations can be invoiced.`,
+                code: "VARIATION_NOT_APPROVED",
+              });
+            }
+            // How much of this variation has already been invoiced?
+            const variationInvoicedExcl = activeInvoices
+              .filter((i) => i.type === "variation" && (i as any).variationId === variationId)
+              .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+            const variationRemainingExcl = Math.max(0, variation.amountExclGst - variationInvoicedExcl);
+            if (newAmountExcl > variationRemainingExcl + 0.005) {
+              return res.status(422).json({
+                error: `Invoice amount exceeds remaining variation value. Remaining: $${variationRemainingExcl.toFixed(2)} excl. GST (variation total: $${variation.amountExclGst.toFixed(2)}).`,
+                code: "OVER_VARIATION_VALUE",
+                variationRemainingExcl,
+                variationAmountExcl: variation.amountExclGst,
               });
             }
           }
@@ -2725,13 +2862,21 @@ export async function registerRoutes(
               );
               const otherTotal = otherActive.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
               const thisAmount = invoice.amountExclGst ?? 0;
-              if (otherTotal + thisAmount > allocQuote.acceptedValue + 0.005) {
-                const remaining = Math.max(0, allocQuote.acceptedValue - otherTotal);
+              // Include approved variation total in the invoiceable ceiling
+              const rfxVariations = await storage.getVariationsForAllocation(invoice.quoteId, allocQuote.projectId ?? null);
+              const approvedVarTotal = rfxVariations
+                .filter((v) => ["approved", "invoiced"].includes(v.status))
+                .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
+              const totalInvoiceableCeiling = allocQuote.acceptedValue + approvedVarTotal;
+              if (otherTotal + thisAmount > totalInvoiceableCeiling + 0.005) {
+                const remaining = Math.max(0, totalInvoiceableCeiling - otherTotal);
                 return res.status(422).json({
-                  error: `Invoice cannot proceed: total invoiced would exceed the contract value. Remaining uninvoiced: $${remaining.toFixed(2)} excl. GST.`,
+                  error: `Invoice cannot proceed: total invoiced would exceed the invoiceable ceiling (base $${allocQuote.acceptedValue.toFixed(2)} + approved variations $${approvedVarTotal.toFixed(2)}). Remaining: $${remaining.toFixed(2)} excl. GST.`,
                   code: "OVER_CONTRACT_VALUE",
                   remainingExcl: remaining,
                   contractValue: allocQuote.acceptedValue,
+                  approvedVariationTotalExcl: approvedVarTotal,
+                  totalInvoiceableCeiling,
                 });
               }
             }

@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { useSystemMode } from "@/hooks/use-system-mode";
-import { type Quote, type QuoteRevision, type AuditLog, type Invoice, type Customer, type Project, type OpJob, VALID_STATUS_TRANSITIONS, type QuoteStatus } from "@shared/schema";
+import { type Quote, type QuoteRevision, type AuditLog, type Invoice, type Customer, type Project, type OpJob, VALID_STATUS_TRANSITIONS, type QuoteStatus, type Variation } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -1411,6 +1411,13 @@ type InvoiceAllocation = {
   depositAllowanceRemainingExcl: number;
   depositAllowanceFullyUsed: boolean;
   activeInvoiceCount: number;
+  // Variation-expanded fields (may be absent on older API responses)
+  approvedVariationTotalExcl?: number;
+  approvedVariationTotalIncl?: number;
+  totalInvoiceableExcl?: number;
+  totalInvoiceableIncl?: number;
+  variations?: Variation[];
+  variationInvoicedByVariationId?: Record<string, number>;
 };
 
 function InvoiceSection({
@@ -1435,6 +1442,7 @@ function InvoiceSection({
   const [depositPct, setDepositPct] = useState("50");
   const [depositFixed, setDepositFixed] = useState("");
   const [fixedGstBasis, setFixedGstBasis] = useState<"excl" | "incl">("excl");
+  const [selectedVariationId, setSelectedVariationId] = useState<string>("");
   const [xeroWarn, setXeroWarn] = useState<string | null>(null);
   const [xeroReturnInvoice, setXeroReturnInvoice] = useState<Invoice | null>(null);
 
@@ -1449,6 +1457,17 @@ function InvoiceSection({
     enabled: !!quoteId,
   });
 
+  // Approved variations eligible for invoicing (from allocation payload or empty)
+  const approvedVariations: Variation[] = (allocation?.variations ?? []).filter(
+    (v) => v.status === "approved"
+  );
+  // How much of each variation has already been invoiced
+  const variationInvoicedMap = allocation?.variationInvoicedByVariationId ?? {};
+  const selectedVariation = approvedVariations.find((v) => v.id === selectedVariationId) ?? null;
+  const variationRemainingExcl = selectedVariation
+    ? Math.max(0, selectedVariation.amountExclGst - (variationInvoicedMap[selectedVariation.id] ?? 0))
+    : 0;
+
   const GST_RATE = 0.15;
 
   const exclGst = (() => {
@@ -1459,9 +1478,16 @@ function InvoiceSection({
           ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
           : parseFloat(depositFixed) || 0;
     }
+    if (invoiceType === "variation") {
+      // If a variation is selected and no manual override provided, default to its remaining value
+      if (selectedVariation && depositFixed === "") return variationRemainingExcl;
+      return fixedGstBasis === "incl"
+        ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
+        : parseFloat(depositFixed) || 0;
+    }
     if (invoiceType === "final" && allocation) {
       return depositFixed === ""
-        ? allocation.remainingExcl
+        ? (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl) - allocation.totalInvoicedExcl
         : fixedGstBasis === "incl"
           ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
           : parseFloat(depositFixed) || 0;
@@ -1480,6 +1506,7 @@ function InvoiceSection({
     setDepositPct("50");
     setDepositFixed("");
     setFixedGstBasis("excl");
+    setSelectedVariationId("");
     setShowCreate(true);
   };
 
@@ -1507,6 +1534,7 @@ function InvoiceSection({
         gstAmount: gst,
         amountInclGst: inclGst,
         description: descriptionMap[invoiceType] ?? "",
+        variationId: invoiceType === "variation" && selectedVariationId ? selectedVariationId : null,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -1646,28 +1674,52 @@ function InvoiceSection({
 
       {allocation && (
         <div className="rounded-lg border bg-card p-3 space-y-2" data-testid="panel-invoice-allocation">
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <p className="text-xs text-muted-foreground">Contract Value</p>
-              <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
+          {/* If there are approved variations, show expanded breakdown */}
+          {(allocation.approvedVariationTotalExcl ?? 0) > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div>
+                <p className="text-xs text-muted-foreground">Base Contract</p>
+                <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Approved Variations</p>
+                <p className="text-sm font-semibold text-blue-600 dark:text-blue-400" data-testid="text-variation-total">+{fmt(allocation.approvedVariationTotalExcl!)} excl.</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Invoiced</p>
+                <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.totalInvoicedExcl)} excl.</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Remaining</p>
+                <p className={`text-sm font-semibold ${(allocation.totalInvoiceableExcl! - allocation.totalInvoicedExcl) <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
+                  {fmt(Math.max(0, allocation.totalInvoiceableExcl! - allocation.totalInvoicedExcl))} excl.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total Invoiced</p>
-              <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.totalInvoicedExcl)} excl.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-xs text-muted-foreground">Contract Value</p>
+                <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Invoiced</p>
+                <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.totalInvoicedExcl)} excl.</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Remaining</p>
+                <p className={`text-sm font-semibold ${allocation.remainingExcl <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
+                  {fmt(allocation.remainingExcl)} excl.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Remaining</p>
-              <p className={`text-sm font-semibold ${allocation.remainingExcl <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
-                {fmt(allocation.remainingExcl)} excl.
-              </p>
-            </div>
-          </div>
+          )}
           {allocation.acceptedValueExcl > 0 && (
             <div className="space-y-1">
               <div className="h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${Math.min(100, (allocation.totalInvoicedExcl / allocation.acceptedValueExcl) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (allocation.totalInvoicedExcl / (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl)) * 100)}%` }}
                 />
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
@@ -1911,11 +1963,58 @@ function InvoiceSection({
               </div>
             )}
 
+            {invoiceType === "variation" && (
+              <div className="space-y-2" data-testid="panel-variation-selector">
+                <Label>Approved Variation <span className="text-destructive">*</span></Label>
+                {approvedVariations.length === 0 ? (
+                  <p className="text-xs text-destructive rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+                    No approved variations for this quote. Go to the linked project to create and approve a variation first.
+                  </p>
+                ) : (
+                  <>
+                    <Select value={selectedVariationId} onValueChange={(v) => { setSelectedVariationId(v); setDepositFixed(""); }}>
+                      <SelectTrigger data-testid="select-variation">
+                        <SelectValue placeholder="Select a variation…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {approvedVariations.map((v) => {
+                          const remaining = Math.max(0, v.amountExclGst - (variationInvoicedMap[v.id] ?? 0));
+                          return (
+                            <SelectItem key={v.id} value={v.id} data-testid={`option-variation-${v.id}`}>
+                              {v.title} — {fmt(remaining)} excl. remaining
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {selectedVariation && (
+                      <div className="rounded-md px-3 py-2 text-xs bg-muted/50 space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Variation total</span>
+                          <span className="font-medium">{fmt(selectedVariation.amountExclGst)} excl.</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Already invoiced</span>
+                          <span className="font-medium">{fmt(variationInvoicedMap[selectedVariation.id] ?? 0)} excl.</span>
+                        </div>
+                        <div className="flex justify-between border-t pt-0.5 mt-0.5">
+                          <span className="text-muted-foreground font-medium">Remaining</span>
+                          <span className="font-semibold text-green-600 dark:text-green-400">{fmt(variationRemainingExcl)} excl.</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             {invoiceType === "final" && allocation && (
               <div className="rounded-md px-3 py-2 text-xs bg-muted/50 space-y-0.5" data-testid="panel-final-remaining">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Remaining balance</span>
-                  <span className="font-semibold text-green-600 dark:text-green-400">{fmt(allocation.remainingExcl)} excl.</span>
+                  <span className="font-semibold text-green-600 dark:text-green-400">
+                    {fmt(Math.max(0, (allocation.totalInvoiceableExcl ?? allocation.acceptedValueExcl) - allocation.totalInvoicedExcl))} excl.
+                  </span>
                 </div>
                 <p className="text-muted-foreground">Final invoice pre-filled with remaining balance. Adjust below if needed.</p>
               </div>
