@@ -54,19 +54,20 @@ export default function OpJobsList() {
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold flex items-center gap-2" data-testid="heading-jobs">
-            <HardHat className="h-5 w-5" />
-            Jobs
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Operational jobs converted from accepted quotes
-          </p>
+    <div className="flex flex-col h-full bg-background" data-testid="jobs-list-op">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <HardHat className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight" data-testid="heading-jobs">Jobs</h1>
+            <p className="text-[11px] text-muted-foreground leading-tight">Operational jobs converted from accepted quotes</p>
+          </div>
         </div>
-      </div>
+      </header>
 
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
       <Tabs value={tab} onValueChange={(v) => setTab(v as "active" | "archived")}>
         <TabsList>
           <TabsTrigger value="active" data-testid="tab-active-jobs">
@@ -99,6 +100,7 @@ export default function OpJobsList() {
           />
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

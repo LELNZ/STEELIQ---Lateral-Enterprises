@@ -1,0 +1,396 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep beyond the exact scope below.
+- Do not add unapproved endpoints unless strictly required for the exact workflow below.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change unrelated Xero OAuth, billing logic, PDF rendering logic, library architecture, or pagination.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless the affected production UI surfaces visibly move closer to a serious commercial-operational standard.
+- Do not claim success just because spacing changed.
+- Do not leave the product with mixed “soft card UI” and “structured enterprise UI” across core working pages.
+
+Definition of done for this phase:
+- Quote Builder desktop workspace is stronger and more usable
+- The Quote Items list is visible by default on desktop and shows minimum live working rows
+- Estimates becomes a stronger operational list surface
+- Projects, Jobs, Invoices, Customers, and Contacts move closer to a unified platform standard
+- Library remains untouched as the benchmark reference
+- No regression to quote/project/job/invoice/Xero workflows
+- No architecture drift
+
+CURRENT CONTEXT — MUST TREAT AS CURRENT TRUTH
+
+The system now has:
+- working production state
+- working live Xero invoice upload
+- improved grouped navigation
+- materially improved billing model
+- materially improved detail pages
+- materially improved list pages
+- but production screenshots show UI maturity is still inconsistent
+
+Observed issues from production screenshots:
+- Quote Builder item list is not visible enough by default on desktop
+- Quote Builder should show at least 3 item rows before expansion
+- Some operational pages still feel card-based or underpowered
+- Not all list pages match the stronger Quotes / Library standard
+- UI language is mixed and not yet at the desired StruMIS / Procore-grade seriousness
+
+DESIGN INTENT — MUST FOLLOW
+
+Target the feel of:
+- StruMIS-style operational seriousness
+- Procore-style clarity and workflow confidence
+
+But do NOT copy either product literally.
+
+SteelIQ should feel:
+- cleaner
+- denser where operationally useful
+- more structured
+- less like a startup admin tool
+- more like a serious internal commercial-operational platform
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY:
+WORKSTREAM A — Quote Builder Desktop Workspace Standardization
+WORKSTREAM B — Estimates List Standardization
+WORKSTREAM C — Operational List Page UI Normalization
+WORKSTREAM D — Shared Page-Shell / Design Consistency
+
+Do not broaden beyond that.
+
+==================================================
+WORKSTREAM A — QUOTE BUILDER DESKTOP WORKSPACE STANDARDIZATION
+==================================================
+
+OBJECTIVE
+Make the Quote Builder feel like a serious daily-use workspace.
+
+REQUIRED BEHAVIOR
+
+1. Quote Items list must be visible by default on desktop
+- On desktop load, the Quote Items section must start open/visible
+- It must show a minimum of 3 item rows without requiring expansion
+- The user must not need to hunt for the list
+
+2. Collapsible behavior must still remain
+- The Quote Items section may still be collapsible
+- Collapse/expand must be controlled only by the section/header toggle
+- Default desktop behavior = open with at least 3 visible rows
+- User can expand to full list or collapse it
+
+3. Preserve current builder workspace structure
+Maintain:
+- left configuration rail
+- central drawing / visual workspace
+- bottom/live item schedule area
+
+4. Do not break existing builder behaviors
+Preserve:
+- item add/edit/remove flows
+- pricing display
+- drawing config / item specifics tabs
+- Exec Summary / Summary actions
+- save behavior
+
+DESIRED RESULT
+The builder should read as:
+- configuration
+- visualization
+- live item schedule
+
+not as:
+- configuration
+- visualization
+- hidden secondary list
+
+==================================================
+WORKSTREAM B — ESTIMATES LIST STANDARDIZATION
+==================================================
+
+OBJECTIVE
+Move Estimates away from a soft card-style list toward a stronger enterprise operational list/table standard.
+
+REQUIRED BEHAVIOR
+
+1. Review the Estimates page as a primary operational page
+- It currently feels lighter-weight and less structured than Quotes / Library
+- Standardize it toward the stronger operational pattern
+
+2. Reduce the “card” feel for the primary records presentation
+- Make estimates easier to scan and compare
+- Use a stronger list/table rhythm where appropriate
+- Keep current LJ/LE/LL division grouping logic intact
+
+3. Preserve estimate actions and routes
+Keep:
+- Open
+- Archive
+- Delete
+- current division switching / visibility logic
+- current route behavior
+
+DESIRED RESULT
+Estimates should feel like a core commercial records page, not a lightweight starter page.
+
+==================================================
+WORKSTREAM C — OPERATIONAL LIST PAGE UI NORMALIZATION
+==================================================
+
+OBJECTIVE
+Bring the core operational list pages closer to one coherent platform standard.
+
+AFFECTED PAGES
+- Projects
+- Jobs
+- Invoices
+- Customers
+- Contacts
+
+REQUIRED BEHAVIOR
+
+1. Review and normalize these pages against the strongest current references:
+- Library page
+- Quotes page
+
+2. Standardize where appropriate:
+- page title row
+- action placement
+- table spacing
+- header density
+- row height
+- whitespace balance
+- visual weight
+- empty-space handling
+
+3. Reduce sparse / underpowered presentation
+- Pages should not look unfinished or overly lightweight
+- High-value operational tables should feel deliberate and strong
+
+4. Preserve all current functionality
+Do not break:
+- filters
+- search
+- actions
+- navigation
+- route behavior
+
+DESIRED RESULT
+Projects, Jobs, Invoices, Customers, and Contacts should look like they belong to the same serious commercial-operational platform.
+
+==================================================
+WORKSTREAM D — SHARED PAGE-SHELL / DESIGN CONSISTENCY
+==================================================
+
+OBJECTIVE
+Establish a clearer shared visual standard across operational pages.
+
+REQUIRED BEHAVIOR
+
+1. Use the Library page as the benchmark reference
+- full-width usable content
+- strong table/list treatment
+- clear data density
+- consistent operational feel
+
+2. Apply shared design consistency to affected pages:
+- content width behavior
+- heading/action rhythm
+- table container treatment
+- spacing logic
+- whitespace control
+
+3. Avoid reintroducing weak patterns:
+- narrow centered admin-card layouts
+- excessive empty gutters
+- decorative card treatment on primary record lists
+- inconsistent page shells between modules
+
+DESIRED RESULT
+The product should feel like one system, not a collection of unrelated page styles.
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing anything:
+1. Inspect production-style surfaces for:
+   - Estimates
+   - Quote Builder
+   - Projects
+   - Jobs
+   - Invoices
+   - Customers
+   - Contacts
+   - Library
+2. Identify the strongest existing visual standard in the product
+3. State exactly how you will standardize the weaker pages without redesigning architecture
+4. Then implement only the minimum safe scope required
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+- redesign architecture
+- change billing/business logic
+- change Xero logic
+- change route structure
+- change QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- broaden into analytics/dashboard work in this phase
+- broaden into navigation redesign in this phase
+- invent new workflow behavior beyond the UI standardization requested
+
+==================================================
+REQUIRED TEST / VERIFICATION
+==================================================
+
+Run and report these exact tests:
+
+TC-001
+Quote Builder desktop load
+Expected:
+- Quote Items section visible by default
+- minimum 3 rows visible
+- section can still expand/collapse from header
+
+TC-002
+Quote Builder actions
+Expected:
+- item actions still work
+- drawing/configuration workflow unchanged
+- save unchanged
+
+TC-003
+Estimates list page
+Expected:
+- stronger operational list feel
+- less card-like presentation
+- Open/Archive/Delete still work
+
+TC-004
+Projects / Jobs / Invoices / Customers / Contacts
+Expected:
+- visually more consistent with Quotes / Library
+- no regression to filters/actions/navigation
+
+TC-005
+Library page reference
+Expected:
+- unchanged
+- still usable as the benchmark operational surface
+
+TC-006
+Production-safe startup
+Expected:
+- no schema changes unless strictly necessary
+- no new startup regressions
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact UI inconsistency found
+Explain exactly why the affected pages were still below the target commercial-operational standard.
+
+4. Exact logic / method implemented
+Document the precise UI standardization method now implemented.
+
+5. Behaviour changes
+Explain exactly what changed in:
+- Quote Builder workspace
+- Estimates list
+- Projects
+- Jobs
+- Invoices
+- Customers
+- Contacts
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If none: explicitly state "None".
+
+7. UI Changes
+Document all visible UI/admin changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+- Xero OAuth flow architecture
+- Billing architecture
+
+9. Risks / Limitations
+Document any remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- Quote Builder workspace quality
+- operational list page quality
+- remaining UI/UX gaps
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Estimates
+- Quote Builder
+- Exec Summary
+- Quotes
+- Projects
+- Jobs
+- Invoices
+- Library
+- Customers
+- Contacts
+- Settings
+- Quote acceptance
+- Create project from quote
+- Create job from quote/project
+- Deposit/progress/final/variation/retention invoice creation
+- Xero push
+- Quote preview rendering
+- PDF export
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this UI Standardization Phase 1.
+Do not redesign architecture.
+Do not broaden into dashboards, navigation redesign, or unrelated feature work in this phase.

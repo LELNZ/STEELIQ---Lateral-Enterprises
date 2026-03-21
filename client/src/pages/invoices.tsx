@@ -272,103 +272,109 @@ export default function InvoicesPage() {
     );
   });
 
+  const tableContent = isLoading ? (
+    <div className="text-sm text-muted-foreground p-4">Loading…</div>
+  ) : filtered.length === 0 ? (
+    <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+      {search ? "No invoices match your search." : "No invoices yet. Invoices are created from accepted quotes."}
+    </div>
+  ) : (
+    <div className="rounded-lg border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[110px]">Number</TableHead>
+            <TableHead className="hidden md:table-cell w-[90px]">Type</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="hidden xl:table-cell w-[110px]">Xero #</TableHead>
+            <TableHead>Customer</TableHead>
+            <TableHead className="hidden lg:table-cell">Project</TableHead>
+            <TableHead className="text-right w-[110px]">Excl. GST</TableHead>
+            <TableHead className="hidden xl:table-cell text-right w-[110px]">Incl. GST</TableHead>
+            <TableHead className="hidden lg:table-cell w-[90px]">Quote</TableHead>
+            <TableHead className="w-[60px]">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((inv) => (
+            <TableRow key={inv.id} data-testid={`row-invoice-${inv.id}`}>
+              <TableCell className="font-mono text-sm font-medium" data-testid={`text-invoice-number-${inv.id}`}>
+                {inv.number}
+              </TableCell>
+              <TableCell className="hidden md:table-cell text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
+              <TableCell>
+                <div className="space-y-0.5">
+                  <Badge variant={statusVariant(inv.status)} className="text-xs" data-testid={`badge-status-${inv.id}`}>
+                    {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                  </Badge>
+                  {inv.xeroStatus && (
+                    <p className="text-[10px] text-muted-foreground font-mono" data-testid={`text-xero-status-${inv.id}`}>
+                      Xero: {inv.xeroStatus}
+                    </p>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
+                {inv.xeroInvoiceNumber ?? <span className="opacity-40">—</span>}
+              </TableCell>
+              <TableCell className="text-sm" data-testid={`text-customer-${inv.id}`}>
+                {inv.customerName ?? <span className="text-xs text-muted-foreground">—</span>}
+              </TableCell>
+              <TableCell className="hidden lg:table-cell text-sm" data-testid={`text-project-${inv.id}`}>
+                {inv.projectName ?? <span className="text-xs text-muted-foreground">—</span>}
+              </TableCell>
+              <TableCell className="text-right text-sm">
+                ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+              </TableCell>
+              <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
+                ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+              </TableCell>
+              <TableCell className="hidden lg:table-cell text-sm">
+                {inv.quoteId ? (
+                  <Link href={`/quote/${inv.quoteId}`} className="text-primary underline underline-offset-2 hover:no-underline text-xs" data-testid={`link-quote-${inv.id}`}>
+                    View quote
+                  </Link>
+                ) : (
+                  <span className="text-muted-foreground text-xs">—</span>
+                )}
+              </TableCell>
+              <TableCell>
+                <InvoiceActions inv={inv} onMutate={() => {}} />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <ReceiptText className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-xl font-semibold tracking-tight">Invoices</h1>
-          {!isLoading && (
-            <span className="text-sm text-muted-foreground">({invoices.length})</span>
-          )}
+    <div className="flex flex-col h-full bg-background">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <ReceiptText className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-semibold tracking-tight">Invoices</h1>
+              {!isLoading && <span className="text-xs text-muted-foreground">({invoices.length})</span>}
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">All invoices across projects and quotes</p>
+          </div>
         </div>
-        <div className="relative w-64">
+        <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            className="pl-8 h-8 text-sm"
+            className="pl-8 h-8 text-sm w-56"
             placeholder="Search invoices…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             data-testid="input-invoices-search"
           />
         </div>
-      </div>
-
-      {isLoading ? (
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-          {search ? "No invoices match your search." : "No invoices yet. Invoices are created from accepted quotes."}
-        </div>
-      ) : (
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[110px]">Number</TableHead>
-                <TableHead className="hidden md:table-cell w-[90px]">Type</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden xl:table-cell w-[110px]">Xero #</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead className="hidden lg:table-cell">Project</TableHead>
-                <TableHead className="text-right w-[110px]">Excl. GST</TableHead>
-                <TableHead className="hidden xl:table-cell text-right w-[110px]">Incl. GST</TableHead>
-                <TableHead className="hidden lg:table-cell w-[90px]">Quote</TableHead>
-                <TableHead className="w-[60px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((inv) => (
-                <TableRow key={inv.id} data-testid={`row-invoice-${inv.id}`}>
-                  <TableCell className="font-mono text-sm font-medium" data-testid={`text-invoice-number-${inv.id}`}>
-                    {inv.number}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
-                  <TableCell>
-                    <div className="space-y-0.5">
-                      <Badge variant={statusVariant(inv.status)} className="text-xs" data-testid={`badge-status-${inv.id}`}>
-                        {INVOICE_STATUS_LABELS[inv.status] || inv.status}
-                      </Badge>
-                      {inv.xeroStatus && (
-                        <p className="text-[10px] text-muted-foreground font-mono" data-testid={`text-xero-status-${inv.id}`}>
-                          Xero: {inv.xeroStatus}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
-                    {inv.xeroInvoiceNumber ?? <span className="opacity-40">—</span>}
-                  </TableCell>
-                  <TableCell className="text-sm" data-testid={`text-customer-${inv.id}`}>
-                    {inv.customerName ?? <span className="text-xs text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-sm" data-testid={`text-project-${inv.id}`}>
-                    {inv.projectName ?? <span className="text-xs text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell className="text-right text-sm">
-                    ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
-                  </TableCell>
-                  <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
-                    ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-sm">
-                    {inv.quoteId ? (
-                      <Link href={`/quote/${inv.quoteId}`} className="text-primary underline underline-offset-2 hover:no-underline text-xs" data-testid={`link-quote-${inv.id}`}>
-                        View quote
-                      </Link>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <InvoiceActions inv={inv} onMutate={() => {}} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      </header>
+      <div className="flex-1 overflow-auto p-4 sm:p-6">{tableContent}</div>
     </div>
   );
 }

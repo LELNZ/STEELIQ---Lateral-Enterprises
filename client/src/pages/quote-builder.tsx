@@ -273,7 +273,7 @@ export default function QuoteBuilder() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [pendingNavigateTo, setPendingNavigateTo] = useState<string | null>(null);
-  const [itemsExpanded, setItemsExpanded] = useState(false);
+  const [itemsExpanded, setItemsExpanded] = useState(true);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const headerFieldsRef = useRef<HTMLDivElement>(null);
   const [formTab, setFormTab] = useState<string>("drawing");

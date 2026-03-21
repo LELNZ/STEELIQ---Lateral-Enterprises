@@ -274,40 +274,45 @@ export default function Contacts() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-contacts-heading">Contacts</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">People linked to customers across the business.</p>
+    <div className="flex flex-col h-full bg-background">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <User className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight" data-testid="text-contacts-heading">Contacts</h1>
+            <p className="text-[11px] text-muted-foreground leading-tight">People linked to customers across the business.</p>
+          </div>
         </div>
-        <Button onClick={() => { setCreateForm({ ...emptyForm }); setCreateOpen(true); }} data-testid="button-new-contact">
-          <Plus className="h-4 w-4 mr-2" /> New Contact
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Search name, email, phone, company…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            data-testid="input-contacts-search"
-          />
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              className="pl-8 h-8 text-sm w-52"
+              placeholder="Search name, email, phone…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="input-contacts-search"
+            />
+          </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-contacts-category-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {CONTACT_CATEGORIES.map((c) => (
+                <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={() => { setCreateForm({ ...emptyForm }); setCreateOpen(true); }} data-testid="button-new-contact">
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> New Contact
+          </Button>
         </div>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-44" data-testid="select-contacts-category-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {CONTACT_CATEGORIES.map((c) => (
-              <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      </header>
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -426,6 +431,7 @@ export default function Contacts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
