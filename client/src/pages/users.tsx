@@ -25,7 +25,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import {
-  Plus, Pencil, KeyRound, UserCheck, UserX, ShieldAlert,
+  Plus, Pencil, KeyRound, UserCheck, UserX, ShieldAlert, Users as UsersIcon,
   AlertTriangle, Copy, CheckCircle2, Info, Archive, RefreshCw,
 } from "lucide-react";
 import { useSystemMode } from "@/hooks/use-system-mode";
@@ -518,11 +518,16 @@ export default function Users() {
   const hasBootstrapAdmin = users.some(u => u.username === "admin" && u.mustChangePassword === false);
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold" data-testid="heading-users">User Management</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manage team access and permissions across all divisions</p>
+    <div className="flex flex-col h-full bg-background">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <UsersIcon className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight" data-testid="heading-users">User Management</h1>
+            <p className="text-[11px] text-muted-foreground leading-tight">Team access and permissions across all divisions</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowRoleGuide(!showRoleGuide)} data-testid="button-role-guide">
@@ -532,7 +537,10 @@ export default function Users() {
             <Plus className="h-4 w-4 mr-1.5" /> Add User
           </Button>
         </div>
-      </div>
+      </header>
+
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <div className="max-w-5xl mx-auto space-y-6">
 
       {showRoleGuide && (
         <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
@@ -747,6 +755,9 @@ export default function Users() {
           This is a seed credential only — change the password and set up real named accounts before going live.
           Once the password is changed, this notice will clear.
         </p>
+      </div>
+
+      </div>
       </div>
 
       <AlertDialog open={cleanupDialogOpen} onOpenChange={setCleanupDialogOpen}>

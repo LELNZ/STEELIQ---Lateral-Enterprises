@@ -1,0 +1,348 @@
+STEELIQ UI/UX HARDENING PHASE 2 — WORKFLOW HONESTY + ESTIMATOR POLISH + DATA-STATE CLARITY
+IMPLEMENTATION CONTROL HEADER
+
+Implement exactly as specified.
+Do not redesign the app architecture.
+Do not convert to microservices.
+Do not alter or replace the existing QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+Do not introduce unrelated feature scope.
+Do not report complete unless all required UI surfaces are working in the actual app, not just at code level.
+Define done in terms of operational usability, workflow honesty, and enterprise-grade consistency.
+
+CURRENT STATE
+SteelIQ is now materially improved:
+- domain-grouped sidebar is in place
+- list pages are more standardized
+- quote/invoice/project/job commercial controls are much stronger
+- live Xero push has already been proven
+- quote builder item list is now visible on load
+
+However, the current UI still has key inconsistencies and misleading workflow cues:
+1. The global + New menu implies creation paths that are not valid in the actual workflow.
+2. The estimator / quote builder still feels like a different product compared with the newer list surfaces.
+3. The invoices list still contains legacy/unlinked rows with blank customer/project values and no clear visual explanation.
+4. Some detail/admin/settings surfaces still feel too sparse / floaty relative to the stronger table/list pages.
+5. The platform needs another pass toward serious commercial-operational parity with Procore / Strumis / enterprise ERP UX principles.
+
+PRIMARY GOALS
+1. Make global navigation and quick actions honest to the real workflow.
+2. Improve the estimator / quote builder desktop workspace into a stronger operational control surface.
+3. Make legacy/unlinked invoice states explicit and repairable.
+4. Continue standardizing detail/admin/settings shells to match the improved list-page quality.
+5. Raise overall UX consistency toward serious commercial platform quality.
+
+==================================================
+PHASE A — REMOVE MISLEADING GLOBAL QUICK CREATE
+==================================================
+
+OBJECTIVE
+Make the + New menu truthful and aligned to actual workflow dependencies.
+
+CURRENT ISSUE
+The current + New menu shows:
+- New Estimate
+- New Project
+- New Job
+- New Invoice
+
+But in the actual workflow:
+- Estimate can be created directly
+- Project normally comes from accepted quote / quote context
+- Job normally comes from accepted quote with project linkage
+- Invoice normally comes from accepted quote / billing context
+
+This makes the control misleading.
+
+REQUIRED IMPLEMENTATION
+1. Update the global + New menu so it only contains truly valid global-create actions.
+Required kept actions:
+- New Estimate
+- New Customer
+- New Contact
+
+2. Remove from the global + New menu for now:
+- New Project
+- New Job
+- New Invoice
+
+3. Do NOT remove actual project/job/invoice creation from the system.
+Only remove misleading global shortcuts that bypass workflow truth.
+
+4. If useful, replace removed items with non-clickable contextual hints or omit them entirely.
+Preferred: omit them entirely.
+
+ACCEPTANCE CRITERIA
+- + New only shows actions that are truly valid from anywhere in the app.
+- No misleading workflow shortcuts remain in the global quick menu.
+
+==================================================
+PHASE B — ESTIMATOR / QUOTE BUILDER DESKTOP POLISH
+==================================================
+
+OBJECTIVE
+Turn the estimator into a stronger enterprise workspace rather than an older internal tool.
+
+CURRENT ISSUE
+The quote builder is functional but still visually inconsistent with the rest of the app:
+- left config rail is dense and utilitarian
+- drawing area is sparse
+- item schedule is still visually secondary
+- desktop hierarchy is not yet strong enough
+- page looks like a separate product next to the improved tables/pages
+
+REQUIRED IMPLEMENTATION
+1. Quote items list default behavior
+- On desktop, the quote items list must be visible by default.
+- It must show a minimum of 3 rows/items worth of visible schedule space immediately.
+- It must remain collapsible/expandable from its heading/toggle.
+- The heading/toggle should expand to full list and collapse back to the default desktop height.
+- On mobile/tablet, preserve practical responsive behavior.
+
+2. Strengthen workspace hierarchy
+The estimator page should clearly read as 3 coordinated zones:
+- configuration rail (left)
+- drawing / visual preview workspace (center)
+- quote schedule / item list (bottom)
+
+Improve spacing, borders, surface hierarchy, and vertical rhythm so these zones feel intentional and cohesive.
+
+3. Improve quote items panel treatment
+- Make the bottom quote-items surface feel like an operational schedule, not a secondary afterthought.
+- Stronger heading, clearer collapsed/expanded affordance, better visual boundary from the drawing area.
+- Maintain existing actions and controls.
+
+4. Improve top action row
+Review and tighten:
+- Save
+- Summary
+- Exec Summary
+- Download
+- item count
+Make this row feel more deliberate and enterprise-grade, not loose utility buttons.
+
+5. Keep all current estimator functionality unchanged
+Do not break:
+- item add/edit/remove
+- drawing preview
+- summary / exec summary
+- save
+- download
+- commercial extras
+- pricing logic
+
+ACCEPTANCE CRITERIA
+- Estimator opens with quote schedule clearly visible on desktop.
+- Minimum 3 visible item rows on desktop before expansion.
+- User can expand/collapse from the heading.
+- Workspace feels visually unified and closer to a premium commercial-operational tool.
+
+==================================================
+PHASE C — LEGACY / UNLINKED INVOICE STATE CLARITY
+==================================================
+
+OBJECTIVE
+Stop legacy broken records from appearing as normal clean records.
+
+CURRENT ISSUE
+The invoices list still shows rows with blank:
+- customer
+- project
+
+while newer rows are correctly linked.
+This creates silent ambiguity and undermines trust.
+
+REQUIRED IMPLEMENTATION
+1. Add explicit visual state for legacy/unlinked invoices
+If an invoice lacks expected customer/project linkage, do NOT render silent blanks as if normal.
+Instead show a clear state such as:
+- Unlinked
+- Legacy record
+- Missing linkage
+
+2. Differentiate between:
+- truly missing live data
+- legacy records created before workflow hardening
+- incomplete records still in draft/recovery state
+
+3. Add a repair path or management path for legacy/unlinked invoices
+At minimum provide one of:
+- “Manage in quote”
+- “Repair linkage”
+- “Review record”
+depending on what is safest in current architecture
+
+Do NOT invent unsafe auto-rewrite behavior.
+Keep repair workflow controlled.
+
+4. Keep valid invoices visually clean.
+Do not overcomplicate correctly linked rows.
+
+ACCEPTANCE CRITERIA
+- Blank customer/project cells are no longer silently ambiguous.
+- Legacy/unlinked invoices are visibly identified.
+- There is a controlled path for review/repair.
+
+==================================================
+PHASE D — DETAIL / ADMIN / SETTINGS SHELL STANDARDIZATION
+==================================================
+
+OBJECTIVE
+Bring non-list pages closer to the stronger shell standard already established.
+
+CURRENT ISSUE
+Some surfaces still feel too sparse / floaty compared with the stronger list pages:
+- Admin / Users
+- Settings
+- some detail views
+
+They work, but they do not yet feel fully aligned with a premium enterprise platform.
+
+REQUIRED IMPLEMENTATION
+1. Review and standardize page shell rhythm for:
+- Admin / Users
+- Settings
+- any obviously inconsistent simple management pages touched in this pass
+
+2. Use the improved shell language already established elsewhere:
+- stronger header/body separation
+- better use of width
+- cleaner surface grouping
+- more deliberate spacing rhythm
+- less “floating card in whitespace” feel
+
+3. Do not over-widen true form/detail pages where readability matters.
+Use judgement:
+- list / management pages should feel like strong operational tables
+- settings/admin pages should feel intentional and structured, not adrift
+
+4. Keep functional behavior unchanged.
+This is a UI shell / surface quality pass, not a business logic rewrite.
+
+ACCEPTANCE CRITERIA
+- Admin and Settings feel visually aligned with the improved platform shell.
+- Less empty/floating feel on desktop.
+- Better enterprise-grade consistency.
+
+==================================================
+PHASE E — ENTERPRISE CONSISTENCY PASS
+==================================================
+
+OBJECTIVE
+Tighten cross-surface consistency so SteelIQ reads as one serious platform.
+
+REQUIRED IMPLEMENTATION
+1. Standardize page-title treatment
+Across touched pages, ensure consistency in:
+- icon badge
+- title
+- subtitle/support text
+- right-side primary actions
+- sticky header behavior where already appropriate
+
+2. Standardize table density and row affordance
+Across touched pages:
+- consistent row spacing
+- consistent action alignment
+- consistent status/badge behavior
+- no odd one-off spacing patterns
+
+3. Standardize empty-space usage
+Use available desktop width more intentionally.
+Do not leave pages looking under-filled without reason.
+
+4. Preserve existing navigation grouping and sidebar taxonomy.
+The grouped navigation itself is good — do not undo it.
+
+ACCEPTANCE CRITERIA
+- Touched pages feel like one coherent platform family.
+- No page in this pass feels like a noticeably older generation UI.
+
+==================================================
+NON-GOALS
+==================================================
+
+Do NOT in this pass:
+- add dashboard/home KPIs
+- add new workflow modules
+- redesign billing logic
+- redesign navigation taxonomy
+- alter PDF engine
+- change Xero architecture
+- invent new project/job/invoice creation workflows
+- remove working enterprise grouping already completed
+
+==================================================
+REQUIRED TEST CASES
+==================================================
+
+Run and report these exact tests:
+
+TC-001
+Open global + New menu
+Expected:
+- shows only valid global actions
+- New Estimate present
+- New Customer present
+- New Contact present
+- no misleading New Project / New Job / New Invoice
+
+TC-002
+Open estimator / quote builder on desktop with multiple items
+Expected:
+- quote items schedule visible by default
+- at least 3 item rows visible
+- panel expands/collapses from heading
+- all existing actions still work
+
+TC-003
+Estimator workflow smoke test
+Expected:
+- add/edit item still works
+- drawing still updates
+- summary/exec summary still work
+- save still works
+
+TC-004
+Open invoices list with mixed historic data
+Expected:
+- linked rows look clean
+- unlinked/legacy rows are explicitly labelled, not silent blanks
+- repair/review path visible where applicable
+
+TC-005
+Open Admin / Settings
+Expected:
+- improved structure and page shell quality
+- less floaty / better desktop use
+- actions still work
+
+TC-006
+Cross-page consistency review
+Expected:
+- Estimates / Quotes / Projects / Jobs / Invoices / Customers / Contacts / Settings / Admin feel visually aligned as one system family
+
+==================================================
+DELIVERABLES REQUIRED
+==================================================
+
+Do not report complete unless all of these are provided:
+1. concise summary of changes
+2. exact files changed
+3. exact root cause / UX issue addressed in each phase
+4. screenshots or precise explanation of:
+   - updated + New menu
+   - estimator default-open item schedule
+   - legacy/unlinked invoice state treatment
+   - admin/settings shell improvements
+5. results for all required test cases
+6. any remaining known gaps
+
+QUALITY BAR
+This pass is about workflow honesty, platform maturity, and enterprise polish.
+Do not optimize for “more features”.
+Optimize for:
+- clarity
+- consistency
+- trust
+- operational usability
+- premium commercial software feel

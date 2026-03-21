@@ -67,28 +67,46 @@ export default function ProjectsList() {
   const fmt = (n: number) => n.toLocaleString("en-NZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FolderOpen className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-xl font-bold tracking-tight">Projects</h1>
+    <div className="flex flex-col h-full bg-background">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <FolderOpen className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight">Projects</h1>
+            <p className="text-[11px] text-muted-foreground leading-tight">Contract-level projects linked to customers and quotes</p>
+          </div>
         </div>
-        <Link href="/customers">
-          <Button variant="outline" size="sm" data-testid="button-manage-customers">
-            <Building2 className="h-3.5 w-3.5 mr-1.5" />
-            Customers
-          </Button>
-        </Link>
-      </div>
+        <div className="flex items-center gap-2">
+          <div className="relative hidden sm:block">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              className="pl-8 h-8 text-sm w-56"
+              placeholder="Search projects…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="input-search-projects"
+            />
+          </div>
+          <Link href="/customers">
+            <Button variant="outline" size="sm" data-testid="button-manage-customers">
+              <Building2 className="h-3.5 w-3.5 mr-1.5" />
+              Customers
+            </Button>
+          </Link>
+        </div>
+      </header>
 
-      <div className="relative">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <div className="sm:hidden relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           className="pl-9"
           placeholder="Search projects, customers, addresses…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          data-testid="input-search-projects"
+          data-testid="input-search-projects-mobile"
         />
       </div>
 
@@ -187,6 +205,7 @@ export default function ProjectsList() {
       <p className="text-xs text-muted-foreground text-right">
         {filtered.length} {filtered.length === 1 ? "project" : "projects"}{search ? ` matching "${search}"` : ""}
       </p>
+      </div>
     </div>
   );
 }
