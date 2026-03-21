@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, Link, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,7 +15,15 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { LogOut, KeyRound } from "lucide-react";
+import { LogOut, KeyRound, Plus, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import NotFound from "@/pages/not-found";
 import JobsList from "@/pages/jobs-list";
 import QuoteBuilder from "@/pages/quote-builder";
@@ -35,6 +43,74 @@ import OpJobDetail from "@/pages/op-job-detail";
 import InvoicesPage from "@/pages/invoices";
 import ProjectsList from "@/pages/projects-list";
 import ProjectDetail from "@/pages/project-detail";
+
+function QuickCreateMenu() {
+  const [, navigate] = useLocation();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2.5 gap-1 text-xs font-medium hidden sm:flex"
+          data-testid="button-quick-create"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New
+          <ChevronDown className="h-3 w-3 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52">
+        <DropdownMenuLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
+          Sales
+        </DropdownMenuLabel>
+        <DropdownMenuItem
+          onClick={() => navigate("/job/new")}
+          className="gap-2 cursor-pointer"
+          data-testid="menu-item-new-estimate"
+        >
+          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+          New Estimate
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
+          Delivery
+        </DropdownMenuLabel>
+        <DropdownMenuItem
+          onClick={() => navigate("/projects")}
+          className="gap-2 cursor-pointer"
+          data-testid="menu-item-goto-projects"
+        >
+          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+          New Project
+          <span className="ml-auto text-[10px] text-muted-foreground">via Quotes</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => navigate("/op-jobs")}
+          className="gap-2 cursor-pointer"
+          data-testid="menu-item-goto-jobs"
+        >
+          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+          New Job
+          <span className="ml-auto text-[10px] text-muted-foreground">via Projects</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
+          Finance
+        </DropdownMenuLabel>
+        <DropdownMenuItem
+          onClick={() => navigate("/invoices")}
+          className="gap-2 cursor-pointer"
+          data-testid="menu-item-goto-invoices"
+        >
+          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+          New Invoice
+          <span className="ml-auto text-[10px] text-muted-foreground">via Quotes</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function Router() {
   return (
@@ -199,6 +275,7 @@ function AppShell() {
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
           <header className="flex items-center gap-2 p-2 border-b sticky top-0 z-50 bg-background">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <QuickCreateMenu />
             <div className="ml-auto flex items-center gap-2">
               {user.divisionCode && (
                 <span className="text-xs bg-muted px-2 py-0.5 rounded font-mono hidden sm:inline" data-testid="text-user-division">
