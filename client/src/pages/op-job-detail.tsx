@@ -458,7 +458,7 @@ export default function OpJobDetail() {
               <FileText className="h-3.5 w-3.5" /> Source Quote
             </div>
             {sourceQuote ? (
-              <div>
+              <div className="space-y-1">
                 <button
                   className="font-mono text-sm text-primary hover:underline"
                   onClick={() => navigate(`/quote/${sourceQuote.id}`)}
@@ -466,7 +466,19 @@ export default function OpJobDetail() {
                 >
                   {sourceQuote.number}
                 </button>
-                <p className="text-xs text-muted-foreground">{sourceQuote.customer}</p>
+                {sourceQuote.acceptedValue != null && (
+                  <p className="text-xs font-semibold" data-testid="text-source-quote-accepted-value">
+                    ${sourceQuote.acceptedValue.toLocaleString("en-NZ", { minimumFractionDigits: 2 })} excl. GST
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">Status: Accepted</p>
+                <button
+                  className="text-xs text-primary hover:underline flex items-center gap-1 mt-1"
+                  onClick={() => navigate(`/quote/${sourceQuote.id}`)}
+                  data-testid="link-manage-billing"
+                >
+                  <ReceiptText className="h-3 w-3" /> Manage billing →
+                </button>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground italic">—</p>
@@ -569,7 +581,19 @@ export default function OpJobDetail() {
                   return (
                     <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/20" data-testid={`row-job-invoice-${inv.id}`}>
                       <td className="px-3 py-2 font-mono font-medium" data-testid={`text-job-invoice-number-${inv.id}`}>{inv.number}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          inv.type === "deposit" ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" :
+                          inv.type === "progress" ? "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" :
+                          inv.type === "variation" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" :
+                          inv.type === "final" ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" :
+                          inv.type === "retention_release" ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" :
+                          inv.type === "credit_note" ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" :
+                          "bg-muted text-muted-foreground"
+                        }`} data-testid={`badge-job-invoice-type-${inv.id}`}>
+                          {INVOICE_TYPE_LABELS[inv.type] || inv.type}
+                        </span>
+                      </td>
                       <td className="px-3 py-2">
                         <Badge variant={(statusColor[inv.status] || "secondary") as any} className="text-xs" data-testid={`badge-job-invoice-status-${inv.id}`}>
                           {INVOICE_STATUS_LABELS[inv.status] || inv.status}

@@ -448,6 +448,14 @@ export default function ProjectDetail() {
     },
     enabled: !!projectId,
   });
+  const { data: pVariations = [] } = useQuery<Variation[]>({
+    queryKey: ["/api/projects", projectId, "variations"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/variations`);
+      return res.json();
+    },
+    enabled: !!projectId,
+  });
 
   const customer = customers.find((c) => c.id === project?.customerId);
 
@@ -455,7 +463,12 @@ export default function ProjectDetail() {
   const totalAccepted = pQuotes
     .filter((q) => q.status === "accepted")
     .reduce((s, q) => s + (q.acceptedValue ?? q.totalValue ?? 0), 0);
-  const totalInvoiced = pInvoices.reduce((s, i) => s + (i.amountInclGst ?? 0), 0);
+  // Use excl. GST to match acceptedValue basis (which is stored excl. GST)
+  const totalInvoicedExcl = pInvoices.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+  const totalInvoicedIncl = pInvoices.reduce((s, i) => s + (i.amountInclGst ?? 0), 0);
+  const approvedVariationTotal = pVariations
+    .filter((v) => ["approved", "partially_invoiced", "fully_invoiced"].includes(v.status))
+    .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -539,16 +552,17 @@ export default function ProjectDetail() {
         </Button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      {/* Commercial Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: "Quotes", value: String(pQuotes.length), sub: pQuotes.length > 0 ? `$${fmt(totalQuoted)} total` : undefined },
-          { label: "Accepted", value: pQuotes.filter((q) => q.status === "accepted").length > 0 ? fmtMoney(totalAccepted) : "—", sub: undefined },
-          { label: "Jobs", value: String(pJobs.length), sub: undefined },
-          { label: "Invoices", value: String(pInvoices.length), sub: pInvoices.length > 0 ? `$${fmt(totalInvoiced)} incl. GST` : undefined },
-          { label: "Outstanding", value: totalAccepted > 0 ? fmtMoney(Math.max(0, totalAccepted - totalInvoiced)) : "—", sub: totalAccepted > 0 ? "uninvoiced" : undefined },
+          { label: "Quotes", value: String(pQuotes.length), sub: pQuotes.length > 0 ? `${fmtMoney(totalQuoted)} total` : undefined, testId: "card-quotes" },
+          { label: "Accepted Contract", value: pQuotes.filter((q) => q.status === "accepted").length > 0 ? fmtMoney(totalAccepted) : "—", sub: "excl. GST", testId: "card-accepted" },
+          { label: "Approved Variations", value: approvedVariationTotal > 0 ? fmtMoney(approvedVariationTotal) : "—", sub: approvedVariationTotal > 0 ? "excl. GST" : "none", testId: "card-variations" },
+          { label: "Jobs", value: String(pJobs.length), sub: undefined, testId: "card-jobs" },
+          { label: "Invoiced", value: pInvoices.length > 0 ? fmtMoney(totalInvoicedIncl) : "—", sub: pInvoices.length > 0 ? "incl. GST" : undefined, testId: "card-invoiced" },
+          { label: "Outstanding", value: totalAccepted > 0 ? fmtMoney(Math.max(0, totalAccepted - totalInvoicedExcl)) : "—", sub: totalAccepted > 0 ? "excl. GST" : undefined, testId: "card-outstanding" },
         ].map((card) => (
-          <div key={card.label} className="rounded-lg border bg-card px-4 py-3">
+          <div key={card.label} className="rounded-lg border bg-card px-4 py-3" data-testid={card.testId}>
             <p className="text-xs text-muted-foreground">{card.label}</p>
             <p className="text-lg font-semibold font-mono">{card.value}</p>
             {card.sub && <p className="text-xs text-muted-foreground">{card.sub}</p>}
@@ -689,8 +703,18 @@ export default function ProjectDetail() {
               {pInvoices.map((inv) => (
                 <TableRow key={inv.id} data-testid={`row-project-invoice-${inv.id}`}>
                   <TableCell className="font-mono text-sm">{inv.number}</TableCell>
-                  <TableCell className="text-sm capitalize">
-                    {INVOICE_TYPE_LABELS[inv.type] ?? inv.type}
+                  <TableCell className="text-sm">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      inv.type === "deposit" ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" :
+                      inv.type === "progress" ? "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" :
+                      inv.type === "variation" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" :
+                      inv.type === "final" ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" :
+                      inv.type === "retention_release" ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" :
+                      inv.type === "credit_note" ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" :
+                      "bg-muted text-muted-foreground"
+                    }`} data-testid={`badge-project-invoice-type-${inv.id}`}>
+                      {INVOICE_TYPE_LABELS[inv.type] ?? inv.type}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusBadgeVariant(inv.status)} className="text-xs">

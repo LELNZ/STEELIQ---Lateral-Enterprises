@@ -1720,7 +1720,7 @@ function InvoiceSection({
 
       {allocation && (
         <div className="rounded-lg border bg-card p-3 space-y-3" data-testid="panel-invoice-allocation">
-          {/* Billing summary — always show full breakdown */}
+          {/* Commercial hierarchy — 9-row model */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
             <div>
               <p className="text-xs text-muted-foreground">Base Contract</p>
@@ -1728,19 +1728,39 @@ function InvoiceSection({
             </div>
             {(allocation.approvedVariationTotalExcl ?? 0) > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground">Approved Variations</p>
+                <p className="text-xs text-muted-foreground">+ Approved Variations</p>
                 <p className="text-sm font-semibold text-blue-600 dark:text-blue-400" data-testid="text-variation-total">+{fmt(allocation.approvedVariationTotalExcl!)} excl.</p>
+              </div>
+            )}
+            {(allocation.approvedVariationTotalExcl ?? 0) > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">= Total Contract</p>
+                <p className="text-sm font-semibold" data-testid="text-total-contract">
+                  {fmt(allocation.acceptedValueExcl + (allocation.approvedVariationTotalExcl ?? 0))} excl.
+                </p>
               </div>
             )}
             {allocation.retentionConfigured && (allocation.retentionHeldValue ?? 0) > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground">Retention Held ({allocation.retentionPercentage}%)</p>
+                <p className="text-xs text-muted-foreground">− Retention ({allocation.retentionPercentage}%)</p>
                 <p className="text-sm font-semibold text-amber-600 dark:text-amber-400" data-testid="text-retention-held">−{fmt(allocation.retentionHeldValue!)} excl.</p>
               </div>
             )}
             <div>
               <p className="text-xs text-muted-foreground">Std. Invoiced</p>
-              <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.standardInvoicedExcl ?? allocation.totalInvoicedExcl)} excl.</p>
+              <p className="text-sm font-semibold" data-testid="text-std-invoiced">{fmt(allocation.standardInvoicedExcl ?? allocation.totalInvoicedExcl)} excl.</p>
+            </div>
+            {(allocation.retentionReleasedExcl ?? 0) > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground">+ Retention Released</p>
+                <p className="text-sm font-semibold text-amber-600 dark:text-amber-400" data-testid="text-retention-released-total">+{fmt(allocation.retentionReleasedExcl!)} excl.</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs text-muted-foreground">Total Invoiced</p>
+              <p className="text-sm font-semibold" data-testid="text-total-invoiced">
+                {fmt((allocation.standardInvoicedExcl ?? allocation.totalInvoicedExcl) + (allocation.retentionReleasedExcl ?? 0))} excl.
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Std. Remaining</p>
@@ -1915,10 +1935,27 @@ function InvoiceSection({
                 <TableRow key={inv.id} data-testid={`row-invoice-${inv.id}`}>
                   <TableCell className="font-mono text-sm" data-testid={`text-invoice-number-${inv.id}`}>{inv.number}</TableCell>
                   <TableCell className="text-sm">
-                    <div>{INVOICE_TYPE_LABELS[inv.type] || inv.type}</div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        inv.type === "deposit" ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" :
+                        inv.type === "progress" ? "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" :
+                        inv.type === "variation" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" :
+                        inv.type === "final" ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" :
+                        inv.type === "retention_release" ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" :
+                        inv.type === "credit_note" ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" :
+                        "bg-muted text-muted-foreground"
+                      }`} data-testid={`badge-invoice-type-${inv.id}`}>
+                        {INVOICE_TYPE_LABELS[inv.type] || inv.type}
+                      </span>
+                    </div>
                     {inv.type === "variation" && (inv as any).variationId && variationTitleMap[(inv as any).variationId] && (
-                      <div className="text-xs text-muted-foreground truncate max-w-[140px]" data-testid={`text-invoice-variation-source-${inv.id}`}>
+                      <div className="text-xs text-muted-foreground truncate max-w-[160px] mt-0.5" data-testid={`text-invoice-variation-source-${inv.id}`}>
                         ↳ {variationTitleMap[(inv as any).variationId]}
+                      </div>
+                    )}
+                    {inv.type === "retention_release" && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5" data-testid={`text-invoice-retention-context-${inv.id}`}>
+                        ↳ Release of retained funds
                       </div>
                     )}
                   </TableCell>
