@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useSystemMode } from "@/hooks/use-system-mode";
-import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, OP_JOB_STATUSES } from "@shared/schema";
+import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, type Invoice, OP_JOB_STATUSES, MEASUREMENT_REQUIREMENTS, DIMENSION_SOURCES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle,
+  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle, ReceiptText, ExternalLink, Ruler,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import LifecyclePanel from "@/components/lifecycle-panel";
@@ -53,6 +53,8 @@ export default function OpJobDetail() {
   const [editNotes, setEditNotes] = useState("");
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [editMeasurementReq, setEditMeasurementReq] = useState<string>("__none__");
+  const [editDimensionSource, setEditDimensionSource] = useState<string>("__none__");
   const { user } = useAuth();
   const { mode: systemMode, isLoading: modeLoading } = useSystemMode();
   const isProduction = !modeLoading && systemMode === "production";
@@ -71,6 +73,16 @@ export default function OpJobDetail() {
     enabled: !!job?.sourceQuoteId,
   });
 
+  const { data: invoices = [] } = useQuery<Invoice[]>({
+    queryKey: ["/api/quotes", job?.sourceQuoteId, "invoices"],
+    queryFn: async () => {
+      const res = await fetch(`/api/quotes/${job?.sourceQuoteId}/invoices`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!job?.sourceQuoteId,
+  });
+
   const customer = customers.find((c) => c.id === job?.customerId);
   const project = projects.find((p) => p.id === job?.projectId);
   const acceptedRevision = sourceQuote?.revisions?.find((r) => r.id === job?.acceptedRevisionId);
@@ -82,6 +94,8 @@ export default function OpJobDetail() {
         title: editTitle,
         status: editStatus,
         notes: editNotes || null,
+        measurementRequirement: editMeasurementReq === "__none__" ? null : editMeasurementReq,
+        dimensionSource: editDimensionSource === "__none__" ? null : editDimensionSource,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -172,6 +186,8 @@ export default function OpJobDetail() {
     setEditTitle(job.title);
     setEditStatus(job.status);
     setEditNotes(job.notes ?? "");
+    setEditMeasurementReq(job.measurementRequirement ?? "__none__");
+    setEditDimensionSource(job.dimensionSource ?? "__none__");
     setEditing(true);
   }
 
@@ -269,6 +285,38 @@ export default function OpJobDetail() {
               placeholder="Internal notes for this job…"
               data-testid="textarea-edit-job-notes"
             />
+          </div>
+          <div className="border-t pt-4 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Measurement & Dimensions</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs">Measurement Requirement</Label>
+                <Select value={editMeasurementReq} onValueChange={setEditMeasurementReq}>
+                  <SelectTrigger className="h-8 text-sm" data-testid="select-edit-measurement-req"><SelectValue placeholder="Not set" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Not set —</SelectItem>
+                    <SelectItem value="pre_quote">Pre-quote measure</SelectItem>
+                    <SelectItem value="post_acceptance">Post-acceptance measure</SelectItem>
+                    <SelectItem value="not_required">Not required</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Dimension Source</Label>
+                <Select value={editDimensionSource} onValueChange={setEditDimensionSource}>
+                  <SelectTrigger className="h-8 text-sm" data-testid="select-edit-dimension-source"><SelectValue placeholder="Not set" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Not set —</SelectItem>
+                    <SelectItem value="site_measure">Site measure</SelectItem>
+                    <SelectItem value="confirmed_drawings">Confirmed drawings</SelectItem>
+                    <SelectItem value="client_supplied">Client-supplied</SelectItem>
+                    <SelectItem value="engineer_drawings">Engineer drawings</SelectItem>
+                    <SelectItem value="architectural_drawings">Architectural drawings</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} data-testid="button-save-job">
@@ -381,7 +429,13 @@ export default function OpJobDetail() {
             </div>
             {project ? (
               <div>
-                <p className="font-medium text-sm" data-testid="text-detail-project">{project.name}</p>
+                <button
+                  className="font-medium text-sm text-primary hover:underline text-left"
+                  onClick={() => navigate(`/projects/${project.id}`)}
+                  data-testid="link-detail-project"
+                >
+                  {project.name}
+                </button>
                 {project.address && <p className="text-xs text-muted-foreground">{project.address}</p>}
               </div>
             ) : (
@@ -409,6 +463,118 @@ export default function OpJobDetail() {
             )}
           </div>
         </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3" data-testid="section-measurement-job">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Ruler className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Measurement & Dimensions</h2>
+          </div>
+          {!editing && !job.archivedAt && (
+            <button
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={startEdit}
+              data-testid="button-edit-measurement"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div className="rounded-lg border bg-card p-3 space-y-1">
+            <p className="text-xs text-muted-foreground">Measurement Requirement</p>
+            <p className="text-sm font-medium" data-testid="text-measurement-req">
+              {job.measurementRequirement === "pre_quote" && "Pre-quote measure"}
+              {job.measurementRequirement === "post_acceptance" && "Post-acceptance measure"}
+              {job.measurementRequirement === "not_required" && (
+                <span className="text-emerald-700 dark:text-emerald-400">Not required</span>
+              )}
+              {!job.measurementRequirement && <span className="text-muted-foreground italic">Not set</span>}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-card p-3 space-y-1">
+            <p className="text-xs text-muted-foreground">Dimension Source</p>
+            <p className="text-sm font-medium capitalize" data-testid="text-dimension-source">
+              {job.dimensionSource
+                ? job.dimensionSource.replace(/_/g, " ")
+                : <span className="text-muted-foreground italic">Not set</span>}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3" data-testid="section-invoices-job">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ReceiptText className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoices</h2>
+            {invoices.length > 0 && (
+              <span className="text-xs text-muted-foreground">({invoices.length})</span>
+            )}
+          </div>
+          {job?.sourceQuoteId && (
+            <button
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+              onClick={() => navigate(`/quote/${job.sourceQuoteId}`)}
+              data-testid="link-manage-invoices"
+            >
+              Manage in quote <ExternalLink className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+
+        {invoices.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No invoices yet for this job's source quote.</p>
+        ) : (
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Number</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Type</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Incl. GST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => {
+                  const INVOICE_STATUS_LABELS: Record<string, string> = {
+                    draft: "Draft", ready_for_xero: "Ready for Xero",
+                    pushed_to_xero_draft: "Pushed to Xero", approved: "Approved",
+                    returned_to_draft: "Returned to Draft",
+                  };
+                  const INVOICE_TYPE_LABELS: Record<string, string> = {
+                    deposit: "Deposit", progress: "Progress", variation: "Variation",
+                    final: "Final", retention_release: "Retention Release", credit_note: "Credit Note",
+                  };
+                  const statusColor: Record<string, string> = {
+                    draft: "secondary", ready_for_xero: "outline",
+                    pushed_to_xero_draft: "secondary", approved: "default", returned_to_draft: "destructive",
+                  };
+                  return (
+                    <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/20" data-testid={`row-job-invoice-${inv.id}`}>
+                      <td className="px-3 py-2 font-mono font-medium" data-testid={`text-job-invoice-number-${inv.id}`}>{inv.number}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</td>
+                      <td className="px-3 py-2">
+                        <Badge variant={(statusColor[inv.status] || "secondary") as any} className="text-xs" data-testid={`badge-job-invoice-status-${inv.id}`}>
+                          {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right font-medium" data-testid={`text-job-invoice-amount-${inv.id}`}>
+                        ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <Separator />

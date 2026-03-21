@@ -285,7 +285,7 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
         isNA || isNotStarted ? "opacity-50" : "",
       ].join(" ")}
     >
-      {/* Stage header */}
+      {/* Stage header — only this div toggles expand; task body is outside */}
       <div
         className={[
           "flex gap-3 py-2.5 px-3",
@@ -293,10 +293,10 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
         ].join(" ")}
         onClick={hasTasks ? onToggleExpand : undefined}
       >
-        {/* Left — status icon + connector */}
+        {/* Left — status icon */}
         <div className="flex flex-col items-center gap-0.5 pt-0.5">
           {statusIcon(stage.status)}
-          {!isLast && (
+          {!isLast && !isExpanded && (
             <div className={[
               "w-px flex-1 min-h-[12px]",
               isComplete ? "bg-emerald-300 dark:bg-emerald-700" : "bg-border",
@@ -304,7 +304,7 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
           )}
         </div>
 
-        {/* Right — content */}
+        {/* Right — label and meta */}
         <div className="flex-1 min-w-0 space-y-0.5">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -320,7 +320,6 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
               >
                 {stage.label}
               </span>
-              {/* Task count pill */}
               {hasTasks && (
                 <span className="text-[10px] text-muted-foreground/60 tabular-nums">
                   {stage.tasks.filter((t) => t.completed).length}/{stage.tasks.length}
@@ -337,7 +336,6 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
             </div>
           </div>
 
-          {/* Meta row */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1">
               <User className="h-3 w-3" />
@@ -349,7 +347,6 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
             </span>
           </div>
 
-          {/* Next action */}
           {isActive && stage.nextAction && (
             <div
               data-testid={`lifecycle-next-action-${stage.key}`}
@@ -360,31 +357,52 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
             </div>
           )}
 
-          {/* Blocked reason */}
           {stage.status === "blocked" && stage.blockedReason && (
             <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
               {stage.blockedReason}
             </div>
           )}
 
-          {/* Source note */}
           {stage.sourceNote && !isNotStarted && (
             <div className="text-xs text-muted-foreground/60 italic mt-0.5">
               {stage.sourceNote}
             </div>
           )}
+        </div>
+      </div>
 
-          {/* Inline task checklist (expanded) */}
-          {hasTasks && isExpanded && (
+      {/* Task body — OUTSIDE the clickable header so task interactions don't collapse the stage */}
+      {hasTasks && isExpanded && (
+        <div
+          className="px-3 pb-2.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="ml-7">
             <TaskChecklist
               stage={stage}
               instanceId={instanceId}
               pendingKey={pendingKey}
               onToggle={onToggleTask}
             />
+          </div>
+          {!isLast && (
+            <div className={[
+              "ml-[11px] w-px mt-1 min-h-[12px]",
+              isComplete ? "bg-emerald-300 dark:bg-emerald-700" : "bg-border",
+            ].join(" ")} />
           )}
         </div>
-      </div>
+      )}
+
+      {/* Connector line when collapsed */}
+      {(!hasTasks || !isExpanded) && !isLast && (
+        <div className="ml-[23px] flex flex-col items-center">
+          <div className={[
+            "w-px min-h-[4px]",
+            isComplete ? "bg-emerald-300 dark:bg-emerald-700" : "bg-border",
+          ].join(" ")} />
+        </div>
+      )}
     </div>
   );
 }

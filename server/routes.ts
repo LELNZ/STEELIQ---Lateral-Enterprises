@@ -85,8 +85,23 @@ async function seedLibraryDefaults() {
 // ── Xero OAuth state store ────────────────────────────────────────────────────
 // Short-lived CSRF state tokens for the OAuth 2.0 Authorization Code flow.
 // State is stored server-side only — never exposed to the browser as a value.
-// Each entry: state → expiry timestamp (ms). Cleaned up after use or on expiry.
-const _oauthStates = new Map<string, number>();
+// Each entry: state → { expiry ms, redirectUri }.  The redirect URI is derived
+// at connect-time and re-used in the callback so both sides always match.
+const _oauthStates = new Map<string, { expiry: number; redirectUri: string }>();
+
+/** Derives the Xero callback URI from the incoming request's host.
+ *  Always derived from the actual request — never from a static env var —
+ *  so that live → live and dev → dev are guaranteed regardless of any
+ *  XERO_REDIRECT_URI secret that may have been set previously. */
+function getXeroRedirectUri(req: any): string {
+  // x-forwarded-proto and x-forwarded-host may be comma-separated when multiple
+  // proxies are in the chain; take only the first (leftmost = original client value).
+  const rawProto = req.headers["x-forwarded-proto"] as string | undefined;
+  const rawHost  = req.headers["x-forwarded-host"]  as string | undefined;
+  const proto = (rawProto?.split(",")[0].trim()) || "https";
+  const host  = (rawHost?.split(",")[0].trim())  || (req.headers.host as string) || "";
+  return `${proto}://${host}/api/xero/callback`;
+}
 
 const XERO_CONNECTIONS_URL = "https://api.xero.com/connections";
 
@@ -1040,10 +1055,49 @@ export async function registerRoutes(
         const number = formatQuoteNumber(seqResult.rows[0].current_value, quotePrefix, divisionCode, quoteUseDivSuffix);
 
         const newQuoteSellValue = (snapshot as any).totals?.sell ?? null;
+
+        // Auto-carry customer linkage from source estimate if available
+        let autoCustomerId: string | null = null;
+        if (sourceJobId) {
+          const srcJob = await client.query(`SELECT customer_id FROM jobs WHERE id = $1`, [sourceJobId]);
+          if (srcJob.rows.length > 0 && srcJob.rows[0].customer_id) {
+            autoCustomerId = srcJob.rows[0].customer_id;
+          } else {
+            // No customer_id on job — try auto-match/create from client fields on job
+            const srcJobFull = await client.query(
+              `SELECT client_name, client_email, client_phone FROM jobs WHERE id = $1`, [sourceJobId]
+            );
+            if (srcJobFull.rows.length > 0) {
+              const { client_name, client_email, client_phone } = srcJobFull.rows[0];
+              if (client_name) {
+                const existingCustomers = await storage.getAllCustomers();
+                const nameLower = client_name.trim().toLowerCase();
+                const match = existingCustomers.find((c) =>
+                  c.name.toLowerCase() === nameLower ||
+                  (client_email && c.email && c.email.toLowerCase() === client_email.toLowerCase()) ||
+                  (client_phone && (c.phone === client_phone))
+                );
+                if (match) {
+                  autoCustomerId = match.id;
+                } else {
+                  const newCustomer = await storage.createCustomer({
+                    name: client_name.trim(),
+                    email: client_email || undefined,
+                    phone: client_phone || undefined,
+                  });
+                  autoCustomerId = newCustomer.id;
+                }
+                // Back-link the customerId to the source job too
+                await client.query(`UPDATE jobs SET customer_id = $1 WHERE id = $2`, [autoCustomerId, sourceJobId]);
+              }
+            }
+          }
+        }
+
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, total_value, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, $6, NOW(), NOW()) RETURNING *`,
-          [number, sourceJobId || null, divisionCode, customer, quoteType || null, newQuoteSellValue]
+          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, total_value, customer_id, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, $6, $7, NOW(), NOW()) RETURNING *`,
+          [number, sourceJobId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId]
         );
         const quote = quoteInsert.rows[0];
 
@@ -1322,9 +1376,36 @@ export async function registerRoutes(
     }
   });
 
+  const orgSettingsPatchSchema = z.object({
+    legalName: z.string().optional(),
+    businessDisplayName: z.string().nullable().optional(),
+    gstNumber: z.string().nullable().optional(),
+    nzbn: z.string().nullable().optional(),
+    address: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+    email: z.string().nullable().optional(),
+    bankDetails: z.string().nullable().optional(),
+    defaultHeaderNotesBlock: z.string().nullable().optional(),
+    defaultTermsBlock: z.string().nullable().optional(),
+    defaultExclusionsBlock: z.string().nullable().optional(),
+    paymentTermsBlock: z.string().nullable().optional(),
+    quoteValidityDays: z.number().int().min(1).optional(),
+    documentLabel: z.string().nullable().optional(),
+    quoteNumberPrefix: z.string().max(10).nullable().optional(),
+    quoteNumberUseDivisionSuffix: z.boolean().nullable().optional(),
+    jobNumberPrefix: z.string().max(10).nullable().optional(),
+    jobNumberUseDivisionSuffix: z.boolean().nullable().optional(),
+    xeroAccountCode: z.string().nullable().optional(),
+    xeroTaxType: z.string().nullable().optional(),
+    systemMode: z.enum(["development", "production"]).optional(),
+    templateConfigJson: z.any().optional(),
+  });
+
   app.patch("/api/settings/org", async (req, res) => {
+    const parsed = orgSettingsPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const org = await storage.upsertOrgSettings(req.body);
+      const org = await storage.upsertOrgSettings(parsed.data as any);
       res.json(org);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -1513,26 +1594,25 @@ export async function registerRoutes(
     }
 
     const clientId = process.env.XERO_CLIENT_ID;
-    const redirectUri = process.env.XERO_REDIRECT_URI;
 
     if (!clientId) {
       return res.status(500).json({
         error: "XERO_CLIENT_ID is not configured. Set it in environment variables before connecting.",
       });
     }
-    if (!redirectUri) {
-      return res.status(500).json({
-        error: "XERO_REDIRECT_URI is not configured. Set it in environment variables before connecting.",
-      });
-    }
+
+    const redirectUri = getXeroRedirectUri(req);
+    console.log("[Xero OAuth] connect → derived redirect_uri:", redirectUri);
 
     // Generate and store a short-lived CSRF state token (10 min TTL)
+    // The redirect URI is stored alongside the state so the callback can
+    // reconstruct the exact same value for the token exchange.
     const state = crypto.randomBytes(24).toString("hex");
-    _oauthStates.set(state, Date.now() + 10 * 60 * 1000);
+    _oauthStates.set(state, { expiry: Date.now() + 10 * 60 * 1000, redirectUri });
 
     // Clean up expired states
-    for (const [s, exp] of _oauthStates) {
-      if (exp < Date.now()) _oauthStates.delete(s);
+    for (const [s, entry] of _oauthStates) {
+      if (entry.expiry < Date.now()) _oauthStates.delete(s);
     }
 
     const params = new URLSearchParams({
@@ -1557,9 +1637,9 @@ export async function registerRoutes(
       return res.redirect("/#/settings?xero=error&reason=" + encodeURIComponent(xeroError));
     }
 
-    // Validate state (CSRF check)
-    const stateExpiry = _oauthStates.get(state ?? "");
-    if (!stateExpiry || stateExpiry < Date.now()) {
+    // Validate state (CSRF check) and retrieve the redirect URI stored at connect-time
+    const stateEntry = _oauthStates.get(state ?? "");
+    if (!stateEntry || stateEntry.expiry < Date.now()) {
       console.error("[Xero OAuth] Invalid or expired state parameter.");
       return res.redirect("/#/settings?xero=error&reason=invalid_state");
     }
@@ -1567,9 +1647,10 @@ export async function registerRoutes(
 
     const clientId = process.env.XERO_CLIENT_ID;
     const clientSecret = process.env.XERO_CLIENT_SECRET;
-    const redirectUri = process.env.XERO_REDIRECT_URI;
+    // Use the exact URI that was sent in the authorisation request (stored in state)
+    const redirectUri = stateEntry.redirectUri;
 
-    if (!clientId || !clientSecret || !redirectUri) {
+    if (!clientId || !clientSecret) {
       console.error("[Xero OAuth] Missing required env vars for token exchange.");
       return res.redirect("/#/settings?xero=error&reason=missing_env");
     }
@@ -1666,7 +1747,7 @@ export async function registerRoutes(
     const dbConn = await storage.getXeroConnection();
     const hasDbConnection = !!dbConn && !!dbConn.tenantId;
     const dbTokenExpired = dbConn ? dbConn.expiresAt.getTime() <= Date.now() : false;
-    const redirectUriSet = !!process.env.XERO_REDIRECT_URI;
+    const redirectUriSet = true; // auto-detected from request host; XERO_REDIRECT_URI override is optional
 
     let mode: "not_configured" | "scaffold" | "live_wired";
     let status: string;
@@ -2252,6 +2333,65 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Project Sub-queries (quotes/jobs/invoices per project) ───────────────
+  app.get("/api/projects/:id/quotes", async (req, res) => {
+    try {
+      return res.json(await storage.getQuotesByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/projects/:id/jobs", async (req, res) => {
+    try {
+      return res.json(await storage.getOpJobsByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/projects/:id/invoices", async (req, res) => {
+    try {
+      return res.json(await storage.getInvoicesByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Create Project from Quote ────────────────────────────────────────────
+  app.post("/api/quotes/:id/create-project", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (!quote.customerId) {
+        return res.status(422).json({ error: "A customer must be linked to this quote before creating a project." });
+      }
+
+      const schema = z.object({
+        name: z.string().min(1),
+        address: z.string().optional().nullable(),
+        description: z.string().optional().nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const project = await storage.createProject({
+        customerId: quote.customerId,
+        name: parsed.data.name,
+        address: parsed.data.address ?? null,
+        description: parsed.data.description ?? null,
+        divisionCode: quote.divisionId ?? null,
+      });
+
+      // Auto-link project back to this quote
+      await storage.updateQuote(quote.id, { projectId: project.id });
+
+      return res.status(201).json({ project });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // ─── Quote Acceptance ─────────────────────────────────────────────────────
   app.post("/api/quotes/:id/accept", async (req, res) => {
     try {
@@ -2329,6 +2469,56 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Invoice Allocation Endpoint ──────────────────────────────────────────
+  // Returns allocation state for a quote: how much has been invoiced, how much
+  // remains, and deposit allowance tracking. Counts "active" statuses only
+  // (draft, ready_for_xero, pushed_to_xero_draft, approved). returned_to_draft
+  // invoices are excluded as they have been retracted by the operator.
+  app.get("/api/quotes/:id/invoice-allocation", async (req, res) => {
+    try {
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+      const allInvoices = await storage.getInvoicesByQuote(req.params.id);
+      const ACTIVE_STATUSES = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+      const MAX_DEPOSIT_PCT = 50;
+      const GST_RATE = 0.15;
+
+      const active = allInvoices.filter((inv) => ACTIVE_STATUSES.includes(inv.status));
+      const acceptedValue = quote.acceptedValue ?? 0;
+
+      const depositInvoicedExcl = active.filter((i) => i.type === "deposit").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const progressInvoicedExcl = active.filter((i) => i.type === "progress").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const finalInvoicedExcl = active.filter((i) => i.type === "final").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const variationInvoicedExcl = active.filter((i) => i.type === "variation").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const totalInvoicedExcl = active.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const remainingExcl = Math.max(0, acceptedValue - totalInvoicedExcl);
+
+      const depositAllowanceExcl = acceptedValue * (MAX_DEPOSIT_PCT / 100);
+      const depositAllowanceRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
+
+      return res.json({
+        acceptedValueExcl: acceptedValue,
+        acceptedValueIncl: acceptedValue * (1 + GST_RATE),
+        totalInvoicedExcl,
+        totalInvoicedIncl: totalInvoicedExcl * (1 + GST_RATE),
+        remainingExcl,
+        remainingIncl: remainingExcl * (1 + GST_RATE),
+        depositInvoicedExcl,
+        progressInvoicedExcl,
+        finalInvoicedExcl,
+        variationInvoicedExcl,
+        depositAllowancePct: MAX_DEPOSIT_PCT,
+        depositAllowanceExcl,
+        depositAllowanceRemainingExcl,
+        depositAllowanceFullyUsed: depositAllowanceRemainingExcl <= 0.001,
+        activeInvoiceCount: active.length,
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/invoices", async (req, res) => {
     const schema = z.object({
       quoteId: z.string().optional().nullable(),
@@ -2372,6 +2562,64 @@ export async function registerRoutes(
           projectId: quote.projectId ?? null,
           divisionCode: quote.divisionId ?? null,
         };
+
+        // ── Invoice allocation guard ─────────────────────────────────────────
+        // Policy: max deposit = 50% of accepted contract value (excl. GST).
+        // Total of all active invoices must not exceed accepted value.
+        // Active = draft | ready_for_xero | pushed_to_xero_draft | approved.
+        // returned_to_draft invoices are excluded (operator has retracted them).
+        const ALLOC_ACTIVE = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+        const MAX_DEPOSIT_PCT = 50;
+        const existingInvoices = await storage.getInvoicesByQuote(parsed.data.quoteId);
+        const activeInvoices = existingInvoices.filter((inv) => ALLOC_ACTIVE.includes(inv.status));
+        const contractValue = quote.acceptedValue ?? 0;
+        const newAmountExcl = parsed.data.amountExclGst ?? 0;
+        const invoiceType = parsed.data.type ?? "deposit";
+
+        if (contractValue > 0 && newAmountExcl > 0) {
+          const totalInvoicedExcl = activeInvoices.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+
+          // Overall contract cap
+          if (totalInvoicedExcl + newAmountExcl > contractValue + 0.005) {
+            const remainingExcl = Math.max(0, contractValue - totalInvoicedExcl);
+            return res.status(422).json({
+              error: `Invoice amount exceeds remaining contract value. Remaining to invoice: $${remainingExcl.toFixed(2)} excl. GST (contract: $${contractValue.toFixed(2)}).`,
+              code: "OVER_CONTRACT_VALUE",
+              remainingExcl,
+              contractValue,
+            });
+          }
+
+          // Deposit-specific cap (50% of contract)
+          if (invoiceType === "deposit") {
+            const depositAllowanceExcl = contractValue * (MAX_DEPOSIT_PCT / 100);
+            const depositInvoicedExcl = activeInvoices
+              .filter((i) => i.type === "deposit")
+              .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+            const depositRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
+
+            if (depositRemainingExcl <= 0.005) {
+              return res.status(422).json({
+                error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full.`,
+                code: "DEPOSIT_ALLOWANCE_EXHAUSTED",
+                depositAllowanceExcl,
+                depositInvoicedExcl,
+                depositRemainingExcl: 0,
+              });
+            }
+
+            if (newAmountExcl > depositRemainingExcl + 0.005) {
+              return res.status(422).json({
+                error: `Deposit amount exceeds remaining deposit allowance. Only $${depositRemainingExcl.toFixed(2)} excl. GST remains of the ${MAX_DEPOSIT_PCT}% deposit allowance.`,
+                code: "OVER_DEPOSIT_ALLOWANCE",
+                depositAllowanceExcl,
+                depositInvoicedExcl,
+                depositRemainingExcl,
+              });
+            }
+          }
+        }
+        // ────────────────────────────────────────────────────────────────────
       }
 
       const number = await storage.getNextInvoiceNumber();
@@ -2446,6 +2694,50 @@ export async function registerRoutes(
             error: `Cannot transition invoice from "${currentStatus}" to "${targetStatus}". Allowed: ${allowed.join(", ") || "none"}.`,
           });
         }
+
+        // Xero readiness validation — must have a customer before marking ready
+        if (targetStatus === "ready_for_xero") {
+          let customerValid = false;
+          if (invoice.customerId) {
+            const customer = await storage.getCustomer(invoice.customerId);
+            customerValid = !!(customer && customer.name);
+          }
+          if (!customerValid && invoice.quoteId) {
+            const linkedQuote = await storage.getQuote(invoice.quoteId);
+            customerValid = !!(linkedQuote?.customerId || linkedQuote?.customer);
+          }
+          if (!customerValid) {
+            return res.status(422).json({
+              error: "Invoice cannot be marked ready for Xero: no customer is linked. Open the source quote and link a customer first.",
+              code: "MISSING_CUSTOMER",
+              quoteId: invoice.quoteId ?? null,
+            });
+          }
+
+          // Hard allocation check at ready_for_xero gate
+          if (invoice.quoteId) {
+            const allocQuote = await storage.getQuote(invoice.quoteId);
+            if (allocQuote?.acceptedValue && allocQuote.acceptedValue > 0) {
+              const allQuoteInvoices = await storage.getInvoicesByQuote(invoice.quoteId);
+              const ALLOC_ACTIVE_RFX = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+              const otherActive = allQuoteInvoices.filter(
+                (inv) => inv.id !== invoice.id && ALLOC_ACTIVE_RFX.includes(inv.status)
+              );
+              const otherTotal = otherActive.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+              const thisAmount = invoice.amountExclGst ?? 0;
+              if (otherTotal + thisAmount > allocQuote.acceptedValue + 0.005) {
+                const remaining = Math.max(0, allocQuote.acceptedValue - otherTotal);
+                return res.status(422).json({
+                  error: `Invoice cannot proceed: total invoiced would exceed the contract value. Remaining uninvoiced: $${remaining.toFixed(2)} excl. GST.`,
+                  code: "OVER_CONTRACT_VALUE",
+                  remainingExcl: remaining,
+                  contractValue: allocQuote.acceptedValue,
+                });
+              }
+            }
+          }
+        }
+
         logActivity("invoice_updated", "invoice", invoice.id, userId, { from: currentStatus, to: targetStatus });
       }
 
@@ -3121,6 +3413,8 @@ export async function registerRoutes(
         title: z.string().min(1).optional(),
         status: z.enum(["active", "on_hold", "completed", "cancelled"]).optional(),
         notes: z.string().nullable().optional(),
+        measurementRequirement: z.enum(["pre_quote", "post_acceptance", "not_required"]).nullable().optional(),
+        dimensionSource: z.enum(["site_measure", "confirmed_drawings", "client_supplied", "engineer_drawings", "architectural_drawings", "other"]).nullable().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });

@@ -260,6 +260,16 @@ function deriveStageStatus(
     }
 
     case "site_measure": {
+      // If the job explicitly marks measurement as not required, skip this stage entirely
+      if (opJob?.measurementRequirement === "not_required") {
+        return {
+          status: "not_applicable",
+          completedAt: null,
+          sourceNote: `Measurement not required — dimensions sourced ${opJob.dimensionSource ? `from ${opJob.dimensionSource.replace(/_/g, " ")}` : "externally"}`,
+          blockedReason: null,
+        };
+      }
+
       const commercialStatus = computedPrev.get("commercial_setup");
       if (commercialStatus === "active" && !opJob) {
         return {

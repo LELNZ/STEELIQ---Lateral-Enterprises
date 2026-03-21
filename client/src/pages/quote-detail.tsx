@@ -23,9 +23,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle } from "lucide-react";
+import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG, type TotalsDisplayConfig } from "@/lib/quote-document";
 import type { PreviewData } from "@/lib/quote-document";
 import { buildQuoteRenderModel } from "@/lib/quote-renderer";
@@ -430,6 +430,19 @@ export default function QuoteDetail() {
             </Button>
           </div>
         )}
+        {quote.projectId && (
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Project</p>
+            <Button
+              variant="ghost"
+              className="p-0 h-auto text-sm underline"
+              onClick={() => navigate(`/projects/${quote.projectId}`)}
+              data-testid="link-header-project"
+            >
+              View Project
+            </Button>
+          </div>
+        )}
         <div className="rounded-lg border bg-card p-3">
           <p className="text-xs text-muted-foreground flex items-center gap-1"><Mail className="h-3 w-3" /> Last Sent</p>
           {quote.sentAt ? (
@@ -513,66 +526,61 @@ export default function QuoteDetail() {
         </div>
       )}
 
-      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} />
+      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} quoteLabel={quote.customer ?? quote.number} />
 
       {currentRevisionForDetails && (
-        <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="section-details-quick-edit">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Customer-facing Details</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Shown as a dedicated block below the quote summary in the customer PDF and preview.</p>
+        <CollapsibleCard title="Customer-facing Details" defaultOpen={false} data-testid="section-details-quick-edit">
+          <div className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">Shown as a dedicated block below the quote summary in the customer PDF and preview.</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <Label htmlFor="details-show-toggle" className="text-xs text-muted-foreground">Show</Label>
+                <Switch
+                  id="details-show-toggle"
+                  checked={effectiveShowDetails}
+                  onCheckedChange={(v) => setLocalShowDetails(v)}
+                  data-testid="switch-details-show"
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Label htmlFor="details-show-toggle" className="text-xs text-muted-foreground">Show</Label>
-              <Switch
-                id="details-show-toggle"
-                checked={effectiveShowDetails}
-                onCheckedChange={(v) => setLocalShowDetails(v)}
-                data-testid="switch-details-show"
-              />
+            <Textarea
+              value={effectiveDetailsText}
+              onChange={e => setLocalDetailsText(e.target.value)}
+              placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
+              rows={4}
+              className="text-sm resize-none"
+              data-testid="textarea-details-quick-edit"
+            />
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground h-7 px-2"
+                onClick={() => navigate(`/quote/${quoteId}/preview`)}
+                data-testid="link-open-quote-display-settings"
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                Open Quote Display Settings
+              </Button>
+              <Button
+                size="sm"
+                disabled={!hasUnsavedDetails || detailsMutation.isPending}
+                onClick={() => detailsMutation.mutate()}
+                data-testid="button-save-details"
+              >
+                {detailsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
+                Save
+              </Button>
             </div>
           </div>
-          <Textarea
-            value={effectiveDetailsText}
-            onChange={e => setLocalDetailsText(e.target.value)}
-            placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
-            rows={4}
-            className="text-sm resize-none"
-            data-testid="textarea-details-quick-edit"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs text-muted-foreground h-7 px-2"
-              onClick={() => navigate(`/quote/${quoteId}/preview`)}
-              data-testid="link-open-quote-display-settings"
-            >
-              <ExternalLink className="h-3 w-3 mr-1" />
-              Open Quote Display Settings
-            </Button>
-            <Button
-              size="sm"
-              disabled={!hasUnsavedDetails || detailsMutation.isPending}
-              onClick={() => detailsMutation.mutate()}
-              data-testid="button-save-details"
-            >
-              {detailsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : null}
-              Save
-            </Button>
-          </div>
-        </div>
+        </CollapsibleCard>
       )}
 
       <Separator />
 
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <History className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Revisions</h2>
-        </div>
+      <CollapsibleCard title={`Revisions${quote.revisions && quote.revisions.length > 0 ? ` (${quote.revisions.length})` : ""}`} icon={<History className="h-4 w-4 text-muted-foreground" />} defaultOpen={false} data-testid="section-revisions">
         {quote.revisions && quote.revisions.length > 0 ? (
-          <div className="rounded-lg border bg-card overflow-x-auto">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -615,24 +623,24 @@ export default function QuoteDetail() {
             </Table>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No revisions yet.</p>
+          <p className="text-sm text-muted-foreground p-4">No revisions yet.</p>
         )}
-      </div>
+      </CollapsibleCard>
 
-      {quote.sourceJobId && <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />}
-
-      <Separator />
-
-      <div data-testid="section-lifecycle" className="rounded-lg border bg-card p-4">
-        <LifecyclePanel quoteId={quote.id} />
-      </div>
+      {quote.sourceJobId && (
+        <CollapsibleCard title="Related Quotes" icon={<FileText className="h-4 w-4 text-muted-foreground" />} defaultOpen={false}>
+          <div className="p-0">
+            <RelatedQuotes sourceJobId={quote.sourceJobId} currentQuoteId={quote.id} />
+          </div>
+        </CollapsibleCard>
+      )}
 
       {quote.status === "accepted" && (
         <>
           <Separator />
           <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} customerId={quote.customerId ?? undefined} projectId={quote.projectId ?? undefined} acceptedRevisionId={quote.acceptedRevisionId ?? undefined} />
           <Separator />
-          <ConvertToJobSection quoteId={quote.id} />
+          <ConvertToJobSection quoteId={quote.id} projectId={quote.projectId} />
           <Separator />
           <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-revert-to-draft">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -654,6 +662,12 @@ export default function QuoteDetail() {
           </div>
         </>
       )}
+
+      <Separator />
+
+      <div data-testid="section-lifecycle" className="rounded-lg border bg-card p-4">
+        <LifecyclePanel quoteId={quote.id} />
+      </div>
 
       <Separator />
 
@@ -908,14 +922,50 @@ const INVOICE_TYPE_LABELS: Record<string, string> = {
   credit_note: "Credit Note",
 };
 
-function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: string; customerId?: string | null; projectId?: string | null }) {
+function CollapsibleCard({
+  title,
+  icon,
+  defaultOpen = true,
+  children,
+  "data-testid": testId,
+}: {
+  title: string;
+  icon?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+  "data-testid"?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-lg border bg-card" data-testid={testId}>
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-sm font-semibold">{title}</span>
+        </div>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+      </button>
+      {open && <div className="border-t">{children}</div>}
+    </div>
+  );
+}
+
+function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, sourceJobId, quoteLabel }: { quoteId: string; customerId?: string | null; projectId?: string | null; quoteStatus?: string; sourceJobId?: string; quoteLabel?: string }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [selCustomer, setSelCustomer] = useState(customerId ?? "__none__");
   const [selProject, setSelProject] = useState(projectId ?? "__none__");
+  const [relinkWarningOpen, setRelinkWarningOpen] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: invoices = [] } = useQuery<Invoice[]>({
+    queryKey: ["/api/quotes", quoteId, "invoices"],
+    queryFn: () => fetch(`/api/quotes/${quoteId}/invoices`).then((r) => r.json()),
+  });
 
   const customer = customers.find((c) => c.id === customerId);
   const project = projects.find((p) => p.id === projectId);
@@ -944,23 +994,95 @@ function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: s
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  // Create Project dialog state
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [cpName, setCpName] = useState("");
+  const [cpAddress, setCpAddress] = useState("");
+  const [cpDescription, setCpDescription] = useState("");
+
+  // Fetch source job for address prefill (only when creating project)
+  const { data: sourceJob } = useQuery<any>({
+    queryKey: ["/api/jobs", sourceJobId],
+    queryFn: async () => {
+      const res = await fetch(`/api/jobs/${sourceJobId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!sourceJobId && createProjectOpen,
+  });
+
+  const createProjectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/quotes/${quoteId}/create-project`, {
+        name: cpName,
+        address: cpAddress || null,
+        description: cpDescription || null,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to create project");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Project created and linked to quote" });
+      setCreateProjectOpen(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const openCreateProject = () => {
+    // Prefill priority: (a) source job/site name, (b) quote label/reference, (c) customer name fallback
+    const defaultName = sourceJob?.name
+      ? sourceJob.name
+      : quoteLabel && quoteLabel !== customer?.name
+      ? quoteLabel
+      : customer?.name
+      ? customer.name
+      : "";
+    setCpName(defaultName);
+    setCpAddress(sourceJob?.address ?? "");
+    setCpDescription("");
+    setCreateProjectOpen(true);
+  };
+
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <Link2 className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Customer & Project</h3>
         </div>
-        {!editing && (
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
-            setSelCustomer(customerId ?? "__none__");
-            setSelProject(projectId ?? "__none__");
-            setEditing(true);
-          }} data-testid="button-edit-linkage">
-            <Link2 className="h-3 w-3 mr-1" />
-            {customer ? "Change" : "Link"}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {!editing && quoteStatus === "accepted" && !projectId && customerId && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={openCreateProject}
+              data-testid="button-create-project-from-quote"
+            >
+              <Plus className="h-3 w-3 mr-1" /> Create Project
+            </Button>
+          )}
+          {!editing && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+              setSelCustomer(customerId ?? "__none__");
+              setSelProject(projectId ?? "__none__");
+              if (invoices.length > 0 && (customerId || projectId)) {
+                setRelinkWarningOpen(true);
+              } else {
+                setEditing(true);
+              }
+            }} data-testid="button-edit-linkage">
+              <Link2 className="h-3 w-3 mr-1" />
+              {customer ? "Change" : "Link"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {!editing ? (
@@ -970,15 +1092,30 @@ function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: s
             {customer ? (
               <p className="text-sm font-medium" data-testid="text-linked-customer">{customer.name}</p>
             ) : (
-              <p className="text-sm text-muted-foreground italic">Not linked</p>
+              <div>
+                <p className="text-sm text-muted-foreground italic">Not linked</p>
+                {quoteStatus === "accepted" && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Link a customer to enable Xero invoicing</p>
+                )}
+              </div>
             )}
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Project</p>
             {project ? (
-              <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
+              <div>
+                <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
+                <a href={`/projects/${project.id}`} className="text-xs text-muted-foreground hover:underline flex items-center gap-1 mt-0.5" data-testid="link-view-project">
+                  <ExternalLink className="h-2.5 w-2.5" /> View project
+                </a>
+              </div>
             ) : (
-              <p className="text-sm text-muted-foreground italic">Not linked</p>
+              <div>
+                <p className="text-sm text-muted-foreground italic">Not linked</p>
+                {quoteStatus === "accepted" && !customerId && (
+                  <p className="text-xs text-muted-foreground mt-1">Link a customer first to create a project</p>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1016,11 +1153,98 @@ function CustomerProjectSection({ quoteId, customerId, projectId }: { quoteId: s
           </div>
         </div>
       )}
+
+      {/* Relink Warning Dialog */}
+      <AlertDialog open={relinkWarningOpen} onOpenChange={setRelinkWarningOpen}>
+        <AlertDialogContent data-testid="dialog-relink-warning">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" /> Changing Customer or Project
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                This quote has <strong>{invoices.length} invoice{invoices.length !== 1 ? "s" : ""}</strong> already raised.
+              </span>
+              <span className="block">
+                Changing the linked customer or project will <strong>not</strong> update existing invoices — those remain associated with the original customer. This may cause mismatches if you are using Xero.
+              </span>
+              <span className="block text-muted-foreground">
+                Only proceed if you are correcting a data entry error and understand the implications.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-relink">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => { setRelinkWarningOpen(false); setEditing(true); }}
+              data-testid="button-confirm-relink"
+            >
+              I understand — Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Create Project Dialog */}
+      <Dialog open={createProjectOpen} onOpenChange={setCreateProjectOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" /> Create Project from Quote
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <Alert>
+              <AlertDescription>
+                A new project will be created and automatically linked to this quote. The project will be owned by {customer?.name ?? "the linked customer"}.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label>Project Name</Label>
+              <Input
+                value={cpName}
+                onChange={(e) => setCpName(e.target.value)}
+                placeholder="e.g. 23 Main St – Window Package"
+                data-testid="input-create-project-name"
+              />
+            </div>
+            <div>
+              <Label className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Site Address <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                value={cpAddress}
+                onChange={(e) => setCpAddress(e.target.value)}
+                placeholder="Site or delivery address"
+                data-testid="input-create-project-address"
+              />
+            </div>
+            <div>
+              <Label>Description <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                value={cpDescription}
+                onChange={(e) => setCpDescription(e.target.value)}
+                placeholder="Brief notes about this project"
+                data-testid="input-create-project-description"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateProjectOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => createProjectMutation.mutate()}
+              disabled={!cpName.trim() || createProjectMutation.isPending}
+              data-testid="button-confirm-create-project"
+            >
+              {createProjectMutation.isPending ? "Creating…" : "Create Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function ConvertToJobSection({ quoteId }: { quoteId: string }) {
+function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectId?: string | null }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [showDialog, setShowDialog] = useState(false);
@@ -1102,12 +1326,31 @@ function ConvertToJobSection({ quoteId }: { quoteId: string }) {
           <Briefcase className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Convert to Job</h3>
         </div>
-        <p className="text-sm text-muted-foreground">
-          This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision.
-        </p>
-        <Button size="sm" onClick={() => setShowDialog(true)} data-testid="button-convert-to-job">
-          <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
-        </Button>
+        {!projectId ? (
+          <>
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm font-medium">
+                A project must be created first before converting to a job.
+                <span className="block text-xs font-normal text-muted-foreground mt-0.5">
+                  Use the <strong>Create Project</strong> button in the Customer &amp; Project section above, then return here to convert.
+                </span>
+              </AlertDescription>
+            </Alert>
+            <Button size="sm" disabled data-testid="button-convert-to-job">
+              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision and project.
+            </p>
+            <Button size="sm" onClick={() => setShowDialog(true)} data-testid="button-convert-to-job">
+              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
+            </Button>
+          </>
+        )}
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
@@ -1155,6 +1398,21 @@ function ConvertToJobSection({ quoteId }: { quoteId: string }) {
   );
 }
 
+type InvoiceAllocation = {
+  acceptedValueExcl: number;
+  acceptedValueIncl: number;
+  totalInvoicedExcl: number;
+  totalInvoicedIncl: number;
+  remainingExcl: number;
+  remainingIncl: number;
+  depositInvoicedExcl: number;
+  depositAllowancePct: number;
+  depositAllowanceExcl: number;
+  depositAllowanceRemainingExcl: number;
+  depositAllowanceFullyUsed: boolean;
+  activeInvoiceCount: number;
+};
+
 function InvoiceSection({
   quoteId,
   acceptedValue,
@@ -1172,6 +1430,7 @@ function InvoiceSection({
 }) {
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
+  const [invoiceType, setInvoiceType] = useState<"deposit" | "progress" | "variation" | "final">("deposit");
   const [depositMode, setDepositMode] = useState<"percentage" | "fixed">("percentage");
   const [depositPct, setDepositPct] = useState("50");
   const [depositFixed, setDepositFixed] = useState("");
@@ -1184,32 +1443,70 @@ function InvoiceSection({
     queryFn: () => fetch(`/api/quotes/${quoteId}/invoices`).then((r) => r.json()),
   });
 
+  const { data: allocation } = useQuery<InvoiceAllocation>({
+    queryKey: ["/api/quotes", quoteId, "invoice-allocation"],
+    queryFn: () => fetch(`/api/quotes/${quoteId}/invoice-allocation`).then((r) => r.json()),
+    enabled: !!quoteId,
+  });
+
   const GST_RATE = 0.15;
-  const exclGst = depositMode === "percentage"
-    ? (acceptedValue * (parseFloat(depositPct) || 0)) / 100
-    : fixedGstBasis === "incl"
+
+  const exclGst = (() => {
+    if (invoiceType === "deposit") {
+      return depositMode === "percentage"
+        ? (acceptedValue * (parseFloat(depositPct) || 0)) / 100
+        : fixedGstBasis === "incl"
+          ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
+          : parseFloat(depositFixed) || 0;
+    }
+    if (invoiceType === "final" && allocation) {
+      return depositFixed === ""
+        ? allocation.remainingExcl
+        : fixedGstBasis === "incl"
+          ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
+          : parseFloat(depositFixed) || 0;
+    }
+    return fixedGstBasis === "incl"
       ? (parseFloat(depositFixed) || 0) / (1 + GST_RATE)
       : parseFloat(depositFixed) || 0;
+  })();
+
   const gst = exclGst * GST_RATE;
   const inclGst = exclGst + gst;
 
+  const openCreateDialog = () => {
+    setInvoiceType("deposit");
+    setDepositMode("percentage");
+    setDepositPct("50");
+    setDepositFixed("");
+    setFixedGstBasis("excl");
+    setShowCreate(true);
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
+      const isDeposit = invoiceType === "deposit";
+      const descriptionMap: Record<string, string> = {
+        deposit: depositMode === "percentage"
+          ? `${depositPct}% deposit on accepted quotation`
+          : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+        progress: `Progress claim — NZD ${inclGst.toFixed(2)} incl. GST`,
+        variation: `Variation invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+        final: `Final invoice — NZD ${inclGst.toFixed(2)} incl. GST`,
+      };
       const res = await apiRequest("POST", "/api/invoices", {
         quoteId,
         divisionCode,
         customerId: customerId ?? null,
         projectId: projectId ?? null,
         quoteRevisionId: acceptedRevisionId ?? null,
-        type: "deposit",
-        depositType: depositMode,
-        depositPercentage: depositMode === "percentage" ? parseFloat(depositPct) : null,
+        type: invoiceType,
+        depositType: isDeposit ? depositMode : null,
+        depositPercentage: isDeposit && depositMode === "percentage" ? parseFloat(depositPct) : null,
         amountExclGst: exclGst,
         gstAmount: gst,
         amountInclGst: inclGst,
-        description: depositMode === "percentage"
-          ? `${depositPct}% deposit on accepted quotation`
-          : `Deposit invoice — NZD ${inclGst.toFixed(2)} incl. GST (fixed amount)`,
+        description: descriptionMap[invoiceType] ?? "",
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -1219,26 +1516,43 @@ function InvoiceSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       setShowCreate(false);
-      toast({ title: "Deposit invoice created" });
+      toast({ title: `${INVOICE_TYPE_LABELS[invoiceType] ?? "Invoice"} created` });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const [xeroMissingCustomer, setXeroMissingCustomer] = useState(false);
 
   const markReadyMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
       const res = await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "ready_for_xero" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        if (body.code === "MISSING_CUSTOMER") {
+          const err = new Error(body.error || "No customer linked");
+          (err as any).missingCustomer = true;
+          throw err;
+        }
         throw new Error(body.error || "Failed to mark ready");
       }
       return res.json();
     },
     onSuccess: () => {
+      setXeroMissingCustomer(false);
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       toast({ title: "Invoice marked ready for Xero" });
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => {
+      if (e?.missingCustomer) {
+        setXeroMissingCustomer(true);
+      } else {
+        setXeroMissingCustomer(false);
+        toast({ title: "Error", description: e.message, variant: "destructive" });
+      }
+    },
   });
 
   const unmarkReadyMutation = useMutation({
@@ -1252,6 +1566,7 @@ function InvoiceSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       toast({ title: "Invoice returned to draft" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -1268,6 +1583,7 @@ function InvoiceSection({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       if (data.xeroMode === "live") {
         toast({
           title: "Pushed to Xero (Live)",
@@ -1290,11 +1606,31 @@ function InvoiceSection({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
       if (data.xeroWarning) setXeroWarn(data.xeroWarning);
       toast({ title: "Invoice returned to draft" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const approveMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "approved" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Approve failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      toast({ title: "Invoice approved" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const fmt = (n: number) => `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-4">
@@ -1303,15 +1639,62 @@ function InvoiceSection({
           <ReceiptText className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoices</h2>
         </div>
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowCreate(true)} data-testid="button-create-invoice">
-          <Plus className="h-3 w-3 mr-1" /> Create Deposit Invoice
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openCreateDialog} data-testid="button-create-invoice">
+          <Plus className="h-3 w-3 mr-1" /> Create Invoice
         </Button>
       </div>
+
+      {allocation && (
+        <div className="rounded-lg border bg-card p-3 space-y-2" data-testid="panel-invoice-allocation">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="text-xs text-muted-foreground">Contract Value</p>
+              <p className="text-sm font-semibold" data-testid="text-contract-value">{fmt(allocation.acceptedValueExcl)} excl.</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Invoiced</p>
+              <p className="text-sm font-semibold" data-testid="text-total-invoiced">{fmt(allocation.totalInvoicedExcl)} excl.</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Remaining</p>
+              <p className={`text-sm font-semibold ${allocation.remainingExcl <= 0 ? "text-destructive" : "text-green-600 dark:text-green-400"}`} data-testid="text-remaining-value">
+                {fmt(allocation.remainingExcl)} excl.
+              </p>
+            </div>
+          </div>
+          {allocation.acceptedValueExcl > 0 && (
+            <div className="space-y-1">
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (allocation.totalInvoicedExcl / allocation.acceptedValueExcl) * 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Deposit: {fmt(allocation.depositInvoicedExcl)} of {fmt(allocation.depositAllowanceExcl)} allowance ({allocation.depositAllowancePct}%)</span>
+                <span>{allocation.depositAllowanceFullyUsed
+                  ? <span className="text-amber-600 dark:text-amber-400 font-medium">Deposit fully used</span>
+                  : <span>{fmt(allocation.depositAllowanceRemainingExcl)} deposit remaining</span>
+                }</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {xeroWarn && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="text-sm font-medium">{xeroWarn}</AlertDescription>
+        </Alert>
+      )}
+
+      {xeroMissingCustomer && (
+        <Alert data-testid="alert-xero-missing-customer">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            A customer must be linked to this quote before marking an invoice ready for Xero. Link one in the <strong>Customer &amp; Project</strong> section above.
+          </AlertDescription>
         </Alert>
       )}
 
@@ -1443,6 +1826,18 @@ function InvoiceSection({
                           </Button>
                         </>
                       )}
+                      {inv.status === "pushed_to_xero_draft" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
+                          onClick={() => approveMutation.mutate(inv.id)}
+                          disabled={approveMutation.isPending}
+                          data-testid={`button-approve-${inv.id}`}
+                        >
+                          Approve
+                        </Button>
+                      )}
                       {["pushed_to_xero_draft", "approved"].includes(inv.status) && (
                         <Button
                           variant="ghost"
@@ -1473,69 +1868,114 @@ function InvoiceSection({
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Create Deposit Invoice</DialogTitle>
+            <DialogTitle>Create Invoice</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Deposit Type</Label>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={depositMode === "percentage" ? "default" : "outline"}
-                  onClick={() => setDepositMode("percentage")}
-                  data-testid="button-deposit-percentage"
-                >
-                  Percentage
-                </Button>
-                <Button
-                  size="sm"
-                  variant={depositMode === "fixed" ? "default" : "outline"}
-                  onClick={() => setDepositMode("fixed")}
-                  data-testid="button-deposit-fixed"
-                >
-                  Fixed Amount
-                </Button>
+              <Label>Invoice Type</Label>
+              <div className="grid grid-cols-4 gap-1">
+                {(["deposit", "progress", "variation", "final"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    size="sm"
+                    variant={invoiceType === t ? "default" : "outline"}
+                    onClick={() => { setInvoiceType(t); setDepositFixed(""); }}
+                    className="text-xs capitalize"
+                    data-testid={`button-invoice-type-${t}`}
+                  >
+                    {t === "deposit" ? "Deposit" : t === "progress" ? "Progress" : t === "variation" ? "Variation" : "Final"}
+                  </Button>
+                ))}
               </div>
             </div>
-            {depositMode === "percentage" ? (
-              <div>
-                <Label>Deposit Percentage</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={depositPct}
-                    onChange={(e) => setDepositPct(e.target.value)}
-                    className="w-24"
-                    data-testid="input-deposit-percentage"
-                  />
-                  <span className="text-sm text-muted-foreground">%</span>
+
+            {invoiceType === "deposit" && allocation && (
+              <div className={`rounded-md px-3 py-2 text-xs space-y-0.5 ${allocation.depositAllowanceFullyUsed ? "bg-destructive/10 border border-destructive/30 text-destructive" : "bg-muted/50"}`} data-testid="panel-deposit-allowance">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Deposit allowance ({allocation.depositAllowancePct}% of contract)</span>
+                  <span className="font-medium">{fmt(allocation.depositAllowanceExcl)} excl.</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Already invoiced (deposit)</span>
+                  <span className="font-medium">{fmt(allocation.depositInvoicedExcl)} excl.</span>
+                </div>
+                <div className="flex justify-between border-t pt-0.5 mt-0.5">
+                  <span className={allocation.depositAllowanceFullyUsed ? "text-destructive font-medium" : "text-muted-foreground"}>Remaining deposit allowance</span>
+                  <span className={`font-semibold ${allocation.depositAllowanceFullyUsed ? "text-destructive" : "text-green-600 dark:text-green-400"}`}>
+                    {fmt(allocation.depositAllowanceRemainingExcl)} excl.
+                  </span>
+                </div>
+                {allocation.depositAllowanceFullyUsed && (
+                  <p className="text-destructive font-medium pt-1">Deposit allocation already fully used for this quote.</p>
+                )}
               </div>
-            ) : (
+            )}
+
+            {invoiceType === "final" && allocation && (
+              <div className="rounded-md px-3 py-2 text-xs bg-muted/50 space-y-0.5" data-testid="panel-final-remaining">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Remaining balance</span>
+                  <span className="font-semibold text-green-600 dark:text-green-400">{fmt(allocation.remainingExcl)} excl.</span>
+                </div>
+                <p className="text-muted-foreground">Final invoice pre-filled with remaining balance. Adjust below if needed.</p>
+              </div>
+            )}
+
+            {invoiceType === "deposit" ? (
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <Label>Deposit Type</Label>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant={depositMode === "percentage" ? "default" : "outline"}
+                    onClick={() => setDepositMode("percentage")}
+                    data-testid="button-deposit-percentage"
+                  >
+                    Percentage
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={depositMode === "fixed" ? "default" : "outline"}
+                    onClick={() => setDepositMode("fixed")}
+                    data-testid="button-deposit-fixed"
+                  >
+                    Fixed Amount
+                  </Button>
+                </div>
+                {depositMode === "percentage" ? (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={depositPct}
+                        onChange={(e) => setDepositPct(e.target.value)}
+                        className="w-24"
+                        data-testid="input-deposit-percentage"
+                      />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1 ml-auto">
+                        <Button size="sm" variant={fixedGstBasis === "excl" ? "default" : "outline"} onClick={() => setFixedGstBasis("excl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-excl">Excl. GST</Button>
+                        <Button size="sm" variant={fixedGstBasis === "incl" ? "default" : "outline"} onClick={() => setFixedGstBasis("incl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-incl">Incl. GST</Button>
+                      </div>
+                    </div>
+                    <Input type="number" min="0" step="0.01" value={depositFixed} onChange={(e) => setDepositFixed(e.target.value)} placeholder="0.00" data-testid="input-deposit-fixed" />
+                  </div>
+                )}
+              </div>
+            ) : invoiceType === "final" ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
                   <Label>Amount (NZD)</Label>
-                  <div className="flex gap-1 ml-auto">
-                    <Button
-                      size="sm"
-                      variant={fixedGstBasis === "excl" ? "default" : "outline"}
-                      onClick={() => setFixedGstBasis("excl")}
-                      className="h-6 px-2 text-xs"
-                      data-testid="button-gst-basis-excl"
-                    >
-                      Excl. GST
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={fixedGstBasis === "incl" ? "default" : "outline"}
-                      onClick={() => setFixedGstBasis("incl")}
-                      className="h-6 px-2 text-xs"
-                      data-testid="button-gst-basis-incl"
-                    >
-                      Incl. GST
-                    </Button>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant={fixedGstBasis === "excl" ? "default" : "outline"} onClick={() => setFixedGstBasis("excl")} className="h-6 px-2 text-xs">Excl. GST</Button>
+                    <Button size="sm" variant={fixedGstBasis === "incl" ? "default" : "outline"} onClick={() => setFixedGstBasis("incl")} className="h-6 px-2 text-xs">Incl. GST</Button>
                   </div>
                 </div>
                 <Input
@@ -1544,26 +1984,36 @@ function InvoiceSection({
                   step="0.01"
                   value={depositFixed}
                   onChange={(e) => setDepositFixed(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-deposit-fixed"
+                  placeholder={allocation ? (fixedGstBasis === "incl" ? (allocation.remainingExcl * 1.15).toFixed(2) : allocation.remainingExcl.toFixed(2)) : "0.00"}
+                  data-testid="input-amount-fixed"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Enter amount {fixedGstBasis === "incl" ? "including" : "excluding"} GST — breakdown shown below.
-                </p>
+                <p className="text-xs text-muted-foreground">Leave blank to use remaining balance ({allocation ? fmt(allocation.remainingExcl) + " excl." : "—"})</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Amount (NZD)</Label>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant={fixedGstBasis === "excl" ? "default" : "outline"} onClick={() => setFixedGstBasis("excl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-excl">Excl. GST</Button>
+                    <Button size="sm" variant={fixedGstBasis === "incl" ? "default" : "outline"} onClick={() => setFixedGstBasis("incl")} className="h-6 px-2 text-xs" data-testid="button-gst-basis-incl">Incl. GST</Button>
+                  </div>
+                </div>
+                <Input type="number" min="0" step="0.01" value={depositFixed} onChange={(e) => setDepositFixed(e.target.value)} placeholder="0.00" data-testid="input-amount-fixed" />
               </div>
             )}
+
             <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Excl. GST</span>
-                <span>${exclGst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span>{fmt(exclGst)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">GST (15%)</span>
-                <span>${gst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span>{fmt(gst)}</span>
               </div>
               <div className="flex justify-between font-semibold border-t pt-1">
                 <span>Incl. GST</span>
-                <span data-testid="text-deposit-incl-gst">${inclGst.toLocaleString("en-NZ", { minimumFractionDigits: 2 })}</span>
+                <span data-testid="text-deposit-incl-gst">{fmt(inclGst)}</span>
               </div>
             </div>
           </div>
@@ -1571,11 +2021,11 @@ function InvoiceSection({
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending || exclGst <= 0}
+              disabled={createMutation.isPending || exclGst <= 0 || (invoiceType === "deposit" && allocation?.depositAllowanceFullyUsed)}
               data-testid="button-save-invoice"
             >
               {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-              Create Invoice
+              Create {INVOICE_TYPE_LABELS[invoiceType] ?? "Invoice"}
             </Button>
           </DialogFooter>
         </DialogContent>

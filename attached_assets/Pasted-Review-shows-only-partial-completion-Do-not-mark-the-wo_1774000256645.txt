@@ -1,0 +1,52 @@
+Review shows only partial completion. Do not mark the workflow rebuild complete.
+
+The implemented changes are useful UX improvements, but the core workflow requirements are still missing.
+
+Required follow-up work:
+
+1. Customer auto-create / auto-link on estimate -> quote
+- When estimate becomes quote, automatically:
+  - reuse linked customer if present
+  - otherwise attempt safe customer match
+  - otherwise create a new customer record
+- link quote.customerId automatically
+- preserve snapshot text fields for document stability
+- allow later unlink/reassign with safeguards
+
+2. Strengthen project-first accepted-quote workflow
+- Create Job must not remain only soft-warned
+- either disable Create Job until project exists, or route Create Job through project creation if missing
+- accepted quote preferred flow must be:
+  Create Project -> Create Job
+
+3. Fix project prefill logic
+- Do not default project name from customer name unless no better source exists
+- Use this priority:
+  a. source estimate/job/site name
+  b. source quote title/reference
+  c. customer name fallback
+- keep address prefill from source estimate/job
+
+4. Confirm downstream inheritance
+- after project is created from accepted quote:
+  - quote.projectId must be linked
+  - job created from that quote must inherit projectId automatically
+  - invoice created from that quote must inherit projectId automatically if project exists
+- confirm customerId also continues to carry through
+
+5. Enforce Xero readiness server-side
+- backend must block transition to ready_for_xero when required customer/Xero mapping data is missing
+- do not rely on UI-only alerts
+- report exact backend route / validation changes
+
+6. Build Projects properly
+- add Projects menu/page
+- add Project list page
+- add Project detail dashboard
+- project detail page must show inline:
+  - quotes
+  - jobs
+  - invoices
+- users must be able to inspect those records from within the project page without being forced away
+
+Do not report complete until the above are implemented and tested.

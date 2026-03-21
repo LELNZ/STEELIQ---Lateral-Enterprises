@@ -1,0 +1,281 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not modify production data blindly.
+- Do not change invoice, lifecycle, quote, customer, or Xero logic until you have audited the current code paths and stated the exact findings.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not report this phase complete unless both the backend logic and the operationally usable UI/admin surfaces are confirmed for the workflow being audited.
+- Do not mark anything “working” merely because code exists.
+- “Done” means the workflow is operationally coherent for internal staff use.
+
+Definition of done for this phase:
+- Current invoicing workflow is fully mapped
+- Current lifecycle workflow is fully mapped
+- Exact gaps / mismatches are identified from actual code
+- Exact recommended fixes are listed in priority order
+- No architecture drift
+- No code changes unless strictly required for a tiny diagnostic fix explicitly justified
+
+IMPORTANT EXECUTION RULE
+Before changing any code:
+1. List the exact files you will inspect
+2. List the exact routes, services, storage methods, and UI surfaces you will trace
+3. State whether this phase is audit-only or requires a tiny diagnostic patch
+4. If any code change is proposed, explain why before making it
+
+HANDOVER TRUTH RULE
+- If handover docs and code differ, treat the current codebase as source of truth and report the mismatch explicitly.
+- Do not rely on previous chat assumptions over current repo state.
+
+SYSTEM CONTEXT — CURRENT BUSINESS SITUATION
+
+This is a live internal-use production system.
+There are already:
+- live quotes
+- at least 2 accepted quotes
+- separate dev and production databases
+- a newly working live Xero OAuth connection via the published site
+
+The live app now shows OAuth connected.
+However, we do NOT yet trust that the invoicing workflow and lifecycle workflow are correct end-to-end.
+
+We need a proper repo-level workflow audit before making further production changes.
+
+LOCKED ARCHITECTURE — MUST NOT CHANGE
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This pipeline is established and locked.
+
+Do not redesign it.
+Do not create a parallel rendering system.
+Do not bypass this flow.
+
+THIS PHASE — EXACT SCOPE
+
+This is an AUDIT / REVIEW phase first.
+
+Your job is to inspect the current repo and determine whether the existing workflow for:
+1. accepted quotes
+2. job/lifecycle progression
+3. invoicing
+4. push to Xero
+is actually correct and operationally coherent.
+
+You must answer these questions from the codebase:
+
+A. What is the intended lifecycle from quote acceptance to invoicing?
+B. What actually happens in code today?
+C. Where are the workflow gaps, mismatches, missing transitions, or incomplete admin/UI surfaces?
+D. Is the system currently safe for real operational use after quote acceptance?
+E. What is the exact recommended next implementation sequence?
+
+Do NOT broaden scope beyond this audit unless you find a tiny surgical fix that is required to make the audit truthful.
+
+CURRENT KNOWN CONCERNS TO AUDIT
+
+We suspect the invoicing and lifecycle workflow may not be fully right yet.
+
+You must inspect the actual current code and determine:
+
+1. Quote acceptance workflow
+- What happens when a quote is accepted?
+- What records are created or updated?
+- Does acceptance correctly lead into job/lifecycle state?
+- Are accepted quotes operationally visible in the right places?
+
+2. Lifecycle workflow
+- What lifecycle phases/tasks/templates currently exist?
+- What is implemented in backend?
+- What is implemented in UI/admin surfaces?
+- What can staff actually do in production today?
+- Are there gaps between lifecycle data model and usable workflow?
+
+3. Invoice workflow
+- From what source is an invoice created?
+- Accepted quote? job? revision? snapshot? invoice draft?
+- What fields are carried into invoice creation?
+- Is the invoice source-of-truth path coherent and safe?
+- Does invoice status progression make sense?
+
+4. Xero workflow
+- After live OAuth connection, what exact path does push-to-xero use?
+- DB-backed OAuth path or legacy env fallback path?
+- Are there still workflow/UI inconsistencies?
+- Does push-to-xero fit the lifecycle/invoice flow correctly?
+
+5. Operational UI/admin readiness
+- Is there a usable operational path for staff from accepted quote -> job/lifecycle -> invoice -> Xero?
+- Are there any backend-only phases being treated as complete without sufficient UI/admin surfaces?
+- Where exactly is the workflow incomplete for real use?
+
+REQUIRED REPO AREAS TO INSPECT
+
+You must inspect the current actual code in at least these areas if they exist:
+
+Backend / storage / schema:
+- shared/schema.ts
+- server/routes.ts
+- server/storage.ts
+- any invoice-related service/helper modules
+- any lifecycle-related service/helper modules
+- quote acceptance / revision / snapshot handling
+- Xero client/integration modules
+
+Frontend / UI:
+- quote detail / accepted quote surfaces
+- invoice pages
+- lifecycle/job pages
+- settings/admin pages relevant to lifecycle or invoicing
+- any pages/components used after quote acceptance
+
+You must trace the real flow, not just search file names.
+
+REQUIRED OUTPUT — AUDIT QUESTIONS TO ANSWER
+
+Your final answer must explicitly answer all of the following:
+
+1. What is the current end-to-end workflow in code from quote acceptance to invoice push?
+2. Which steps are fully implemented?
+3. Which steps are partial?
+4. Which steps are missing?
+5. Which steps have backend support but insufficient UI/admin support?
+6. Which current parts are safe for production use?
+7. Which current parts are risky or misleading for production use?
+8. What is the single best next task after this audit?
+9. What should the next 3 implementation tasks be, in order?
+10. Is any current behaviour architecturally unsafe? If yes, specify exactly where.
+
+STRICT REVIEW RULES
+
+Do NOT:
+- claim a workflow is complete unless both data path and operational UI path are present
+- assume lifecycle is complete just because tables or endpoints exist
+- assume invoicing is correct just because Xero OAuth now works
+- rewrite architecture during the audit
+- perform hidden refactors
+- touch production DB data
+- broaden into unrelated cleanup
+
+If you find code smells or future improvements, note them separately only if directly relevant.
+
+REQUIRED APPROACH
+
+1. Inspect code
+2. Trace actual workflow paths
+3. Compare UI/admin surfaces against backend capability
+4. Identify exact workflow truth
+5. Produce a concrete next-task recommendation
+6. Only make a code change if a tiny diagnostic/logging patch is absolutely necessary to answer truthfully
+
+If you believe a code change is necessary:
+- explain why first
+- keep it surgical
+- do not broaden scope
+
+MANDATORY HANDOVER FORMAT
+
+Return final handover in this exact structure:
+
+1. Files inspected
+List every file inspected with a short reason.
+
+2. Planned tasks summary
+List the exact audit tasks you executed.
+
+3. Exact current workflow found
+Describe the real current workflow from:
+quote acceptance
+-> job/lifecycle
+-> invoice
+-> Xero
+
+4. Exact workflow gaps found
+List the specific missing, partial, or inconsistent steps.
+
+5. Exact root causes
+Explain why those gaps exist from the code structure and implementation state.
+
+6. Behaviour assessment
+Separate clearly:
+- Working now
+- Partial now
+- Missing now
+- Risky/misleading now
+
+7. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If none: explicitly state "None".
+
+8. UI / Admin Surface Assessment
+Explain whether staff can operationally use the workflow today and where UI/admin gaps exist.
+
+9. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+
+10. Risks / Limitations
+Document edge cases, production-use risks, and any uncertainties.
+
+11. Updated Current System State
+Rewrite the relevant current-state notes for:
+- invoicing
+- lifecycle
+- Xero
+based on the actual code you inspected.
+
+12. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks in priority order, with a short reason for each.
+
+13. Regression Checks
+Confirm whether the audit found any obvious risk to:
+- Library CRUD
+- Quote builder item creation
+- Snapshot generation
+- Quote preview rendering
+- PDF generation
+- Schedule pagination rules
+- Pricing breakdown
+- Labour breakdown
+- Production-safe startup
+- Invoice creation flow
+- Xero push flow
+
+FINAL INSTRUCTION
+
+This is primarily an audit phase.
+Inspect the current repo deeply and truthfully.
+Do not redesign architecture.
+Do not make speculative changes.
+Do not mark lifecycle or invoicing as complete unless the actual code and operational UI surfaces prove it.
+If a tiny diagnostic patch is needed, explain it first and keep it surgical.
+Otherwise return a full truthful repo audit and the exact next-task recommendation.

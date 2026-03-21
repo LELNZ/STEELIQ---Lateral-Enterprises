@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2, Contact, ReceiptText } from "lucide-react";
+import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2, Contact, ReceiptText, FolderOpen } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useAuth } from "@/lib/auth-context";
@@ -49,6 +49,7 @@ export function AppSidebar() {
   const isLibraryActive = location.startsWith("/library");
   const isSettingsActive = location.startsWith("/settings");
   const isAdminActive = location.startsWith("/admin") || location.startsWith("/users");
+  const isProjectsActive = location.startsWith("/projects");
 
   return (
     <Sidebar collapsible="icon">
@@ -122,6 +123,15 @@ export function AppSidebar() {
                   <Link href="/customers" onClick={(e) => guardedClick(e, "/customers")} data-testid="link-sidebar-customers">
                     <Users />
                     <span>Customers</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isProjectsActive} tooltip="Projects">
+                  <Link href="/projects" onClick={(e) => guardedClick(e, "/projects")} data-testid="link-sidebar-projects">
+                    <FolderOpen />
+                    <span>Projects</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

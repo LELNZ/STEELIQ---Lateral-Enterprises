@@ -1,0 +1,120 @@
+STEELIQ INVOICE ALLOCATION / OVER-INVOICING CONTROL
+IMPLEMENTATION CONTROL HEADER
+
+Implement exactly as specified.
+Do not redesign the app architecture.
+Do not replace the current invoice/Xero integration.
+Do not report complete unless invoice creation is commercially safe and prevents over-invoicing.
+
+CURRENT STATUS
+Live Xero push now works.
+A draft invoice is successfully created in Xero and a contact is created/matched.
+The next critical issue is invoice allocation control.
+
+PROBLEM
+The system currently allows multiple 50% deposit invoices to be created against the same accepted quote, which is commercially unsafe.
+
+BUSINESS RULE
+The system must track how much of the accepted quote value has already been invoiced and prevent users from creating invoices that exceed:
+- the allowed deposit allocation
+- or the total remaining uninvoiced contract value
+
+==================================================
+REQUIRED IMPLEMENTATION
+==================================================
+
+1. Add invoice allocation tracking per accepted quote
+Track:
+- accepted value
+- total invoiced
+- remaining to invoice
+- deposit invoiced total
+- progress invoiced total
+- final invoiced total
+- variation invoiced total if applicable
+
+2. Deposit invoice control
+If deposit policy is percentage-based (e.g. 50%):
+- calculate max deposit allowance from accepted value
+- subtract existing deposit invoices already created/approved/pushed
+- only allow remaining deposit amount
+- if deposit allowance is fully used, disable/hide "Create Deposit Invoice"
+
+3. Prevent over-invoicing overall
+For any new invoice:
+- total invoice amount across all non-cancelled invoices must not exceed
+  accepted value + approved variations
+- block invoice creation or status progression if it exceeds remaining amount
+
+4. Improve invoice creation UI
+Show in quote/job invoice section and invoice creation flow:
+- accepted value
+- total invoiced so far
+- remaining to invoice
+- deposit allowance max
+- deposit already invoiced
+- deposit allowance remaining
+
+5. Final invoice logic
+- auto-suggest remaining balance
+- do not allow final invoice to exceed remaining uninvoiced value
+
+6. Existing invoice status consideration
+Count toward allocation as appropriate:
+- draft: reserved or not reserved based on chosen policy (recommend count drafts visibly, but hard-block at ready_for_xero/pushed minimum)
+- ready_for_xero
+- pushed_to_xero_draft
+- approved
+Need clear chosen rule and consistent implementation.
+
+Recommended policy:
+- Draft invoices should count as “reserved” in UI warning
+- Hard financial validation should block at least from ready_for_xero onward
+- Prefer blocking duplicate invoice creation earlier if possible
+
+7. Inline warnings
+If a user attempts another 50% deposit after one already exists:
+- show clear warning:
+  "Deposit allocation already fully used for this quote"
+or
+  "Only $X remaining of deposit allowance"
+
+==================================================
+REQUIRED TEST CASES
+==================================================
+
+TC-001
+Accepted quote value = 100
+Create 50% deposit
+Expected: allowed
+
+TC-002
+Try creating second 50% deposit
+Expected: blocked or capped to remaining deposit allowance = 0
+
+TC-003
+Create partial deposit less than allowed
+Expected: remaining deposit allowance updates correctly
+
+TC-004
+Create progress/final invoice after deposit
+Expected: remaining overall value calculated correctly
+
+TC-005
+Attempt total invoicing above contract value
+Expected: blocked
+
+TC-006
+Push valid invoice to Xero after allocation checks
+Expected: still works
+
+==================================================
+DELIVERABLES REQUIRED
+==================================================
+
+Do not report complete unless:
+- duplicate 50% deposit creation is prevented
+- remaining invoiceable balance is clearly shown in UI
+- over-invoicing is blocked
+- Xero push still works after the new controls
+- provide exact files changed and exact business rules implemented

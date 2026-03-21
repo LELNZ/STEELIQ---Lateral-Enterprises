@@ -1,0 +1,239 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change unrelated Xero, invoice, lifecycle, pricing, library, snapshot, rendering, or pagination logic.
+- Do not change the live/production business workflow outside the exact OAuth callback issue described below.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Definition of done:
+- Requested feature works
+- Existing architecture preserved
+- No unintended schema/API drift
+- No regression to quote rendering, snapshots, library flows, pricing flows, lifecycle, invoicing, Xero fallback behaviour, or pagination
+
+IMPORTANT EXECUTION RULE
+Before changing code:
+1. Briefly list the exact files you will inspect
+2. Briefly list the exact changes you will make
+3. Then make only those changes
+
+If handover docs and code differ, treat the current repo code as source of truth and report the mismatch.
+
+SYSTEM CONTEXT — CURRENT PRODUCTION ISSUE
+
+We have:
+- a live published app at https://steel-iq-lateral-enterprises.replit.app
+- a dev preview app at a janeway.replit.dev URL
+- separate development and production databases
+- live quotes and accepted quotes already in the production system
+
+Current Xero problem:
+- User starts on live site settings page
+- Clicks “Connect to Xero”
+- Reaches Xero consent successfully
+- After consent, Xero redirects to the dev janeway host instead of the live published host
+- Callback then fails with:
+  invalid_state
+- Live site remains not connected
+
+This means the OAuth flow is crossing hosts/runtimes:
+- connect starts from live
+- callback lands on dev
+- callback runtime does not have the matching in-memory state token
+
+This is the active bug to fix.
+
+LOCKED ARCHITECTURE — MUST NOT CHANGE
+
+QuoteDocument
+-> QuoteRenderModel
+-> Preview / PDF
+
+This is locked.
+Do not redesign it.
+Do not create parallel systems.
+Do not broaden scope into unrelated architecture.
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY a surgical fix for the Xero OAuth redirect/callback host mismatch.
+
+Required outcomes:
+1. Clicking “Connect to Xero” from the live published site must always send Xero back to:
+   https://steel-iq-lateral-enterprises.replit.app/api/xero/callback
+
+2. Clicking “Connect to Xero” from dev must send Xero back to the dev callback host for dev only
+
+3. The callback must validate state successfully when connect and callback occur on the same environment
+
+4. No unrelated Xero, invoice, library, lifecycle, rendering, or settings refactor
+
+DO NOT:
+- redesign the full Xero integration
+- remove the existing fallback path unless absolutely required
+- change invoice push logic beyond what is required for successful OAuth callback
+- change database schema unless strictly necessary
+- change the settings page UX except if minimal status wording is needed
+- touch quote/job/customer/invoice transactional data
+
+ROOT PROBLEM TO FIX
+
+The current behaviour proves one of these is true:
+- the connect route is still building the wrong redirect_uri
+- or redirect_uri selection is using dev config while on live
+- or the callback flow stores state in one host/runtime but returns to another host/runtime
+- or the prior “auto-detect” change was not actually implemented correctly/published
+
+You must inspect the real current code and fix the actual bug, not guess.
+
+REQUIRED IMPLEMENTATION DIRECTION
+
+Use the safest minimal approach that guarantees:
+- live connect -> live callback
+- dev connect -> dev callback
+
+Preferred implementation:
+- In GET /api/xero/connect, derive the redirect URI from the incoming request origin/host in a safe way
+- Store the chosen redirect URI together with the OAuth state server-side
+- In GET /api/xero/callback, validate the state using the same stored entry and reuse the exact stored redirect URI during token exchange
+- Ensure no cross-host fallback from live to dev
+- Ensure no accidental use of a dev janeway URI when the request originated from the live published site
+
+If there is still an env-based fallback in code, it must not override the live request host incorrectly.
+
+Important:
+- The callback exchange must use the exact same redirect URI that was used in the authorization request
+- The state store must preserve enough data to guarantee this
+- If you keep the in-memory state store, it must at least be correct for same-host live and same-host dev flows
+- Do not introduce unnecessary persistence or architecture changes unless absolutely required
+
+REQUIRED REVIEW BEFORE IMPLEMENTING
+
+Before editing:
+1. Inspect the current implementation of:
+   - /api/xero/connect
+   - /api/xero/callback
+   - any helper used to resolve redirect URI / request origin / host
+   - current state map/store shape
+2. Identify exactly why live is still returning to the dev host
+3. State the exact root cause found from code
+4. State the exact minimal fix you will apply
+5. Then implement only that fix
+
+REQUIRED REGRESSION SAFETY
+
+Must preserve:
+- Xero settings page loads
+- Connect to Xero button remains operational
+- existing DB token storage behaviour
+- existing static/env fallback path unless explicitly incompatible
+- push-to-xero route remains intact
+- no break to login/session flow
+- no break to production-safe startup
+- no break to QuoteDocument -> QuoteRenderModel -> Preview/PDF
+- no break to lifecycle
+- no break to library/pricing flows
+
+TEST / VERIFICATION REQUIREMENTS
+
+After implementation, verify and report:
+1. From live host, the generated Xero auth URL uses:
+   redirect_uri=https://steel-iq-lateral-enterprises.replit.app/api/xero/callback
+
+2. From dev host, the generated Xero auth URL uses the dev callback host
+
+3. The callback route now uses the same redirect URI that was stored at connect-time
+
+4. invalid_state caused by cross-host callback is eliminated for the live path
+
+5. No unrelated files changed beyond the minimum required set
+
+If you cannot fully test Xero externally, still verify by logging or inspecting the exact generated redirect_uri and stored state payload.
+
+MANDATORY HANDOVER FORMAT
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause found
+Explain exactly why live OAuth was returning to dev and producing invalid_state.
+
+4. Exact logic / method implemented
+Document the precise fix method.
+
+5. Behaviour changes
+Explain exactly what behaviour changed for live and dev OAuth.
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If none: explicitly state "None".
+
+7. UI Changes
+Document any visible UI changes.
+If none: explicitly state "None".
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+
+9. Risks / Limitations
+Document any edge cases or remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes only if this fix changes the Xero/OAuth environment understanding.
+
+11. Updated Recommended Next Tasks
+List the next safest follow-up tasks after this fix.
+
+12. Regression Checks
+Confirm the following still work:
+- Settings page load
+- Connect to Xero button
+- Xero status route
+- xero_connections storage path
+- push-to-xero route integrity
+- Library CRUD
+- Quote builder item creation
+- Snapshot generation
+- Quote preview rendering
+- PDF generation
+- Schedule pagination rules
+- Pricing breakdown
+- Labour breakdown
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this live/dev Xero callback-host fix with minimal safe edits.
+If anything appears to require an architectural change, stop and explain before changing it.
