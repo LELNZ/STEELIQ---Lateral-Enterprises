@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, ArrowRight, AlertTriangle } from "lucide-react";
+import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, AlertTriangle, LinkIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -318,10 +318,38 @@ export default function InvoicesPage() {
                 {inv.xeroInvoiceNumber ?? <span className="opacity-40">—</span>}
               </TableCell>
               <TableCell className="text-sm" data-testid={`text-customer-${inv.id}`}>
-                {inv.customerName ?? <span className="text-xs text-muted-foreground">—</span>}
+                {inv.customerName ? (
+                  inv.customerName
+                ) : (
+                  <div className="space-y-0.5">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 gap-1">
+                      <LinkIcon className="h-2.5 w-2.5" /> Unlinked
+                    </Badge>
+                    {inv.quoteId && (
+                      <div>
+                        <Link href={`/quote/${inv.quoteId}`} className="text-[10px] text-primary underline underline-offset-2 hover:no-underline" data-testid={`link-repair-customer-${inv.id}`}>
+                          Link customer →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-sm" data-testid={`text-project-${inv.id}`}>
-                {inv.projectName ?? <span className="text-xs text-muted-foreground">—</span>}
+                {inv.projectName ? (
+                  inv.projectName
+                ) : (
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-muted-foreground italic">No project</span>
+                    {inv.quoteId && (
+                      <div>
+                        <Link href={`/quote/${inv.quoteId}`} className="text-[10px] text-primary underline underline-offset-2 hover:no-underline" data-testid={`link-repair-project-${inv.id}`}>
+                          Review record →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
               </TableCell>
               <TableCell className="text-right text-sm">
                 ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}

@@ -1636,6 +1636,7 @@ export default function QuoteBuilder() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+            <div className="w-px h-5 bg-border mx-0.5 hidden sm:block shrink-0" />
             <Button onClick={saveJob} disabled={isSaving} size={isLargeScreen ? "default" : "sm"} data-testid="button-save-job">
               <Save className="w-4 h-4 mr-1.5" /> {isSaving ? "Saving..." : "Save"}
             </Button>
@@ -3299,20 +3300,25 @@ export default function QuoteBuilder() {
               ? "border-l bg-card flex flex-col shrink-0 overflow-hidden w-80 xl:w-96"
               : `border-t bg-card flex flex-col shrink-0 overflow-hidden ${itemsExpanded ? "h-[55dvh]" : "h-[160px]"}`
             }`}>
-              <div className="px-4 py-2 shrink-0 flex items-center justify-between">
-                <h3 className="text-sm font-semibold" data-testid="text-quote-list-title">
-                  Quote Items ({items.length}) — {totalSqm} m² — ${formatPrice(totalPrice)}
-                </h3>
+              <div className="px-4 py-2.5 border-b bg-muted/30 shrink-0 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <h3 className="text-sm font-semibold shrink-0" data-testid="text-quote-list-title">
+                    Quote Schedule
+                  </h3>
+                  <span className="text-xs text-muted-foreground hidden sm:inline truncate">
+                    {items.length} item{items.length !== 1 ? "s" : ""} · {totalSqm} m² · ${formatPrice(totalPrice)}
+                  </span>
+                </div>
                 {quoteListPosition === "bottom" && (
                   <Button
                     variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
+                    size="sm"
+                    className="h-6 px-2 gap-1 text-xs text-muted-foreground shrink-0"
                     onClick={() => setItemsExpanded(!itemsExpanded)}
                     title={itemsExpanded ? "Collapse" : "Expand"}
                     data-testid="button-toggle-items-expand"
                   >
-                    {itemsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    {itemsExpanded ? <><ChevronDown className="w-3.5 h-3.5" /> Collapse</> : <><ChevronUp className="w-3.5 h-3.5" /> Expand</>}
                   </Button>
                 )}
               </div>

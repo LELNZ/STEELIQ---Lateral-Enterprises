@@ -15,7 +15,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { LogOut, KeyRound, Plus, ChevronDown } from "lucide-react";
+import { LogOut, KeyRound, Plus, ChevronDown, UserRound, Contact } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +60,7 @@ function QuickCreateMenu() {
           <ChevronDown className="h-3 w-3 opacity-60" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
+      <DropdownMenuContent align="start" className="w-48">
         <DropdownMenuLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
           Sales
         </DropdownMenuLabel>
@@ -74,38 +74,23 @@ function QuickCreateMenu() {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
-          Delivery
+          Master Data
         </DropdownMenuLabel>
         <DropdownMenuItem
-          onClick={() => navigate("/projects")}
+          onClick={() => navigate("/customers")}
           className="gap-2 cursor-pointer"
-          data-testid="menu-item-goto-projects"
+          data-testid="menu-item-new-customer"
         >
-          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-          New Project
-          <span className="ml-auto text-[10px] text-muted-foreground">via Quotes</span>
+          <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+          New Customer
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => navigate("/op-jobs")}
+          onClick={() => navigate("/contacts")}
           className="gap-2 cursor-pointer"
-          data-testid="menu-item-goto-jobs"
+          data-testid="menu-item-new-contact"
         >
-          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-          New Job
-          <span className="ml-auto text-[10px] text-muted-foreground">via Projects</span>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground">
-          Finance
-        </DropdownMenuLabel>
-        <DropdownMenuItem
-          onClick={() => navigate("/invoices")}
-          className="gap-2 cursor-pointer"
-          data-testid="menu-item-goto-invoices"
-        >
-          <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-          New Invoice
-          <span className="ml-auto text-[10px] text-muted-foreground">via Quotes</span>
+          <Contact className="h-3.5 w-3.5 text-muted-foreground" />
+          New Contact
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
