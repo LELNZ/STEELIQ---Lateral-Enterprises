@@ -1,0 +1,357 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep beyond the exact scope below.
+- Do not add unapproved endpoints unless strictly required for the exact workflow below.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change unrelated Xero OAuth, PDF rendering, library architecture, or pagination.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless retention behavior is operationally explicit across billing summaries, invoice creation, and remaining-to-invoice logic.
+- Do not claim success just because a “retention” invoice type exists.
+- Do not leave retention held, retention released, and closeout balance ambiguous.
+
+Definition of done for this phase:
+- Retention is modeled as a real commercial withholding mechanism
+- Retention held and released are visible in billing summaries
+- Retention release invoice logic is implemented safely
+- Closeout/final-billing logic is clearer and commercially controlled
+- No regression to deposit/progress/final/variation rules or Xero push flow
+
+CURRENT CONTEXT — MUST TREAT AS CURRENT TRUTH
+
+The system now has:
+- working production state
+- working live Xero invoice upload
+- project-first workflow materially improved
+- customer/project/job/invoice relationships materially improved
+- deposit cap / over-invoicing controls
+- approved variations increase invoiceable ceiling
+- variation hardening now implemented, including:
+  - partial invoicing
+  - fully invoiced state
+  - project/job/quote/invoice traceability
+- list-page UI materially improved
+
+We are now moving to the next serious commercial-operational billing gap:
+RETENTION + CLOSEOUT BILLING MODEL
+
+LOCKED BUSINESS MODEL — MUST RESPECT
+
+Customer = who is buying
+Project = umbrella site / contract / grouped work
+Quote = commercial proposal
+Job = internal execution record created from accepted quote
+Variation = approved commercial change record that can increase invoiceable value
+Invoice = billing event linked to quote/customer/project/job/variation context
+Retention = withheld commercial value released later under controlled conditions
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY:
+WORKSTREAM A — Retention Commercial Model
+WORKSTREAM B — Retention Release Invoice Flow
+WORKSTREAM C — Closeout Billing Summary Logic
+
+Do not broaden beyond that.
+
+==================================================
+WORKSTREAM A — RETENTION COMMERCIAL MODEL
+==================================================
+
+OBJECTIVE
+Model retention as a real withheld commercial value, not as an accidental leftover amount.
+
+Required behavior:
+
+1. Retention on accepted commercial scope
+- Retention must be configurable on the accepted commercial scope
+- Support either:
+  - retention percentage
+  - or retention amount
+- If both are currently too risky, choose the safest single model and explain why
+- Preferred:
+  - retentionPercentage
+  - derived retentionHeldValue
+
+2. Retention held visibility
+- Billing summaries must clearly show:
+  - base contract value
+  - approved variations
+  - total invoiceable before retention
+  - retention held
+  - invoiceable before retention release
+  - total invoiced
+  - remaining
+- Users must understand that retention is withheld, not forgotten
+
+3. Retention impact on standard invoices
+- Deposit/progress/final invoices must not accidentally consume value reserved as retention release
+- Final invoice logic should account for retention being withheld unless/until released
+
+4. Retention state
+At minimum, track:
+- retention configured
+- retention held value
+- retention released value
+- retention remaining to release
+
+If status is useful, implement it carefully.
+Do not overbuild.
+
+==================================================
+WORKSTREAM B — RETENTION RELEASE INVOICE FLOW
+==================================================
+
+OBJECTIVE
+Allow controlled billing of retained value.
+
+Required behavior:
+
+1. Retention release invoice type
+- Implement a dedicated retention release invoice flow
+- It must bill only from retention held / remaining to release
+- It must not exceed unreleased retention value
+
+2. Retention release calculation
+- If retention held = $X and retention already released = $Y
+- remaining retention release allowance = $X - $Y
+- retention release invoice must be capped to that amount
+
+3. Invoice inheritance
+Retention release invoices must inherit:
+- customer
+- project
+- source quote
+- linked job where relevant
+- division
+- normal Xero/invoice pipeline compatibility
+
+4. Remaining-to-invoice logic
+- Remaining contract billing and remaining retention release must be separately understandable
+- Users must not confuse:
+  - standard uninvoiced balance
+  - retention still withheld
+  - retention available to release
+
+==================================================
+WORKSTREAM C — CLOSEOUT BILLING SUMMARY LOGIC
+==================================================
+
+OBJECTIVE
+Make the commercial end-state of a project/quote clearer.
+
+Required behavior:
+
+1. Billing summary must clearly distinguish:
+- Base contract
+- Approved variations
+- Total contract including variations
+- Retention held
+- Standard invoiced total
+- Retention released total
+- Total invoiced overall
+- Remaining standard billing
+- Remaining retention release
+
+2. Final invoice logic
+- Final invoice should auto-suggest the remaining standard billing balance
+- It should NOT silently consume retention-held value unless explicitly using retention release flow
+
+3. Closeout clarity
+- On quote/project commercial surfaces, staff should be able to tell:
+  - whether contract billing is fully complete apart from retention
+  - whether retention is still outstanding
+  - whether the commercial scope is fully billed including retention
+
+Do not build a giant closeout module in this phase.
+Just make billing state understandable and operationally safe.
+
+==================================================
+REQUIRED UI / ADMIN SURFACES
+==================================================
+
+This phase is not backend-only.
+
+Required visible surfaces:
+- quote commercial / allocation summary updated for retention
+- invoice creation UI includes retention release where valid
+- project commercial summary reflects retention held and released
+- job/quote/project surfaces do not ambiguously mix retained value into standard remaining balance
+
+If the safest place to configure retention initially is the accepted quote commercial surface, do that.
+Do not overcomplicate configuration in this phase.
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing anything:
+1. Inspect current invoice allocation logic
+2. Inspect current quote/project commercial summary surfaces
+3. State exactly how retention will fit into:
+   - deposit logic
+   - progress logic
+   - final invoice logic
+   - variation-expanded invoiceable ceiling
+4. State whether retention is modeled as:
+   - percent-derived value
+   - amount-derived value
+   - or both
+5. Then implement only the minimum safe scope required
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+- redesign the billing architecture
+- weaken existing invoice allocation controls
+- weaken variation controls
+- weaken Xero push rules
+- redesign project/job/customer/quote architecture
+- broaden into general navigation redesign
+- touch QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline except where billing summary surfaces need current totals
+
+==================================================
+TEST / VERIFICATION REQUIREMENTS
+==================================================
+
+Run and report these exact tests:
+
+TC-001
+Configure retention on accepted quote
+Expected:
+- retention held value is calculated and visible
+
+TC-002
+Create deposit/progress invoices with retention configured
+Expected:
+- standard remaining billing excludes retention held appropriately
+
+TC-003
+Create final invoice
+Expected:
+- final invoice auto-suggests remaining standard billing only
+- retention remains separately withheld
+
+TC-004
+Create retention release invoice
+Expected:
+- only allowed up to remaining retention release value
+
+TC-005
+Attempt over-release of retention
+Expected:
+- blocked correctly
+
+TC-006
+Variation + retention combined case
+Expected:
+- billing summary still calculates correctly
+
+TC-007
+Push valid retention release invoice through existing Xero flow
+Expected:
+- existing Xero pipeline still works
+
+TC-008
+Billing summary / closeout readability
+Expected:
+- user can clearly see whether only retention remains outstanding
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause / business-rule issue found
+Explain exactly why the previous billing model was still insufficient without retention.
+
+4. Exact logic / method implemented
+Document the precise retention + closeout billing logic now implemented.
+
+5. Behaviour changes
+Explain exactly what changed in:
+- quote commercial/allocation behavior
+- project commercial summary
+- invoice creation
+- final invoice calculation
+- retention release handling
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+
+7. UI Changes
+Document all visible UI/admin changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+- Xero OAuth flow architecture
+
+9. Risks / Limitations
+Document any remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- retention model
+- invoice allocation model
+- closeout billing state
+- remaining billing gaps
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Quote acceptance
+- Create project from quote
+- Create job from quote/project
+- Deposit invoice creation
+- Progress/final/variation/retention invoice creation
+- Invoice allocation controls
+- Variation controls
+- Xero push
+- Project dashboard
+- Job detail
+- Quote preview rendering
+- PDF export
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this Retention + Closeout Billing Model phase.
+Do not redesign architecture.
+Do not broaden into navigation redesign or unrelated UI overhauls in this phase.

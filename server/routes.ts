@@ -8,6 +8,7 @@ import {
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
   VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
+  VARIATION_STATUSES,
 } from "@shared/schema";
 import { z } from "zod";
 import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
@@ -448,6 +449,15 @@ export async function registerRoutes(
       res.json(enriched);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/jobs/:id/variations", async (req, res) => {
+    try {
+      const jobVariations = await storage.getVariationsByJob(req.params.id);
+      return res.json(jobVariations);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
     }
   });
 
@@ -1248,6 +1258,47 @@ export async function registerRoutes(
       res.json(result.rows[0]);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ─── Retention Configuration ───────────────────────────────────────────────
+  // Configures retention on an accepted quote. Retention is modeled as a
+  // percentage of the accepted contract value. retentionHeldValue is derived
+  // and stored for display purposes. Set retentionPercentage to 0 or null to
+  // clear retention.
+  app.patch("/api/quotes/:id/retention", async (req, res) => {
+    try {
+      const schema = z.object({
+        retentionPercentage: z.number().min(0).max(100).nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const quote = await storage.getQuote(req.params.id);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (quote.status !== "accepted") {
+        return res.status(400).json({ error: "Retention can only be configured on accepted quotes." });
+      }
+
+      const pct = parsed.data.retentionPercentage;
+      const acceptedValue = quote.acceptedValue ?? 0;
+      const retentionHeld = (pct != null && pct > 0) ? Math.round((acceptedValue * pct / 100) * 100) / 100 : null;
+      const retentionPct = (pct != null && pct > 0) ? pct : null;
+
+      const result = await pool.query(
+        `UPDATE quotes SET retention_percentage = $1, retention_held_value = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
+        [retentionPct, retentionHeld, req.params.id]
+      );
+      await storage.createAuditLog({
+        entityType: "quote",
+        entityId: req.params.id,
+        action: "retention_configured",
+        metadataJson: { retentionPercentage: retentionPct, retentionHeldValue: retentionHeld },
+        performedByUserId: req.user?.id ?? null,
+      });
+      return res.json(result.rows[0]);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
     }
   });
 
@@ -2358,6 +2409,79 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Variations ───────────────────────────────────────────────────────────
+
+  app.get("/api/projects/:id/variations", async (req, res) => {
+    try {
+      return res.json(await storage.getVariationsByProject(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/quotes/:id/variations", async (req, res) => {
+    try {
+      return res.json(await storage.getVariationsByQuote(req.params.id));
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/variations", async (req, res) => {
+    const schema = z.object({
+      projectId: z.string().optional().nullable(),
+      quoteId: z.string().optional().nullable(),
+      jobId: z.string().optional().nullable(),
+      customerId: z.string().optional().nullable(),
+      divisionCode: z.string().optional().nullable(),
+      title: z.string().min(1, "Title is required"),
+      reason: z.string().optional().nullable(),
+      amountExclGst: z.number().positive("Amount must be positive"),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const userId = req.user?.id ?? null;
+      const v = await storage.createVariation({
+        ...parsed.data,
+        status: "draft",
+        createdByUserId: userId ?? undefined,
+      } as any);
+      return res.status(201).json(v);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/variations/:id", async (req, res) => {
+    const schema = z.object({
+      title: z.string().min(1).optional(),
+      reason: z.string().optional().nullable(),
+      amountExclGst: z.number().positive().optional(),
+      jobId: z.string().optional().nullable(),
+      status: z.enum(VARIATION_STATUSES).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const existing = await storage.getVariation(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Variation not found" });
+
+      // Cannot edit amount/title/reason once approved or in any invoiced state
+      const locked = ["approved", "partially_invoiced", "fully_invoiced"].includes(existing.status);
+      if (locked && (parsed.data.amountExclGst !== undefined || parsed.data.title !== undefined || parsed.data.reason !== undefined)) {
+        if (parsed.data.status === undefined) {
+          return res.status(409).json({ error: "Cannot edit a variation that is approved or invoiced. Change status first." });
+        }
+      }
+
+      const updated = await storage.updateVariation(req.params.id, parsed.data as any);
+      return res.json(updated);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   // ─── Create Project from Quote ────────────────────────────────────────────
   app.post("/api/quotes/:id/create-project", async (req, res) => {
     try {
@@ -2487,23 +2611,71 @@ export async function registerRoutes(
       const active = allInvoices.filter((inv) => ACTIVE_STATUSES.includes(inv.status));
       const acceptedValue = quote.acceptedValue ?? 0;
 
+      // Approved variation total: only approved/invoiced variations count towards invoiceable
+      const allVariations = await storage.getVariationsForAllocation(req.params.id, quote.projectId ?? null);
+      const approvedVariationTotalExcl = allVariations
+        .filter((v) => ["approved", "partially_invoiced", "fully_invoiced"].includes(v.status))
+        .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
+
+      // ── Retention calculations ───────────────────────────────────────────────
+      // Retention is withheld from the BASE contract only (not from variations).
+      // retentionHeldValue = acceptedValue × retentionPercentage / 100 (stored on quote).
+      // Standard invoices (deposit/progress/final/variation) can only bill up to
+      //   (acceptedValue - retentionHeld) + approvedVariations.
+      // Retention release invoices bill separately against retentionHeld.
+      const retentionPercentage: number | null = (quote as any).retentionPercentage ?? null;
+      const retentionHeldValue: number = (quote as any).retentionHeldValue ?? 0;
+
+      // Standard invoiced = everything except retention_release
       const depositInvoicedExcl = active.filter((i) => i.type === "deposit").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
       const progressInvoicedExcl = active.filter((i) => i.type === "progress").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
       const finalInvoicedExcl = active.filter((i) => i.type === "final").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
       const variationInvoicedExcl = active.filter((i) => i.type === "variation").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
-      const totalInvoicedExcl = active.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
-      const remainingExcl = Math.max(0, acceptedValue - totalInvoicedExcl);
+      const standardInvoicedExcl = depositInvoicedExcl + progressInvoicedExcl + finalInvoicedExcl + variationInvoicedExcl;
+      const retentionReleasedExcl = active.filter((i) => i.type === "retention_release").reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+      const totalInvoicedExcl = standardInvoicedExcl + retentionReleasedExcl;
+
+      // Invoiceable ceilings
+      const standardCeilingExcl = (acceptedValue - retentionHeldValue) + approvedVariationTotalExcl;
+      const totalInvoiceableExcl = acceptedValue + approvedVariationTotalExcl; // kept for backward compat
+      const standardRemainingExcl = Math.max(0, standardCeilingExcl - standardInvoicedExcl);
+      const retentionRemainingExcl = Math.max(0, retentionHeldValue - retentionReleasedExcl);
+      const remainingExcl = Math.max(0, totalInvoiceableExcl - totalInvoicedExcl); // total remaining (backward compat)
 
       const depositAllowanceExcl = acceptedValue * (MAX_DEPOSIT_PCT / 100);
       const depositAllowanceRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
 
+      // Per-variation invoiced totals for guard
+      const variationInvoicedByVariationId: Record<string, number> = {};
+      for (const inv of active.filter((i) => i.type === "variation" && (i as any).variationId)) {
+        const vid = (inv as any).variationId as string;
+        variationInvoicedByVariationId[vid] = (variationInvoicedByVariationId[vid] ?? 0) + (inv.amountExclGst ?? 0);
+      }
+
       return res.json({
         acceptedValueExcl: acceptedValue,
         acceptedValueIncl: acceptedValue * (1 + GST_RATE),
+        approvedVariationTotalExcl,
+        approvedVariationTotalIncl: approvedVariationTotalExcl * (1 + GST_RATE),
+        totalInvoiceableExcl,
+        totalInvoiceableIncl: totalInvoiceableExcl * (1 + GST_RATE),
         totalInvoicedExcl,
         totalInvoicedIncl: totalInvoicedExcl * (1 + GST_RATE),
         remainingExcl,
         remainingIncl: remainingExcl * (1 + GST_RATE),
+        // Retention fields
+        retentionPercentage,
+        retentionHeldValue,
+        retentionHeldValueIncl: retentionHeldValue * (1 + GST_RATE),
+        retentionReleasedExcl,
+        retentionReleasedIncl: retentionReleasedExcl * (1 + GST_RATE),
+        retentionRemainingExcl,
+        retentionRemainingIncl: retentionRemainingExcl * (1 + GST_RATE),
+        retentionConfigured: retentionPercentage != null && retentionPercentage > 0,
+        // Standard (non-retention) billing breakdown
+        standardCeilingExcl,
+        standardInvoicedExcl,
+        standardRemainingExcl,
         depositInvoicedExcl,
         progressInvoicedExcl,
         finalInvoicedExcl,
@@ -2513,6 +2685,8 @@ export async function registerRoutes(
         depositAllowanceRemainingExcl,
         depositAllowanceFullyUsed: depositAllowanceRemainingExcl <= 0.001,
         activeInvoiceCount: active.length,
+        variations: allVariations,
+        variationInvoicedByVariationId,
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2534,6 +2708,7 @@ export async function registerRoutes(
       amountInclGst: z.number().optional().nullable(),
       description: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
+      variationId: z.string().optional().nullable(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -2565,7 +2740,9 @@ export async function registerRoutes(
 
         // ── Invoice allocation guard ─────────────────────────────────────────
         // Policy: max deposit = 50% of accepted contract value (excl. GST).
-        // Total of all active invoices must not exceed accepted value.
+        // Retention-aware: standard invoices (deposit/progress/final/variation)
+        //   are capped at (acceptedValue - retentionHeld) + approvedVariations.
+        // Retention release invoices are separately capped at retentionHeld.
         // Active = draft | ready_for_xero | pushed_to_xero_draft | approved.
         // returned_to_draft invoices are excluded (operator has retracted them).
         const ALLOC_ACTIVE = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
@@ -2576,46 +2753,127 @@ export async function registerRoutes(
         const newAmountExcl = parsed.data.amountExclGst ?? 0;
         const invoiceType = parsed.data.type ?? "deposit";
 
-        if (contractValue > 0 && newAmountExcl > 0) {
-          const totalInvoicedExcl = activeInvoices.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+        // Retention values from quote
+        const retentionHeld: number = (quote as any).retentionHeldValue ?? 0;
 
-          // Overall contract cap
-          if (totalInvoicedExcl + newAmountExcl > contractValue + 0.005) {
-            const remainingExcl = Math.max(0, contractValue - totalInvoicedExcl);
-            return res.status(422).json({
-              error: `Invoice amount exceeds remaining contract value. Remaining to invoice: $${remainingExcl.toFixed(2)} excl. GST (contract: $${contractValue.toFixed(2)}).`,
-              code: "OVER_CONTRACT_VALUE",
-              remainingExcl,
-              contractValue,
-            });
-          }
+        // Approved variation total — these expand the invoiceable ceiling
+        const allVariations = await storage.getVariationsForAllocation(parsed.data.quoteId, quote.projectId ?? null);
+        const approvedVariationTotalExcl = allVariations
+          .filter((v) => ["approved", "partially_invoiced", "fully_invoiced"].includes(v.status))
+          .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
 
-          // Deposit-specific cap (50% of contract)
-          if (invoiceType === "deposit") {
-            const depositAllowanceExcl = contractValue * (MAX_DEPOSIT_PCT / 100);
-            const depositInvoicedExcl = activeInvoices
-              .filter((i) => i.type === "deposit")
-              .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
-            const depositRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
-
-            if (depositRemainingExcl <= 0.005) {
+        if (newAmountExcl > 0) {
+          if (invoiceType === "retention_release") {
+            // ── Retention release guard ───────────────────────────────────────
+            // Can only bill from retention held, not yet released.
+            if (retentionHeld <= 0.001) {
               return res.status(422).json({
-                error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full.`,
-                code: "DEPOSIT_ALLOWANCE_EXHAUSTED",
-                depositAllowanceExcl,
-                depositInvoicedExcl,
-                depositRemainingExcl: 0,
+                error: "No retention is configured on this quote. Configure retention before creating a retention release invoice.",
+                code: "RETENTION_NOT_CONFIGURED",
+              });
+            }
+            const retentionReleasedExcl = activeInvoices
+              .filter((i) => i.type === "retention_release")
+              .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+            const retentionRemainingExcl = Math.max(0, retentionHeld - retentionReleasedExcl);
+            if (retentionRemainingExcl <= 0.001) {
+              return res.status(422).json({
+                error: `Retention has already been fully released ($${retentionHeld.toFixed(2)} excl. GST).`,
+                code: "RETENTION_FULLY_RELEASED",
+                retentionHeld,
+                retentionReleasedExcl,
+                retentionRemainingExcl: 0,
+              });
+            }
+            if (newAmountExcl > retentionRemainingExcl + 0.005) {
+              return res.status(422).json({
+                error: `Retention release amount exceeds remaining retention. Remaining to release: $${retentionRemainingExcl.toFixed(2)} excl. GST (held: $${retentionHeld.toFixed(2)}, already released: $${retentionReleasedExcl.toFixed(2)}).`,
+                code: "OVER_RETENTION_RELEASE",
+                retentionHeld,
+                retentionReleasedExcl,
+                retentionRemainingExcl,
+              });
+            }
+          } else {
+            // ── Standard invoice guard (deposit / progress / final / variation) ──
+            // Standard ceiling = (contractValue - retentionHeld) + approvedVariations
+            const standardCeilingExcl = (contractValue - retentionHeld) + approvedVariationTotalExcl;
+            const standardInvoicedExcl = activeInvoices
+              .filter((i) => i.type !== "retention_release")
+              .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+
+            if (standardCeilingExcl > 0 && standardInvoicedExcl + newAmountExcl > standardCeilingExcl + 0.005) {
+              const standardRemainingExcl = Math.max(0, standardCeilingExcl - standardInvoicedExcl);
+              const retentionMsg = retentionHeld > 0 ? ` (retention withheld: $${retentionHeld.toFixed(2)})` : "";
+              return res.status(422).json({
+                error: `Invoice amount exceeds remaining invoiceable value. Remaining: $${standardRemainingExcl.toFixed(2)} excl. GST (base contract: $${contractValue.toFixed(2)}, approved variations: $${approvedVariationTotalExcl.toFixed(2)}${retentionMsg}).`,
+                code: "OVER_CONTRACT_VALUE",
+                remainingExcl: standardRemainingExcl,
+                contractValue,
+                approvedVariationTotalExcl,
+                retentionHeld,
+                standardCeilingExcl,
               });
             }
 
-            if (newAmountExcl > depositRemainingExcl + 0.005) {
-              return res.status(422).json({
-                error: `Deposit amount exceeds remaining deposit allowance. Only $${depositRemainingExcl.toFixed(2)} excl. GST remains of the ${MAX_DEPOSIT_PCT}% deposit allowance.`,
-                code: "OVER_DEPOSIT_ALLOWANCE",
-                depositAllowanceExcl,
-                depositInvoicedExcl,
-                depositRemainingExcl,
-              });
+            // Deposit-specific cap (50% of base contract only, not variations)
+            if (invoiceType === "deposit") {
+              const depositAllowanceExcl = contractValue * (MAX_DEPOSIT_PCT / 100);
+              const depositInvoicedExcl = activeInvoices
+                .filter((i) => i.type === "deposit")
+                .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+              const depositRemainingExcl = Math.max(0, depositAllowanceExcl - depositInvoicedExcl);
+
+              if (depositRemainingExcl <= 0.005) {
+                return res.status(422).json({
+                  error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full.`,
+                  code: "DEPOSIT_ALLOWANCE_EXHAUSTED",
+                  depositAllowanceExcl,
+                  depositInvoicedExcl,
+                  depositRemainingExcl: 0,
+                });
+              }
+
+              if (newAmountExcl > depositRemainingExcl + 0.005) {
+                return res.status(422).json({
+                  error: `Deposit amount exceeds remaining deposit allowance. Only $${depositRemainingExcl.toFixed(2)} excl. GST remains of the ${MAX_DEPOSIT_PCT}% deposit allowance.`,
+                  code: "OVER_DEPOSIT_ALLOWANCE",
+                  depositAllowanceExcl,
+                  depositInvoicedExcl,
+                  depositRemainingExcl,
+                });
+              }
+            }
+
+            // Variation invoice cap — must link to an approved variation, cannot exceed remaining variation value
+            if (invoiceType === "variation") {
+              const variationId = parsed.data.variationId;
+              if (!variationId) {
+                return res.status(422).json({
+                  error: "Variation invoices must be linked to an approved variation record.",
+                  code: "VARIATION_REQUIRED",
+                });
+              }
+              const variation = await storage.getVariation(variationId);
+              if (!variation) return res.status(404).json({ error: "Variation record not found." });
+              if (!["approved", "partially_invoiced"].includes(variation.status)) {
+                return res.status(422).json({
+                  error: `Cannot invoice against a variation with status '${variation.status}'. Only approved or partially invoiced variations can be invoiced.`,
+                  code: "VARIATION_NOT_APPROVED",
+                });
+              }
+              const variationInvoicedExcl = activeInvoices
+                .filter((i) => i.type === "variation" && (i as any).variationId === variationId)
+                .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+              const variationRemainingExcl = Math.max(0, variation.amountExclGst - variationInvoicedExcl);
+              if (newAmountExcl > variationRemainingExcl + 0.005) {
+                return res.status(422).json({
+                  error: `Invoice amount exceeds remaining variation value. Remaining: $${variationRemainingExcl.toFixed(2)} excl. GST (variation total: $${variation.amountExclGst.toFixed(2)}).`,
+                  code: "OVER_VARIATION_VALUE",
+                  variationRemainingExcl,
+                  variationAmountExcl: variation.amountExclGst,
+                });
+              }
             }
           }
         }
@@ -2632,6 +2890,10 @@ export async function registerRoutes(
         createdByUserId: userId ?? undefined,
       } as any);
       logActivity("invoice_created", "invoice", invoice.id, userId, { number, type: parsed.data.type });
+      // Auto-sync variation status when a variation invoice is created
+      if (parsed.data.type === "variation" && parsed.data.variationId) {
+        await storage.syncVariationStatus(parsed.data.variationId);
+      }
       return res.status(201).json(invoice);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2714,7 +2976,7 @@ export async function registerRoutes(
             });
           }
 
-          // Hard allocation check at ready_for_xero gate
+          // Hard allocation check at ready_for_xero gate (retention-aware)
           if (invoice.quoteId) {
             const allocQuote = await storage.getQuote(invoice.quoteId);
             if (allocQuote?.acceptedValue && allocQuote.acceptedValue > 0) {
@@ -2723,16 +2985,45 @@ export async function registerRoutes(
               const otherActive = allQuoteInvoices.filter(
                 (inv) => inv.id !== invoice.id && ALLOC_ACTIVE_RFX.includes(inv.status)
               );
-              const otherTotal = otherActive.reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
               const thisAmount = invoice.amountExclGst ?? 0;
-              if (otherTotal + thisAmount > allocQuote.acceptedValue + 0.005) {
-                const remaining = Math.max(0, allocQuote.acceptedValue - otherTotal);
-                return res.status(422).json({
-                  error: `Invoice cannot proceed: total invoiced would exceed the contract value. Remaining uninvoiced: $${remaining.toFixed(2)} excl. GST.`,
-                  code: "OVER_CONTRACT_VALUE",
-                  remainingExcl: remaining,
-                  contractValue: allocQuote.acceptedValue,
-                });
+              const rfxVariations = await storage.getVariationsForAllocation(invoice.quoteId, allocQuote.projectId ?? null);
+              const approvedVarTotal = rfxVariations
+                .filter((v) => ["approved", "partially_invoiced", "fully_invoiced"].includes(v.status))
+                .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
+              const rfxRetentionHeld: number = (allocQuote as any).retentionHeldValue ?? 0;
+
+              if (invoice.type === "retention_release") {
+                // Check against retention ceiling
+                const retentionReleasedOther = otherActive
+                  .filter((i) => i.type === "retention_release")
+                  .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+                const retentionRemainingCeiling = Math.max(0, rfxRetentionHeld - retentionReleasedOther);
+                if (thisAmount > retentionRemainingCeiling + 0.005) {
+                  return res.status(422).json({
+                    error: `Retention release invoice cannot proceed: amount exceeds remaining retention to release ($${retentionRemainingCeiling.toFixed(2)} excl. GST).`,
+                    code: "OVER_RETENTION_RELEASE",
+                    retentionHeld: rfxRetentionHeld,
+                    retentionRemainingCeiling,
+                  });
+                }
+              } else {
+                // Standard invoice — check against standard ceiling (contract - retention + variations)
+                const standardCeiling = (allocQuote.acceptedValue - rfxRetentionHeld) + approvedVarTotal;
+                const otherStandardTotal = otherActive
+                  .filter((i) => i.type !== "retention_release")
+                  .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+                if (otherStandardTotal + thisAmount > standardCeiling + 0.005) {
+                  const remaining = Math.max(0, standardCeiling - otherStandardTotal);
+                  return res.status(422).json({
+                    error: `Invoice cannot proceed: total invoiced would exceed the standard invoiceable ceiling. Remaining: $${remaining.toFixed(2)} excl. GST.`,
+                    code: "OVER_CONTRACT_VALUE",
+                    remainingExcl: remaining,
+                    contractValue: allocQuote.acceptedValue,
+                    approvedVariationTotalExcl: approvedVarTotal,
+                    retentionHeld: rfxRetentionHeld,
+                    standardCeiling,
+                  });
+                }
               }
             }
           }
@@ -2892,6 +3183,10 @@ export async function registerRoutes(
         previousStatus: invoice.status,
         xeroInvoiceId: invoice.xeroInvoiceId,
       });
+      // Re-sync variation status when a variation invoice is returned to draft
+      if (invoice.type === "variation" && (invoice as any).variationId) {
+        await storage.syncVariationStatus((invoice as any).variationId);
+      }
       return res.json({
         invoice: updated,
         xeroWarning: invoice.xeroInvoiceId

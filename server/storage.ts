@@ -22,6 +22,7 @@ import {
   type OpJob, type InsertOpJob,
   type LifecycleTemplate, type LifecycleInstance, type LifecycleTaskState,
   type XeroConnection,
+  type Variation, type InsertVariation,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -29,7 +30,7 @@ import {
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
-  xeroConnections,
+  xeroConnections, variations,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -203,6 +204,16 @@ export interface IStorage {
     completedByUserId: string | null;
     note: string | null;
   }): Promise<LifecycleTaskState>;
+
+  // ── Variations ────────────────────────────────────────────────────────────
+  createVariation(data: InsertVariation): Promise<Variation>;
+  getVariation(id: string): Promise<Variation | undefined>;
+  getVariationsByProject(projectId: string): Promise<Variation[]>;
+  getVariationsByQuote(quoteId: string): Promise<Variation[]>;
+  getVariationsByJob(jobId: string): Promise<Variation[]>;
+  getVariationsForAllocation(quoteId: string, projectId: string | null): Promise<Variation[]>;
+  updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined>;
+  syncVariationStatus(variationId: string): Promise<void>;
 
   // ── Xero OAuth Connection ─────────────────────────────────────────────────
   getXeroConnection(): Promise<XeroConnection | undefined>;
@@ -831,6 +842,7 @@ export class DatabaseStorage implements IStorage {
       amountInclGst: row.amount_incl_gst,
       description: row.description,
       notes: row.notes,
+      variationId: row.variation_id,
       xeroInvoiceId: row.xero_invoice_id,
       xeroInvoiceNumber: row.xero_invoice_number,
       xeroStatus: row.xero_status,
@@ -1052,6 +1064,86 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.select().from(xeroConnections).where(eq(xeroConnections.id, "default"));
     return row;
   }
+
+  // ── Variations ────────────────────────────────────────────────────────────
+
+  async createVariation(data: InsertVariation): Promise<Variation> {
+    const [row] = await db.insert(variations).values(data as any).returning();
+    return row;
+  }
+
+  async getVariation(id: string): Promise<Variation | undefined> {
+    const [row] = await db.select().from(variations).where(eq(variations.id, id));
+    return row;
+  }
+
+  async getVariationsByProject(projectId: string): Promise<Variation[]> {
+    return db.select().from(variations).where(eq(variations.projectId, projectId)).orderBy(desc(variations.createdAt));
+  }
+
+  async getVariationsByQuote(quoteId: string): Promise<Variation[]> {
+    return db.select().from(variations).where(eq(variations.quoteId, quoteId)).orderBy(desc(variations.createdAt));
+  }
+
+  async getVariationsForAllocation(quoteId: string, projectId: string | null): Promise<Variation[]> {
+    // Returns variations linked directly to this quote, PLUS any project-level variations
+    // (no quoteId set) that belong to the same project. Deduplication by id handles any overlap.
+    const byQuote = await db.select().from(variations).where(eq(variations.quoteId, quoteId));
+    const byProject = projectId
+      ? await db.select().from(variations).where(
+          and(eq(variations.projectId, projectId), isNull(variations.quoteId))
+        )
+      : [];
+    const seen = new Set<string>();
+    const combined: Variation[] = [];
+    for (const v of [...byQuote, ...byProject]) {
+      if (!seen.has(v.id)) { seen.add(v.id); combined.push(v); }
+    }
+    return combined;
+  }
+
+  async getVariationsByJob(jobId: string): Promise<Variation[]> {
+    return db.select().from(variations).where(eq(variations.jobId, jobId)).orderBy(desc(variations.createdAt));
+  }
+
+  async updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined> {
+    const [row] = await db.update(variations).set({ ...data, updatedAt: new Date() } as any).where(eq(variations.id, id)).returning();
+    return row;
+  }
+
+  async syncVariationStatus(variationId: string): Promise<void> {
+    // Re-derive variation status from active invoices linked to this variation.
+    // ALLOC_ACTIVE mirrors the allocation guard: returned_to_draft is excluded.
+    const ALLOC_ACTIVE = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+    const variation = await this.getVariation(variationId);
+    if (!variation) return;
+    // Only manage status for invoiceable variations (not draft/sent/declined)
+    if (!["approved", "partially_invoiced", "fully_invoiced"].includes(variation.status)) return;
+
+    // Fetch all invoices linked to this variation across any quote
+    const allInvoices = variation.quoteId
+      ? await this.getInvoicesByQuote(variation.quoteId)
+      : [];
+    const variationInvoicedExcl = allInvoices
+      .filter((i) => ALLOC_ACTIVE.includes(i.status) && i.type === "variation" && (i as any).variationId === variationId)
+      .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+
+    let newStatus: string;
+    if (variationInvoicedExcl <= 0.001) {
+      newStatus = "approved";
+    } else if (variationInvoicedExcl >= variation.amountExclGst - 0.005) {
+      newStatus = "fully_invoiced";
+    } else {
+      newStatus = "partially_invoiced";
+    }
+    if (newStatus !== variation.status) {
+      await db.update(variations)
+        .set({ status: newStatus, updatedAt: new Date() } as any)
+        .where(eq(variations.id, variationId));
+    }
+  }
+
+  // ── Xero OAuth Connection ─────────────────────────────────────────────────
 
   async upsertXeroConnection(data: {
     tenantId: string | null;

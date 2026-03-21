@@ -205,7 +205,7 @@ export default function QuotesList() {
   const noQuotesAtAll = !quotes || quotes.length === 0;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-4" data-testid="quotes-list-page">
+    <div className="p-4 sm:p-6 space-y-4" data-testid="quotes-list-page">
       <div className="flex items-center gap-3 flex-wrap">
         <FileText className="h-6 w-6 text-muted-foreground" />
         <h1 className="text-xl font-bold" data-testid="text-quotes-heading">Quotes</h1>
@@ -219,16 +219,14 @@ export default function QuotesList() {
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="overflow-x-auto">
-            <TabsList data-testid="tabs-quote-categories">
-              <TabsTrigger value="active" data-testid="tab-active">
-                Active {tabCounts.active > 0 && `(${tabCounts.active})`}
-              </TabsTrigger>
-              <TabsTrigger value="archived" data-testid="tab-archived">
-                Archived {tabCounts.archived > 0 && `(${tabCounts.archived})`}
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList data-testid="tabs-quote-categories">
+            <TabsTrigger value="active" data-testid="tab-active">
+              Active {tabCounts.active > 0 && `(${tabCounts.active})`}
+            </TabsTrigger>
+            <TabsTrigger value="archived" data-testid="tab-archived">
+              Archived {tabCounts.archived > 0 && `(${tabCounts.archived})`}
+            </TabsTrigger>
+          </TabsList>
 
           <div className="flex flex-col gap-3 mt-4">
             <div className="flex flex-col sm:flex-row gap-3">
@@ -419,12 +417,12 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
           <TableRow>
             <TableHead className="w-[120px]">Quote #</TableHead>
             <TableHead>Customer</TableHead>
-            <TableHead className="w-[140px]">Source Estimate</TableHead>
-            <TableHead className="w-[100px]">Type</TableHead>
-            <TableHead className="w-[100px]">Division</TableHead>
+            <TableHead className="hidden xl:table-cell w-[140px]">Source Estimate</TableHead>
+            <TableHead className="hidden lg:table-cell w-[90px]">Type</TableHead>
+            <TableHead className="hidden lg:table-cell w-[90px]">Division</TableHead>
             <TableHead className="w-[120px] text-right">Value</TableHead>
-            <TableHead className="w-[180px]">Status</TableHead>
-            <TableHead className="w-[120px]">Updated</TableHead>
+            <TableHead className="w-[170px]">Status</TableHead>
+            <TableHead className="hidden xl:table-cell w-[100px]">Updated</TableHead>
             <TableHead className="w-[50px]" />
           </TableRow>
         </TableHeader>
@@ -435,13 +433,13 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
                 {q.number}
               </TableCell>
               <TableCell data-testid={`text-quote-customer-${q.id}`}>{q.customer}</TableCell>
-              <TableCell className="text-sm text-muted-foreground" data-testid={`text-quote-source-${q.id}`}>
+              <TableCell className="hidden xl:table-cell text-sm text-muted-foreground" data-testid={`text-quote-source-${q.id}`}>
                 {q.sourceEstimateName || "—"}
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground" data-testid={`text-quote-type-${q.id}`}>
+              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground" data-testid={`text-quote-type-${q.id}`}>
                 {formatQuoteType(q.quoteType)}
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground" data-testid={`text-quote-division-${q.id}`}>
+              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground" data-testid={`text-quote-division-${q.id}`}>
                 {q.divisionId || "—"}
               </TableCell>
               <TableCell className="text-right font-mono text-sm" data-testid={`text-quote-value-${q.id}`}>
@@ -450,7 +448,7 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
               <TableCell>
                 <QuoteBadges quote={q} />
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
+              <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
                 {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-NZ") : "—"}
               </TableCell>
               <TableCell>

@@ -1,0 +1,350 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep beyond the exact scope below.
+- Do not add unapproved endpoints unless strictly required for the exact workflow below.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change unrelated Xero OAuth, PDF rendering, library architecture, or pagination.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless the main working detail pages clearly reflect the now-maturing commercial model.
+- Do not claim success just because data exists in the backend.
+- Do not leave quote/project/job/invoice detail pages with inconsistent commercial summaries, weak source relationships, or unclear action grouping.
+
+Definition of done for this phase:
+- Quote, Project, Job, and Invoice detail surfaces are commercially clearer and more consistent
+- Billing, variation, and retention state are visible where operationally relevant
+- Action grouping is more coherent on the main detail pages
+- No regression to current working quote/project/job/invoice/Xero behavior
+- No architecture drift
+
+CURRENT CONTEXT — MUST TREAT AS CURRENT TRUTH
+
+The system now has:
+- working production state
+- working live Xero invoice upload
+- project-first workflow materially improved
+- customer/project/job/invoice relationships materially improved
+- deposit/progress/final billing logic materially improved
+- variation hardening implemented
+- retention + closeout billing model implemented
+- list-page layout materially improved
+
+We are now at the stage where the commercial model is maturing, but the main detail pages need to better express that model.
+
+LOCKED BUSINESS MODEL — MUST RESPECT
+
+Customer = who is buying
+Project = umbrella site / contract / grouped work
+Quote = commercial proposal
+Job = internal execution record created from accepted quote
+Variation = approved commercial change record that can increase invoiceable value
+Invoice = billing event linked to quote/customer/project/job/variation context
+Retention = withheld commercial value released later under controlled conditions
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY:
+WORKSTREAM A — Quote Detail Commercial Standardization
+WORKSTREAM B — Project Detail Commercial Standardization
+WORKSTREAM C — Job Detail Commercial Standardization
+WORKSTREAM D — Invoice Detail / Invoice Surface Commercial Standardization
+
+Do not broaden beyond that.
+
+==================================================
+WORKSTREAM A — QUOTE DETAIL COMMERCIAL STANDARDIZATION
+==================================================
+
+OBJECTIVE
+Make quote detail a strong commercial control surface.
+
+Required outcomes:
+
+1. Quote detail should clearly show the commercial hierarchy:
+- base contract value
+- approved variations total
+- total contract incl. variations
+- retention held
+- standard invoiced
+- retention released
+- total invoiced
+- standard remaining
+- retention remaining
+
+2. Source relationships on quote detail must be clear and consistent:
+- linked customer
+- linked project
+- source estimate/job if applicable
+- accepted revision/snapshot context where relevant
+
+3. Action grouping on accepted quotes must be more coherent:
+Preferred grouping:
+- commercial setup / linkage actions
+- project/job actions
+- invoice actions
+- billing/retention/variation actions
+Do not scatter important actions randomly down the page.
+
+4. Variation and retention context must be visible without making the user hunt:
+- approved variation total visible
+- retention state visible
+- invoiceable total understandable
+- final invoice behavior understandable
+
+5. Keep collapsible sections where useful, but ensure the most important commercial summary is immediately visible.
+
+==================================================
+WORKSTREAM B — PROJECT DETAIL COMMERCIAL STANDARDIZATION
+==================================================
+
+OBJECTIVE
+Make project detail feel like the commercial-operational umbrella workspace.
+
+Required outcomes:
+
+1. Project detail should clearly summarize:
+- linked customer
+- project address/status
+- total quoted
+- total accepted
+- approved variation total
+- total invoiced
+- retention state if derivable safely
+- outstanding standard billing
+- outstanding retention release where applicable
+
+2. Keep inline sections for:
+- quotes
+- jobs
+- invoices
+- variations
+But ensure they are visually structured and commercially readable.
+
+3. Improve commercial traceability from project detail:
+- ability to understand which quotes/jobs/invoices/variations belong to the project
+- make it obvious which records are commercial vs operational
+
+4. Action areas must be more deliberate:
+- project-level actions grouped logically
+- variation and invoice actions discoverable
+- not a scattered pile of buttons
+
+==================================================
+WORKSTREAM C — JOB DETAIL COMMERCIAL STANDARDIZATION
+==================================================
+
+OBJECTIVE
+Make job detail clearly express its role as an operational record derived from commercial source.
+
+Required outcomes:
+
+1. Job detail should clearly show:
+- source quote
+- linked customer
+- linked project
+- accepted value / commercial source context
+- linked variations affecting this job
+- invoice visibility relevant to this job/project context
+
+2. Job detail should not pretend to be the primary commercial surface, but it must clearly communicate:
+- where the commercial source is
+- what variations affect the job
+- where billing/invoice context sits
+
+3. Improve the relationship area so staff can understand:
+- this job belongs to which project
+- came from which quote
+- has which commercially relevant linked variations
+
+==================================================
+WORKSTREAM D — INVOICE DETAIL / INVOICE SURFACE COMMERCIAL STANDARDIZATION
+==================================================
+
+OBJECTIVE
+Make invoice surfaces clearly communicate what kind of billing event each invoice represents.
+
+Required outcomes:
+
+1. Invoice surfaces must clearly distinguish:
+- deposit invoice
+- progress invoice
+- final invoice
+- variation invoice
+- retention release invoice
+
+2. Invoice surfaces must clearly show source context:
+- linked customer
+- linked project
+- linked quote
+- linked job if relevant
+- linked variation if variation invoice
+- retention release context if retention invoice
+
+3. Users must be able to tell whether the invoice is:
+- standard contract billing
+- variation billing
+- retention release billing
+
+4. Keep current Xero push workflow intact, but make invoice identity clearer before pushing.
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing anything:
+1. Inspect current Quote detail, Project detail, Job detail, and Invoice surfaces
+2. Identify which commercial summaries already exist and which are inconsistent/missing
+3. State exactly how you will standardize the detail pages without redesigning architecture
+4. Then implement only the minimum safe scope required
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+- redesign navigation/app shell in this phase
+- redesign billing architecture
+- weaken invoice allocation controls
+- weaken variation/retention controls
+- weaken Xero push rules
+- redesign project/job/customer/quote architecture
+- touch QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline except where current summaries need to reflect already-existing commercial totals
+
+==================================================
+TEST / VERIFICATION REQUIREMENTS
+==================================================
+
+Run and report these exact tests:
+
+TC-001
+Accepted quote detail
+Expected:
+- commercial summary clearly shows contract + variation + retention + invoicing state
+
+TC-002
+Project detail
+Expected:
+- project reads as umbrella commercial/operational workspace
+- quotes/jobs/invoices/variations clearly understandable
+
+TC-003
+Job detail
+Expected:
+- source quote/project/customer/variation context is clear
+
+TC-004
+Variation invoice
+Expected:
+- invoice surface clearly identifies source variation and billing type
+
+TC-005
+Retention release invoice
+Expected:
+- invoice surface clearly identifies retention release context
+
+TC-006
+Standard progress/final invoice
+Expected:
+- invoice surface clearly distinguishes it from variation/retention billing
+
+TC-007
+Xero push path
+Expected:
+- invoice identity is clearer before push
+- existing push still works
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause / business-rule issue found
+Explain exactly why the previous detail pages were insufficient for a serious commercial-operational platform.
+
+4. Exact logic / method implemented
+Document the precise detail-page commercial standardization logic now implemented.
+
+5. Behaviour changes
+Explain exactly what changed in:
+- quote detail
+- project detail
+- job detail
+- invoice surfaces
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If none: explicitly state "None".
+
+7. UI Changes
+Document all visible UI/admin changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+- Xero OAuth flow architecture
+
+9. Risks / Limitations
+Document any remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- quote/project/job/invoice detail page quality
+- commercial visibility
+- remaining UI/UX gaps
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Quote acceptance
+- Create project from quote
+- Create job from quote/project
+- Deposit/progress/final/variation/retention invoice creation
+- Invoice allocation controls
+- Variation controls
+- Retention controls
+- Xero push
+- Project dashboard
+- Job detail
+- Quote preview rendering
+- PDF export
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this Detail Page Commercial Standardization phase.
+Do not redesign architecture.
+Do not broaden into app-shell/top-nav redesign or unrelated UI overhauls in this phase.

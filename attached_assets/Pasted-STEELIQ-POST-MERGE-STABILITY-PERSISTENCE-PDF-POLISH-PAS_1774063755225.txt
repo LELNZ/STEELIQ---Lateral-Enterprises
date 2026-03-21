@@ -1,0 +1,69 @@
+STEELIQ POST-MERGE STABILITY / PERSISTENCE / PDF POLISH PASS
+
+Implement exactly as specified.
+Do not redesign the app architecture.
+Do not introduce unrelated feature work.
+Do not mark complete unless all 3 areas below are fixed and verified in production-like conditions.
+
+1. DIVISION LOGO PERSISTENCE
+Problem:
+Division logo appears in settings temporarily but does not persist reliably in production. Broken image icon appears.
+
+Diagnosis:
+Current implementation uploads logos via /api/drawing-images using local disk storage (uploads/drawing-images) and stores only the URL/key in division_settings.logoUrl. This is not durable enough for production.
+
+Required:
+- Move division logo storage to durable persistence.
+- Preferred:
+  a. store logo binary in database-backed image storage already used elsewhere, or
+  b. use durable object storage
+- Save only a durable key/URL in division settings.
+- Ensure the saved logo still renders after refresh/redeploy.
+- Do not rely on local filesystem persistence for division logos.
+
+Acceptance:
+- Upload logo
+- Save settings
+- Refresh page
+- Logo still displays
+- Quote preview and PDF use the same persisted logo
+
+2. TABLE RESPONSIVENESS / PAGE FIT
+Problem:
+Quote list and similar tables still do not use screen width well and rely too heavily on horizontal scroll.
+
+Required:
+- Improve quotes/invoices/projects table responsiveness
+- Keep key columns visible first:
+  - number
+  - customer
+  - source/project
+  - value
+  - status
+- Hide or collapse lower-priority columns earlier on smaller widths
+- Reduce unnecessary horizontal scrolling
+- Better use available desktop width
+
+Acceptance:
+- Tables are easier to read in the current desktop viewport
+- Key columns remain visible without awkward horizontal scrolling
+
+3. PDF SPEC TABLE POLISH
+Problem:
+PDF data is now rendering, but wrapped spec rows still feel cramped and break awkwardly around separators like "-" and "//".
+
+Examples seen in SE-0146-LJ and SE-0148-LJ:
+- "Clear // EnergySaver -" on one line with suffix on next line
+- "H3-Pine-19mm Miter Cut -" split awkwardly before "Grooved"
+
+Required:
+- Keep current rendering fix
+- Add spacing polish for wrapped rows
+- Normalize long spec strings before wrapping to avoid ugly line breaks where possible
+- Add slightly more vertical padding for wrapped rows
+- Avoid leaving a dangling hyphen at line end when possible
+
+Acceptance:
+- Wrapped spec rows are readable and less cramped
+- No awkward trailing dash line endings where avoidable
+- SE-0146-LJ and SE-0148-LJ render cleanly

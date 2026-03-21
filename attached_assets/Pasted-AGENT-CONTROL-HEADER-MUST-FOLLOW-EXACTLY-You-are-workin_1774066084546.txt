@@ -1,0 +1,234 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change business logic for quoting, projects, jobs, invoices, lifecycle, Xero, or library data in this phase unless required to fix page layout behavior.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless the affected pages actually use screen width better, tables are more usable, and the main page scroll behavior is improved.
+- Do not report success just because some columns hide at breakpoints.
+- Do not leave desktop pages trapped in narrow centered table boxes with large unused whitespace.
+
+Definition of done for this phase:
+- Quotes, Invoices, Projects, Jobs, Customers, and Contacts use available page width significantly better
+- Desktop table/list screens align more closely with the Library page density/usability pattern
+- Horizontal scrolling is reduced materially on desktop
+- Main page scrolling behaves more naturally, with fewer nested scroll traps
+- No business logic regressions
+
+CURRENT USER FEEDBACK — MUST TREAT AS SOURCE OF TRUTH
+
+The current live app now has:
+- better customer preview
+- division logo persisting in preview
+- improved PDF rendering
+
+However, table/list pages still have poor UI/UX:
+- Quotes page still shows a horizontal scrollbar and does not fit the page well
+- Invoices, Projects, Jobs, Customers, Contacts feel too narrow and boxed into a small central area
+- Library page is noticeably better because it fills the page and uses width properly
+- middle-mouse autoscroll does not work naturally on pages; user must wheel-scroll or drag the side bar
+- too much empty white space surrounds narrow data tables
+
+This phase is specifically to fix page shell + table/list layout quality.
+
+REFERENCE DESIGN RULE
+
+Use the Library page as the reference quality benchmark for:
+- width usage
+- content density
+- table usability
+- page composition
+
+Do NOT redesign the library page.
+Bring the weaker list pages up toward that standard.
+
+THIS PHASE — EXACT SCOPE
+
+Implement a PAGE SHELL + TABLE LAYOUT STANDARDIZATION PASS for these pages:
+- Quotes
+- Invoices
+- Projects
+- Jobs
+- Customers
+- Contacts
+
+REQUIRED REVIEW BEFORE IMPLEMENTING
+
+Before changing anything:
+1. Inspect the page shell/container layout used by Library
+2. Inspect the page shell/container layout used by:
+   - Quotes
+   - Invoices
+   - Projects
+   - Jobs
+   - Customers
+   - Contacts
+3. Identify exactly why these screens are not filling the page well
+4. Identify where nested overflow containers are interfering with normal page scroll/autoscroll
+5. State the exact minimal layout/template changes you will make
+6. Then implement only those changes
+
+DO NOT GUESS.
+Use the actual current layout/components as source of truth.
+
+REQUIRED IMPLEMENTATION
+
+1. Wider operational page containers
+- The affected list pages must use substantially more available horizontal space on desktop
+- Remove unnecessary narrow max-width constraints if present
+- Do not leave large empty whitespace around a small center table
+- Search/filter/action rows should align with the wider content surface
+
+2. Table usability first, not scroll-first
+- Use available desktop width before falling back to horizontal scroll
+- Keep primary business columns visible:
+  - Quotes: number, customer, source/project, value, status, updated/actions
+  - Invoices: number, type, status, customer, project, amount, actions
+  - Projects: project, customer, quote/job/invoice counts, quoted, invoiced
+  - Jobs: job number, title, customer/project, status, source quote
+  - Customers: customer/company, key contact info, actions
+  - Contacts: name, company, email/phone, category, actions
+- Horizontal scrolling on desktop should be minimized, not treated as the main pattern
+
+3. Consistent list-page template
+- Standardize the top region:
+  - page title
+  - key action(s)
+  - search/filter row
+  - full-width table/list surface
+- The pages should feel like one coherent product system, not separate ad hoc cards
+
+4. Reduce nested scroll traps
+- Review page wrappers and data-table wrappers for unnecessary overflow rules
+- Main page vertical scroll should behave naturally
+- Middle-mouse autoscroll should work more like a normal document/page on major list screens
+- Inner scroll containers should only remain where truly necessary
+
+5. Preserve good responsive behavior
+- On smaller widths, lower-priority columns can collapse/hide
+- But desktop should remain the primary design target for this operational system
+- Do not damage mobile/narrow layouts while fixing desktop
+
+6. Do not degrade working pages
+- Keep customer preview pages, quote preview pages, and library page behavior intact
+- This is not a PDF phase
+- This is not a business-logic phase
+
+SPECIFIC USER-CALLED ISSUE TO FIX
+
+Quotes page still visibly has a horizontal scrollbar and poor width usage even after the prior responsiveness pass.
+This must be specifically improved.
+
+TEST / VERIFICATION REQUIREMENTS
+
+After implementation, verify and report for each of:
+- Quotes
+- Invoices
+- Projects
+- Jobs
+- Customers
+- Contacts
+
+Confirm:
+1. Page uses more horizontal space on desktop
+2. Table/list surface is easier to read
+3. Horizontal scrolling is reduced or eliminated where appropriate
+4. Search/filter/action rows align cleanly with table width
+5. Main page scrolling behaves more naturally
+6. Library page remains unchanged and still works
+
+MANDATORY HANDOVER FORMAT
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause found
+Explain exactly why the affected list pages felt too narrow and why autoscroll/page scroll behavior was poor.
+
+4. Exact logic / method implemented
+Document the precise page-shell / table-layout / overflow fixes applied.
+
+5. Behaviour changes
+Explain exactly what changed on:
+- Quotes
+- Invoices
+- Projects
+- Jobs
+- Customers
+- Contacts
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If none: explicitly state "None".
+
+7. UI Changes
+Document all visible layout/UI changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+- Xero flow
+- Invoice business rules
+
+9. Risks / Limitations
+Document any edge cases or remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- app shell / list-page layout quality
+- operational list page consistency
+- remaining UI/UX gaps
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Library page layout
+- Quote list filtering/search
+- Invoice list actions
+- Project list navigation
+- Job list navigation
+- Customer list navigation
+- Contact list navigation
+- Quote preview rendering
+- PDF export
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this page shell + table layout standardization pass.
+Use the Library page as the layout quality reference.
+Do not broaden scope into new features or business logic changes.

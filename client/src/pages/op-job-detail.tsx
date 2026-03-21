@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useSystemMode } from "@/hooks/use-system-mode";
-import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, type Invoice, OP_JOB_STATUSES, MEASUREMENT_REQUIREMENTS, DIMENSION_SOURCES } from "@shared/schema";
+import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, type Invoice, type Variation, OP_JOB_STATUSES, MEASUREMENT_REQUIREMENTS, DIMENSION_SOURCES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle, ReceiptText, ExternalLink, Ruler,
+  ArrowLeftCircle, HardHat, Building2, FolderOpen, FileText, CheckCircle2, Calendar, Pencil, XCircle, Archive, RotateCcw, AlertTriangle, ReceiptText, ExternalLink, Ruler, GitBranch,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import LifecyclePanel from "@/components/lifecycle-panel";
@@ -81,6 +81,16 @@ export default function OpJobDetail() {
       return res.json();
     },
     enabled: !!job?.sourceQuoteId,
+  });
+
+  const { data: jobVariations = [] } = useQuery<Variation[]>({
+    queryKey: ["/api/jobs", jobId, "variations"],
+    queryFn: async () => {
+      const res = await fetch(`/api/jobs/${jobId}/variations`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!jobId,
   });
 
   const customer = customers.find((c) => c.id === job?.customerId);
@@ -448,7 +458,7 @@ export default function OpJobDetail() {
               <FileText className="h-3.5 w-3.5" /> Source Quote
             </div>
             {sourceQuote ? (
-              <div>
+              <div className="space-y-1">
                 <button
                   className="font-mono text-sm text-primary hover:underline"
                   onClick={() => navigate(`/quote/${sourceQuote.id}`)}
@@ -456,7 +466,19 @@ export default function OpJobDetail() {
                 >
                   {sourceQuote.number}
                 </button>
-                <p className="text-xs text-muted-foreground">{sourceQuote.customer}</p>
+                {sourceQuote.acceptedValue != null && (
+                  <p className="text-xs font-semibold" data-testid="text-source-quote-accepted-value">
+                    ${sourceQuote.acceptedValue.toLocaleString("en-NZ", { minimumFractionDigits: 2 })} excl. GST
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">Status: Accepted</p>
+                <button
+                  className="text-xs text-primary hover:underline flex items-center gap-1 mt-1"
+                  onClick={() => navigate(`/quote/${sourceQuote.id}`)}
+                  data-testid="link-manage-billing"
+                >
+                  <ReceiptText className="h-3 w-3" /> Manage billing →
+                </button>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground italic">—</p>
@@ -559,7 +581,19 @@ export default function OpJobDetail() {
                   return (
                     <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/20" data-testid={`row-job-invoice-${inv.id}`}>
                       <td className="px-3 py-2 font-mono font-medium" data-testid={`text-job-invoice-number-${inv.id}`}>{inv.number}</td>
-                      <td className="px-3 py-2 text-muted-foreground">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          inv.type === "deposit" ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" :
+                          inv.type === "progress" ? "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300" :
+                          inv.type === "variation" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" :
+                          inv.type === "final" ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" :
+                          inv.type === "retention_release" ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" :
+                          inv.type === "credit_note" ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" :
+                          "bg-muted text-muted-foreground"
+                        }`} data-testid={`badge-job-invoice-type-${inv.id}`}>
+                          {INVOICE_TYPE_LABELS[inv.type] || inv.type}
+                        </span>
+                      </td>
                       <td className="px-3 py-2">
                         <Badge variant={(statusColor[inv.status] || "secondary") as any} className="text-xs" data-testid={`badge-job-invoice-status-${inv.id}`}>
                           {INVOICE_STATUS_LABELS[inv.status] || inv.status}
@@ -576,6 +610,55 @@ export default function OpJobDetail() {
           </div>
         )}
       </div>
+
+      {jobVariations.length > 0 && (
+        <>
+          <Separator />
+          <div className="space-y-3" data-testid="section-linked-variations">
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Linked Variations</h2>
+              <span className="text-xs bg-muted text-muted-foreground rounded-full px-2 py-0.5">{jobVariations.length}</span>
+            </div>
+            <div className="rounded-lg border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Title</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Status</th>
+                    <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Amount (excl. GST)</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Reason</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {jobVariations.map((v) => (
+                    <tr key={v.id} data-testid={`row-job-variation-${v.id}`}>
+                      <td className="px-3 py-2 font-medium">{v.title}</td>
+                      <td className="px-3 py-2">
+                        <Badge variant={
+                          v.status === "approved" ? "default"
+                          : v.status === "partially_invoiced" || v.status === "fully_invoiced" ? "outline"
+                          : v.status === "declined" ? "destructive"
+                          : "secondary"
+                        } className="text-xs" data-testid={`badge-job-variation-status-${v.id}`}>
+                          {v.status === "partially_invoiced" ? "Part. Invoiced"
+                            : v.status === "fully_invoiced" ? "Fully Invoiced"
+                            : v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        ${(v.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground truncate max-w-[200px]">{v.reason ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground">These variations are linked to this job. Manage them from the project detail page.</p>
+          </div>
+        </>
+      )}
 
       <Separator />
 

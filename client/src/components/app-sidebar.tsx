@@ -1,5 +1,9 @@
 import { useCallback } from "react";
-import { Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users, ShieldCheck, HardHat, Building2, Contact, ReceiptText, FolderOpen } from "lucide-react";
+import {
+  Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users,
+  ShieldCheck, HardHat, Building2, Contact, ReceiptText, FolderOpen,
+  Calendar, ShoppingCart, Factory, Truck, CheckSquare, LineChart, Lock,
+} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useAuth } from "@/lib/auth-context";
@@ -9,6 +13,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -18,6 +23,21 @@ import {
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
+function PlaceholderItem({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        className="opacity-40 cursor-not-allowed pointer-events-none"
+        tooltip={`${label} — Coming Soon`}
+      >
+        <Icon />
+        <span>{label}</span>
+        <Lock className="ml-auto h-3 w-3 opacity-60" />
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
 export function AppSidebar() {
   const [location, navigate] = useLocation();
@@ -50,6 +70,8 @@ export function AppSidebar() {
   const isSettingsActive = location.startsWith("/settings");
   const isAdminActive = location.startsWith("/admin") || location.startsWith("/users");
   const isProjectsActive = location.startsWith("/projects");
+  const isInvoicesActive = location.startsWith("/invoices");
+  const isCustomersActive = location.startsWith("/customers");
 
   return (
     <Sidebar collapsible="icon">
@@ -60,14 +82,20 @@ export function AppSidebar() {
         </div>
         <span className="hidden group-data-[collapsible=icon]:block text-xs font-bold tracking-tight">SI</span>
       </SidebarHeader>
+
       <SidebarContent>
+
+        {/* ── SALES ──────────────────────────────── */}
         <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/60 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+            Sales
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <Collapsible defaultOpen className="group/collapsible">
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
-                    <SidebarMenuButton tooltip="Estimates" isActive={isEstimatesActive}>
+                    <SidebarMenuButton tooltip="Estimates" isActive={isEstimatesActive} data-testid="button-sidebar-estimates-group">
                       <BarChart3 />
                       <span>Estimates</span>
                       <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
@@ -79,20 +107,20 @@ export function AppSidebar() {
                         <SidebarMenuSubButton asChild isActive={isEstimatesActive}>
                           <Link href="/" onClick={(e) => guardedClick(e, "/")} data-testid="link-sidebar-lj-estimates">
                             <Briefcase className="w-3.5 h-3.5" />
-                            <span>LJ – Estimates</span>
+                            <span>LJ – Joinery</span>
                           </Link>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
-                        <SidebarMenuSubButton className="opacity-50 pointer-events-none" data-testid="link-sidebar-le-estimates">
+                        <SidebarMenuSubButton className="opacity-40 pointer-events-none" data-testid="link-sidebar-le-estimates">
                           <Briefcase className="w-3.5 h-3.5" />
-                          <span>LE – Estimates <span className="text-[10px] text-muted-foreground">(Coming Soon)</span></span>
+                          <span>LE – Engineering <span className="text-[10px] text-muted-foreground">(soon)</span></span>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
-                        <SidebarMenuSubButton className="opacity-50 pointer-events-none" data-testid="link-sidebar-ll-estimates">
+                        <SidebarMenuSubButton className="opacity-40 pointer-events-none" data-testid="link-sidebar-ll-estimates">
                           <Briefcase className="w-3.5 h-3.5" />
-                          <span>LL – Estimates <span className="text-[10px] text-muted-foreground">(Coming Soon)</span></span>
+                          <span>LL – Laser <span className="text-[10px] text-muted-foreground">(soon)</span></span>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                     </SidebarMenuSub>
@@ -108,39 +136,22 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location.startsWith("/invoices")} tooltip="Invoices">
-                  <Link href="/invoices" onClick={(e) => guardedClick(e, "/invoices")} data-testid="link-sidebar-invoices">
-                    <ReceiptText />
-                    <span>Invoices</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location.startsWith("/customers")} tooltip="Customers">
-                  <Link href="/customers" onClick={(e) => guardedClick(e, "/customers")} data-testid="link-sidebar-customers">
-                    <Users />
-                    <span>Customers</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
+        {/* ── DELIVERY ───────────────────────────── */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/60 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+            Delivery
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isProjectsActive} tooltip="Projects">
                   <Link href="/projects" onClick={(e) => guardedClick(e, "/projects")} data-testid="link-sidebar-projects">
                     <FolderOpen />
                     <span>Projects</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isContactsActive} tooltip="Contacts">
-                  <Link href="/contacts" onClick={(e) => guardedClick(e, "/contacts")} data-testid="link-sidebar-contacts">
-                    <Contact />
-                    <span>Contacts</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -153,7 +164,36 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
+        {/* ── FINANCE ────────────────────────────── */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/60 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+            Finance
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isInvoicesActive} tooltip="Invoices">
+                  <Link href="/invoices" onClick={(e) => guardedClick(e, "/invoices")} data-testid="link-sidebar-invoices">
+                    <ReceiptText />
+                    <span>Invoices</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* ── MASTER DATA ────────────────────────── */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/60 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+            Master Data
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isLibraryActive} tooltip="Library">
                   <Link href="/library" onClick={(e) => guardedClick(e, "/library")} data-testid="link-sidebar-library">
@@ -163,30 +203,60 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isCustomersActive} tooltip="Customers">
+                  <Link href="/customers" onClick={(e) => guardedClick(e, "/customers")} data-testid="link-sidebar-customers">
+                    <Users />
+                    <span>Customers</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isContactsActive} tooltip="Contacts">
+                  <Link href="/contacts" onClick={(e) => guardedClick(e, "/contacts")} data-testid="link-sidebar-contacts">
+                    <Contact />
+                    <span>Contacts</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* ── COMING SOON ────────────────────────── */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/40 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+            Platform Roadmap
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <PlaceholderItem icon={Calendar} label="Scheduling" />
+              <PlaceholderItem icon={ShoppingCart} label="Procurement" />
+              <PlaceholderItem icon={Factory} label="Manufacture" />
+              <PlaceholderItem icon={Truck} label="Dispatch" />
+              <PlaceholderItem icon={CheckSquare} label="Closeout" />
+              <PlaceholderItem icon={LineChart} label="Reporting" />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* ── SYSTEM ─────────────────────────────── */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/60 px-2 pb-1 group-data-[collapsible=icon]:hidden">
+            System
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
               {canManageUsers && (
-                <Collapsible className="group/admin-collapsible">
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton tooltip="Admin" isActive={isAdminActive} data-testid="button-sidebar-admin">
-                        <ShieldCheck />
-                        <span>Admin</span>
-                        <ChevronDown className="ml-auto transition-transform group-data-[state=open]/admin-collapsible:rotate-180" />
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton asChild isActive={location.startsWith("/admin") || location.startsWith("/users")}>
-                            <Link href="/admin" onClick={(e) => guardedClick(e, "/admin")} data-testid="link-sidebar-admin-users">
-                              <Building2 className="w-3.5 h-3.5" />
-                              <span>Users</span>
-                            </Link>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isAdminActive} tooltip="Users">
+                    <Link href="/admin" onClick={(e) => guardedClick(e, "/admin")} data-testid="link-sidebar-admin-users">
+                      <ShieldCheck />
+                      <span>Users</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               )}
 
               <SidebarMenuItem>
@@ -200,6 +270,7 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
       </SidebarContent>
     </Sidebar>
   );

@@ -286,6 +286,7 @@ function renderRichTextPdf(pdf: Pdf, y: number, text: string | null, opts: RichT
 
 async function loadImageAsDataUrl(url: string): Promise<string | null> {
   try {
+    if (url.startsWith("data:")) return url;
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
@@ -1156,12 +1157,18 @@ async function renderPhotosFromCache(
   return { y, count: renderedCount };
 }
 
+function cleanWrappedLines(lines: string[]): string[] {
+  if (lines.length <= 1) return lines;
+  return lines.map(line => line.replace(/ -$/, "").replace(/ \/$/, "").replace(/ \/\/$/, "").trimEnd());
+}
+
 function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[], x: number, w: number): number {
   const rowH = DENSITY_SPEC_ROW_H;
   const labelW = w * 0.45;
   const valueW = w - labelW - 4;
   const valueFontPt = mmSize(T.typography.specValueSize);
   const lineSpacingMm = valueFontPt * 1.15 * 0.352778;
+  const multiLineExtraPad = 1.5;
 
   for (let i = 0; i < specs.length; i++) {
     pdf.setFont(FONT_NORMAL, "normal");
@@ -1169,10 +1176,13 @@ function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[
     const labelLines = wrapText(pdf, specs[i].label, labelW - 2);
 
     pdf.setFontSize(valueFontPt);
-    const valLines = wrapText(pdf, specs[i].value, valueW);
+    const rawValLines = wrapText(pdf, specs[i].value, valueW);
+    const valLines = cleanWrappedLines(rawValLines);
 
     const nLines = Math.max(labelLines.length, valLines.length);
-    const dynamicRowH = nLines <= 1 ? rowH : rowH + (nLines - 1) * lineSpacingMm;
+    const dynamicRowH = nLines <= 1
+      ? rowH
+      : rowH + (nLines - 1) * lineSpacingMm + multiLineExtraPad;
 
     if (y + dynamicRowH > MAX_Y) break;
 

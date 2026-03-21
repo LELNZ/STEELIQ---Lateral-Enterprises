@@ -1,0 +1,394 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep beyond the exact scope below.
+- Do not add unapproved endpoints unless strictly required for the exact workflow below.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change unrelated Xero OAuth, PDF rendering, library architecture, or pagination.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless the app shell and navigation materially improve operational usability across the current live modules.
+- Do not claim success just because menu labels changed.
+- Do not leave the system with the same fragmented navigation and weak workflow grouping.
+
+Definition of done for this phase:
+- SteelIQ has a clearer enterprise-style app shell
+- Navigation is grouped by workflow domain, not just flat object lists
+- Current live modules remain accessible and more understandable
+- Future module expansion is visible in a controlled way without pretending unfinished modules are operational
+- No regression to quote/project/job/invoice/Xero workflows
+- No architecture drift
+
+CURRENT CONTEXT — MUST TREAT AS CURRENT TRUTH
+
+The system now has:
+- working production state
+- working live Xero invoice upload
+- materially improved customer/project/job/invoice relationships
+- materially improved billing model:
+  - deposit
+  - progress
+  - variation
+  - final
+  - retention release
+- materially improved detail pages
+- materially improved list pages
+- still a relatively flat / admin-style app shell compared with the desired Procore / StruMIS-like operational standard
+
+We now want the platform to feel more like a serious commercial-operational system.
+
+DESIGN INTENT — MUST FOLLOW
+
+Target the feel of:
+- Procore-style grouped operational navigation
+- StruMIS-style seriousness and workflow clarity
+
+But do NOT copy either product literally.
+
+SteelIQ should feel:
+- cleaner
+- lighter
+- more modern
+- more internally operational
+- more scalable for future modules
+
+LOCKED BUSINESS MODEL — MUST RESPECT
+
+Customer = who is buying
+Project = umbrella site / contract / grouped work
+Quote = commercial proposal
+Job = internal execution record created from accepted quote
+Variation = approved commercial change record that can increase invoiceable value
+Invoice = billing event linked to quote/customer/project/job/variation context
+Retention = withheld commercial value released later under controlled conditions
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY:
+WORKSTREAM A — Enterprise App Shell / Navigation Architecture
+WORKSTREAM B — Current Module Grouping + Discoverability
+WORKSTREAM C — Future Module Visibility / Placeholders
+WORKSTREAM D — Workflow-Oriented Quick Access
+
+Do not broaden beyond that.
+
+==================================================
+WORKSTREAM A — ENTERPRISE APP SHELL / NAVIGATION ARCHITECTURE
+==================================================
+
+OBJECTIVE
+Replace the current flat / admin-style navigation feel with a grouped workflow-domain shell.
+
+Required direction:
+
+1. Move toward a top-oriented workflow navigation model
+Preferred architecture:
+- top navigation for major workflow domains
+- optional secondary nav / sub-nav for the selected domain
+- page content beneath
+- left-side rail only where useful for local context, not as the entire primary information architecture
+
+2. Major workflow domains should be grouped like this (or the closest safe equivalent using current modules):
+- Sales
+- Delivery
+- Finance
+- Master Data
+- Admin
+
+3. Map current live modules into those domains:
+Sales:
+- Estimates
+- Quotes
+
+Delivery:
+- Projects
+- Jobs
+- Lifecycle (where relevant in job/project context)
+
+Finance:
+- Invoices
+- Xero / Billing context where appropriate
+
+Master Data:
+- Library
+- Customers
+- Contacts
+
+Admin:
+- Settings
+- Numbering / templates / org controls where applicable
+
+4. Keep current routes working
+- Do not break existing routing
+- Do not remove access to current pages
+- This phase is shell/navigation structure, not route redesign
+
+==================================================
+WORKSTREAM B — CURRENT MODULE GROUPING + DISCOVERABILITY
+==================================================
+
+OBJECTIVE
+Make the current modules easier to understand as one connected operating platform.
+
+Required behavior:
+
+1. Each domain should make sense operationally
+Users should intuitively understand:
+- Sales = win and structure work
+- Delivery = run work
+- Finance = bill and reconcile
+- Master Data = maintain core records
+- Admin = configure system behavior
+
+2. Current active modules must remain easy to reach
+At minimum ensure strong discoverability for:
+- Estimates
+- Quotes
+- Projects
+- Jobs
+- Invoices
+- Library
+- Customers
+- Contacts
+- Settings
+
+3. Navigation should reduce clutter, not increase clicks unnecessarily
+- Avoid hiding frequently used core modules too deeply
+- Use grouped structure without harming daily operator flow
+
+4. Preserve current page titles and route identity unless a minimal naming improvement is clearly beneficial
+
+==================================================
+WORKSTREAM C — FUTURE MODULE VISIBILITY / PLACEHOLDERS
+==================================================
+
+OBJECTIVE
+Let the platform visually scale toward its future without pretending unfinished modules are live.
+
+Required behavior:
+
+1. The app shell should visibly allow for future modules such as:
+- Scheduling
+- Procurement
+- Manufacture
+- Dispatch / Delivery
+- Closeout
+- Reporting
+
+2. These future modules must be clearly presented as:
+- planned
+- coming soon
+- or disabled placeholders
+
+3. Do NOT create fake operational backends for future modules.
+This is visibility and IA only.
+
+4. The shell should make SteelIQ feel like a growing platform, not a small admin tool.
+
+==================================================
+WORKSTREAM D — WORKFLOW-ORIENTED QUICK ACCESS
+==================================================
+
+OBJECTIVE
+Improve day-to-day usability with clearer top-level workflow entry points.
+
+Required behavior:
+
+1. Add or improve quick actions in the app shell or page header area for core actions such as:
+- New Estimate
+- New Quote
+- New Project
+- New Job
+- New Invoice
+
+Only surface actions that map safely to current workflows.
+
+2. Ensure quick access respects the current architecture:
+- no hidden new creation paths that bypass business rules
+- project-first and current billing rules must remain intact
+
+3. If a dashboard/home landing exists or can be safely improved within this phase, it may show:
+- major workflow domains
+- quick links
+- current active modules
+- future module placeholders
+But do not broaden into a full analytics dashboard build.
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing anything:
+1. Inspect current app shell, sidebar, and top-level navigation structure
+2. Inspect route layout and main page entry points
+3. State exactly how you will introduce grouped workflow navigation without breaking current access paths
+4. State whether you will:
+   - fully move to top nav now
+   - or implement a hybrid shell as the safest incremental step
+5. Then implement only the minimum safe scope required
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+- redesign billing architecture
+- redesign quote/project/job/customer domain models
+- weaken Xero/invoice/retention/variation controls
+- break current routes
+- broaden into major page redesigns beyond what is needed for the shell/nav
+- touch QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- fake unfinished future modules as if they are complete
+
+==================================================
+TEST / VERIFICATION REQUIREMENTS
+==================================================
+
+Run and report these exact tests:
+
+TC-001
+Primary navigation
+Expected:
+- grouped by workflow domain
+- current modules still easy to reach
+
+TC-002
+Sales flow discoverability
+Expected:
+- Estimates and Quotes feel grouped and related
+
+TC-003
+Delivery flow discoverability
+Expected:
+- Projects and Jobs feel grouped and related
+
+TC-004
+Finance flow discoverability
+Expected:
+- Invoices and billing/Xero context feel grouped and related
+
+TC-005
+Master Data discoverability
+Expected:
+- Library, Customers, Contacts feel like core records, not random menu items
+
+TC-006
+Admin discoverability
+Expected:
+- Settings remains available but is correctly separated from operational modules
+
+TC-007
+Future module visibility
+Expected:
+- Scheduling / Procurement / Manufacture / Dispatch / Closeout / Reporting are visible as planned/disabled placeholders, not fake live modules
+
+TC-008
+Quick access
+Expected:
+- user can clearly reach current core actions without extra navigation friction
+
+TC-009
+Route compatibility
+Expected:
+- all existing current pages/routes still work
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause / IA issue found
+Explain exactly why the previous app shell/navigation was insufficient for a serious commercial-operational platform.
+
+4. Exact logic / method implemented
+Document the precise shell/navigation architecture now implemented.
+
+5. Behaviour changes
+Explain exactly what changed in:
+- app shell
+- navigation grouping
+- module discoverability
+- quick access
+- future module visibility
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+If none: explicitly state "None".
+
+7. UI Changes
+Document all visible UI/admin changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+- Xero OAuth flow architecture
+- Billing architecture
+
+9. Risks / Limitations
+Document any remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- app shell / navigation maturity
+- workflow grouping
+- remaining UX gaps
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Estimates
+- Quotes
+- Projects
+- Jobs
+- Invoices
+- Library
+- Customers
+- Contacts
+- Settings
+- Quote acceptance
+- Create project from quote
+- Create job from quote/project
+- Deposit/progress/final/variation/retention invoice creation
+- Xero push
+- Quote preview rendering
+- PDF export
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this Enterprise App Shell + Navigation Architecture phase.
+Do not redesign architecture.
+Do not broaden into unrelated page-level redesigns beyond what is required for the new shell/navigation structure.
