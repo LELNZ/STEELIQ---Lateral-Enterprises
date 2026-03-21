@@ -530,7 +530,10 @@ export type Invoice = typeof invoices.$inferSelect;
 
 // ─── Variations ──────────────────────────────────────────────────────────────
 
-export const VARIATION_STATUSES = ["draft", "sent", "approved", "declined", "invoiced"] as const;
+export const VARIATION_STATUSES = [
+  "draft", "sent", "approved", "declined",
+  "partially_invoiced", "fully_invoiced",
+] as const;
 export type VariationStatus = typeof VARIATION_STATUSES[number];
 
 export const variations = pgTable("variations", {
@@ -543,7 +546,10 @@ export const variations = pgTable("variations", {
   title: text("title").notNull(),
   reason: text("reason"),
   amountExclGst: real("amount_excl_gst").notNull(),
+  gstAmount: real("gst_amount"),
+  amountInclGst: real("amount_incl_gst"),
   status: text("status").notNull().default("draft"),
+  approvedAt: timestamp("approved_at"),
   createdByUserId: varchar("created_by_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -1457,12 +1457,17 @@ function InvoiceSection({
     enabled: !!quoteId,
   });
 
-  // Approved variations eligible for invoicing (from allocation payload or empty)
+  // Approved/partially invoiced variations eligible for further invoicing
   const approvedVariations: Variation[] = (allocation?.variations ?? []).filter(
-    (v) => v.status === "approved"
+    (v) => ["approved", "partially_invoiced"].includes(v.status)
   );
   // How much of each variation has already been invoiced
   const variationInvoicedMap = allocation?.variationInvoicedByVariationId ?? {};
+  // Map for looking up variation title from variationId on invoices
+  const allVariationsForMap: Variation[] = allocation?.variations ?? [];
+  const variationTitleMap: Record<string, string> = Object.fromEntries(
+    allVariationsForMap.map((v) => [v.id, v.title])
+  );
   const selectedVariation = approvedVariations.find((v) => v.id === selectedVariationId) ?? null;
   const variationRemainingExcl = selectedVariation
     ? Math.max(0, selectedVariation.amountExclGst - (variationInvoicedMap[selectedVariation.id] ?? 0))
@@ -1821,7 +1826,14 @@ function InvoiceSection({
               {invoices.map((inv) => (
                 <TableRow key={inv.id} data-testid={`row-invoice-${inv.id}`}>
                   <TableCell className="font-mono text-sm" data-testid={`text-invoice-number-${inv.id}`}>{inv.number}</TableCell>
-                  <TableCell className="text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
+                  <TableCell className="text-sm">
+                    <div>{INVOICE_TYPE_LABELS[inv.type] || inv.type}</div>
+                    {inv.type === "variation" && (inv as any).variationId && variationTitleMap[(inv as any).variationId] && (
+                      <div className="text-xs text-muted-foreground truncate max-w-[140px]" data-testid={`text-invoice-variation-source-${inv.id}`}>
+                        ↳ {variationTitleMap[(inv as any).variationId]}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="space-y-1">
                       <Badge variant={inv.status === "approved" ? "default" : inv.status === "returned_to_draft" ? "destructive" : inv.status === "ready_for_xero" ? "outline" : "secondary"} className="text-xs">

@@ -210,8 +210,10 @@ export interface IStorage {
   getVariation(id: string): Promise<Variation | undefined>;
   getVariationsByProject(projectId: string): Promise<Variation[]>;
   getVariationsByQuote(quoteId: string): Promise<Variation[]>;
+  getVariationsByJob(jobId: string): Promise<Variation[]>;
   getVariationsForAllocation(quoteId: string, projectId: string | null): Promise<Variation[]>;
   updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined>;
+  syncVariationStatus(variationId: string): Promise<void>;
 
   // ── Xero OAuth Connection ─────────────────────────────────────────────────
   getXeroConnection(): Promise<XeroConnection | undefined>;
@@ -1100,9 +1102,45 @@ export class DatabaseStorage implements IStorage {
     return combined;
   }
 
+  async getVariationsByJob(jobId: string): Promise<Variation[]> {
+    return db.select().from(variations).where(eq(variations.jobId, jobId)).orderBy(desc(variations.createdAt));
+  }
+
   async updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined> {
     const [row] = await db.update(variations).set({ ...data, updatedAt: new Date() } as any).where(eq(variations.id, id)).returning();
     return row;
+  }
+
+  async syncVariationStatus(variationId: string): Promise<void> {
+    // Re-derive variation status from active invoices linked to this variation.
+    // ALLOC_ACTIVE mirrors the allocation guard: returned_to_draft is excluded.
+    const ALLOC_ACTIVE = ["draft", "ready_for_xero", "pushed_to_xero_draft", "approved"];
+    const variation = await this.getVariation(variationId);
+    if (!variation) return;
+    // Only manage status for invoiceable variations (not draft/sent/declined)
+    if (!["approved", "partially_invoiced", "fully_invoiced"].includes(variation.status)) return;
+
+    // Fetch all invoices linked to this variation across any quote
+    const allInvoices = variation.quoteId
+      ? await this.getInvoicesByQuote(variation.quoteId)
+      : [];
+    const variationInvoicedExcl = allInvoices
+      .filter((i) => ALLOC_ACTIVE.includes(i.status) && i.type === "variation" && (i as any).variationId === variationId)
+      .reduce((s, i) => s + (i.amountExclGst ?? 0), 0);
+
+    let newStatus: string;
+    if (variationInvoicedExcl <= 0.001) {
+      newStatus = "approved";
+    } else if (variationInvoicedExcl >= variation.amountExclGst - 0.005) {
+      newStatus = "fully_invoiced";
+    } else {
+      newStatus = "partially_invoiced";
+    }
+    if (newStatus !== variation.status) {
+      await db.update(variations)
+        .set({ status: newStatus, updatedAt: new Date() } as any)
+        .where(eq(variations.id, variationId));
+    }
   }
 
   // ── Xero OAuth Connection ─────────────────────────────────────────────────

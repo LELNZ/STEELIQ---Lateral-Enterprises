@@ -452,6 +452,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/jobs/:id/variations", async (req, res) => {
+    try {
+      const jobVariations = await storage.getVariationsByJob(req.params.id);
+      return res.json(jobVariations);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   app.patch("/api/jobs/:id/archive", async (req, res) => {
     try {
       const job = await storage.getJob(req.params.id);
@@ -2408,6 +2417,7 @@ export async function registerRoutes(
       title: z.string().min(1).optional(),
       reason: z.string().optional().nullable(),
       amountExclGst: z.number().positive().optional(),
+      jobId: z.string().optional().nullable(),
       status: z.enum(VARIATION_STATUSES).optional(),
     });
     const parsed = schema.safeParse(req.body);
@@ -2416,8 +2426,8 @@ export async function registerRoutes(
       const existing = await storage.getVariation(req.params.id);
       if (!existing) return res.status(404).json({ error: "Variation not found" });
 
-      // Cannot edit amount/title/reason once approved or invoiced
-      const locked = ["approved", "invoiced"].includes(existing.status);
+      // Cannot edit amount/title/reason once approved or in any invoiced state
+      const locked = ["approved", "partially_invoiced", "fully_invoiced"].includes(existing.status);
       if (locked && (parsed.data.amountExclGst !== undefined || parsed.data.title !== undefined || parsed.data.reason !== undefined)) {
         if (parsed.data.status === undefined) {
           return res.status(409).json({ error: "Cannot edit a variation that is approved or invoiced. Change status first." });
@@ -2564,7 +2574,7 @@ export async function registerRoutes(
       // Use combined query: variations linked to this quoteId OR project-level variations without quoteId
       const allVariations = await storage.getVariationsForAllocation(req.params.id, quote.projectId ?? null);
       const approvedVariationTotalExcl = allVariations
-        .filter((v) => ["approved", "invoiced"].includes(v.status))
+        .filter((v) => ["approved", "partially_invoiced", "fully_invoiced"].includes(v.status))
         .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
 
       const totalInvoiceableExcl = acceptedValue + approvedVariationTotalExcl;
@@ -2675,7 +2685,7 @@ export async function registerRoutes(
         // Approved variation total — these expand the invoiceable ceiling
         const allVariations = await storage.getVariationsForAllocation(parsed.data.quoteId, quote.projectId ?? null);
         const approvedVariationTotalExcl = allVariations
-          .filter((v) => ["approved", "invoiced"].includes(v.status))
+          .filter((v) => ["approved", "partially_invoiced", "fully_invoiced"].includes(v.status))
           .reduce((s, v) => s + (v.amountExclGst ?? 0), 0);
         const totalInvoiceableExcl = contractValue + approvedVariationTotalExcl;
 
@@ -2735,9 +2745,9 @@ export async function registerRoutes(
             }
             const variation = await storage.getVariation(variationId);
             if (!variation) return res.status(404).json({ error: "Variation record not found." });
-            if (variation.status !== "approved") {
+            if (!["approved", "partially_invoiced"].includes(variation.status)) {
               return res.status(422).json({
-                error: `Cannot invoice against a variation with status '${variation.status}'. Only approved variations can be invoiced.`,
+                error: `Cannot invoice against a variation with status '${variation.status}'. Only approved or partially invoiced variations can be invoiced.`,
                 code: "VARIATION_NOT_APPROVED",
               });
             }
@@ -2769,6 +2779,10 @@ export async function registerRoutes(
         createdByUserId: userId ?? undefined,
       } as any);
       logActivity("invoice_created", "invoice", invoice.id, userId, { number, type: parsed.data.type });
+      // Auto-sync variation status when a variation invoice is created
+      if (parsed.data.type === "variation" && parsed.data.variationId) {
+        await storage.syncVariationStatus(parsed.data.variationId);
+      }
       return res.status(201).json(invoice);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3037,6 +3051,10 @@ export async function registerRoutes(
         previousStatus: invoice.status,
         xeroInvoiceId: invoice.xeroInvoiceId,
       });
+      // Re-sync variation status when a variation invoice is returned to draft
+      if (invoice.type === "variation" && (invoice as any).variationId) {
+        await storage.syncVariationStatus((invoice as any).variationId);
+      }
       return res.json({
         invoice: updated,
         xeroWarning: invoice.xeroInvoiceId

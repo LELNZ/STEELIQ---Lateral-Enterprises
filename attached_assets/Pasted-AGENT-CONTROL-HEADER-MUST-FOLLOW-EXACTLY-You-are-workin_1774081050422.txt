@@ -1,0 +1,319 @@
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless explicitly instructed.
+- Do not replace or bypass the QuoteDocument pipeline.
+- Do not merge snapshot state with live editable state.
+- Do not introduce schema creep beyond the exact scope below.
+- Do not add unapproved endpoints unless strictly required for the exact workflow below.
+- Do not perform hidden refactors.
+- Do not make speculative improvements that were not requested.
+- Do not rename, relocate, or restructure major modules unless explicitly instructed.
+- Do not “clean up” by changing architecture.
+- Do not change unrelated Xero OAuth, PDF rendering, library architecture, or pagination.
+- Extend the current system incrementally and safely.
+- If you believe a structural change is required, stop and explain why before making it.
+
+Implementation mode:
+- Treat the rendering/document pipeline as locked.
+- Prefer small, surgical edits.
+- Preserve backward compatibility.
+- Preserve snapshot integrity.
+- Preserve library-driven data selection.
+- Preserve preview/PDF alignment.
+- Match existing conventions before adding new ones.
+
+Operational completion rule:
+- Do not mark this phase complete unless variation behavior is operationally traceable across project, quote, job, invoice, and Xero-related billing surfaces.
+- Do not claim “variation complete” just because approved variations can be invoiced.
+- Do not leave partial invoicing, traceability, or audit visibility ambiguous.
+
+Definition of done for this phase:
+- Variation becomes commercially traceable and operationally robust
+- Variation invoices remain aligned with approved variation value and remaining uninvoiced balance
+- Job/project/quote/invoice visibility improves without architecture drift
+- No regression to deposit/progress/final allocation rules or Xero push flow
+
+CURRENT CONTEXT — MUST TREAT AS CURRENT TRUTH
+
+The system now has:
+- working production state
+- working live Xero invoice upload
+- project-first workflow materially improved
+- customer/project/job/invoice relationships materially improved
+- list page width/layout significantly improved
+- variation is now surfaced on project detail
+- approved variations now expand invoiceable ceiling
+- variation invoices are now created from approved variations
+- backend guards exist for variation approval and variation value limits
+
+This phase is to HARDEN the variation model so SteelIQ behaves more like a serious commercial-operational platform.
+
+LOCKED BUSINESS MODEL — MUST RESPECT
+
+Customer = who is buying
+Project = umbrella site / contract / grouped work
+Quote = commercial proposal
+Job = internal execution record created from accepted quote
+Variation = approved commercial change record that can increase invoiceable value
+Invoice = billing event linked to quote/customer/project/job/variation context
+
+THIS PHASE — EXACT SCOPE
+
+Implement ONLY:
+WORKSTREAM A — Variation Hardening
+WORKSTREAM B — Commercial Traceability Surfaces
+
+Do not broaden beyond that.
+
+==================================================
+WORKSTREAM A — VARIATION HARDENING
+==================================================
+
+OBJECTIVE
+Move the current variation implementation from good v1 behavior to commercially robust behavior.
+
+Required improvements:
+
+1. Job linkage support
+- Variation should be optionally linkable to a specific job where relevant
+- If a variation arises during or because of a specific job/work package, that relationship must be storable and visible
+- Do not make job mandatory; keep nullable for broader commercial variations
+
+2. Partial invoicing support
+- A variation may be invoiced in multiple parts
+- Do NOT treat a variation as fully “invoiced” just because one variation invoice exists
+- Track:
+  - approved variation amount
+  - total invoiced against that variation
+  - remaining variation value to invoice
+
+3. Better variation statuses
+Review current status model and improve it if needed.
+Preferred operational model:
+- draft
+- sent
+- approved
+- declined
+- partially_invoiced
+- fully_invoiced
+
+If introducing both partially_invoiced and fully_invoiced is the safest option, do it.
+If you believe status should be derived instead of stored, explain why and implement safely.
+
+4. Prevent over-invoicing at variation level
+- Total variation invoices linked to a variation must never exceed the approved variation amount
+- Existing guard should remain, but the UI must also clearly show remaining variation value
+
+5. Variation commercial metadata
+Add, expose, or confirm these fields where safely possible:
+- title
+- reason / description
+- amountExclGst
+- status
+- created date
+- approved date if available
+- linked project
+- linked quote
+- linked job (nullable)
+- total invoiced against variation
+- remaining to invoice
+
+Do not overbuild document management in this phase.
+Keep it commercially useful and traceable.
+
+==================================================
+WORKSTREAM B — COMMERCIAL TRACEABILITY SURFACES
+==================================================
+
+OBJECTIVE
+Make variation visible and understandable in all relevant commercial/operational contexts.
+
+Required visible surfaces:
+
+1. Project detail
+- Keep/project improve the Variations section
+- Show:
+  - status
+  - approved amount
+  - invoiced-to-date
+  - remaining-to-invoice
+  - linked job if any
+  - create invoice action where valid
+- Ensure project page acts like the commercial umbrella
+
+2. Quote detail / allocation area
+- Show approved variation total clearly
+- Show that total invoiceable value = base contract + approved variations
+- If useful, include a compact variations summary or link
+
+3. Job detail
+- If a variation is job-linked, show it on the job detail page
+- This must help operations understand that the job scope changed commercially
+
+4. Invoice visibility
+- Variation invoices must show their source variation clearly
+- Users should be able to see from the invoice surface what variation generated it
+- Do not make users guess whether an invoice is base-contract or variation-related
+
+5. Xero / billing compatibility
+- Preserve the current invoice/Xero pipeline
+- Confirm variation invoices still push cleanly through the existing invoice path
+- No separate export path
+
+==================================================
+REQUIRED REVIEW BEFORE IMPLEMENTING
+==================================================
+
+Before changing anything:
+1. Inspect the current variation schema, routes, storage methods, and UI surfaces
+2. Identify whether partial invoicing is already derivable from invoice linkage or needs explicit fields
+3. State exactly how you will handle:
+   - partially_invoiced
+   - fully_invoiced
+   without breaking current allocation logic
+4. State whether status will be stored, derived, or hybrid
+5. Then implement only the minimum safe scope required
+
+==================================================
+STRICT RULES
+==================================================
+
+DO NOT:
+- redesign the billing architecture
+- weaken existing invoice allocation controls
+- weaken Xero push rules
+- redesign project/job/customer/quote architecture
+- broaden into retention implementation in this phase
+- broaden into top-nav / shell redesign in this phase
+- touch QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline except where existing commercial summary surfaces must reflect current totals
+
+==================================================
+TEST / VERIFICATION REQUIREMENTS
+==================================================
+
+Run and report these exact tests:
+
+TC-001
+Create a draft variation
+Expected:
+- appears on project detail
+- not invoiceable yet
+- does not expand invoiceable total yet
+
+TC-002
+Approve variation
+Expected:
+- approved variation amount expands invoiceable ceiling
+- quote/project billing summaries update
+
+TC-003
+Link variation to a job
+Expected:
+- job detail shows linked variation
+- traceability is clear
+
+TC-004
+Create first variation invoice smaller than full approved value
+Expected:
+- variation remains partially invoiced
+- remaining variation value shown correctly
+
+TC-005
+Create second variation invoice for the remainder
+Expected:
+- variation becomes fully invoiced
+- total variation invoiced equals approved variation value
+
+TC-006
+Attempt to over-invoice a variation
+Expected:
+- blocked correctly
+
+TC-007
+Variation invoice visibility
+Expected:
+- invoice surface clearly shows source variation
+
+TC-008
+Push a valid variation invoice through existing Xero flow
+Expected:
+- existing Xero pipeline still works
+
+==================================================
+MANDATORY HANDOVER FORMAT
+==================================================
+
+Return final handover in this exact structure:
+
+1. Files changed
+List every modified file with a short explanation.
+
+2. Planned tasks summary
+List the exact tasks you executed.
+
+3. Exact root cause / business-rule issue found
+Explain exactly why the previous variation model was still insufficient for a serious commercial-operational platform.
+
+4. Exact logic / method implemented
+Document the precise variation hardening logic now implemented.
+
+5. Behaviour changes
+Explain exactly what changed in:
+- project detail variation behavior
+- quote commercial/allocation behavior
+- job detail visibility
+- invoice visibility
+- partial vs full variation invoicing
+
+6. Schema / API / Data Changes
+Document any schema, database, API, or data changes.
+
+7. UI Changes
+Document all visible UI/admin changes.
+
+8. Architecture Verification
+Explicitly confirm the following were NOT modified:
+- Quote lifecycle
+- Snapshot system
+- QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline
+- Library as source of truth
+- Pagination logic
+- Xero OAuth flow architecture
+
+9. Risks / Limitations
+Document any remaining limitations.
+
+10. Updated Current System State
+Update the current-state notes for:
+- variation model
+- invoice allocation model
+- project/job/quote commercial traceability
+- remaining billing gaps
+
+11. Updated Recommended Next Tasks
+List the next 3 safest implementation tasks after this phase, in priority order.
+
+12. Regression Checks
+Confirm the following still work:
+- Quote acceptance
+- Create project from quote
+- Create job from quote/project
+- Deposit invoice creation
+- Progress/final/variation invoice creation
+- Invoice allocation controls
+- Xero push
+- Project dashboard
+- Job detail
+- Quote preview rendering
+- PDF export
+- Production-safe startup
+
+FINAL INSTRUCTION
+
+Implement exactly this Variation Hardening + Commercial Traceability phase.
+Do not redesign architecture.
+Do not broaden into retention or navigation redesign in this phase.

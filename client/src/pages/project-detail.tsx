@@ -20,16 +20,18 @@ import {
 import {
   FolderOpen, Building2, MapPin, FileText, HardHat, ReceiptText, GitBranch,
   ArrowLeftCircle, ChevronDown, ChevronUp, ExternalLink, Pencil, Check, X, Plus,
+  Briefcase, Link2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 
 const VARIATION_STATUS_LABELS: Record<string, string> = {
   draft: "Draft", sent: "Sent", approved: "Approved",
-  declined: "Declined", invoiced: "Invoiced",
+  declined: "Declined", partially_invoiced: "Part. Invoiced", fully_invoiced: "Fully Invoiced",
 };
 const VARIATION_STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  approved: "default", invoiced: "outline", declined: "destructive", sent: "secondary", draft: "secondary",
+  approved: "default", partially_invoiced: "outline", fully_invoiced: "outline",
+  declined: "destructive", sent: "secondary", draft: "secondary",
 };
 const GST_RATE = 0.15;
 
@@ -94,7 +96,9 @@ function CollapsibleSection({
 function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; acceptedQuoteId?: string }) {
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", reason: "", amountExclGst: "" });
+  const [linkJobOpen, setLinkJobOpen] = useState<string | null>(null);
+  const [form, setForm] = useState({ title: "", reason: "", amountExclGst: "", jobId: "" });
+  const [linkJobId, setLinkJobId] = useState("");
 
   const { data: variations = [], isLoading } = useQuery<Variation[]>({
     queryKey: ["/api/projects", projectId, "variations"],
@@ -106,6 +110,29 @@ function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; 
     enabled: !!projectId,
   });
 
+  const { data: projectJobs = [] } = useQuery<OpJob[]>({
+    queryKey: ["/api/projects", projectId, "jobs"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/jobs`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId,
+  });
+
+  type AllocData = { variationInvoicedByVariationId: Record<string, number> };
+  const { data: allocData } = useQuery<AllocData>({
+    queryKey: ["/api/quotes", acceptedQuoteId, "invoice-allocation"],
+    queryFn: async () => {
+      const res = await fetch(`/api/quotes/${acceptedQuoteId}/invoice-allocation`);
+      if (!res.ok) return { variationInvoicedByVariationId: {} };
+      return res.json();
+    },
+    enabled: !!acceptedQuoteId,
+  });
+  const invoicedMap = allocData?.variationInvoicedByVariationId ?? {};
+  const jobMap = Object.fromEntries(projectJobs.map((j) => [j.id, j]));
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const amountExcl = parseFloat(form.amountExclGst);
@@ -114,6 +141,7 @@ function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; 
       const res = await apiRequest("POST", "/api/variations", {
         projectId,
         quoteId: acceptedQuoteId ?? null,
+        jobId: form.jobId || null,
         title: form.title.trim(),
         reason: form.reason.trim() || null,
         amountExclGst: amountExcl,
@@ -127,20 +155,21 @@ function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "variations"] });
       setAddOpen(false);
-      setForm({ title: "", reason: "", amountExclGst: "" });
+      setForm({ title: "", reason: "", amountExclGst: "", jobId: "" });
       toast({ title: "Variation created" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const patchMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const res = await apiRequest("PATCH", `/api/variations/${id}`, { status });
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/variations/${id}`, data);
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error ?? "Failed"); }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "variations"] });
+      if (acceptedQuoteId) queryClient.invalidateQueries({ queryKey: ["/api/quotes", acceptedQuoteId, "invoice-allocation"] });
       toast({ title: "Variation updated" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -165,75 +194,116 @@ function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; 
         ) : variations.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No variations yet.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Excl. GST</TableHead>
-                <TableHead className="text-right">Incl. GST</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {variations.map((v) => (
-                <TableRow key={v.id} data-testid={`row-variation-${v.id}`}>
-                  <TableCell className="font-medium text-sm">{v.title}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{v.reason ?? "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={VARIATION_STATUS_VARIANT[v.status] ?? "secondary"} className="text-xs">
-                      {VARIATION_STATUS_LABELS[v.status] ?? v.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">{v.amountExclGst != null ? fmtMoney(v.amountExclGst) : "—"}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{v.amountInclGst != null ? fmtMoney(v.amountInclGst) : "—"}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {v.status === "draft" && (
-                        <>
-                          <Button size="sm" variant="outline" className="h-7 text-xs"
-                            onClick={() => patchMutation.mutate({ id: v.id, status: "sent" })}
-                            disabled={patchMutation.isPending}
-                            data-testid={`button-send-variation-${v.id}`}>
-                            Sent
-                          </Button>
-                          <Button size="sm" variant="default" className="h-7 text-xs"
-                            onClick={() => patchMutation.mutate({ id: v.id, status: "approved" })}
-                            disabled={patchMutation.isPending}
-                            data-testid={`button-approve-variation-${v.id}`}>
-                            <Check className="h-3 w-3 mr-1" /> Approve
-                          </Button>
-                          <Button size="sm" variant="destructive" className="h-7 text-xs"
-                            onClick={() => patchMutation.mutate({ id: v.id, status: "declined" })}
-                            disabled={patchMutation.isPending}
-                            data-testid={`button-decline-variation-${v.id}`}>
-                            <X className="h-3 w-3 mr-1" /> Decline
-                          </Button>
-                        </>
-                      )}
-                      {v.status === "sent" && (
-                        <>
-                          <Button size="sm" variant="default" className="h-7 text-xs"
-                            onClick={() => patchMutation.mutate({ id: v.id, status: "approved" })}
-                            disabled={patchMutation.isPending}
-                            data-testid={`button-approve-variation-${v.id}`}>
-                            <Check className="h-3 w-3 mr-1" /> Approve
-                          </Button>
-                          <Button size="sm" variant="destructive" className="h-7 text-xs"
-                            onClick={() => patchMutation.mutate({ id: v.id, status: "declined" })}
-                            disabled={patchMutation.isPending}
-                            data-testid={`button-decline-variation-${v.id}`}>
-                            <X className="h-3 w-3 mr-1" /> Decline
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Approved (excl.)</TableHead>
+                  <TableHead className="text-right">Invoiced (excl.)</TableHead>
+                  <TableHead className="text-right">Remaining (excl.)</TableHead>
+                  <TableHead>Linked Job</TableHead>
+                  <TableHead />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {variations.map((v) => {
+                  const invoiced = invoicedMap[v.id] ?? 0;
+                  const remaining = Math.max(0, (v.amountExclGst ?? 0) - invoiced);
+                  const isInvoiceable = ["approved", "partially_invoiced"].includes(v.status);
+                  const linkedJob = v.jobId ? jobMap[v.jobId] : null;
+                  return (
+                    <TableRow key={v.id} data-testid={`row-variation-${v.id}`}>
+                      <TableCell className="text-sm">
+                        <div className="font-medium">{v.title}</div>
+                        {v.reason && <div className="text-xs text-muted-foreground truncate max-w-[160px]">{v.reason}</div>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={VARIATION_STATUS_VARIANT[v.status] ?? "secondary"} className="text-xs" data-testid={`badge-variation-status-${v.id}`}>
+                          {VARIATION_STATUS_LABELS[v.status] ?? v.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">{v.amountExclGst != null ? fmtMoney(v.amountExclGst) : "—"}</TableCell>
+                      <TableCell className="text-right font-mono text-sm" data-testid={`text-variation-invoiced-${v.id}`}>
+                        {["approved", "partially_invoiced", "fully_invoiced"].includes(v.status) && acceptedQuoteId ? fmtMoney(invoiced) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm" data-testid={`text-variation-remaining-${v.id}`}>
+                        {isInvoiceable && acceptedQuoteId
+                          ? <span className={remaining <= 0.005 ? "text-muted-foreground" : "text-green-600 dark:text-green-400 font-semibold"}>{fmtMoney(remaining)}</span>
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm" data-testid={`cell-variation-job-${v.id}`}>
+                        {linkedJob ? (
+                          <Link href={`/op-jobs/${linkedJob.id}`} className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                            <Briefcase className="h-3 w-3" />{linkedJob.jobNumber}
+                          </Link>
+                        ) : (
+                          <button
+                            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                            onClick={() => { setLinkJobOpen(v.id); setLinkJobId(""); }}
+                            data-testid={`button-link-job-${v.id}`}
+                          >
+                            <Link2 className="h-3 w-3" /> Link job
+                          </button>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1 flex-wrap">
+                          {v.status === "draft" && (
+                            <>
+                              <Button size="sm" variant="outline" className="h-7 text-xs"
+                                onClick={() => patchMutation.mutate({ id: v.id, data: { status: "sent" } })}
+                                disabled={patchMutation.isPending}
+                                data-testid={`button-send-variation-${v.id}`}>
+                                Mark Sent
+                              </Button>
+                              <Button size="sm" variant="default" className="h-7 text-xs"
+                                onClick={() => patchMutation.mutate({ id: v.id, data: { status: "approved" } })}
+                                disabled={patchMutation.isPending}
+                                data-testid={`button-approve-variation-${v.id}`}>
+                                <Check className="h-3 w-3 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="destructive" className="h-7 text-xs"
+                                onClick={() => patchMutation.mutate({ id: v.id, data: { status: "declined" } })}
+                                disabled={patchMutation.isPending}
+                                data-testid={`button-decline-variation-${v.id}`}>
+                                <X className="h-3 w-3 mr-1" /> Decline
+                              </Button>
+                            </>
+                          )}
+                          {v.status === "sent" && (
+                            <>
+                              <Button size="sm" variant="default" className="h-7 text-xs"
+                                onClick={() => patchMutation.mutate({ id: v.id, data: { status: "approved" } })}
+                                disabled={patchMutation.isPending}
+                                data-testid={`button-approve-variation-${v.id}`}>
+                                <Check className="h-3 w-3 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="destructive" className="h-7 text-xs"
+                                onClick={() => patchMutation.mutate({ id: v.id, data: { status: "declined" } })}
+                                disabled={patchMutation.isPending}
+                                data-testid={`button-decline-variation-${v.id}`}>
+                                <X className="h-3 w-3 mr-1" /> Decline
+                              </Button>
+                            </>
+                          )}
+                          {isInvoiceable && acceptedQuoteId && remaining > 0.005 && (
+                            <Link href={`/quotes/${acceptedQuoteId}`}>
+                              <Button size="sm" variant="outline" className="h-7 text-xs"
+                                data-testid={`button-invoice-variation-${v.id}`}>
+                                <ReceiptText className="h-3 w-3 mr-1" /> Invoice
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
 
@@ -265,6 +335,22 @@ function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; 
                 </p>
               )}
             </div>
+            {projectJobs.length > 0 && (
+              <div>
+                <Label>Linked Job <span className="text-muted-foreground text-xs">(optional)</span></Label>
+                <Select value={form.jobId || "_none"} onValueChange={(v) => setForm((f) => ({ ...f, jobId: v === "_none" ? "" : v }))}>
+                  <SelectTrigger data-testid="select-variation-job">
+                    <SelectValue placeholder="None — project-level variation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">None</SelectItem>
+                    {projectJobs.map((j) => (
+                      <SelectItem key={j.id} value={j.id}>{j.jobNumber} — {j.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
@@ -273,6 +359,42 @@ function VariationsSection({ projectId, acceptedQuoteId }: { projectId: string; 
               disabled={!form.title.trim() || !form.amountExclGst || createMutation.isPending}
               data-testid="button-save-variation">
               {createMutation.isPending ? "Saving…" : "Create Variation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link Job Dialog */}
+      <Dialog open={!!linkJobOpen} onOpenChange={(o) => { if (!o) setLinkJobOpen(null); }}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Link Variation to Job</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Assign this variation to a job for operational traceability.</p>
+            <Select value={linkJobId} onValueChange={setLinkJobId}>
+              <SelectTrigger data-testid="select-link-job">
+                <SelectValue placeholder="Select a job…" />
+              </SelectTrigger>
+              <SelectContent>
+                {projectJobs.map((j) => (
+                  <SelectItem key={j.id} value={j.id}>{j.jobNumber} — {j.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkJobOpen(null)}>Cancel</Button>
+            <Button
+              disabled={!linkJobId || patchMutation.isPending}
+              onClick={() => {
+                if (!linkJobOpen || !linkJobId) return;
+                patchMutation.mutate({ id: linkJobOpen, data: { jobId: linkJobId } }, {
+                  onSuccess: () => setLinkJobOpen(null),
+                });
+              }}
+              data-testid="button-confirm-link-job">
+              Link Job
             </Button>
           </DialogFooter>
         </DialogContent>
