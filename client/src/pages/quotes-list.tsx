@@ -205,7 +205,7 @@ export default function QuotesList() {
   const noQuotesAtAll = !quotes || quotes.length === 0;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-4" data-testid="quotes-list-page">
+    <div className="p-4 sm:p-6 space-y-4" data-testid="quotes-list-page">
       <div className="flex items-center gap-3 flex-wrap">
         <FileText className="h-6 w-6 text-muted-foreground" />
         <h1 className="text-xl font-bold" data-testid="text-quotes-heading">Quotes</h1>
@@ -219,16 +219,14 @@ export default function QuotesList() {
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <div className="overflow-x-auto">
-            <TabsList data-testid="tabs-quote-categories">
-              <TabsTrigger value="active" data-testid="tab-active">
-                Active {tabCounts.active > 0 && `(${tabCounts.active})`}
-              </TabsTrigger>
-              <TabsTrigger value="archived" data-testid="tab-archived">
-                Archived {tabCounts.archived > 0 && `(${tabCounts.archived})`}
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList data-testid="tabs-quote-categories">
+            <TabsTrigger value="active" data-testid="tab-active">
+              Active {tabCounts.active > 0 && `(${tabCounts.active})`}
+            </TabsTrigger>
+            <TabsTrigger value="archived" data-testid="tab-archived">
+              Archived {tabCounts.archived > 0 && `(${tabCounts.archived})`}
+            </TabsTrigger>
+          </TabsList>
 
           <div className="flex flex-col gap-3 mt-4">
             <div className="flex flex-col sm:flex-row gap-3">

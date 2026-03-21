@@ -273,7 +273,7 @@ export default function InvoicesPage() {
   });
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-6xl mx-auto">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <ReceiptText className="h-5 w-5 text-muted-foreground" />
