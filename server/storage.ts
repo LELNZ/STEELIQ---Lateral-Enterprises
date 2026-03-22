@@ -218,6 +218,7 @@ export interface IStorage {
     templateVersion: number;
   }): Promise<LifecycleInstance>;
   updateLifecycleInstanceJob(quoteId: string, opJobId: string): Promise<void>;
+  deleteLifecycleDataForQuote(quoteId: string): Promise<{ instanceDeleted: boolean; taskStatesDeleted: number }>;
 
   // ── Lifecycle Task State ───────────────────────────────────────────────────
   getLifecycleTaskStates(lifecycleInstanceId: string): Promise<LifecycleTaskState[]>;
@@ -1152,6 +1153,16 @@ export class DatabaseStorage implements IStorage {
       .update(lifecycleInstances)
       .set({ opJobId })
       .where(eq(lifecycleInstances.quoteId, quoteId));
+  }
+
+  async deleteLifecycleDataForQuote(quoteId: string): Promise<{ instanceDeleted: boolean; taskStatesDeleted: number }> {
+    const instance = await this.getLifecycleInstanceForQuote(quoteId);
+    if (!instance) return { instanceDeleted: false, taskStatesDeleted: 0 };
+    const deletedTasks = await db.delete(lifecycleTaskStates)
+      .where(eq(lifecycleTaskStates.lifecycleInstanceId, instance.id))
+      .returning();
+    await db.delete(lifecycleInstances).where(eq(lifecycleInstances.id, instance.id));
+    return { instanceDeleted: true, taskStatesDeleted: deletedTasks.length };
   }
 
   async getLifecycleTaskStates(lifecycleInstanceId: string): Promise<LifecycleTaskState[]> {

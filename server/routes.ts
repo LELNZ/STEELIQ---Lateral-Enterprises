@@ -4371,6 +4371,7 @@ export async function registerRoutes(
         for (const inv of linkedInvoices) {
           await storage.deleteInvoice(inv.id);
         }
+        await storage.deleteLifecycleDataForQuote(entityId);
         await storage.deleteQuote(entityId);
       } else if (entityType === "opJob") {
         const j = await storage.getOpJob(entityId);
