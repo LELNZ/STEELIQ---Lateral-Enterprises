@@ -1446,6 +1446,7 @@ export async function registerRoutes(
     quoteNumberUseDivisionSuffix: z.boolean().nullable().optional(),
     jobNumberPrefix: z.string().max(10).nullable().optional(),
     jobNumberUseDivisionSuffix: z.boolean().nullable().optional(),
+    invoiceNumberPrefix: z.string().max(10).nullable().optional(),
     xeroAccountCode: z.string().nullable().optional(),
     xeroTaxType: z.string().nullable().optional(),
     systemMode: z.enum(["development", "production"]).optional(),

@@ -405,12 +405,6 @@ export default function OpJobDetail() {
 
       <Separator />
 
-      <div data-testid="section-lifecycle-job" className="rounded-lg border bg-card p-4">
-        <LifecyclePanel jobId={jobId} />
-      </div>
-
-      <Separator />
-
       <div className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Source Relationships</h2>
 
@@ -523,6 +517,12 @@ export default function OpJobDetail() {
             </p>
           </div>
         </div>
+      </div>
+
+      <Separator />
+
+      <div data-testid="section-lifecycle-job" className="rounded-lg border bg-card p-4">
+        <LifecyclePanel jobId={jobId} />
       </div>
 
       <Separator />

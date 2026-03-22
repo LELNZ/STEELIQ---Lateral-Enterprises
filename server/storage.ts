@@ -869,7 +869,9 @@ export class DatabaseStorage implements IStorage {
       .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
       .where(eq(numberSequences.id, "invoice"))
       .returning();
-    return `INV-${String(row.currentValue).padStart(4, "0")}`;
+    const org = await this.getOrgSettings();
+    const prefix = org?.invoiceNumberPrefix ?? "INV";
+    return `${prefix}-${String(row.currentValue).padStart(4, "0")}`;
   }
 
   async createInvoice(data: InsertInvoice): Promise<Invoice> {

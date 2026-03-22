@@ -1569,8 +1569,10 @@ function NumberingTab() {
   const [quoteDivSuffix, setQuoteDivSuffix] = useState(false);
   const [jobPrefix, setJobPrefix] = useState("");
   const [jobDivSuffix, setJobDivSuffix] = useState(false);
+  const [invoicePrefix, setInvoicePrefix] = useState("");
   const [quoteNext, setQuoteNext] = useState("");
   const [jobNext, setJobNext] = useState("");
+  const [invoiceNext, setInvoiceNext] = useState("");
 
   useEffect(() => {
     if (org) {
@@ -1578,6 +1580,7 @@ function NumberingTab() {
       setQuoteDivSuffix(org.quoteNumberUseDivisionSuffix ?? false);
       setJobPrefix(org.jobNumberPrefix || "J");
       setJobDivSuffix(org.jobNumberUseDivisionSuffix ?? false);
+      setInvoicePrefix(org.invoiceNumberPrefix || "INV");
     }
   }, [org]);
 
@@ -1585,8 +1588,10 @@ function NumberingTab() {
     if (sequences) {
       const qSeq = sequences.find(s => s.id === "quote");
       const jSeq = sequences.find(s => s.id === "op_job");
+      const iSeq = sequences.find(s => s.id === "invoice");
       if (qSeq) setQuoteNext(String(qSeq.currentValue + 1));
       if (jSeq) setJobNext(String(jSeq.currentValue + 1));
+      if (iSeq) setInvoiceNext(String(iSeq.currentValue + 1));
     }
   }, [sequences]);
 
@@ -1597,6 +1602,7 @@ function NumberingTab() {
         quoteNumberUseDivisionSuffix: quoteDivSuffix,
         jobNumberPrefix: jobPrefix || "J",
         jobNumberUseDivisionSuffix: jobDivSuffix,
+        invoiceNumberPrefix: invoicePrefix || "INV",
       });
       return res.json();
     },
@@ -1633,6 +1639,9 @@ function NumberingTab() {
     : "";
   const jobPreview = jobPrefix
     ? `${jobPrefix}-${String(parseInt(jobNext || "1")).padStart(4, "0")}${jobDivSuffix ? "-LJ" : ""}`
+    : "";
+  const invoicePreview = invoicePrefix
+    ? `${invoicePrefix}-${String(parseInt(invoiceNext || "1")).padStart(4, "0")}`
     : "";
 
   if (!isAdmin) {
@@ -1764,6 +1773,57 @@ function NumberingTab() {
                 disabled={seqMutation.isPending}
                 onClick={() => handleSetNext("op_job", jobNext)}
                 data-testid="button-set-job-next"
+              >
+                Set
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Invoice Numbering</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Controls the prefix for invoice numbers (e.g. INV-0042, SE-0042). Applies to all future invoices.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Prefix</Label>
+              <Input
+                value={invoicePrefix}
+                onChange={(e) => setInvoicePrefix(e.target.value)}
+                placeholder="INV"
+                className="w-24"
+                data-testid="input-invoice-number-prefix"
+              />
+            </div>
+          </div>
+          {invoicePreview && (
+            <p className="text-xs text-muted-foreground">Preview: <strong>{invoicePreview}</strong></p>
+          )}
+          <Separator />
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Next Invoice Number</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              The next invoice created will use this sequence number. Current next: <strong>{seqLoading ? "…" : (invoiceNext || "1")}</strong>
+            </p>
+            <div className="flex gap-2 items-center">
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={invoiceNext}
+                onChange={(e) => setInvoiceNext(e.target.value)}
+                className="w-32"
+                data-testid="input-invoice-next-number"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={seqMutation.isPending}
+                onClick={() => handleSetNext("invoice", invoiceNext)}
+                data-testid="button-set-invoice-next"
               >
                 Set
               </Button>

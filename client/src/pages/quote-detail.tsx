@@ -526,7 +526,7 @@ export default function QuoteDetail() {
       <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} quoteLabel={quote.customer ?? quote.number} />
 
       {currentRevisionForDetails && (
-        <CollapsibleCard title="Customer-facing Details" defaultOpen={false} data-testid="section-details-quick-edit">
+        <CollapsibleCard title="Customer-facing Details" defaultOpen={true} data-testid="section-details-quick-edit">
           <div className="p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">Shown as a dedicated block below the quote summary in the customer PDF and preview.</p>
@@ -1083,38 +1083,60 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
       </div>
 
       {!editing ? (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Building2 className="h-3 w-3" /> Customer</p>
-            {customer ? (
-              <p className="text-sm font-medium" data-testid="text-linked-customer">{customer.name}</p>
-            ) : (
-              <div>
-                <p className="text-sm text-muted-foreground italic">Not linked</p>
-                {quoteStatus === "accepted" && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Link a customer to enable Xero invoicing</p>
-                )}
-              </div>
-            )}
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Building2 className="h-3 w-3" /> Customer</p>
+              {customer ? (
+                <p className="text-sm font-medium" data-testid="text-linked-customer">{customer.name}</p>
+              ) : (
+                <div>
+                  <p className="text-sm text-muted-foreground italic">Not linked</p>
+                  {quoteStatus === "accepted" && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Link a customer to enable Xero invoicing</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Project</p>
+              {project ? (
+                <div>
+                  <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
+                  <a href={`/projects/${project.id}`} className="text-xs text-muted-foreground hover:underline flex items-center gap-1 mt-0.5" data-testid="link-view-project">
+                    <ExternalLink className="h-2.5 w-2.5" /> View project
+                  </a>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm text-muted-foreground italic">Not linked</p>
+                  {quoteStatus === "accepted" && !customerId && (
+                    <p className="text-xs text-muted-foreground mt-1">Link a customer first to create a project</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Project</p>
-            {project ? (
-              <div>
-                <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
-                <a href={`/projects/${project.id}`} className="text-xs text-muted-foreground hover:underline flex items-center gap-1 mt-0.5" data-testid="link-view-project">
-                  <ExternalLink className="h-2.5 w-2.5" /> View project
-                </a>
+
+          {quoteStatus === "accepted" && !projectId && customerId && (
+            <div className="rounded-lg border-2 border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 p-4 space-y-2" data-testid="banner-create-project-cta">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Next Step: Create Project</p>
               </div>
-            ) : (
-              <div>
-                <p className="text-sm text-muted-foreground italic">Not linked</p>
-                {quoteStatus === "accepted" && !customerId && (
-                  <p className="text-xs text-muted-foreground mt-1">Link a customer first to create a project</p>
-                )}
-              </div>
-            )}
-          </div>
+              <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                This quote has been accepted. Create a project to start operational delivery — jobs, invoices, and site management all flow from the project.
+              </p>
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={openCreateProject}
+                data-testid="button-create-project-cta"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Create Project
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -1277,6 +1299,7 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
     onSuccess: (newJob: OpJob) => {
       queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/op-jobs", "by-quote", quoteId] });
+      if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "jobs"] });
       toast({ title: "Job created", description: `${newJob.jobNumber} — ${newJob.title}` });
       setShowDialog(false);
       navigate(`/op-jobs/${newJob.id}`);
@@ -1588,6 +1611,8 @@ function InvoiceSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoices"] });
       setShowCreate(false);
       toast({ title: `${INVOICE_TYPE_LABELS[invoiceType] ?? "Invoice"} created` });
     },
@@ -1614,6 +1639,8 @@ function InvoiceSection({
       setXeroMissingCustomer(false);
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoices"] });
       toast({ title: "Invoice marked ready for Xero" });
     },
     onError: (e: any) => {
@@ -1638,6 +1665,8 @@ function InvoiceSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoices"] });
       toast({ title: "Invoice returned to draft" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -1655,6 +1684,8 @@ function InvoiceSection({
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoices"] });
       if (data.xeroMode === "live") {
         toast({
           title: "Pushed to Xero (Live)",
@@ -1678,6 +1709,8 @@ function InvoiceSection({
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoices"] });
       if (data.xeroWarning) setXeroWarn(data.xeroWarning);
       toast({ title: "Invoice returned to draft" });
     },
@@ -1696,6 +1729,8 @@ function InvoiceSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "invoice-allocation"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoices"] });
       toast({ title: "Invoice approved" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -1708,10 +1743,18 @@ function InvoiceSection({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ReceiptText className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoices</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Invoices {invoices.length > 0 && <span className="text-xs font-normal">({invoices.length})</span>}
+          </h2>
         </div>
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openCreateDialog} data-testid="button-create-invoice">
-          <Plus className="h-3 w-3 mr-1" /> Create Invoice
+        <Button
+          size="sm"
+          variant={invoices.length === 0 ? "default" : "outline"}
+          className={invoices.length === 0 ? "h-7 text-xs" : "h-7 text-xs"}
+          onClick={openCreateDialog}
+          data-testid="button-create-invoice"
+        >
+          <Plus className="h-3 w-3 mr-1" /> {invoices.length === 0 ? "Create First Invoice" : "Create Invoice"}
         </Button>
       </div>
 
@@ -1913,7 +1956,13 @@ function InvoiceSection({
       </Dialog>
 
       {invoices.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No invoices yet.</p>
+        <div className="rounded-lg border border-dashed p-4 space-y-1" data-testid="panel-no-invoices">
+          <p className="text-sm font-medium">No invoices raised yet</p>
+          <p className="text-xs text-muted-foreground">
+            Start with a deposit invoice, then raise progress, variation, or final invoices as work progresses.
+            Invoices must be marked ready and pushed to Xero for accounting.
+          </p>
+        </div>
       ) : (
         <div className="rounded-lg border bg-card overflow-x-auto">
           <Table>
@@ -1961,6 +2010,11 @@ function InvoiceSection({
                       <Badge variant={inv.status === "approved" ? "default" : inv.status === "returned_to_draft" ? "destructive" : inv.status === "ready_for_xero" ? "outline" : "secondary"} className="text-xs">
                         {INVOICE_STATUS_LABELS[inv.status] || inv.status}
                       </Badge>
+                      {inv.status === "returned_to_draft" && (
+                        <p className="text-xs text-destructive/70" data-testid={`text-returned-to-draft-note-${inv.id}`}>
+                          Mark ready to re-queue for Xero
+                        </p>
+                      )}
                       {inv.xeroInvoiceNumber && (
                         <p className="text-xs font-mono text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
                           Xero: {inv.xeroInvoiceNumber}

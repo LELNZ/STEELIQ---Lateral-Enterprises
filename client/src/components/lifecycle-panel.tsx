@@ -460,16 +460,15 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
   // Track which task toggle is in-flight: "stageKey:taskKey"
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  // Default-expand active stage and all task-driven stages when lifecycle loads
+  // Default-expand only the currently active stage when lifecycle loads or current stage changes.
+  // Non-active stages default closed so the panel doesn't flood open on load.
   useEffect(() => {
     if (!lifecycle) return;
-    setExpandedStages((prev) => {
-      const next = new Set(prev);
+    setExpandedStages((_prev) => {
+      const next = new Set<string>();
       for (const stage of lifecycle.stages) {
-        if (stage.tasks.length > 0) {
-          if (stage.status === "active" || stage.taskDriven) {
-            next.add(stage.key);
-          }
+        if (stage.tasks.length > 0 && stage.status === "active") {
+          next.add(stage.key);
         }
       }
       return next;
