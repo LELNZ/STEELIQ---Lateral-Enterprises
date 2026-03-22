@@ -1990,6 +1990,38 @@ function GovernanceEntitySection({
 
   const [confirmClearXero, setConfirmClearXero] = useState<string | null>(null);
 
+  const chainArchiveInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("POST", "/api/admin/governance/archive", { entityType: "invoice", entityId: invoiceId });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Archive failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Invoice archived", description: "Linked invoice archived. Refresh chain to see updated status." });
+      onRefresh();
+    },
+    onError: (e: any) => toast({ title: "Archive failed", description: e.message, variant: "destructive" }),
+  });
+
+  const chainDeleteInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/governance/record/invoice/${invoiceId}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Invoice deleted", description: "Linked invoice permanently removed." });
+      onRefresh();
+    },
+    onError: (e: any) => toast({ title: "Delete blocked", description: e.message, variant: "destructive" }),
+  });
+
   const activeItems = items.filter((i: any) => !i.archivedAt);
   const archivedItems = items.filter((i: any) => !!i.archivedAt);
   const isProtected = (i: any) => i._isolation?.xeroLinked || i._isolation?.isSharedWithLiveData || i._xeroLinked;
@@ -2062,29 +2094,19 @@ function GovernanceEntitySection({
                       )}
                     </div>
                     {chain && (
-                      <div className="text-xs text-muted-foreground space-y-0.5">
-                        {/* Quote chain: op-job and invoices */}
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        {/* Quote chain: op-job */}
                         {chain.opJob && (
                           <div>→ Op-Job: {chain.opJob.jobNumber}{chain.opJob.isDemoRecord ? " (demo flagged)" : " ⚠ not demo-flagged"}</div>
                         )}
                         {/* Estimate chain: linked quotes */}
                         {chain.quoteCount > 0 && (
                           <div className="text-amber-600 dark:text-amber-400">
-                            → {chain.quoteCount} linked quote(s): {chain.quoteNumbers.join(", ")} — delete blocked until resolved
+                            → {chain.quoteCount} linked quote(s): {chain.quoteNumbers?.join(", ")} — delete blocked until resolved
                           </div>
                         )}
                         {chain.quoteCount === 0 && entityType === "estimate" && (
                           <div>No linked quotes — safe to delete</div>
-                        )}
-                        {/* Op-job / quote / project: invoices */}
-                        {chain.invoiceCount > 0 && (
-                          <div>
-                            → {chain.invoiceCount} linked invoice(s)
-                            {chain.xeroLinkedInvoiceCount > 0 && (
-                              <span className="ml-1 text-destructive font-medium">({chain.xeroLinkedInvoiceCount} Xero-linked: {chain.xeroLinkedNumbers.join(", ")})</span>
-                            )}
-                            {chain.xeroLinkedInvoiceCount === 0 && <span className="ml-1 text-amber-600 dark:text-amber-400">— delete blocked until resolved</span>}
-                          </div>
                         )}
                         {/* Op-job: source quote */}
                         {chain.sourceQuote && (
@@ -2096,6 +2118,92 @@ function GovernanceEntitySection({
                         )}
                         {chain.quoteCount > 0 && entityType === "project" && (
                           <div className="text-amber-600 dark:text-amber-400">→ {chain.quoteCount} linked quote(s) — delete blocked until resolved</div>
+                        )}
+                        {/* Quote chain: individual invoice details with inline actions */}
+                        {entityType === "quote" && chain.invoices?.length > 0 && (
+                          <div className="space-y-1 mt-1">
+                            <div className="font-medium text-foreground">Linked invoices ({chain.invoices.length}):</div>
+                            {chain.invoices.map((inv: any) => {
+                              const isXeroLinked = !!inv.xeroInvoiceId;
+                              const isArchived = !!inv.archivedAt;
+                              const isNonDemo = !inv.isDemoRecord;
+                              return (
+                                <div key={inv.id} className="flex items-center gap-2 flex-wrap pl-3 py-0.5 border-l-2 border-muted" data-testid={`chain-invoice-${inv.id}`}>
+                                  <span className="font-mono">{inv.number}</span>
+                                  <span className="text-muted-foreground">{inv.type} · {inv.status}</span>
+                                  {isNonDemo && <Badge variant="outline" className="text-xs border-amber-400 text-amber-700 dark:text-amber-400">Live (not demo)</Badge>}
+                                  {inv.isDemoRecord && <Badge variant="outline" className="text-xs">Demo</Badge>}
+                                  {isXeroLinked && <Badge variant="destructive" className="text-xs">Xero: {inv.xeroInvoiceNumber}</Badge>}
+                                  {isArchived && <Badge variant="outline" className="text-xs">Archived</Badge>}
+                                  {/* Inline actions for demo invoices */}
+                                  {inv.isDemoRecord && !isArchived && (
+                                    <div className="flex items-center gap-1 ml-auto">
+                                      {isXeroLinked && (
+                                        confirmClearXero === inv.id ? (
+                                          <div className="flex items-center gap-1 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded px-1.5 py-0.5">
+                                            <span className="text-amber-800 dark:text-amber-300">Voided in Xero?</span>
+                                            <Button size="sm" variant="destructive" className="h-4 px-1.5 text-[10px]"
+                                              disabled={clearXeroLinkMutation.isPending}
+                                              onClick={() => clearXeroLinkMutation.mutate(inv.id)}
+                                              data-testid={`button-chain-confirm-clear-xero-${inv.id}`}
+                                            >{clearXeroLinkMutation.isPending ? "..." : "Yes, clear"}</Button>
+                                            <Button size="sm" variant="ghost" className="h-4 px-1.5 text-[10px]"
+                                              onClick={() => setConfirmClearXero(null)}
+                                            >No</Button>
+                                          </div>
+                                        ) : (
+                                          <Button size="sm" variant="outline" className="h-5 px-1.5 text-[10px] border-amber-400 text-amber-700 dark:text-amber-400"
+                                            onClick={() => setConfirmClearXero(inv.id)}
+                                            data-testid={`button-chain-clear-xero-${inv.id}`}
+                                          >Clear Xero Link</Button>
+                                        )
+                                      )}
+                                      {!isXeroLinked && (
+                                        <>
+                                          <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px]"
+                                            disabled={chainArchiveInvoiceMutation.isPending}
+                                            onClick={() => chainArchiveInvoiceMutation.mutate(inv.id)}
+                                            data-testid={`button-chain-archive-inv-${inv.id}`}
+                                          >Archive</Button>
+                                          <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-destructive"
+                                            disabled={chainDeleteInvoiceMutation.isPending}
+                                            onClick={() => chainDeleteInvoiceMutation.mutate(inv.id)}
+                                            data-testid={`button-chain-delete-inv-${inv.id}`}
+                                          >Delete</Button>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {/* Chain status guidance */}
+                            {chain.hasNonDemoInvoice && (
+                              <div className="text-destructive font-medium mt-1">
+                                ⚠ Chain contains live (non-demo) invoice(s) — chain cleanup blocked. Flag them as demo first if appropriate.
+                              </div>
+                            )}
+                            {!chain.hasNonDemoInvoice && chain.xeroLinkedInvoiceCount > 0 && (
+                              <div className="text-amber-600 dark:text-amber-400 font-medium mt-1">
+                                Next step: Clear stale Xero link(s) above, then archive/delete the invoices, then delete this quote.
+                              </div>
+                            )}
+                            {chain.canChainDelete && chain.invoiceCount > 0 && (
+                              <div className="text-green-700 dark:text-green-400 font-medium mt-1">
+                                All linked records are demo-flagged with no Xero blockers — quote delete will auto-cleanup this chain.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* Non-quote entity: summary invoice counts (existing behavior) */}
+                        {entityType !== "quote" && chain.invoiceCount > 0 && (
+                          <div>
+                            → {chain.invoiceCount} linked invoice(s)
+                            {chain.xeroLinkedInvoiceCount > 0 && (
+                              <span className="ml-1 text-destructive font-medium">({chain.xeroLinkedInvoiceCount} Xero-linked: {chain.xeroLinkedNumbers.join(", ")})</span>
+                            )}
+                            {chain.xeroLinkedInvoiceCount === 0 && <span className="ml-1 text-amber-600 dark:text-amber-400">— delete blocked until resolved</span>}
+                          </div>
                         )}
                       </div>
                     )}
@@ -2220,40 +2328,45 @@ function GovernanceEntitySection({
                         Archive
                       </Button>
                     )}
-                    {confirmDelete === id ? (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-7 text-xs"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => deleteMutation.mutate(id)}
-                          data-testid={`button-confirm-delete-${entityType}-${id}`}
-                        >
-                          {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Delete"}
-                        </Button>
+                    {(() => {
+                      const chainBlocked = entityType === "quote" && chain && (chain.xeroLinkedInvoiceCount > 0 || chain.hasNonDemoInvoice);
+                      return confirmDelete === id ? (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-7 text-xs"
+                            disabled={deleteMutation.isPending}
+                            onClick={() => deleteMutation.mutate(id)}
+                            data-testid={`button-confirm-delete-${entityType}-${id}`}
+                          >
+                            {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Delete"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            onClick={() => setConfirmDelete(null)}
+                            data-testid={`button-cancel-delete-${entityType}-${id}`}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-7 text-xs"
-                          onClick={() => setConfirmDelete(null)}
-                          data-testid={`button-cancel-delete-${entityType}-${id}`}
+                          className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setConfirmDelete(id)}
+                          disabled={!!chainBlocked}
+                          title={chainBlocked ? "Resolve linked chain blockers first" : undefined}
+                          data-testid={`button-delete-${entityType}-${id}`}
                         >
-                          Cancel
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
                         </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setConfirmDelete(id)}
-                        data-testid={`button-delete-${entityType}-${id}`}
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        Delete
-                      </Button>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
 

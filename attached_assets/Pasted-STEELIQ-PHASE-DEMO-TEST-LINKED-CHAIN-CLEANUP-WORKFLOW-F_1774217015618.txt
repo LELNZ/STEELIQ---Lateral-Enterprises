@@ -1,0 +1,228 @@
+STEELIQ PHASE — DEMO/TEST LINKED-CHAIN CLEANUP WORKFLOW FOR PRIVILEGED ADMIN USERS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow governance/admin workflow hardening phase for linked demo/test record cleanup.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not weaken Xero protections.
+- Do not weaken downstream chain protections.
+- Do not weaken referential integrity.
+- Do not introduce unsafe blanket hard deletion.
+- Do not change lifecycle architecture broadly.
+- Do not change invoice creation, quote creation, or quote lifecycle rules broadly.
+- Do not introduce schema creep unless absolutely required and you stop to explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond improving the privileged admin cleanup workflow for linked demo/test chains.
+
+CURRENT LIVE ISSUE
+
+In the live system, privileged admin users can flag records as demo/test and can see governance state, but linked demo/test cleanup remains operationally poor.
+
+Observed live problems:
+- A demo/test quote delete is correctly blocked because of downstream Xero-linked invoice protection.
+- The admin workflow does not make it easy to resolve the blocker chain in the correct order.
+- Demo/test invoices are visible in active lists, but the cleanup path is not sufficiently available/clear from the operational context.
+- The governance panel does not yet provide a complete linked-chain cleanup workflow.
+- Test/demo data should be removable completely when it is truly a demo-only chain and all blockers are safely resolved.
+
+PRIMARY OBJECTIVE
+
+Implement a privileged-admin, chain-aware cleanup workflow for demo/test record chains so that test/demo chains can be safely and completely cleaned up in the correct order without weakening live data protections.
+
+PHASE A — AUDIT THE CURRENT LINKED CHAIN TRUTH
+
+1. Review the current governance, archive, delete, and Xero-blocking code paths for:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- lifecycle-linked quote data
+
+2. For a demo/test quote, identify all currently relevant linked blockers, including:
+- linked op-jobs
+- linked invoices
+- Xero-linked invoices
+- lifecycle instances/task states
+- any other dependent rows already enforced by code
+
+3. Report the real dependency/cleanup order required for a fully demo/test quote chain.
+
+PHASE B — ADD CHAIN-AWARE BLOCKER VISIBILITY
+
+For privileged admin users in the canonical governance surface, make linked blockers visible and actionable.
+
+Required behavior:
+1. For a protected or actionable demo/test quote, show clearly:
+- linked jobs count
+- linked invoices count
+- whether any linked invoice is Xero-linked
+- whether quote deletion is currently blocked and why
+
+2. The UI must make the next cleanup step obvious, for example:
+- “Clear stale Xero link on invoice INV-0745 first”
+- “Archive/delete linked demo invoice first”
+- “Then delete quote”
+
+3. Do not expose this to non-admin users.
+
+PHASE C — ADD SAFE DEMO-CHAIN CLEANUP ACTIONS
+
+Implement the narrowest safe admin workflow.
+
+Expected direction:
+- for demo/test-only linked chains, once blockers are resolved, the system should support orderly cleanup of the linked chain
+- this may be:
+  - guided step-by-step actions, or
+  - a safe chain cleanup action/button
+- but only when all linked records in scope are demo/test and currently eligible
+
+At minimum, the admin should be able to complete cleanup without manually hunting across disconnected pages.
+
+Possible acceptable implementation:
+- a quote-level governance “Resolve linked demo chain” or “Cleanup demo chain” surface
+- invoice-level protected/actionable controls linked from the quote governance row
+- ordered archive/delete actions made directly accessible in governance
+
+PHASE D — KEEP SAFETY STRICT
+
+Required safety rules:
+1. Non-demo/live records must never be swept into cleanup.
+2. Xero-linked invoices must remain blocked until the stale link is explicitly cleared through the existing safe workflow.
+3. If any linked record in the chain is non-demo or otherwise protected, the chain cleanup must stop and explain why.
+4. Archive-first remains preferred unless delete is currently safe under existing governance rules.
+
+PHASE E — INVOICE ACTIONABILITY / DISCOVERABILITY
+
+The current live invoice cleanup path is not operationally clear enough.
+
+Required behavior:
+1. For privileged admin users, demo/test invoices that are relevant to chain cleanup must have a clear discoverability/action path.
+2. If the invoice page lacks the needed archive/delete/clear-link actions for this workflow, add the narrowest truthful improvement.
+3. Ensure the admin can:
+- find the linked invoice
+- clear stale Xero link if needed
+- archive/delete when eligible
+
+STRICT NON-GOALS
+
+Do NOT:
+- weaken protections for real production records
+- redesign Settings broadly
+- redesign Quotes, Jobs, or Invoices pages broadly
+- implement automatic deletion of mixed live/test chains
+- add fake environment switching
+- redesign lifecycle engine
+- change invoice numbering
+- add speculative bulk features beyond what is required for linked demo/test cleanup
+
+REQUIRED TEST CASES
+
+TC-CHAIN-001
+Open a demo/test quote with linked demo job(s) and linked invoice(s).
+Expected:
+- governance/admin surface clearly shows the linked chain and current blockers
+
+TC-CHAIN-002
+For a demo/test quote blocked by a Xero-linked demo invoice:
+Expected:
+- admin can see exactly which linked invoice blocks delete
+- admin can navigate to or act on the blocker from the cleanup flow
+
+TC-CHAIN-003
+For a stale Xero-linked demo invoice after Xero-side deletion/void:
+Expected:
+- admin can clear the stale Xero link
+- invoice becomes actionable
+
+TC-CHAIN-004
+After blocker resolution, archive/delete the linked demo invoice.
+Expected:
+- invoice is removed from active operational view appropriately
+
+TC-CHAIN-005
+After linked invoice blocker is cleared/removed, delete or archive the linked demo/test quote.
+Expected:
+- no raw DB error
+- delete/archive follows current safe rules
+
+TC-CHAIN-006
+Attempt the same cleanup on a chain containing any non-demo/live record.
+Expected:
+- cleanup is blocked clearly
+- no unsafe cascade occurs
+
+TC-CHAIN-007
+Verify privileged admin can complete the cleanup workflow without needing to guess where records went.
+Expected:
+- archived discoverability and action guidance are clear
+
+TC-CHAIN-008
+Verify non-admin users do not see admin-only cleanup actions or chain-governance controls.
+Expected:
+- role-gating preserved
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact linked-chain cleanup order implemented or exposed
+3. exact blocker visibility added
+4. exact invoice action/discoverability improvements made
+5. exact rules for when chain cleanup is allowed vs blocked
+6. results of all required test cases
+7. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. LINKED-CHAIN TRUTH
+- exact quote-chain dependencies identified
+- exact cleanup order required
+- exact blockers that can appear
+
+4. BLOCKER VISIBILITY / ADMIN UX
+- what linked blocker information is now shown
+- where it is shown
+- how the next step is made clear
+
+5. CLEANUP FLOW
+- before blocker resolution
+- after stale Xero link clear
+- after invoice cleanup
+- after quote cleanup
+
+6. TEST RESULTS
+- TC-CHAIN-001 result
+- TC-CHAIN-002 result
+- TC-CHAIN-003 result
+- TC-CHAIN-004 result
+- TC-CHAIN-005 result
+- TC-CHAIN-006 result
+- TC-CHAIN-007 result
+- TC-CHAIN-008 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve protections.
+Preserve referential integrity.
+Make demo/test linked-chain cleanup operationally usable for privileged admin users.
+Do not weaken safety for live production records.
+Report truthfully and exactly.
