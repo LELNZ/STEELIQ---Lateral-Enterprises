@@ -56,6 +56,7 @@ export const customers = pgTable("customers", {
   address: text("address"),
   notes: text("notes"),
   xeroContactId: text("xero_contact_id"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -79,6 +80,7 @@ export const customerContacts = pgTable("customer_contacts", {
   category: text("category").default("client"),
   notes: text("notes"),
   isPrimary: boolean("is_primary").default(false),
+  isDemoRecord: boolean("is_demo_record").default(false),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });

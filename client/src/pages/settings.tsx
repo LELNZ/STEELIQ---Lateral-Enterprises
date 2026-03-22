@@ -1859,7 +1859,7 @@ function EnvironmentInfoSection() {
   );
 }
 
-type GovernanceEntityType = "estimate" | "quote" | "opJob" | "project" | "invoice";
+type GovernanceEntityType = "estimate" | "quote" | "opJob" | "project" | "invoice" | "customer" | "contact";
 
 function GovernanceEntitySection({
   title,
@@ -1940,11 +1940,13 @@ function GovernanceEntitySection({
         <div className="border-t divide-y">
           {items.map((item: any) => {
             const id = item.id;
-            const label = item.number || item.jobNumber || item.name || item.title || id;
+            const label = item.number || item.jobNumber || item.name || item.title
+              || (item.firstName || item.lastName ? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() : null)
+              || id;
             const sub = item.customer || item.status || "";
             const isArchived = !!item.archivedAt;
             const chain = item._chain;
-            const xeroLinked = item._xeroLinked || (chain?.xeroLinkedInvoiceCount > 0);
+            const xeroLinked = item._xeroLinked || (chain?.xeroLinkedInvoiceCount > 0) || item._isolation?.xeroLinked;
 
             return (
               <div key={id} className="px-4 py-3 space-y-2" data-testid={`governance-row-${entityType}-${id}`}>
@@ -1999,6 +2001,36 @@ function GovernanceEntitySection({
                     {item._xeroLinked && (
                       <div className="text-xs text-destructive">
                         Xero invoice: {item._xeroNumber || "linked"} — cannot delete without voiding in Xero first
+                      </div>
+                    )}
+                    {/* CRM isolation info for customers */}
+                    {item._isolation && (
+                      <div className="text-xs space-y-0.5">
+                        {item._isolation.xeroLinked && (
+                          <div className="text-destructive">Xero contact linked — archive/delete blocked until Xero link is removed</div>
+                        )}
+                        {item._isolation.isSharedWithLiveData ? (
+                          <div className="text-destructive font-medium">
+                            ⚠ Shared with live data —
+                            {item._isolation.liveQuoteCount > 0 && ` ${item._isolation.liveQuoteCount} live quote(s)`}
+                            {item._isolation.liveJobCount > 0 && ` ${item._isolation.liveJobCount} live job(s)`}
+                            {item._isolation.liveProjectCount > 0 && ` ${item._isolation.liveProjectCount} live project(s)`}
+                            {item._isolation.liveInvoiceCount > 0 && ` ${item._isolation.liveInvoiceCount} live invoice(s)`}
+                            {item._isolation.parentCustomerShared && " (parent customer is shared with live data)"}
+                          </div>
+                        ) : (
+                          <div className="text-green-700 dark:text-green-400">
+                            Isolated — {item._isolation.safeToDelete ? "safe to archive and delete" : "safe to archive"}
+                            {item._isolation.totalLinkedQuotes > 0 && ` (${item._isolation.totalLinkedQuotes} linked quote(s), all demo-flagged)`}
+                            {item._isolation.totalLinkedJobs > 0 && ` (${item._isolation.totalLinkedJobs} linked job(s), all demo-flagged)`}
+                          </div>
+                        )}
+                        {item._isolation.parentCustomerName && (
+                          <div className="text-muted-foreground">Parent customer: {item._isolation.parentCustomerName}</div>
+                        )}
+                        {item._isolation.liveJobCount > 0 && entityType === "contact" && (
+                          <div className="text-amber-600 dark:text-amber-400">→ {item._isolation.liveJobCount} live job(s) reference this contact</div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2109,7 +2141,7 @@ function GovernanceSection() {
     },
   });
 
-  const totalFlagged = summary ? (summary.counts.estimates + summary.counts.quotes + summary.counts.opJobs + summary.counts.projects + summary.counts.invoices) : 0;
+  const totalFlagged = summary ? (summary.counts.estimates + summary.counts.quotes + summary.counts.opJobs + summary.counts.projects + summary.counts.invoices + (summary.counts.customers ?? 0) + (summary.counts.contacts ?? 0)) : 0;
 
   return (
     <div className="space-y-4" data-testid="governance-section">
@@ -2186,6 +2218,18 @@ function GovernanceSection() {
                 title="Invoices"
                 entityType="invoice"
                 items={summary.invoices}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Customers (CRM)"
+                entityType="customer"
+                items={summary.customers ?? []}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Contacts (CRM)"
+                entityType="contact"
+                items={summary.contacts ?? []}
                 onRefresh={() => refetch()}
               />
             </div>
