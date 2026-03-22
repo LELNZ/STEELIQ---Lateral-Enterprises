@@ -1960,19 +1960,39 @@ function GovernanceEntitySection({
                     </div>
                     {chain && (
                       <div className="text-xs text-muted-foreground space-y-0.5">
+                        {/* Quote chain: op-job and invoices */}
                         {chain.opJob && (
                           <div>→ Op-Job: {chain.opJob.jobNumber}{chain.opJob.isDemoRecord ? " (demo flagged)" : " ⚠ not demo-flagged"}</div>
                         )}
-                        {chain.invoiceCount > 0 && (
-                          <div>
-                            → {chain.invoiceCount} invoice(s)
-                            {chain.xeroLinkedInvoiceCount > 0 && (
-                              <span className="ml-1 text-destructive font-medium">({chain.xeroLinkedInvoiceCount} linked to Xero: {chain.xeroLinkedNumbers.join(", ")})</span>
-                            )}
+                        {/* Estimate chain: linked quotes */}
+                        {chain.quoteCount > 0 && (
+                          <div className="text-amber-600 dark:text-amber-400">
+                            → {chain.quoteCount} linked quote(s): {chain.quoteNumbers.join(", ")} — delete blocked until resolved
                           </div>
                         )}
+                        {chain.quoteCount === 0 && entityType === "estimate" && (
+                          <div>No linked quotes — safe to delete</div>
+                        )}
+                        {/* Op-job / quote / project: invoices */}
+                        {chain.invoiceCount > 0 && (
+                          <div>
+                            → {chain.invoiceCount} linked invoice(s)
+                            {chain.xeroLinkedInvoiceCount > 0 && (
+                              <span className="ml-1 text-destructive font-medium">({chain.xeroLinkedInvoiceCount} Xero-linked: {chain.xeroLinkedNumbers.join(", ")})</span>
+                            )}
+                            {chain.xeroLinkedInvoiceCount === 0 && <span className="ml-1 text-amber-600 dark:text-amber-400">— delete blocked until resolved</span>}
+                          </div>
+                        )}
+                        {/* Op-job: source quote */}
                         {chain.sourceQuote && (
                           <div>← Source quote: {chain.sourceQuote.number}{!chain.sourceQuote.isDemoRecord ? " ⚠ not demo-flagged" : ""}</div>
+                        )}
+                        {/* Project chain: quote, op-job counts */}
+                        {chain.opJobCount > 0 && (
+                          <div className="text-amber-600 dark:text-amber-400">→ {chain.opJobCount} linked op-job(s) — delete blocked until resolved</div>
+                        )}
+                        {chain.quoteCount > 0 && entityType === "project" && (
+                          <div className="text-amber-600 dark:text-amber-400">→ {chain.quoteCount} linked quote(s) — delete blocked until resolved</div>
                         )}
                       </div>
                     )}
@@ -2040,8 +2060,11 @@ function GovernanceEntitySection({
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                       <div className="space-y-1">
                         <p className="font-medium">Permanent deletion — this cannot be undone.</p>
-                        {xeroLinked && <p>⚠ This record or its downstream chain has Xero-linked invoices. The server will block deletion to protect accounting integrity.</p>}
-                        {chain?.invoiceCount > 0 && <p>Downstream invoices in this chain will also be reviewed before deletion is allowed.</p>}
+                        {xeroLinked && <p>⚠ This record or its downstream chain has Xero-linked invoices. The server will block deletion to protect accounting integrity. Archiving in SteelIQ does not remove records from Xero.</p>}
+                        {chain?.quoteCount > 0 && entityType === "estimate" && <p>⚠ This estimate has {chain.quoteCount} linked quote(s). The server will block deletion until those quotes are resolved first.</p>}
+                        {chain?.invoiceCount > 0 && entityType !== "estimate" && <p>⚠ {chain.invoiceCount} linked invoice(s) in this chain will be reviewed before deletion is allowed.</p>}
+                        {chain?.opJobCount > 0 && <p>⚠ {chain.opJobCount} linked op-job(s) must be resolved before this project can be deleted.</p>}
+                        {(chain?.quoteCount > 0 || chain?.opJobCount > 0 || chain?.invoiceCount > 0) && entityType === "project" && <p>⚠ This project has linked downstream records. The server will block deletion until they are resolved.</p>}
                         <p>Archive is the safer option and preserves historical records.</p>
                       </div>
                     </div>

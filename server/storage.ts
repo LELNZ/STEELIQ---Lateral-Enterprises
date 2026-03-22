@@ -166,6 +166,7 @@ export interface IStorage {
   getAllInvoices(): Promise<Invoice[]>;
   getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]>;
   updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+  archiveInvoice(id: string): Promise<void>;
 
   getNextJobNumber(divisionCode?: string): Promise<string>;
   getNumberSequences(): Promise<{ id: string; currentValue: number }[]>;
@@ -818,11 +819,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInvoicesByQuote(quoteId: string): Promise<Invoice[]> {
-    return db.select().from(invoices).where(eq(invoices.quoteId, quoteId)).orderBy(desc(invoices.createdAt));
+    return db.select().from(invoices).where(and(eq(invoices.quoteId, quoteId), isNull(invoices.archivedAt))).orderBy(desc(invoices.createdAt));
   }
 
   async getAllInvoices(): Promise<Invoice[]> {
-    return db.select().from(invoices).orderBy(desc(invoices.createdAt));
+    return db.select().from(invoices).where(isNull(invoices.archivedAt)).orderBy(desc(invoices.createdAt));
   }
 
   async getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]> {
@@ -834,6 +835,7 @@ export class DatabaseStorage implements IStorage {
       FROM invoices i
       LEFT JOIN customers c ON c.id = i.customer_id
       LEFT JOIN projects p ON p.id = i.project_id
+      WHERE i.archived_at IS NULL
       ORDER BY i.created_at DESC
     `);
     return result.rows.map((row: any) => ({
@@ -858,6 +860,7 @@ export class DatabaseStorage implements IStorage {
       xeroInvoiceNumber: row.xero_invoice_number,
       xeroStatus: row.xero_status,
       isDemoRecord: row.is_demo_record ?? false,
+      archivedAt: row.archived_at ?? null,
       createdByUserId: row.created_by_user_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -872,6 +875,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoices.id, id))
       .returning();
     return updated;
+  }
+
+  async archiveInvoice(id: string): Promise<void> {
+    await db.update(invoices)
+      .set({ archivedAt: new Date() } as any)
+      .where(eq(invoices.id, id));
   }
 
   async getNextJobNumber(divisionCode?: string): Promise<string> {

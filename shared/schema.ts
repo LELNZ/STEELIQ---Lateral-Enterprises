@@ -524,6 +524,7 @@ export const invoices = pgTable("invoices", {
   xeroInvoiceNumber: text("xero_invoice_number"),
   xeroStatus: text("xero_status"),
   isDemoRecord: boolean("is_demo_record").default(false),
+  archivedAt: timestamp("archived_at"),
   createdByUserId: varchar("created_by_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

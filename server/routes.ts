@@ -3818,19 +3818,54 @@ export async function registerRoutes(
 
       const opJobsWithChain = await Promise.all(demoOpJobs.map(async (j) => {
         const linkedQuote = j.sourceQuoteId ? await storage.getQuote(j.sourceQuoteId) : null;
+        const linkedInvoices = j.sourceQuoteId ? await storage.getInvoicesByQuote(j.sourceQuoteId) : [];
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
         return {
           ...j,
           _chain: {
             sourceQuote: linkedQuote ? { id: linkedQuote.id, number: linkedQuote.number, isDemoRecord: linkedQuote.isDemoRecord } : null,
+            invoiceCount: linkedInvoices.length,
+            xeroLinkedInvoiceCount: xeroLinkedInvoices.length,
+            xeroLinkedNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean),
+          },
+        };
+      }));
+
+      const estimatesWithChain = await Promise.all(demoJobs.map(async (job) => {
+        const linkedQuotes = await storage.getQuotesByJobId(job.id);
+        return {
+          ...job,
+          _chain: {
+            quoteCount: linkedQuotes.length,
+            quoteNumbers: linkedQuotes.map(q => q.number),
+          },
+        };
+      }));
+
+      const projectsWithChain = await Promise.all(demoProjects.map(async (proj) => {
+        const [linkedQuotes, linkedOpJobs, linkedInvoices] = await Promise.all([
+          storage.getQuotesByProject(proj.id),
+          storage.getOpJobsByProject(proj.id),
+          storage.getInvoicesByProject(proj.id),
+        ]);
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+        return {
+          ...proj,
+          _chain: {
+            quoteCount: linkedQuotes.length,
+            opJobCount: linkedOpJobs.length,
+            invoiceCount: linkedInvoices.length,
+            xeroLinkedInvoiceCount: xeroLinkedInvoices.length,
+            xeroLinkedNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean),
           },
         };
       }));
 
       res.json({
-        estimates: demoJobs,
+        estimates: estimatesWithChain,
         quotes: quotesWithChain,
         opJobs: opJobsWithChain,
-        projects: demoProjects,
+        projects: projectsWithChain,
         invoices: demoInvoices.map(inv => ({
           ...inv,
           _xeroLinked: !!inv.xeroInvoiceId,
@@ -3890,8 +3925,14 @@ export async function registerRoutes(
         const inv = await storage.getInvoice(entityId);
         if (!inv) return res.status(404).json({ error: "Invoice not found" });
         if (!inv.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
-        // Invoices use status for archival — set to archived state
-        await storage.updateInvoice(entityId, { status: "returned_to_draft" } as any);
+        if (inv.xeroInvoiceId) {
+          return res.status(400).json({
+            error: "This invoice is linked to Xero. Archiving it in SteelIQ does not remove it from Xero. Archive only if you understand this. To continue, void the Xero record first.",
+            code: "XERO_LINKED",
+            xeroInvoiceNumber: inv.xeroInvoiceNumber,
+          });
+        }
+        await storage.archiveInvoice(entityId);
         result = "archived";
       } else {
         return res.status(400).json({ error: "Unknown entity type" });
@@ -3958,16 +3999,69 @@ export async function registerRoutes(
         const j = await storage.getOpJob(entityId);
         if (!j) return res.status(404).json({ error: "Op-Job not found" });
         if (!j.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Check downstream invoices via the source quote
+        if (j.sourceQuoteId) {
+          const linkedInvoices = await storage.getInvoicesByQuote(j.sourceQuoteId);
+          const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+          if (xeroLinkedInvoices.length > 0) {
+            return res.status(400).json({
+              error: `This op-job has ${xeroLinkedInvoices.length} Xero-linked invoice(s) in its quote chain (${xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean).join(", ")}). Void or remove them in Xero first. Archive this op-job instead.`,
+              code: "XERO_LINKED_DOWNSTREAM",
+              xeroNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber),
+            });
+          }
+          if (linkedInvoices.length > 0) {
+            return res.status(400).json({
+              error: `This op-job has ${linkedInvoices.length} linked invoice(s) in its quote chain. Archive or delete those invoices first before deleting the op-job. Archive is the safer option.`,
+              code: "LINKED_INVOICES_DOWNSTREAM",
+              invoiceCount: linkedInvoices.length,
+            });
+          }
+        }
         await storage.deleteOpJob(entityId);
       } else if (entityType === "estimate") {
         const j = await storage.getJob(entityId);
         if (!j) return res.status(404).json({ error: "Estimate not found" });
         if (!j.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Check downstream quotes before deleting
+        const linkedQuotes = await storage.getQuotesByJobId(entityId);
+        if (linkedQuotes.length > 0) {
+          return res.status(400).json({
+            error: `This estimate has ${linkedQuotes.length} linked quote(s) (${linkedQuotes.map(q => q.number).join(", ")}). Archive or delete those quotes first to avoid orphaning them. Archive is the safer option.`,
+            code: "LINKED_QUOTES_DOWNSTREAM",
+            quoteNumbers: linkedQuotes.map(q => q.number),
+          });
+        }
         await storage.deleteJob(entityId);
       } else if (entityType === "project") {
         const p = await storage.getProject(entityId);
         if (!p) return res.status(404).json({ error: "Project not found" });
         if (!p.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Check downstream quotes, op-jobs, and invoices before deleting
+        const [linkedQuotes, linkedOpJobs, linkedInvoices] = await Promise.all([
+          storage.getQuotesByProject(entityId),
+          storage.getOpJobsByProject(entityId),
+          storage.getInvoicesByProject(entityId),
+        ]);
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+        if (xeroLinkedInvoices.length > 0) {
+          return res.status(400).json({
+            error: `This project has ${xeroLinkedInvoices.length} Xero-linked invoice(s) (${xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean).join(", ")}). Void or remove them in Xero first. Archive this project instead.`,
+            code: "XERO_LINKED_DOWNSTREAM",
+            xeroNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber),
+          });
+        }
+        const blockReasons: string[] = [];
+        if (linkedQuotes.length > 0) blockReasons.push(`${linkedQuotes.length} linked quote(s): ${linkedQuotes.map(q => q.number).join(", ")}`);
+        if (linkedOpJobs.length > 0) blockReasons.push(`${linkedOpJobs.length} linked op-job(s): ${linkedOpJobs.map(j => j.jobNumber).join(", ")}`);
+        if (linkedInvoices.length > 0) blockReasons.push(`${linkedInvoices.length} linked invoice(s)`);
+        if (blockReasons.length > 0) {
+          return res.status(400).json({
+            error: `This project has linked downstream records — ${blockReasons.join("; ")}. Archive or resolve those records first to avoid silent orphaning. Archive is the safer option.`,
+            code: "LINKED_RECORDS_DOWNSTREAM",
+            detail: { quotes: linkedQuotes.length, opJobs: linkedOpJobs.length, invoices: linkedInvoices.length },
+          });
+        }
         await storage.deleteProject(entityId);
       } else {
         return res.status(400).json({ error: "Unknown entity type" });

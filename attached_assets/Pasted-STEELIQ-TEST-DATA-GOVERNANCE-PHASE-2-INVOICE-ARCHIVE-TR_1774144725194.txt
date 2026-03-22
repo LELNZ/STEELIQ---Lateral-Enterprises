@@ -1,0 +1,341 @@
+STEELIQ TEST DATA GOVERNANCE — PHASE 2
+INVOICE ARCHIVE TRUTH + DOWNSTREAM DELETE SAFETY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not broaden deletion capability.
+- Do not mark this phase complete unless the required admin/user-facing UI surfaces and governance rules are operationally usable.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If older prompt language conflicts with the actual repo, follow current code truth and report the mismatch.
+- Preserve the existing Settings > System Environment Information and role-gated Governance structure from Phase 1.
+- Preserve the current quote archive/history behavior unless explicitly required below.
+- Do not force customer/contact governance into this phase.
+
+CURRENT CONTEXT
+
+- SteelIQ is live and Xero push works.
+- Phase 1 removed the misleading System Mode selector from the Settings UI and replaced it with:
+  - Environment Information
+  - Test / Demo Data Governance
+- Owner/Admin-only governance controls now exist.
+- Demo/test flagging and review now exist across:
+  - estimates
+  - quotes
+  - projects
+  - jobs
+  - invoices
+- Xero-linked invoice delete is blocked.
+- Phase 1 was accepted with known gaps.
+
+PHASE 1 ACCEPTED GAPS TO CLOSE NOW
+
+1. Invoice archive is not a true archive yet.
+Current behavior sets invoice status to returned_to_draft, but invoices still remain in the active invoice list.
+This is not sufficient for production-safe test/demo governance.
+
+2. Delete safety is incomplete for linked downstream relationships.
+Current known gaps:
+- estimate delete does not check downstream quotes
+- project delete does not check downstream quotes/op-jobs/invoices
+- op-job delete does not check downstream invoice implications
+
+PRIMARY OBJECTIVE
+
+Close the Phase 1 governance gaps without broadening scope.
+
+This phase is only about:
+1. true invoice archive behavior for flagged test/demo invoices
+2. downstream delete blocking / delete safety for estimate, project, and op-job governance paths
+3. truthful reporting of exact behavior and remaining limits
+
+Do not start a broader governance redesign.
+
+PHASE A — TRUE INVOICE ARCHIVE BEHAVIOR
+
+OBJECTIVE
+
+Make archive for flagged test/demo invoices behave like a real governance archive, not a returned-to-draft workaround that still leaves the record in the active operational list.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the current invoice model and choose the safest architecture-preserving method to support true archive behavior for flagged test/demo invoices.
+
+Allowed approaches only if they preserve current architecture:
+- add an archivedAt field to invoices and filter active invoice list accordingly
+- or another tightly scoped equivalent that truthfully removes archived demo invoices from normal active operational invoice views without breaking lifecycle logic
+
+2. Archive for invoices must:
+- be available only through Owner/Admin governance controls
+- apply only to records flagged as test/demo
+- preserve historical visibility
+- remove archived demo invoices from normal active operational invoice surfaces
+- remain clearly distinct from delete
+- not imply any cleanup in Xero
+
+3. Do not break:
+- invoice lifecycle logic
+- Xero push safeguards
+- existing invoice rendering and detail behavior beyond what is required for archive truth
+
+4. If a migration is required, keep it minimal and tightly scoped.
+
+ACCEPTANCE CRITERIA
+
+- Archived flagged test/demo invoices no longer appear in the normal active invoice list
+- Archived flagged test/demo invoices remain historically visible in the appropriate governance/historical surface
+- Archive remains distinct from delete
+- Xero-linked invoice safety remains intact
+
+PHASE B — DOWNSTREAM DELETE SAFETY FOR ESTIMATES
+
+OBJECTIVE
+
+Prevent unsafe deletion of demo/test estimates when downstream records exist.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the estimate governance delete path.
+2. Before allowing delete of a flagged test/demo estimate, check for downstream linked records at least where current architecture supports them, including:
+- linked quotes
+- any further downstream implications discoverable from those links
+
+3. Required behavior:
+- if downstream linked records exist and deletion would create unsafe orphaning or misleading residual records, block delete
+- show a clear warning/reason
+- guide the user toward archive instead where appropriate
+
+4. Only allow delete when:
+- record is flagged test/demo
+- downstream safety rules pass
+- action is still explicitly requested by Owner/Admin
+
+ACCEPTANCE CRITERIA
+
+- Demo/test estimate delete is blocked when downstream linked records create risk
+- No silent orphaning of downstream quote chains from estimate delete
+
+PHASE C — DOWNSTREAM DELETE SAFETY FOR OP-JOBS
+
+OBJECTIVE
+
+Prevent unsafe deletion of demo/test op-jobs when downstream commercial/finance implications exist.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the op-job governance delete path.
+2. Before allowing delete of a flagged test/demo op-job, check for linked downstream implications where current architecture supports them, especially:
+- linked project/invoice implications
+- any finance-sensitive downstream records
+- any Xero-linked implications
+
+3. Required behavior:
+- block delete where linked downstream records make deletion unsafe
+- clearly explain why
+- preserve archive as the safer/default option
+
+ACCEPTANCE CRITERIA
+
+- Demo/test op-job delete is blocked when downstream linked records create risk
+- No silent orphaning of finance-sensitive downstream records from op-job delete
+
+PHASE D — DOWNSTREAM DELETE SAFETY FOR PROJECTS
+
+OBJECTIVE
+
+Prevent unsafe deletion of demo/test projects when downstream operational/commercial chains exist.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the project governance delete path.
+2. Before allowing delete of a flagged test/demo project, check for linked downstream records where current architecture supports them, including:
+- linked quotes
+- linked op-jobs
+- linked invoices
+- any Xero-linked invoice implications
+
+3. Required behavior:
+- block delete where downstream linked records make deletion unsafe
+- clearly explain why
+- preserve archive as the safer/default option
+
+ACCEPTANCE CRITERIA
+
+- Demo/test project delete is blocked when downstream linked records create risk
+- No silent orphaning of linked quotes/jobs/invoices from project delete
+
+PHASE E — SAFETY / UX / WORDING
+
+OBJECTIVE
+
+Make the delete-vs-archive distinction and downstream blocking logic operationally clear.
+
+REQUIRED IMPLEMENTATION
+
+1. Wherever a governance delete is blocked due to downstream relationships, show clear reason text such as:
+- linked downstream records exist
+- finance-sensitive records exist
+- Xero-linked records exist
+- archive should be used instead
+
+2. Keep archive visually primary as the safer governance action.
+3. Do not expose broader deletion capability.
+4. Do not imply that deleting or archiving in SteelIQ removes records from Xero.
+
+PHASE F — KEEP PHASE BOUNDARIES
+
+Do not expand into:
+- customer/contact governance cleanup
+- full test-batch architecture
+- full chain delete orchestration
+- admin redesign
+- broader quote lifecycle changes
+- non-test-data deletion features
+
+If something cannot be safely completed without crossing these boundaries, stop and report it rather than improvising.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign invoice architecture broadly
+- redesign admin architecture
+- change quote archive/history semantics beyond what is explicitly required
+- change production/business deletion rules outside flagged test/demo governance
+- weaken Xero safety
+- introduce speculative batch tooling
+- claim completion if invoice archive still behaves like returned_to_draft-in-active-list
+
+REQUIRED TEST CASES
+
+TC-001
+Archive a flagged test/demo invoice.
+Expected:
+- it is removed from normal active invoice list
+- it remains historically/governance visible
+- it is not deleted
+- no implication of Xero cleanup is shown
+
+TC-002
+Attempt delete of a flagged test/demo estimate with downstream linked quote(s).
+Expected:
+- delete is blocked
+- clear reason is shown
+- archive remains available as safer option
+
+TC-003
+Attempt delete of a flagged test/demo op-job with downstream finance/commercial implications.
+Expected:
+- delete is blocked where unsafe
+- clear reason is shown
+
+TC-004
+Attempt delete of a flagged test/demo project with linked quotes/op-jobs/invoices.
+Expected:
+- delete is blocked where unsafe
+- clear reason is shown
+
+TC-005
+Attempt delete of a flagged test/demo invoice linked to Xero.
+Expected:
+- still blocked
+- warning remains explicit that SteelIQ cleanup does not remove it from Xero
+
+TC-006
+Verify non-high-level users still cannot access governance archive/delete controls.
+Expected:
+- no regression in role gating
+
+TC-007
+Verify Settings > System still shows:
+- truthful read-only environment information
+- role-gated governance section
+- no fake environment selector
+Expected:
+- no regression from Phase 1
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact invoice archive behavior implemented
+5. exact downstream delete blocking rules implemented for:
+   - estimates
+   - op-jobs
+   - projects
+6. exact UI/admin behavior changed
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+
+5. INVOICE ARCHIVE BEHAVIOR
+- old behavior
+- new behavior
+- how active-list removal now works
+- how historical/governance visibility is preserved
+
+6. DOWNSTREAM DELETE SAFETY
+- estimates
+- op-jobs
+- projects
+- exact blocking rules for each
+- exact warning behavior for each
+
+7. UI / GOVERNANCE SURFACE CHANGES
+- exact changes to Settings > System and/or governance panels
+- how blocked delete is communicated
+- how archive remains primary
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to Phase 3 rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Prefer archive over delete.
+Allow delete only for explicit test/demo data where all safeguards pass.
+Report truthfully and exactly.
