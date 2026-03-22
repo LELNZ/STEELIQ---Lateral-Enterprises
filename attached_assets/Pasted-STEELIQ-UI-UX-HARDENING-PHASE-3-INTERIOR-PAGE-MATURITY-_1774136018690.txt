@@ -1,0 +1,197 @@
+STEELIQ UI/UX HARDENING PHASE 3 — INTERIOR PAGE MATURITY + ENTERPRISE DENSITY
+IMPLEMENTATION CONTROL HEADER
+
+Implement exactly as specified.
+Do not redesign the app architecture.
+Do not change workflows, business rules, billing logic, Xero logic, PDF logic, or navigation taxonomy.
+Do not add new modules or speculative features.
+Do not mark complete unless the touched pages visibly move from “improved internal tool” toward “serious commercial-operational platform”.
+
+CURRENT STATUS
+The platform shell is now materially improved:
+- grouped navigation is good
+- page headers are more standardized
+- misleading global quick-create actions were removed
+- list pages are more consistent
+
+However, the page interiors are still uneven.
+Some pages now share a shell but do not yet share the same maturity level.
+
+PRIMARY GOAL
+Raise the interior quality of the existing core pages so SteelIQ feels like one serious commercial-operational platform, not a mix of old and new UI generations.
+
+TARGET PAGES
+1. Invoices
+2. Projects
+3. Jobs
+4. Customers
+5. Contacts
+6. Settings
+7. Users
+8. Quote Builder desktop workspace
+
+==================================================
+WORKSTREAM A — INVOICES PAGE INTERIOR POLISH
+==================================================
+
+OBJECTIVE
+Make Invoices feel like a serious finance workspace.
+
+REQUIRED
+1. Improve row scannability and hierarchy:
+- stronger distinction between invoice number, type, status, customer/project, and actions
+- better spacing and alignment
+- cleaner action column treatment
+- clearer visual separation for legacy/unlinked rows without making the table noisy
+
+2. Improve status/type readability:
+- make type and status easier to scan
+- ensure returned_to_draft / pushed_to_xero / ready_for_xero rows are visually legible and consistent
+
+3. Improve finance density:
+- amounts should read clearly as finance values
+- table should feel deliberate, not generic
+
+Do not change business logic.
+
+==================================================
+WORKSTREAM B — PROJECTS + JOBS INTERIOR MATURITY
+==================================================
+
+OBJECTIVE
+Make Projects and Jobs read as true operational records.
+
+REQUIRED
+1. Projects list:
+- strengthen row hierarchy
+- quoted/invoiced figures should read as meaningful commercial values
+- improve emphasis on project identity, customer, and operational counts
+
+2. Jobs list:
+- make rows feel like live operational work records
+- improve hierarchy of job no., title, customer/project, status, and source quote
+- reduce “plain table” feeling
+
+Do not change routing or workflows.
+
+==================================================
+WORKSTREAM C — CUSTOMERS + CONTACTS ENTERPRISE QUALITY
+==================================================
+
+OBJECTIVE
+Move Customers and Contacts beyond basic admin tables.
+
+REQUIRED
+1. Improve row treatment, alignment, and density.
+2. Strengthen distinction between:
+- customer/company identity
+- communication data
+- row actions
+3. Make Contacts feel like relationship records, not just a flat spreadsheet.
+
+Do not add CRM feature scope.
+This is presentation quality only.
+
+==================================================
+WORKSTREAM D — SETTINGS + USERS SYSTEM QUALITY
+==================================================
+
+OBJECTIVE
+Make system/admin pages feel like intentional system-control surfaces.
+
+REQUIRED
+1. Reduce floating / underpowered feel.
+2. Improve form grouping, section hierarchy, and desktop rhythm.
+3. Keep readability.
+4. Do not widen blindly; use structure and surface grouping.
+
+Do not change underlying system logic.
+
+==================================================
+WORKSTREAM E — QUOTE BUILDER VISUAL BALANCE
+==================================================
+
+OBJECTIVE
+Improve desktop workspace quality further.
+
+REQUIRED
+1. Keep quote schedule visible by default.
+2. Improve balance between:
+- left config rail
+- center drawing workspace
+- bottom quote schedule
+3. Make the center workspace feel less empty and more intentional.
+4. Strengthen the visual relationship between the drawing area and the live quote schedule.
+
+Do not redesign the builder or break existing controls.
+
+==================================================
+STRICT NON-GOALS
+==================================================
+
+Do NOT:
+- add dashboard/KPIs
+- add new creation flows
+- change navigation groups
+- add new workflow steps
+- change quote lifecycle
+- change project/job/invoice business rules
+- alter PDF or Xero architecture
+- add speculative automation
+
+==================================================
+REQUIRED TESTS
+==================================================
+
+TC-001
+Invoices page
+Expected:
+- clearer hierarchy
+- better action/status/type readability
+- unlinked rows still explicit and controlled
+
+TC-002
+Projects page
+Expected:
+- stronger contract/project row emphasis
+- better commercial readability
+
+TC-003
+Jobs page
+Expected:
+- stronger operational-record feel
+- clearer row hierarchy
+
+TC-004
+Customers + Contacts
+Expected:
+- visibly more mature and structured
+- not just plain tables
+
+TC-005
+Settings + Users
+Expected:
+- stronger system-surface quality
+- less floating/empty feel
+
+TC-006
+Quote Builder desktop
+Expected:
+- schedule still visible by default
+- stronger workspace balance
+- no regression to builder behavior
+
+==================================================
+DELIVERABLES REQUIRED
+==================================================
+
+1. exact files changed
+2. exact page-interior weaknesses found
+3. exact UI method used to raise maturity
+4. screenshots or precise visual descriptions of each touched page
+5. results of all 6 tests
+6. remaining known gaps
+
+QUALITY BAR
+This phase is not about more features.
+It is about page-interior maturity, information hierarchy, and enterprise-grade polish.

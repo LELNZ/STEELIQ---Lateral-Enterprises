@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
-  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen,
+  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen, Building2, Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -209,13 +209,20 @@ function CustomerRow({ customer }: { customer: Customer }) {
         onClick={() => setExpanded((v) => !v)}
         data-testid={`row-customer-${customer.id}`}
       >
-        <TableCell className="w-8">
+        <TableCell className="w-8 py-3">
           {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
         </TableCell>
-        <TableCell className="font-medium">{customer.name}</TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">{customer.email ?? "—"}</TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden md:table-cell">{customer.phone ?? "—"}</TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden lg:table-cell truncate max-w-[180px]">{customer.address ?? "—"}</TableCell>
+        <TableCell className="py-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 select-none">
+              {customer.name[0]?.toUpperCase() ?? "?"}
+            </div>
+            <span className="font-medium text-sm">{customer.name}</span>
+          </div>
+        </TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-3">{customer.email ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-3">{customer.phone ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden lg:table-cell truncate max-w-[180px] py-3">{customer.address ?? "—"}</TableCell>
       </TableRow>
       {expanded && (
         <TableRow>
@@ -584,6 +591,7 @@ function CustomerRow({ customer }: { customer: Customer }) {
 export default function Customers() {
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
 
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
@@ -616,9 +624,21 @@ export default function Customers() {
             <p className="text-[11px] text-muted-foreground leading-tight">Manage customers and contacts across all divisions.</p>
           </div>
         </div>
-        <Button size="sm" onClick={() => setShowCreate(true)} data-testid="button-new-customer">
-          <Plus className="h-3.5 w-3.5 mr-1.5" /> New Customer
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              className="pl-8 h-8 text-sm w-48"
+              placeholder="Search customers…"
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
+              data-testid="input-customers-search"
+            />
+          </div>
+          <Button size="sm" onClick={() => setShowCreate(true)} data-testid="button-new-customer">
+            <Plus className="h-3.5 w-3.5 mr-1.5" /> New Customer
+          </Button>
+        </div>
       </header>
       <div className="flex-1 overflow-auto p-4 sm:p-6">
 
@@ -635,16 +655,18 @@ export default function Customers() {
         <div className="rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50">
                 <TableHead className="w-8" />
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden sm:table-cell">Email</TableHead>
-                <TableHead className="hidden md:table-cell">Phone</TableHead>
-                <TableHead className="hidden lg:table-cell">Address</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+                <TableHead className="hidden sm:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</TableHead>
+                <TableHead className="hidden md:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phone</TableHead>
+                <TableHead className="hidden lg:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Address</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {customers.map((c) => (
+              {customers
+                .filter((c) => !customerSearch || c.name.toLowerCase().includes(customerSearch.toLowerCase()))
+                .map((c) => (
                 <CustomerRow key={c.id} customer={c} />
               ))}
             </TableBody>

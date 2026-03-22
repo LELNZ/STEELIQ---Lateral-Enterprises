@@ -23,6 +23,15 @@ const INVOICE_STATUS_LABELS: Record<string, string> = {
   returned_to_draft: "Returned to Draft",
 };
 
+const INVOICE_TYPE_COLORS: Record<string, string> = {
+  deposit: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
+  progress: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800",
+  variation: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-800",
+  final: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800",
+  retention_release: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800",
+  credit_note: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800",
+};
+
 const INVOICE_TYPE_LABELS: Record<string, string> = {
   deposit: "Deposit",
   progress: "Progress",
@@ -282,27 +291,31 @@ export default function InvoicesPage() {
     <div className="rounded-lg border bg-card">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-[110px]">Number</TableHead>
-            <TableHead className="hidden md:table-cell w-[90px]">Type</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="hidden xl:table-cell w-[110px]">Xero #</TableHead>
-            <TableHead>Customer</TableHead>
-            <TableHead className="hidden lg:table-cell">Project</TableHead>
-            <TableHead className="text-right w-[110px]">Excl. GST</TableHead>
-            <TableHead className="hidden xl:table-cell text-right w-[110px]">Incl. GST</TableHead>
-            <TableHead className="hidden lg:table-cell w-[90px]">Quote</TableHead>
-            <TableHead className="w-[60px]">Actions</TableHead>
+          <TableRow className="bg-muted/50">
+            <TableHead className="w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Number</TableHead>
+            <TableHead className="hidden md:table-cell w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
+            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+            <TableHead className="hidden xl:table-cell w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Xero #</TableHead>
+            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</TableHead>
+            <TableHead className="hidden lg:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Project</TableHead>
+            <TableHead className="text-right w-[120px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Excl. GST</TableHead>
+            <TableHead className="hidden xl:table-cell text-right w-[120px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Incl. GST</TableHead>
+            <TableHead className="hidden lg:table-cell w-[90px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quote</TableHead>
+            <TableHead className="w-[60px]" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {filtered.map((inv) => (
-            <TableRow key={inv.id} data-testid={`row-invoice-${inv.id}`}>
-              <TableCell className="font-mono text-sm font-medium" data-testid={`text-invoice-number-${inv.id}`}>
+            <TableRow key={inv.id} className="hover:bg-muted/30" data-testid={`row-invoice-${inv.id}`}>
+              <TableCell className="font-mono text-sm font-semibold py-3" data-testid={`text-invoice-number-${inv.id}`}>
                 {inv.number}
               </TableCell>
-              <TableCell className="hidden md:table-cell text-sm">{INVOICE_TYPE_LABELS[inv.type] || inv.type}</TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell py-3">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${INVOICE_TYPE_COLORS[inv.type] ?? "bg-muted text-muted-foreground border-border"}`}>
+                  {INVOICE_TYPE_LABELS[inv.type] || inv.type}
+                </span>
+              </TableCell>
+              <TableCell className="py-3">
                 <div className="space-y-0.5">
                   <Badge variant={statusVariant(inv.status)} className="text-xs" data-testid={`badge-status-${inv.id}`}>
                     {INVOICE_STATUS_LABELS[inv.status] || inv.status}
@@ -314,12 +327,12 @@ export default function InvoicesPage() {
                   )}
                 </div>
               </TableCell>
-              <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>
+              <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground py-3" data-testid={`text-xero-number-${inv.id}`}>
                 {inv.xeroInvoiceNumber ?? <span className="opacity-40">—</span>}
               </TableCell>
-              <TableCell className="text-sm" data-testid={`text-customer-${inv.id}`}>
+              <TableCell className="text-sm py-3" data-testid={`text-customer-${inv.id}`}>
                 {inv.customerName ? (
-                  inv.customerName
+                  <span className="font-medium">{inv.customerName}</span>
                 ) : (
                   <div className="space-y-0.5">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 gap-1">
@@ -335,9 +348,9 @@ export default function InvoicesPage() {
                   </div>
                 )}
               </TableCell>
-              <TableCell className="hidden lg:table-cell text-sm" data-testid={`text-project-${inv.id}`}>
+              <TableCell className="hidden lg:table-cell text-sm py-3" data-testid={`text-project-${inv.id}`}>
                 {inv.projectName ? (
-                  inv.projectName
+                  <span className="font-medium">{inv.projectName}</span>
                 ) : (
                   <div className="space-y-0.5">
                     <span className="text-[10px] text-muted-foreground italic">No project</span>
@@ -351,13 +364,17 @@ export default function InvoicesPage() {
                   </div>
                 )}
               </TableCell>
-              <TableCell className="text-right text-sm">
-                ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+              <TableCell className="text-right py-3">
+                <span className="font-mono text-sm font-semibold tabular-nums">
+                  ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                </span>
               </TableCell>
-              <TableCell className="hidden xl:table-cell text-right text-sm font-medium">
-                ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+              <TableCell className="hidden xl:table-cell text-right py-3">
+                <span className="font-mono text-sm font-medium text-muted-foreground tabular-nums">
+                  ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
+                </span>
               </TableCell>
-              <TableCell className="hidden lg:table-cell text-sm">
+              <TableCell className="hidden lg:table-cell py-3">
                 {inv.quoteId ? (
                   <Link href={`/quote/${inv.quoteId}`} className="text-primary underline underline-offset-2 hover:no-underline text-xs" data-testid={`link-quote-${inv.id}`}>
                     View quote
@@ -366,7 +383,7 @@ export default function InvoicesPage() {
                   <span className="text-muted-foreground text-xs">—</span>
                 )}
               </TableCell>
-              <TableCell>
+              <TableCell className="py-3">
                 <InvoiceActions inv={inv} onMutate={() => {}} />
               </TableCell>
             </TableRow>

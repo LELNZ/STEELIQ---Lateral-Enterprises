@@ -129,14 +129,14 @@ export default function ProjectsList() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Project</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Customer</th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Address</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Quotes</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Jobs</th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Invoices</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Quoted</th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Invoiced</th>
+                <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Project</th>
+                <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Customer</th>
+                <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden md:table-cell">Address</th>
+                <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Quotes</th>
+                <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Jobs</th>
+                <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Invoices</th>
+                <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Quoted</th>
+                <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs uppercase tracking-wider hidden lg:table-cell">Invoiced</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -155,15 +155,15 @@ export default function ProjectsList() {
                       <Badge variant="outline" className="ml-2 text-xs">{p.divisionCode}</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  <td className="px-4 py-3">
                     {p.customer ? (
                       <Link href={`/customers`}>
-                        <span className="flex items-center gap-1 hover:underline cursor-pointer">
-                          <Building2 className="h-3 w-3" />{p.customer.name}
+                        <span className="flex items-center gap-1.5 hover:underline cursor-pointer font-medium">
+                          <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />{p.customer.name}
                         </span>
                       </Link>
                     ) : (
-                      <span className="italic text-xs">No customer</span>
+                      <span className="italic text-xs text-muted-foreground">No customer</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
@@ -182,16 +182,20 @@ export default function ProjectsList() {
                   <td className="px-4 py-3 text-center">
                     <Badge variant={p.invoiceCount > 0 ? "secondary" : "outline"} className="text-xs">{p.invoiceCount}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs hidden lg:table-cell">
-                    {p.totalQuoted > 0 ? `$${fmt(p.totalQuoted)}` : "—"}
+                  <td className="px-4 py-3 text-right hidden lg:table-cell">
+                    {p.totalQuoted > 0 ? (
+                      <span className="font-mono text-sm font-semibold tabular-nums">${fmt(p.totalQuoted)}</span>
+                    ) : <span className="text-xs text-muted-foreground">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs hidden lg:table-cell">
-                    {p.totalInvoiced > 0 ? `$${fmt(p.totalInvoiced)}` : "—"}
+                  <td className="px-4 py-3 text-right hidden lg:table-cell">
+                    {p.totalInvoiced > 0 ? (
+                      <span className="font-mono text-sm font-medium tabular-nums">${fmt(p.totalInvoiced)}</span>
+                    ) : <span className="text-xs text-muted-foreground">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/projects/${p.id}`}>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" data-testid={`button-open-project-${p.id}`}>
-                        <ExternalLink className="h-3 w-3" />
+                      <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" data-testid={`button-open-project-${p.id}`}>
+                        Open <ExternalLink className="h-3 w-3" />
                       </Button>
                     </Link>
                   </td>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { type OpJob, type Customer, type Project } from "@shared/schema";
+import { type OpJob, type Customer, type Project, type Quote } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -49,9 +49,11 @@ export default function OpJobsList() {
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: quotes = [] } = useQuery<Quote[]>({ queryKey: ["/api/quotes"] });
 
   const customerMap = Object.fromEntries(customers.map((c) => [c.id, c.name]));
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+  const quoteNumberMap = Object.fromEntries(quotes.map((q) => [q.id, q.number]));
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="jobs-list-op">
@@ -84,6 +86,7 @@ export default function OpJobsList() {
             isLoading={isLoading}
             customerMap={customerMap}
             projectMap={projectMap}
+            quoteNumberMap={quoteNumberMap}
             onNavigate={(id) => navigate(`/op-jobs/${id}`)}
             isArchived={false}
           />
@@ -95,6 +98,7 @@ export default function OpJobsList() {
             isLoading={archivedLoading}
             customerMap={customerMap}
             projectMap={projectMap}
+            quoteNumberMap={quoteNumberMap}
             onNavigate={(id) => navigate(`/op-jobs/${id}`)}
             isArchived={true}
           />
@@ -106,12 +110,13 @@ export default function OpJobsList() {
 }
 
 function JobsTable({
-  jobs, isLoading, customerMap, projectMap, onNavigate, isArchived,
+  jobs, isLoading, customerMap, projectMap, quoteNumberMap, onNavigate, isArchived,
 }: {
   jobs: OpJob[];
   isLoading: boolean;
   customerMap: Record<string, string>;
   projectMap: Record<string, string>;
+  quoteNumberMap: Record<string, string>;
   onNavigate: (id: string) => void;
   isArchived: boolean;
 }) {
@@ -143,15 +148,15 @@ function JobsTable({
       <div className="rounded-lg border bg-card overflow-x-auto mt-4">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-[100px]">Job No.</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead>Project</TableHead>
-              <TableHead>Division</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Source Quote</TableHead>
-              <TableHead>Created</TableHead>
+            <TableRow className="bg-muted/50">
+              <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Job No.</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Title</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Project</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Division</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Source Quote</TableHead>
+              <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Created</TableHead>
               <TableHead className="w-[80px]" />
             </TableRow>
           </TableHeader>
@@ -185,25 +190,25 @@ function JobsTable({
                 onClick={() => onNavigate(job.id)}
                 data-testid={`row-job-${job.id}`}
               >
-                <TableCell className="font-mono font-medium text-sm" data-testid={`text-job-number-${job.id}`}>
+                <TableCell className="font-mono font-semibold text-sm py-3" data-testid={`text-job-number-${job.id}`}>
                   {job.jobNumber}
                 </TableCell>
-                <TableCell className="font-medium text-sm" data-testid={`text-job-title-${job.id}`}>
+                <TableCell className="font-medium text-sm py-3" data-testid={`text-job-title-${job.id}`}>
                   {job.title}
                   {job.isDemoRecord && (
                     <Badge variant="secondary" className="ml-2 text-xs" data-testid={`badge-demo-${job.id}`}>Demo</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground" data-testid={`text-job-customer-${job.id}`}>
-                  {job.customerId ? customerMap[job.customerId] ?? <span className="italic">Unknown</span> : <span className="italic text-xs">—</span>}
+                <TableCell className="text-sm py-3" data-testid={`text-job-customer-${job.id}`}>
+                  {job.customerId ? <span className="font-medium">{customerMap[job.customerId] ?? <span className="italic text-muted-foreground">Unknown</span>}</span> : <span className="italic text-xs text-muted-foreground">—</span>}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground" data-testid={`text-job-project-${job.id}`}>
-                  {job.projectId ? projectMap[job.projectId] ?? <span className="italic">Unknown</span> : <span className="italic text-xs">—</span>}
+                <TableCell className="text-sm py-3" data-testid={`text-job-project-${job.id}`}>
+                  {job.projectId ? <span className="text-muted-foreground">{projectMap[job.projectId] ?? <span className="italic">Unknown</span>}</span> : <span className="italic text-xs text-muted-foreground">—</span>}
                 </TableCell>
-                <TableCell className="text-sm font-mono" data-testid={`text-job-division-${job.id}`}>
+                <TableCell className="text-sm font-mono py-3 hidden lg:table-cell" data-testid={`text-job-division-${job.id}`}>
                   {job.divisionId ?? <span className="text-muted-foreground text-xs">—</span>}
                 </TableCell>
-                <TableCell>
+                <TableCell className="py-3">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Badge variant={STATUS_VARIANTS[job.status] ?? "outline"} className="text-xs" data-testid={`badge-job-status-${job.id}`}>
                       {STATUS_LABELS[job.status] ?? job.status}
@@ -213,10 +218,16 @@ function JobsTable({
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="text-sm font-mono text-muted-foreground" data-testid={`text-job-source-quote-${job.id}`}>
-                  {job.sourceQuoteId ? <span className="text-xs">linked</span> : "—"}
+                <TableCell className="py-3 hidden md:table-cell" data-testid={`text-job-source-quote-${job.id}`}>
+                  {job.sourceQuoteId ? (
+                    <span className="font-mono text-xs font-medium text-primary">
+                      {quoteNumberMap[job.sourceQuoteId] ?? job.sourceQuoteId}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground" data-testid={`text-job-created-${job.id}`}>
+                <TableCell className="text-xs text-muted-foreground py-3 hidden sm:table-cell" data-testid={`text-job-created-${job.id}`}>
                   {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-NZ") : "—"}
                 </TableCell>
                 <TableCell>
