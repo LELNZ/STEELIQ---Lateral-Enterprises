@@ -1,0 +1,462 @@
+STEELIQ PRODUCTION WORKFLOW HARDENING — PHASE 5
+LIVE REFRESH + OPERATIONAL FLOW CLARITY + LIFECYCLE UX + INVOICE NUMBERING CONTROL
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle business rules unless explicitly required below for UI truth/interaction locking.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not weaken any governance protections introduced in Phases 1–4.
+- Do not mark this phase complete unless the required user-facing surfaces are operationally usable in live workflow.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If older prompt language conflicts with actual repo code, follow current code truth and report the mismatch.
+- Preserve the Settings > System Environment Information and role-gated Governance architecture from Phases 1–4.
+- Preserve invoice archive behavior introduced in Phase 2.
+- Preserve CRM governance protections introduced in Phase 3.
+- Preserve governance hardening/audit visibility introduced in Phase 4.
+- Do not start a broad dashboard redesign.
+- Do not start a workflow re-architecture.
+- Do not introduce speculative event-bus/state-management rewrites.
+
+CURRENT CONTEXT
+
+SteelIQ is live and Xero push works.
+
+Accepted baseline already in place:
+- truthful environment clarity and role-gated governance
+- invoice archive truth
+- downstream delete safety on key chains
+- CRM governance and shared-live protection
+- governance audit visibility and summary hardening
+
+CURRENT PRODUCTION WORKFLOW ISSUES TO FIX NOW
+
+These issues have been observed in the live workflow and must be addressed as the next priority:
+
+1. Freshly created records are not appearing quickly/reliably enough across operational surfaces.
+Observed examples:
+- created invoice did not appear in global invoices page for ~15 minutes
+- created invoice did not appear under project for ~15 minutes
+- created job did not appear in jobs page or project jobs section for ~15 minutes
+- invoiced amount and outstanding amount did not update promptly
+This strongly suggests mutation refresh / invalidation / stale-data flow problems.
+
+2. Estimate / Quote lifecycle interaction is confusing.
+Observed examples:
+- lifecycle radio buttons were not clickable when expected on estimate/quote
+- after accepting the quote, lifecycle radio button interaction behavior became confusing/incorrect
+The lifecycle UI needs to match actual workflow rules and user expectations.
+
+3. Accepted quote -> Create Project handoff is not visually clear enough.
+- The next action after quote acceptance needs to be much more obvious and stronger in the UI.
+
+4. Customer-facing details need to default open, not collapsed.
+
+5. Invoice creation workflow needs clearer UI and stronger operational guidance.
+
+6. Job page lifecycle placement is wrong.
+- Lifecycle is too high on the page
+- It should sit lower and better match real workflow sequence
+
+7. Settings > Numbering is incomplete.
+- quote numbering exists
+- job numbering exists
+- invoice numbering control is missing
+- invoice reference/prefix control is missing
+Examples needed:
+- SE-01234
+- INV-01234
+- JOB-01234
+or equivalent clear prefix control
+
+8. Lifecycle cards should default closed except for the current stage, which should be default open.
+
+PRIMARY OBJECTIVE
+
+Harden the live production workflow so users get:
+1. immediate record visibility and totals refresh after key mutations
+2. clearer next-step guidance from accepted quote -> project -> job/invoice
+3. lifecycle UI that behaves truthfully and predictably
+4. clearer invoice creation workflow
+5. complete invoice numbering/reference controls in Settings
+
+Do not broaden scope beyond that.
+
+PHASE A — LIVE REFRESH / MUTATION INVALIDATION HARDENING
+
+OBJECTIVE
+
+Ensure newly created or updated records appear promptly and consistently across all relevant operational surfaces.
+
+REQUIRED IMPLEMENTATION
+
+1. Review mutation flows for at least:
+- create project
+- create job
+- create invoice
+- return invoice to draft
+- quote acceptance where downstream summaries depend on it
+- any summary cards or totals affected by invoice/job/project creation
+
+2. Identify and fix stale-data / delayed-visibility issues across:
+- global invoices page
+- project detail invoice section
+- jobs page
+- project detail jobs section
+- invoiced amount / outstanding amount summaries
+- any related quote/project/job billing summaries
+
+3. Use architecture-preserving methods only, such as:
+- correct TanStack Query invalidation
+- targeted refetching
+- mutation success refresh chaining
+- query key consistency fixes
+- removing overly stale cache settings where inappropriate
+
+4. Do not introduce speculative global state redesigns.
+
+ACCEPTANCE CRITERIA
+
+- Newly created invoices appear promptly in the global invoice list and relevant project/quote surfaces
+- Newly created jobs appear promptly in the jobs list and relevant project surfaces
+- invoiced/outstanding totals refresh promptly after relevant mutations
+- no manual multi-minute wait is required for operational truth to appear
+
+PHASE B — ACCEPTED QUOTE HANDOFF CLARITY
+
+OBJECTIVE
+
+Make the next step after quote acceptance operationally obvious.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the accepted quote UI area and strengthen the handoff to:
+- Create Project
+- and any subsequent logical next steps already supported by the system
+
+2. The accepted quote page should clearly communicate:
+- quote is accepted
+- next operational action is to create/manage the project
+- this is the main operational continuation of the accepted commercial record
+
+3. Make the handoff area:
+- visually stronger
+- more obvious
+- more deliberate
+- enterprise-grade, not easy to miss
+
+4. Do not add new workflow logic beyond what already exists.
+This is clarity and sequencing, not lifecycle redesign.
+
+ACCEPTANCE CRITERIA
+
+- A user landing on an accepted quote page can immediately identify the next operational action
+- Create Project is no longer visually easy to miss
+
+PHASE C — INVOICE WORKFLOW CLARITY
+
+OBJECTIVE
+
+Make invoice creation and billing progression clearer and easier to use.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the invoice creation section/surface in the quote/project flow.
+2. Improve clarity around:
+- invoice creation entry point
+- invoice type selection / billing progression
+- current billing state
+- next sensible billing action
+- returned-to-draft clarity where relevant
+
+3. Preserve current billing rules and Xero safety.
+4. This is a UI/UX clarity pass, not finance-rule redesign.
+
+ACCEPTANCE CRITERIA
+
+- Users can more easily understand where and how to create the next invoice
+- Current billing state is clearer
+- Returned-to-draft state is not confusing in the UI
+
+PHASE D — LIFECYCLE UX TRUTH + DEFAULT OPEN/CLOSED RULES
+
+OBJECTIVE
+
+Make lifecycle cards and lifecycle interaction consistent, predictable, and workflow-appropriate.
+
+REQUIRED IMPLEMENTATION
+
+1. Review lifecycle UI behavior on at least:
+- estimate
+- quote
+- job
+
+2. Apply these UX rules:
+- lifecycle cards default closed
+- only the current stage is default open
+- non-current cards should not all open by default
+- the currently relevant stage should be the one surfaced first
+
+3. Review lifecycle radio-button/selectable-stage behavior and ensure:
+- interaction truthfully reflects allowed workflow state changes
+- controls are not inexplicably disabled when they should be usable
+- controls do not appear more editable than the actual workflow allows
+- accepted quote state does not create confusing lifecycle interaction regressions for estimate/quote surfaces
+
+4. If current lifecycle business rules intentionally restrict editing, the UI must make that clear rather than feeling broken.
+5. Do not redesign lifecycle rules broadly; fix UI truth and interaction behavior.
+
+ACCEPTANCE CRITERIA
+
+- lifecycle cards now default closed except the current stage
+- lifecycle interaction feels deliberate and truthful
+- estimate/quote lifecycle controls no longer feel broken or inconsistent
+
+PHASE E — JOB PAGE LIFECYCLE PLACEMENT
+
+OBJECTIVE
+
+Move the job lifecycle area to a more workflow-appropriate place in the job page.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the job detail page layout.
+2. Move the lifecycle section lower in the page to better match operational reading order and workflow sequence.
+3. Keep the page coherent and enterprise-grade.
+4. Do not redesign the whole page.
+
+ACCEPTANCE CRITERIA
+
+- job lifecycle is no longer awkwardly at the top
+- page flow feels more aligned to actual operator workflow
+
+PHASE F — CUSTOMER-FACING DETAILS DEFAULT OPEN
+
+OBJECTIVE
+
+Make customer-facing details easier to review by default.
+
+REQUIRED IMPLEMENTATION
+
+1. Identify the customer-facing details section in the relevant quote/project workflow surface.
+2. Make it default open rather than collapsed.
+3. Preserve the ability to collapse if that already exists and remains useful.
+
+ACCEPTANCE CRITERIA
+
+- customer-facing details default open on the relevant workflow surface
+- usability for normal review is improved
+
+PHASE G — INVOICE NUMBERING + REFERENCE CONTROL
+
+OBJECTIVE
+
+Complete the numbering/settings control surface so invoice numbering is configurable alongside existing quote/job numbering, and invoice reference/prefix behavior is explicit.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the existing Settings > Numbering page and current numbering architecture.
+2. Add invoice numbering controls consistent with existing quote/job numbering controls.
+3. Add a clear invoice reference/prefix control.
+
+Examples of intended reference patterns:
+- INV-01234
+- SE-01234
+- JOB-01234
+
+4. Use current architecture patterns where possible.
+5. Do not redesign numbering architecture broadly unless current code proves a small extension is required.
+6. If separate concepts exist for:
+- displayed invoice number
+- accounting reference
+- internal reference prefix
+then make the UI wording truthful and explicit.
+
+ACCEPTANCE CRITERIA
+
+- Settings now includes invoice numbering control
+- Settings now includes clear invoice reference/prefix control
+- behavior is consistent with existing numbering settings patterns
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the app architecture
+- redesign the workflow engine
+- redesign billing rules
+- redesign lifecycle business logic broadly
+- start a dashboard phase
+- start a new governance phase
+- add speculative async event systems
+- add speculative cache frameworks
+- weaken any governance or Xero protections
+- claim completion if refresh issues remain materially unresolved
+
+REQUIRED TEST CASES
+
+TC-001
+Create an invoice in the live workflow path.
+Expected:
+- invoice appears promptly in global invoices page
+- invoice appears promptly in the relevant project/quote invoice surface
+- invoiced/outstanding totals update promptly
+
+TC-002
+Create a job in the live workflow path.
+Expected:
+- job appears promptly in jobs page
+- job appears promptly in the relevant project surface
+
+TC-003
+Accept a quote and review the accepted quote page.
+Expected:
+- Create Project handoff is visually clear and stronger than before
+- next operational step is obvious
+
+TC-004
+Review invoice creation workflow on the relevant quote/project surface.
+Expected:
+- current billing state is clearer
+- invoice creation entry/action is clearer
+- returned-to-draft state is not confusing
+
+TC-005
+Review lifecycle cards on estimate, quote, and job surfaces.
+Expected:
+- only current stage defaults open
+- other lifecycle cards default closed
+- interaction feels truthful and not broken
+
+TC-006
+Review job detail page layout.
+Expected:
+- lifecycle section is lower and better aligned to workflow order
+
+TC-007
+Review customer-facing details section.
+Expected:
+- defaults open
+- still behaves coherently
+
+TC-008
+Review Settings > Numbering.
+Expected:
+- invoice numbering control exists
+- invoice reference/prefix control exists
+- wording is clear and consistent with existing settings patterns
+
+TC-009
+Verify non-targeted systems did not regress.
+Expected:
+- governance protections still intact
+- Xero protections still intact
+- Settings > System still truthful
+- no fake environment selector reintroduced
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact refresh/invalidation fixes implemented
+5. exact accepted-quote handoff improvements implemented
+6. exact invoice workflow clarity improvements implemented
+7. exact lifecycle UX changes implemented
+8. exact job page placement change implemented
+9. exact customer-facing-details default-open change implemented
+10. exact invoice numbering/reference controls implemented
+11. results of all required test cases
+12. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+- or state explicitly that no schema changes were required
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+- or state explicitly that no route changes were required
+
+5. LIVE REFRESH / INVALIDATION HARDENING
+- old behavior
+- new behavior
+- exact query invalidation/refetch fixes made
+- exact surfaces now refreshed promptly
+
+6. ACCEPTED QUOTE HANDOFF CLARITY
+- old behavior
+- new behavior
+- exact UI changes made
+
+7. INVOICE WORKFLOW CLARITY
+- exact surface changes
+- how billing state / next action / returned-to-draft clarity improved
+
+8. LIFECYCLE UX CHANGES
+- estimate
+- quote
+- job
+- default open/closed rules
+- interaction truth changes
+
+9. JOB PAGE LIFECYCLE PLACEMENT
+- old placement
+- new placement
+- why it better matches workflow
+
+10. CUSTOMER-FACING DETAILS DEFAULT OPEN
+- exact surface changed
+- exact behavior changed
+
+11. INVOICE NUMBERING / REFERENCE CONTROLS
+- exact settings changes
+- exact behavior supported
+- any remaining limits
+
+12. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+- TC-008 result
+- TC-009 result
+
+13. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Preserve Xero safety.
+Fix the production workflow truth issues directly and clearly.
+Report truthfully and exactly.

@@ -427,6 +427,7 @@ export const orgSettings = pgTable("org_settings", {
   quoteNumberUseDivisionSuffix: boolean("quote_number_use_division_suffix").default(false),
   jobNumberPrefix: text("job_number_prefix").default("J"),
   jobNumberUseDivisionSuffix: boolean("job_number_use_division_suffix").default(false),
+  invoiceNumberPrefix: text("invoice_number_prefix").default("INV"),
   xeroAccountCode: text("xero_account_code").default("200"),
   xeroTaxType: text("xero_tax_type").default("OUTPUT2"),
 });

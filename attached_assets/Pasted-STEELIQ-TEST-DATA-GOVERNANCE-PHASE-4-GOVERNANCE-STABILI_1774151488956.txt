@@ -1,0 +1,333 @@
+STEELIQ TEST DATA GOVERNANCE — PHASE 4
+GOVERNANCE STABILIZATION + AUDIT VISIBILITY + PERFORMANCE HARDENING
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not broaden deletion capability.
+- Do not mark this phase complete unless the required admin/user-facing governance surfaces are operationally usable.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If older prompt language conflicts with actual repo code, follow current code truth and report the mismatch.
+- Preserve the Settings > System Environment Information and role-gated Governance architecture from Phases 1–3.
+- Preserve the invoice archive model introduced in Phase 2.
+- Preserve CRM governance protections introduced in Phase 3.
+- Do not start a broader admin redesign.
+
+CURRENT CONTEXT
+
+SteelIQ is live and Xero push works.
+
+Accepted governance baseline already in place:
+- Phase 1:
+  - misleading System Mode selector removed from Settings UI
+  - truthful Environment Information + Test / Demo Data Governance split
+  - Owner/Admin-only governance access
+  - demo/test governance across estimates, quotes, projects, jobs, invoices
+- Phase 2:
+  - true invoice archive via invoices.archivedAt
+  - archived demo invoices removed from active invoice surfaces
+  - downstream delete blocking for estimate, op-job, and project risk paths
+- Phase 3:
+  - CRM governance added for customers and contacts
+  - shared-live CRM protection implemented
+  - contact isolation summary truth fixed
+  - Owner/Admin customer/contact demo-flagging UI added
+
+CURRENT REMAINING CONCERNS TO CLEAN UP NOW
+
+These are the accepted remaining gaps worth addressing now without opening a new broad feature stream:
+
+1. Governance summary performance
+- CRM isolation currently performs multiple per-record linked-record queries
+- acceptable for current size, but not ideal as dataset volume grows
+
+2. Governance audit visibility
+- demo-flagged / demo-unflagged actions are written to audit logs
+- governance panel does not yet surface meaningful history/context to the operator
+
+3. Minor governance technical debt / consistency
+- requireNonProductionMode is dead code
+- customer-linked record safety logic has some query consistency differences
+- these should be cleaned only where it improves governance clarity without architecture drift
+
+PRIMARY OBJECTIVE
+
+Stabilize and harden the governance system you already built.
+
+This phase is only about:
+1. improving governance summary efficiency
+2. adding useful audit/history visibility for governance actions
+3. cleaning up narrow governance-related technical debt and consistency issues
+4. preserving the accepted Phase 1–3 behavior exactly
+
+Do not start a new product feature phase.
+Do not redesign the domain model.
+
+PHASE A — GOVERNANCE SUMMARY PERFORMANCE HARDENING
+
+OBJECTIVE
+
+Reduce avoidable query load in the governance summary path while preserving the same safety model and output truth.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the current governance summary implementation for:
+- demo customers isolation analysis
+- demo contacts isolation analysis
+- any repeated per-record linked-record queries
+- any repeated CRM parent lookups
+- any repeated chain lookups that can be safely consolidated
+
+2. Improve performance using architecture-preserving methods only, such as:
+- batching existing queries
+- reducing duplicate linked-record lookups
+- reusing already-fetched data safely
+- narrowing result sets
+- avoiding repeated parent-customer re-analysis where safe
+
+3. Do NOT change the safety rules.
+The optimized summary must preserve the same truth and the same operator-facing meaning.
+
+4. If performance can only be improved partially in this phase, make the meaningful safe improvement and report the remaining limitation honestly.
+
+ACCEPTANCE CRITERIA
+
+- Governance summary does less redundant work than before
+- Output truth is preserved
+- No regression in safety logic or role gating
+
+PHASE B — GOVERNANCE AUDIT VISIBILITY
+
+OBJECTIVE
+
+Give Owner/Admin users useful governance-history visibility without redesigning the audit architecture.
+
+REQUIRED IMPLEMENTATION
+
+1. Surface useful recent governance history in an existing governance/admin surface, using current audit log data where already available.
+
+At minimum, include useful visibility for actions such as:
+- demo-flagged
+- demo-unflagged
+- governance archive
+- governance delete
+- any relevant blocked governance attempt if already logged and safely available
+
+2. This does NOT need to become a full audit product.
+Keep it tightly scoped and operationally useful.
+
+3. Suitable UI examples:
+- “Recent Governance Activity”
+- “Recent Test Data Actions”
+- recent rows showing:
+  - action
+  - entity type
+  - record label/identifier where available
+  - actor
+  - time
+
+4. Only Owner/Admin should see this.
+Do not expose audit surfaces to non-high-level users.
+
+5. Use existing repo patterns and keep the surface serious and enterprise-appropriate.
+
+ACCEPTANCE CRITERIA
+
+- Owner/Admin can see a useful recent governance activity surface
+- It is grounded in actual audit data, not fabricated summaries
+- Non-high-level users cannot access it
+
+PHASE C — NARROW GOVERNANCE TECHNICAL DEBT CLEANUP
+
+OBJECTIVE
+
+Clean up narrow, governance-related inconsistencies that are now worth fixing.
+
+REQUIRED IMPLEMENTATION
+
+1. Review and clean up dead governance mode-gating residue where safe, including:
+- requireNonProductionMode dead code, if it now truly has zero callers and removal is safe
+
+2. Review the customer-linked safety query consistency and make the smallest safe improvement if warranted.
+Examples:
+- if archived-vs-deleted filtering inconsistencies can be aligned cleanly without lifecycle drift, do so
+- if not safely alignable here, report the limitation instead of forcing it
+
+3. Do not broaden into unrelated refactors.
+
+ACCEPTANCE CRITERIA
+
+- governance-related dead code/inconsistency is reduced
+- no behavior regressions introduced
+
+PHASE D — SAFETY / UX PRESERVATION
+
+OBJECTIVE
+
+Preserve the governance baseline and make sure this hardening phase does not degrade it.
+
+REQUIRED IMPLEMENTATION
+
+Do not weaken:
+- Owner/Admin role gating
+- non-high-level restrictions
+- shared-live CRM blocking
+- Xero blocking
+- archive vs delete distinctions
+- truthful environment information in Settings > System
+- chain integrity messaging added in earlier phases
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign governance architecture
+- redesign audit architecture broadly
+- add bulk demo-flagging UI
+- add batch delete tooling
+- add customer/contact lifecycle redesign
+- redesign invoice/op-job relationships
+- weaken any safety checks
+- reopen quote lifecycle or PDF pipeline work
+- add speculative dashboards unrelated to governance
+
+REQUIRED TEST CASES
+
+TC-001
+Open Settings > System as Owner/Admin.
+Expected:
+- Environment Information still present and truthful
+- Governance panel still present
+- no fake environment selector regression
+
+TC-002
+Open Settings > System as non-high-level user.
+Expected:
+- governance controls still restricted
+- no governance audit surface visible
+- no regression in role gating
+
+TC-003
+Review governance summary for customers/contacts after performance hardening.
+Expected:
+- same truth/output behavior preserved
+- no loss of isolation accuracy
+- no regression in shared-live or Xero protection messaging
+
+TC-004
+Review recent governance activity as Owner/Admin.
+Expected:
+- useful recent governance actions are visible
+- entries are grounded in real audit data
+- actor/time/action/entity context is clear
+
+TC-005
+Verify customer shared-live protection still holds.
+Expected:
+- archive/delete blocked where shared with live data
+- warning remains clear
+
+TC-006
+Verify contact shared-live protection still holds.
+Expected:
+- archive/delete blocked where shared with live data
+- summary truth still aligns with backend enforcement
+
+TC-007
+Verify Xero-linked protection still holds.
+Expected:
+- customer/contact/invoice protections remain intact
+- governance hardening introduced no regression
+
+TC-008
+Verify governance-related technical debt cleanup did not alter runtime behavior.
+Expected:
+- no route regressions
+- no broken governance surfaces
+- no hidden mode-based restrictions reintroduced
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact governance summary performance changes implemented
+5. exact audit visibility surface added/changed
+6. exact technical debt / consistency cleanup performed
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+- or state explicitly that no schema changes were required
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+- or state explicitly that no route changes were required
+
+5. GOVERNANCE SUMMARY PERFORMANCE HARDENING
+- old behavior
+- new behavior
+- exact redundant work reduced
+- any remaining limits
+
+6. GOVERNANCE AUDIT VISIBILITY
+- exact surface added/changed
+- what actions are shown
+- who can see it
+- how it is sourced from actual audit data
+
+7. GOVERNANCE TECHNICAL DEBT / CONSISTENCY CLEANUP
+- dead code removed or retained
+- consistency improvements made
+- anything intentionally left untouched and why
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+- TC-008 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Prefer archive over delete.
+Allow delete only for explicit test/demo data where all safeguards pass.
+Protect shared live CRM records.
+Report truthfully and exactly.

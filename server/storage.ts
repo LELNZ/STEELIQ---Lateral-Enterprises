@@ -117,6 +117,7 @@ export interface IStorage {
 
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(entityType: string, entityId: string): Promise<AuditLog[]>;
+  getGovernanceAuditHistory(limit: number): Promise<AuditLog[]>;
 
   getOrgSettings(): Promise<OrgSettings | undefined>;
   upsertOrgSettings(data: Partial<InsertOrgSettings>): Promise<OrgSettings>;
@@ -587,6 +588,17 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(auditLogs.createdAt));
   }
 
+  async getGovernanceAuditHistory(limit: number): Promise<AuditLog[]> {
+    const GOVERNANCE_ACTIONS = [
+      "demo_flagged", "demo_unflagged",
+      "governance_archive", "governance_delete",
+    ];
+    return db.select().from(auditLogs)
+      .where(inArray(auditLogs.action, GOVERNANCE_ACTIONS))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
+  }
+
   async getOrgSettings(): Promise<OrgSettings | undefined> {
     const [row] = await db.select().from(orgSettings).where(eq(orgSettings.id, "default"));
     return row;
@@ -857,7 +869,9 @@ export class DatabaseStorage implements IStorage {
       .set({ currentValue: sql`${numberSequences.currentValue} + 1` })
       .where(eq(numberSequences.id, "invoice"))
       .returning();
-    return `INV-${String(row.currentValue).padStart(4, "0")}`;
+    const org = await this.getOrgSettings();
+    const prefix = org?.invoiceNumberPrefix ?? "INV";
+    return `${prefix}-${String(row.currentValue).padStart(4, "0")}`;
   }
 
   async createInvoice(data: InsertInvoice): Promise<Invoice> {
