@@ -1,0 +1,187 @@
+STEELIQ PHASE 9 CLOSEOUT — FULL STRUCTURED COMPLETION REPORT REQUIRED
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This prompt is NOT a new feature phase. This is a strict closeout and verification phase for the work already completed in Phase 9.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not start a new feature phase.
+- Do not broaden scope.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not change lifecycle logic.
+- Do not change governance architecture.
+- Do not change Xero protections, archive/delete safety, or demo-flag semantics unless a critical defect is discovered and reported first.
+- Do not give a summary-only response.
+- Do not say the phase is complete without the full structured report below.
+- Treat current repo truth as authoritative.
+- If you discover any incomplete coverage or leakage path, report it explicitly rather than glossing over it.
+
+CURRENT CONTEXT
+
+Phase 9 was intended to implement:
+- backend shielding of active demo/test records from standard users
+- across the main operational list and detail routes
+- while preserving owner/admin visibility and governance access
+- with standard-user detail access blocked appropriately
+- and with minimal UI wording adjustments only where needed
+
+A summary has already been provided, but it is not sufficient.
+A full structured completion report is now required before this phase can be accepted as canonical truth.
+
+PRIMARY OBJECTIVE
+
+Return the full structured completion report for Phase 9 with exact route coverage, exact files changed, exact filtering behavior, exact role behavior, and explicit note of any remaining unshielded secondary read paths.
+
+If anything is incomplete, say so clearly.
+
+PHASE A — RE-VERIFY CURRENT IMPLEMENTATION
+
+Re-check the code currently in the repo and confirm exactly what was changed for Phase 9.
+
+You must verify:
+1. All primary list routes for:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+2. All primary detail routes for:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+3. The exact standard-user behavior when a demo/test record is requested by ID.
+4. The exact owner/admin behavior for the same routes.
+5. Any UI changes made to align with the new shielding behavior.
+
+PHASE B — SECONDARY READ-PATH AUDIT
+
+You must explicitly audit whether there are any additional operational read paths beyond the primary list/detail endpoints that may still expose active demo/test records to standard users.
+
+At minimum, inspect whether the codebase contains any relevant:
+- search endpoints
+- recent-items endpoints
+- lookup/autocomplete endpoints
+- relationship/linked-record fetches
+- dashboard summary endpoints
+- sidebar/supporting queries
+- quote/project/customer/op-job linked fetches used by pages
+
+For each one that is relevant, state whether it is:
+- shielded
+- unshielded
+- not applicable
+- not reviewed because clearly out of scope
+
+Do not skip this section.
+
+PHASE C — TEST RESULT RESTATEMENT
+
+Re-state the Phase 9 test results in the exact structured form requested below.
+
+If any test was API-only, say so.
+If any test used direct DB setup or seeded demo records, say so.
+If any test was partial, say so.
+
+STRICT NON-GOALS
+
+Do NOT:
+- start Phase 10
+- add estimate lifecycle card work
+- add linked-record cascade behavior
+- redesign record visibility model
+- introduce a real environment switch
+- claim all read paths are covered unless you actually reviewed them
+
+REQUIRED OUTPUT FORMAT
+
+Return your completion report in this exact structure and no other structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+- whether Phase 9 is fully complete or complete with noted limits
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. ROUTES HARDENED
+For each entity:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+Provide for each:
+- exact list route(s) hardened
+- exact detail route(s) hardened
+- exact filtering added
+- exact role behavior
+
+4. DETAIL ACCESS BEHAVIOR
+- exact standard-user behavior for direct access to active demo/test records
+- exact owner/admin behavior
+- whether 404 was used consistently across all entity types
+- note any exceptions
+
+5. FILTERING RULE
+- exact backend rule used
+- where it is enforced
+- what remains admin-visible
+- whether archived demo/test records are affected or unchanged
+
+6. UI / WORDING CHANGES
+- exact UI changes made
+- exact wording changes made
+- why they were necessary
+
+7. SECONDARY READ-PATH AUDIT
+- list every additional relevant read path reviewed
+- mark each as shielded / unshielded / not applicable
+- clearly state whether any remaining leakage path exists
+
+8. TEST RESULTS
+- TC-P9-001 result
+- TC-P9-002 result
+- TC-P9-003 result
+- TC-P9-004 result
+- TC-P9-005 result
+- TC-P9-006 result
+- TC-P9-007 result
+- TC-P9-008 result
+- TC-P9-009 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- exact future hardening still recommended, if any
+
+10. FINAL VERDICT
+- one of:
+  - COMPLETE
+  - COMPLETE WITH LIMITED SCOPE
+  - MOSTLY COMPLETE WITH SPECIFIC GAPS
+  - NOT COMPLETE
+
+- one paragraph explaining why
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Be exact.
+Be evidence-based.
+Do not over-claim.
+Do not return a summary-only answer.
+Return the full structured closeout report for Phase 9.
