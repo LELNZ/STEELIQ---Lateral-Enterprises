@@ -272,14 +272,15 @@ interface StageRowProps {
   instanceId: string | null;
   pendingKey: string | null;
   onToggleTask: (stageKey: string, taskKey: string, completed: boolean) => void;
+  previewMode?: boolean;
 }
 
-function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendingKey, onToggleTask }: StageRowProps) {
-  const isActive = stage.status === "active";
-  const isComplete = stage.status === "complete";
-  const isNA = stage.status === "not_applicable";
-  const isNotStarted = stage.status === "not_started";
-  const isBlocked = stage.status === "blocked";
+function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendingKey, onToggleTask, previewMode = false }: StageRowProps) {
+  const isActive = !previewMode && stage.status === "active";
+  const isComplete = !previewMode && stage.status === "complete";
+  const isNA = !previewMode && stage.status === "not_applicable";
+  const isNotStarted = !previewMode && stage.status === "not_started";
+  const isBlocked = !previewMode && stage.status === "blocked";
   const hasTasks = stage.tasks.length > 0;
 
   return (
@@ -287,9 +288,10 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
       data-testid={`lifecycle-stage-${stage.key}`}
       className={[
         "rounded-md transition-colors",
-        isActive ? "bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30" : "",
-        isBlocked ? "bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30" : "",
-        isNA || isNotStarted ? "opacity-50" : "",
+        previewMode ? "border border-dashed border-border/60 opacity-70" : "",
+        !previewMode && isActive ? "bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30" : "",
+        !previewMode && isBlocked ? "bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30" : "",
+        !previewMode && (isNA || isNotStarted) ? "opacity-50" : "",
       ].join(" ")}
     >
       {/* Stage header — only this div toggles expand; task body is outside */}
@@ -319,22 +321,26 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
                 data-testid={`lifecycle-stage-label-${stage.key}`}
                 className={[
                   "text-sm font-medium leading-snug",
-                  isActive ? "text-blue-800 dark:text-blue-200" : "",
-                  isComplete ? "text-emerald-800 dark:text-emerald-200" : "",
-                  isBlocked ? "text-amber-800 dark:text-amber-200" : "",
-                  isNA || isNotStarted ? "text-muted-foreground" : "text-foreground",
+                  previewMode ? "text-muted-foreground" : "",
+                  !previewMode && isActive ? "text-blue-800 dark:text-blue-200" : "",
+                  !previewMode && isComplete ? "text-emerald-800 dark:text-emerald-200" : "",
+                  !previewMode && isBlocked ? "text-amber-800 dark:text-amber-200" : "",
+                  !previewMode && (isNA || isNotStarted) ? "text-muted-foreground" : "",
+                  !previewMode && !isActive && !isComplete && !isBlocked && !isNA && !isNotStarted ? "text-foreground" : "",
                 ].join(" ")}
               >
                 {stage.label}
               </span>
-              {hasTasks && (
+              {hasTasks && !previewMode && (
                 <span className="text-[10px] text-muted-foreground/60 tabular-nums">
                   {stage.tasks.filter((t) => t.completed).length}/{stage.tasks.length}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {statusBadge(stage.status)}
+              {previewMode
+                ? <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-muted-foreground/50 border-dashed border-muted-foreground/30">planned</Badge>
+                : statusBadge(stage.status)}
               {hasTasks && (
                 isExpanded
                   ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -354,7 +360,7 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
             </span>
           </div>
 
-          {isActive && stage.nextAction && (
+          {!previewMode && isActive && stage.nextAction && (
             <div
               data-testid={`lifecycle-next-action-${stage.key}`}
               className="flex items-start gap-1 mt-1 text-xs text-blue-700 dark:text-blue-300"
@@ -364,7 +370,7 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
             </div>
           )}
 
-          {stage.status === "blocked" && stage.blockedReason && (
+          {!previewMode && stage.status === "blocked" && stage.blockedReason && (
             <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
               {stage.blockedReason}
             </div>
@@ -577,10 +583,15 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground" data-testid="lifecycle-progress">
-            {completedCount}/{totalCount} stages
-          </span>
-          <OverallStatusBadge status={lifecycle.overallStatus} />
+          {lifecycle.instanceId && (
+            <span className="text-xs text-muted-foreground" data-testid="lifecycle-progress">
+              {completedCount}/{totalCount} stages
+            </span>
+          )}
+          {lifecycle.instanceId
+            ? <OverallStatusBadge status={lifecycle.overallStatus} />
+            : <Badge variant="outline" className="text-[10px] border-dashed text-muted-foreground/60">Preview</Badge>
+          }
         </div>
       </div>
 
@@ -613,7 +624,7 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
       <Separator />
 
       {/* Stage list */}
-      <div className="space-y-0">
+      <div className={["space-y-1", !lifecycle.instanceId ? "opacity-90" : ""].join(" ")}>
         {lifecycle.stages.map((stage, idx) => (
           <StageRow
             key={stage.key}
@@ -624,6 +635,7 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
             instanceId={lifecycle.instanceId}
             pendingKey={pendingKey}
             onToggleTask={handleToggleTask}
+            previewMode={!lifecycle.instanceId}
           />
         ))}
       </div>

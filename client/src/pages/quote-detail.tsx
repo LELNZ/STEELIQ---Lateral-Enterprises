@@ -963,6 +963,16 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
     queryKey: ["/api/quotes", quoteId, "invoices"],
     queryFn: () => fetch(`/api/quotes/${quoteId}/invoices`).then((r) => r.json()),
   });
+  const { data: linkedJob } = useQuery({
+    queryKey: ["/api/op-jobs", "by-quote", quoteId],
+    queryFn: async () => {
+      const res = await fetch(`/api/op-jobs?quoteId=${quoteId}`);
+      const jobs = await res.json();
+      return (jobs as any[]).find((j) => j.sourceQuoteId === quoteId) ?? null;
+    },
+    enabled: quoteStatus === "accepted" && !!projectId,
+    staleTime: 15_000,
+  });
 
   const customer = customers.find((c) => c.id === customerId);
   const project = projects.find((p) => p.id === projectId);
@@ -1136,10 +1146,18 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="h-4 w-4 shrink-0 mt-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 flex items-center justify-center text-[10px] font-bold">2</span>
+                  <span className={["h-4 w-4 shrink-0 mt-0.5 rounded-full flex items-center justify-center text-[10px] font-bold", linkedJob ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" : "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400"].join(" ")}>
+                    {linkedJob ? "✓" : "2"}
+                  </span>
                   <div>
-                    <p className="text-xs font-medium text-foreground/80">Convert to operational job</p>
-                    <p className="text-[11px] text-muted-foreground">Create a job shell in the Convert to Job section below to track production and site work.</p>
+                    <p className="text-xs font-medium text-foreground/80">
+                      {linkedJob ? "Operational job created" : "Convert to operational job"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {linkedJob
+                        ? <a href={`/op-jobs/${linkedJob.id}`} className="text-primary hover:underline">View job →</a>
+                        : "Create a job shell in the Convert to Job section below to track production and site work."}
+                    </p>
                   </div>
                 </div>
               </div>

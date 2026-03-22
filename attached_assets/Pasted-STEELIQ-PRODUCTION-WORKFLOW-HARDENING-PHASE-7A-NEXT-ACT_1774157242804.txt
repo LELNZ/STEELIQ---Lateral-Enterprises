@@ -1,0 +1,319 @@
+STEELIQ PRODUCTION WORKFLOW HARDENING — PHASE 7A
+NEXT-ACTIONS JOB AWARENESS + LIFECYCLE PREVIEW POLISH + MEASUREMENT READINESS GUARDS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle business rules except where explicitly required below for truthful UI state, readiness guards, or operator guidance.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not weaken any governance protections introduced in Phases 1–6.
+- Do not mark this phase complete unless the required user-facing surfaces are operationally usable in live workflow.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If older prompt language conflicts with actual repo code, follow current code truth and report the mismatch.
+- Preserve the Settings > System Environment Information and role-gated Governance architecture from Phases 1–6.
+- Preserve invoice archive behavior introduced in Phase 2.
+- Preserve CRM governance protections introduced in Phase 3.
+- Preserve governance hardening/audit visibility introduced in Phase 4.
+- Preserve Phase 5 refresh invalidation and invoice numbering work.
+- Preserve Phase 6 lifecycle preview/read-only truth work, post-project Next Actions panel, Measurement & Dimensions guidance, and demo/test record-level wording.
+- Do not start a broad dashboard redesign.
+- Do not start a workflow re-architecture.
+- Do not introduce speculative event-bus/state-management rewrites.
+
+CURRENT CONTEXT
+
+SteelIQ is live and Xero push works.
+
+Accepted baseline already in place:
+- truthful environment clarity and role-gated governance
+- invoice archive truth
+- downstream delete safety on key chains
+- CRM governance and shared-live protection
+- governance audit visibility and summary hardening
+- invoice numbering prefix control
+- quote-detail invoice refresh invalidation improvements
+- accepted quote Create Project CTA
+- customer-facing details default open
+- lifecycle panel active-stage default expansion
+- job-page lifecycle moved lower
+- lifecycle preview/read-only truth on quote/job surfaces
+- post-project Next Actions panel
+- Measurement & Dimensions guidance
+- demo/test record-level-only wording
+
+CURRENT REMAINING WORKFLOW GAPS TO FIX NOW
+
+These are the most useful next refinements after Phase 6 and should be handled now without broadening scope:
+
+1. Post-project Next Actions panel does not yet detect job existence.
+Observed / reported gap:
+- after project creation, the panel can guide “Convert to operational job”
+- but it does not yet change state if a job already exists
+- this weakens the operator signal and can make the panel feel static rather than workflow-aware
+
+2. Lifecycle preview mode could still be more visually explicit.
+Observed / reported gap:
+- preview mode is improved, but still relies mainly on muted Required badges
+- it could be clearer that pre-acceptance lifecycle tasks are a template/preview and not active work
+
+3. Measurement & Dimensions is guidance-only, not readiness-guarded.
+Observed / reported gap:
+- users are told what the fields are for
+- but there is no guard preventing workflow progression if these remain unset where they should be required
+- this means users can still move forward without completing readiness-critical information
+
+PRIMARY OBJECTIVE
+
+Harden the workflow further so users get:
+1. workflow-aware next-step guidance after project creation
+2. clearer lifecycle preview/read-only distinction before activation
+3. truthful readiness enforcement around Measurement Requirement / Dimension Source where appropriate
+4. no contradictions between operational guidance and what the system actually allows
+
+Do not broaden scope beyond that.
+
+PHASE A — NEXT-ACTIONS PANEL JOB-AWARENESS
+
+OBJECTIVE
+
+Make the post-project Next Actions panel reflect whether a job already exists, rather than always presenting job creation as pending.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the existing post-project Next Actions panel on the accepted quote page.
+2. Add the smallest architecture-preserving logic needed so the panel can determine whether a job already exists for the quote/project context.
+3. Update the panel so it reflects actual workflow state:
+- if no job exists, the step should read as pending / next action
+- if a job already exists, the step should read as completed or otherwise clearly no longer pending
+- the UI must remain clear about invoice state and job state separately
+
+4. Do not redesign the page broadly.
+5. Use existing repo patterns and existing data access where possible.
+
+ACCEPTANCE CRITERIA
+
+- post-project Next Actions panel is job-aware
+- it no longer suggests job creation is still pending when a job already exists
+- the panel reads like a live operational guide, not a static hint
+
+PHASE B — LIFECYCLE PREVIEW POLISH
+
+OBJECTIVE
+
+Make pre-acceptance lifecycle preview mode more visually and behaviorally explicit.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the current preview-mode lifecycle treatment on the quote context.
+2. Improve clarity without changing business rules, for example by making preview-state tasks/cards more obviously non-active and template-like.
+3. Preserve the Phase 6 preview/read-only truth, but strengthen it so users do not mistake preview tasks for broken active tasks.
+
+Required outcomes:
+- users can immediately tell this is a planned template, not active work
+- the panel looks intentionally read-only in preview mode
+- active lifecycle state remains visually stronger once the instance exists
+
+Do not redesign the lifecycle engine.
+Do not change task completion logic unless required for truthful non-interactive presentation.
+
+ACCEPTANCE CRITERIA
+
+- preview lifecycle state is more obviously a template/read-only mode
+- users are less likely to interpret pre-acceptance tasks as broken or partially blocked active tasks
+
+PHASE C — MEASUREMENT & DIMENSIONS READINESS GUARDS
+
+OBJECTIVE
+
+Add truthful workflow guards so readiness-critical Measurement & Dimensions data cannot be silently skipped where the process should require it.
+
+REQUIRED IMPLEMENTATION
+
+1. Review current lifecycle and job detail logic around:
+- measurementRequirement
+- dimensionSource
+- Survey / Measure or equivalent readiness stages
+
+2. Implement the smallest safe readiness guard that fits current architecture.
+The goal is not a lifecycle redesign, but a truthful operational guard.
+
+Examples of acceptable guard behavior if supported by current architecture:
+- block completion of the measurement/survey stage until required fields are set
+- or block progression past a measurement-dependent stage if the necessary fields are null
+- or clearly surface a blocking validation state inside the lifecycle/task UI before progression is allowed
+
+3. The guard must be truthful and workflow-appropriate:
+- if measurement is not required, the workflow should not be blocked unnecessarily
+- if dimensions are required for readiness, the missing data should block the relevant progression clearly
+- the UI must explain exactly what needs to be set and where
+
+4. Do not redesign lifecycle business rules broadly.
+5. Do not introduce speculative generic validation frameworks.
+
+ACCEPTANCE CRITERIA
+
+- Measurement & Dimensions is no longer guidance-only where readiness should depend on it
+- users are clearly told what is missing and why progression is blocked
+- workflow blocking is scoped only to the relevant stage/readiness point
+
+PHASE D — SAFETY / UX PRESERVATION
+
+OBJECTIVE
+
+Preserve all existing protections and prior accepted improvements while implementing this refinement pass.
+
+REQUIRED IMPLEMENTATION
+
+Do not weaken:
+- Owner/Admin governance restrictions
+- Xero protections
+- invoice archive truth
+- refresh/invalidation improvements from Phase 5
+- invoice numbering controls from Phase 5
+- accepted quote Create Project CTA when no project exists
+- Phase 6 demo/test record-level wording unless expanded with equally truthful wording
+- lifecycle preview/read-only truth introduced in Phase 6
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the app architecture
+- redesign the lifecycle engine broadly
+- redesign workflow/business rules beyond targeted readiness guards
+- redesign governance architecture
+- add speculative automation
+- add speculative batch propagation
+- start a new reporting/dashboard phase
+- weaken any safety checks
+- change unrelated page shells or page density
+- reopen numbering architecture beyond the Phase 5 implementation
+
+REQUIRED TEST CASES
+
+TC-001
+Review accepted quote with linked project but no job.
+Expected:
+- post-project Next Actions panel shows job creation as pending/next action
+- invoice/job steps read clearly and separately
+
+TC-002
+Review accepted quote with linked project and existing job.
+Expected:
+- post-project Next Actions panel reflects that a job already exists
+- job step no longer reads as pending
+- panel remains clear about invoice state
+
+TC-003
+Review lifecycle on pre-acceptance quote.
+Expected:
+- preview mode is obviously template/read-only
+- users can clearly distinguish preview from active lifecycle state
+
+TC-004
+Review lifecycle on active quote/job context.
+Expected:
+- active lifecycle remains visually stronger than preview mode
+- no regression in editability truth
+
+TC-005
+Attempt to progress/complete the measurement-dependent lifecycle stage with missing Measurement Requirement / Dimension Source where those are required.
+Expected:
+- progression is blocked at the relevant point
+- clear guidance explains what is missing and where to set it
+
+TC-006
+Review a case where measurement is not required.
+Expected:
+- workflow is not blocked unnecessarily
+- readiness guard behaves proportionately
+
+TC-007
+Verify non-targeted systems did not regress.
+Expected:
+- governance protections still intact
+- Xero protections still intact
+- Settings > System still truthful
+- invoice numbering controls still intact
+- no fake environment selector reintroduced
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact Next Actions job-awareness improvement implemented
+5. exact lifecycle preview polish implemented
+6. exact Measurement & Dimensions readiness guard implemented
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+- or state explicitly that no schema changes were required
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+- or state explicitly that no route changes were required
+
+5. NEXT-ACTIONS PANEL JOB-AWARENESS
+- old behavior
+- new behavior
+- exact UI/data changes made
+
+6. LIFECYCLE PREVIEW POLISH
+- old behavior
+- new behavior
+- exact visual/interaction truth improvements made
+
+7. MEASUREMENT & DIMENSIONS READINESS GUARDS
+- old behavior
+- new behavior
+- exact blocking/validation behavior implemented
+- how the user is guided to resolve it
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Preserve Xero safety.
+Tighten workflow truth and readiness directly and clearly.
+Report truthfully and exactly.
