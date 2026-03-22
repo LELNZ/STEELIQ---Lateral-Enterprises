@@ -2061,28 +2061,76 @@ export default function QuoteBuilder() {
                   </div>
                 )}
 
-                {showSidelightControls && (
-                  <>
-                    <div>
-                      <Label className="text-xs">Sidelight Position</Label>
-                      <Select value={w.sidelightSide || "right"} onValueChange={(v) => form.setValue("sidelightSide", v as any)}>
-                        <SelectTrigger data-testid="select-sidelight-side"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="left">Left</SelectItem>
-                          <SelectItem value="right">Right</SelectItem>
-                          <SelectItem value="both">Both</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="sidelightWidth" className="text-xs">Sidelight Width (mm)</Label>
-                      <Input id="sidelightWidth" type="number" inputMode="decimal" min={100}
-                        {...form.register("sidelightWidth", { valueAsNumber: true })}
-                        onFocus={handleConfigFieldFocus}
-                        data-testid="input-sidelight-width" />
-                    </div>
-                  </>
-                )}
+                {showSidelightControls && (() => {
+                  const totalW = w.width || 0;
+                  const slSideVal = w.sidelightSide || "right";
+                  const isBoth = slSideVal === "both";
+                  const currentSlW = w.sidelightWidth || 400;
+                  const derivedDoorW = isBoth ? totalW - currentSlW * 2 : totalW - currentSlW;
+                  const doorWidthDisplay = derivedDoorW > 0 ? derivedDoorW : totalW > 0 ? Math.round(totalW * 0.6) : 800;
+                  const calcSlW = isBoth ? Math.round((totalW - doorWidthDisplay) / 2) : totalW - doorWidthDisplay;
+                  const doorWidthMin = isBoth ? 200 : 200;
+                  const doorWidthMax = isBoth ? Math.max(200, totalW - 200) : Math.max(200, totalW - 100);
+                  const doorWidthInvalid = totalW > 0 && (doorWidthDisplay >= totalW || (isBoth ? doorWidthDisplay >= totalW - 200 : false) || calcSlW < 100);
+
+                  return (
+                    <>
+                      <div>
+                        <Label className="text-xs">Sidelight Position</Label>
+                        <Select value={slSideVal} onValueChange={(v) => {
+                          form.setValue("sidelightSide", v as any);
+                          const newIsBoth = v === "both";
+                          const curDoorW = isBoth ? totalW - currentSlW * 2 : totalW - currentSlW;
+                          const validDoorW = curDoorW > 0 ? curDoorW : Math.round(totalW * 0.6);
+                          const newSlW = newIsBoth ? Math.round((totalW - validDoorW) / 2) : totalW - validDoorW;
+                          if (newSlW > 0) form.setValue("sidelightWidth", newSlW);
+                        }}>
+                          <SelectTrigger data-testid="select-sidelight-side"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="left">Left</SelectItem>
+                            <SelectItem value="right">Right</SelectItem>
+                            <SelectItem value="both">Both</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="entranceDoorWidth" className="text-xs">Door Width (mm)</Label>
+                        <Input id="entranceDoorWidth" type="number" inputMode="decimal"
+                          min={doorWidthMin} max={doorWidthMax}
+                          value={doorWidthDisplay}
+                          onChange={(e) => {
+                            const dw = parseInt(e.target.value) || 0;
+                            if (dw > 0 && totalW > 0) {
+                              const newSlW = isBoth ? Math.round((totalW - dw) / 2) : totalW - dw;
+                              if (newSlW >= 50) {
+                                form.setValue("sidelightWidth", newSlW);
+                              }
+                            }
+                          }}
+                          onFocus={handleConfigFieldFocus}
+                          data-testid="input-door-width" />
+                        {doorWidthInvalid && (
+                          <p className="text-xs text-destructive mt-0.5" data-testid="text-door-width-error">
+                            Door width must leave at least {isBoth ? "100mm per sidelight" : "100mm for the sidelight"}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Sidelight Width (auto)</Label>
+                        <div className="flex items-center gap-2">
+                          <Input type="number" readOnly tabIndex={-1}
+                            value={isBoth ? currentSlW : calcSlW > 0 ? calcSlW : currentSlW}
+                            className="bg-muted/40 text-muted-foreground"
+                            data-testid="input-sidelight-width-display" />
+                          {isBoth && <span className="text-xs text-muted-foreground whitespace-nowrap">× 2</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          = {totalW} total − {doorWidthDisplay} door{isBoth ? ` (÷ 2 = ${currentSlW} each)` : ""}
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {isEntrance && (() => {
                   const doorRows: EntranceDoorRow[] = w.entranceDoorRows || defaultEntranceDoorRows;
