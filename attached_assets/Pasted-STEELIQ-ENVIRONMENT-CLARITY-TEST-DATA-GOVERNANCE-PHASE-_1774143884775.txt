@@ -1,0 +1,309 @@
+STEELIQ ENVIRONMENT CLARITY + TEST DATA GOVERNANCE — PHASE 1 FOLLOW-UP REVIEW + GAP CLOSURE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are continuing work on an existing live, production-oriented system. You must preserve the current architecture and tighten the implementation against the original phase requirements.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this follow-up.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not broaden deletion capability.
+- Do not mark this complete unless the required admin/user-facing UI surfaces and governance rules are operationally usable and clearly reported.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If the previous implementation only partially met the brief, report that honestly and close only the missing gaps required below.
+
+CURRENT CONTEXT
+
+- SteelIQ is live and Xero push works.
+- Production contains both real business records and historical testing records.
+- The previous pass reportedly removed the old Settings > System mode selector and replaced it with:
+  - Environment Information
+  - Test / Demo Data Governance
+- The previous pass reportedly extended `isDemoRecord` to jobs, projects, and invoices.
+- The previous pass reportedly changed demo tooling visibility from mode-based to role-based.
+- This follow-up is to verify, tighten, and complete the phase against the original governance brief.
+
+CURRENT RISK
+
+The prior report is directionally good but not yet sufficient to accept the phase as complete because it did not fully prove:
+- exact old system-mode behavior in code
+- full role behavior by user type
+- full governance parity across all required entities
+- exact archive vs delete rules
+- linked downstream chain awareness vs simple grouped entity review
+- exact operational list behavior after archive
+- exact required test case results
+- whether customer/contact safety was implemented or deferred
+
+PRIMARY OBJECTIVE
+
+Do not start a new phase.
+Do not broaden scope.
+Use this pass to:
+1. close missing gaps where needed
+2. verify the implementation against the original phase brief
+3. produce a complete, exact, truthful completion report
+
+REQUIRED FOLLOW-UP WORK
+
+PHASE A — OLD SYSTEM MODE TRUTH
+
+Inspect and report the exact old behavior of the removed/rebuilt System Mode selector.
+
+You must state precisely:
+- exact files inspected
+- exact code path
+- exact stored field/setting touched
+- whether it switched a real runtime environment
+- whether it switched a database target
+- whether it only changed UI state and/or a persisted DB/application flag
+- whether it was misleading relative to actual infrastructure/runtime truth
+
+Do not summarize vaguely.
+Be exact.
+
+PHASE B — ROLE GATING VERIFICATION
+
+Verify and report exact role behavior for:
+- Owner
+- Admin
+- Non-high-level user
+
+You must state clearly:
+- what Owner can see/do
+- what Admin can see/do
+- what non-high-level users see on Settings > System
+- whether governance controls are hidden entirely or replaced with a restricted message
+- whether any governance/archive/delete surfaces remain visible outside Owner/Admin
+
+PHASE C — GOVERNANCE ENTITY COVERAGE VERIFICATION
+
+Verify and report exact governance coverage for:
+- estimates
+- quotes
+- projects
+- jobs
+- invoices
+
+For each entity, state:
+- whether test/demo flagging exists
+- whether governance review visibility exists
+- whether archive exists
+- whether delete exists
+- any limitations
+
+Do not imply parity if parity is partial.
+
+PHASE D — LINKED CHAIN GOVERNANCE TRUTH
+
+Clarify exactly what was implemented regarding linked downstream chain awareness.
+
+You must state one of the following truthfully:
+- chain-aware review is implemented, with exact explanation of how linked downstream records are surfaced before archive/delete
+OR
+- review is currently grouped by entity type only, not true linked-chain review
+
+If true linked-chain review is not yet implemented and can be added safely in this follow-up without architectural drift, implement the minimum required improvement.
+If it cannot be safely completed in this pass without structural drift, do not force it — report it as a known gap.
+
+Do not overstate grouped entity review as chain governance.
+
+PHASE E — ARCHIVE VS DELETE RULES
+
+Verify and report exact safety rules.
+
+You must state:
+- whether delete is allowed only for records flagged as test/demo
+- whether delete is blocked for Xero-linked invoices
+- whether delete is blocked when downstream linked records create risk
+- whether archive remains the preferred/default action
+- whether SteelIQ cleanup clearly does not imply Xero cleanup
+- what warnings are shown for finance-sensitive or relationship-sensitive records
+
+If any of these are missing and can be safely completed now without drift, complete them.
+
+PHASE F — OPERATIONAL LIST BEHAVIOR
+
+Verify and report exactly which normal active operational lists stop showing archived flagged records.
+
+State this explicitly for each relevant surface that changed, such as:
+- estimates lists
+- quotes lists
+- projects lists
+- jobs lists
+- invoices lists
+- governance review surfaces
+
+If archive does not yet remove records from a relevant normal active list, fix it where safe and report it.
+
+PHASE G — CUSTOMER / CONTACT SAFETY
+
+State clearly whether customer/contact cleanup safety was:
+- implemented
+- partially implemented
+- intentionally deferred
+
+If implemented:
+- explain exact protection rules for shared live CRM records
+
+If not implemented:
+- do not imply otherwise
+- report it as a known gap
+
+PHASE H — COMPLETE TEST CASE REPORTING
+
+You must run and report the exact test cases explicitly:
+
+TC-001
+Verify what the old system mode selector did in code.
+
+TC-002
+As Owner/Admin, open Settings > System and confirm:
+- no fake environment selector remains
+- environment info is read-only and truthful
+- governance controls are visible
+
+TC-003
+As non-high-level user, confirm governance controls are restricted or hidden.
+
+TC-004
+Flag selected test/demo records across at least:
+- estimate
+- quote
+- project
+- job
+- invoice
+and confirm they appear in governance review surfaces.
+
+TC-005
+Archive selected flagged test/demo records and confirm they are removed from normal active operational lists while preserved historically.
+
+TC-006
+Attempt delete of flagged test/demo records with downstream linked items and confirm:
+- relationship impact is shown clearly
+- unsafe deletion is blocked
+- safe deletion is only allowed where rules pass
+
+TC-007
+Attempt cleanup of an accounting-linked/Xero-linked invoice and confirm:
+- the system warns clearly
+- the system does not imply SteelIQ cleanup removes it from Xero
+- unsafe destructive behavior is prevented
+
+TC-008
+If customer/contact cleanup is implemented:
+- confirm isolated test/demo customer/contact records can be safely handled
+- confirm shared live CRM records are protected
+
+STRICT NON-GOALS
+
+Do NOT:
+- start a new governance phase
+- redesign admin architecture
+- redesign storage architecture
+- introduce speculative test-batch features unless already partly implemented and needed to complete existing work
+- add broad destructive deletion
+- weaken live protections
+- mark grouped entity review as full linked-chain governance unless that is truly implemented
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed in this follow-up
+2. exact meaning of old system mode in code
+3. exact replacement behavior implemented
+4. exact role-gating behavior by role
+5. exact entity coverage achieved
+6. exact linked-chain review truth
+7. exact archive vs delete safety rules
+8. exact Xero/accounting-linked protection rules
+9. exact operational list/archive behavior
+10. full results for all required test cases
+11. exact known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was verified
+- what was changed in this follow-up
+- what was intentionally not changed
+
+2. OLD SYSTEM MODE TRUTH
+- exact files inspected
+- exact code path
+- exact stored field/setting touched
+- whether it switched environment/runtime/database or not
+- exact truth statement
+
+3. FILES CHANGED IN THIS FOLLOW-UP
+- full file list
+- one-line purpose of each change
+
+4. CURRENT REPLACEMENT BEHAVIOR
+- Environment Information behavior
+- Test / Demo Governance behavior
+- how the misleading selector was removed/rebuilt
+
+5. ROLE GATING
+- Owner capabilities
+- Admin capabilities
+- Non-high-level behavior
+- exact non-high-level Settings > System experience
+
+6. GOVERNANCE ENTITY COVERAGE
+- estimates
+- quotes
+- projects
+- jobs
+- invoices
+- for each: flagging / review / archive / delete / limitations
+
+7. LINKED CHAIN GOVERNANCE TRUTH
+- exact current behavior
+- whether truly chain-aware or only grouped-by-entity
+- limitations if any
+
+8. SAFETY RULES IMPLEMENTED
+- archive vs delete
+- downstream relationship handling
+- Xero/accounting-linked invoice protection
+- customer/contact protection if implemented
+- any prevented actions
+
+9. OPERATIONAL LIST BEHAVIOR
+- exact normal active lists affected by archive
+- what is hidden from active view
+- what remains historically visible
+
+10. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+- TC-008 result if applicable
+
+11. KNOWN GAPS
+- exact remaining limitations
+- what should move to Phase 2 rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Prefer archive over delete by default.
+Allow delete only for explicit test/demo data with safeguards.
+Report truthfully and exactly.

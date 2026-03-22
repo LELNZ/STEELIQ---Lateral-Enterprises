@@ -3520,8 +3520,6 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
 
       const demoQuotes = await storage.getDemoQuotes();
       const demoJobs = await storage.getDemoOpJobs();
@@ -3562,8 +3560,6 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
 
       // Locate the single live commercial record to preserve
       const allQuotes = await storage.getAllQuotes();
@@ -3660,8 +3656,6 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
       const demoQuotes = await storage.getDemoQuotes();
       const demoJobs = await storage.getDemoOpJobs();
       res.json({
@@ -3869,8 +3863,10 @@ export async function registerRoutes(
 
       let result: string;
       if (entityType === "estimate") {
-        const rec = await storage.archiveJob(entityId);
+        const rec = await storage.getJob(entityId);
         if (!rec) return res.status(404).json({ error: "Estimate not found" });
+        if (!rec.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        await storage.archiveJob(entityId);
         result = "archived";
       } else if (entityType === "quote") {
         const q = await storage.getQuote(entityId);
