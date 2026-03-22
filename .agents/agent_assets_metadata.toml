@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "Leh_q-NvFA_3g5PRgy6B5"
+uri = "file://.local/audit-report-phase7b-closeout.md"
+type = "text"
+title = "SteelIQ Live State Audit — Phase 7B Closeout Report"

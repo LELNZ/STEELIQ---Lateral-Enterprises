@@ -1,0 +1,332 @@
+STEELIQ LIVE STATE AUDIT — CANONICAL TRUTH RECONCILIATION + NEXT PHASE DEFINITION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is an audit and truth-reconciliation phase, not a casual coding sprint.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle unless a critical production-breaking defect is discovered and explicitly reported first.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not weaken Xero/accounting safeguards.
+- Do not weaken governance protections introduced in prior phases.
+- Do not mark any prior phase complete unless the repo code and actual runtime behavior prove it.
+- Do not trust prior work reports over repo truth.
+- Treat the current repository code and current runtime behavior as the implementation source of truth.
+- If older prompt language conflicts with actual repo code, follow current code truth and report the mismatch.
+- Preserve Settings > System Environment Information and role-gated Governance architecture unless a truthful defect is found and explicitly reported.
+- Do not start a broad redesign, dashboard rewrite, or architecture cleanup.
+- This phase is primarily assessment, verification, reconciliation, and next-phase definition.
+
+CURRENT CONTEXT
+
+SteelIQ is live and Xero push works.
+
+Prior phases claim the following are in place:
+- truthful environment clarity and role-gated governance
+- invoice archive truth
+- downstream delete safety on key chains
+- CRM governance and shared-live protection
+- governance audit visibility and summary hardening
+- invoice numbering prefix control
+- quote-detail invoice refresh invalidation improvements
+- accepted quote Create Project CTA
+- customer-facing details default open
+- lifecycle panel active-stage default expansion
+- job-page lifecycle moved lower
+- lifecycle preview/read-only truth on quote/job surfaces
+- post-project Next Actions panel
+- Measurement & Dimensions guidance
+- demo/test record-level-only wording
+- job-aware Next Actions panel
+- lifecycle preview polish
+- UI-level Measurement & Dimensions readiness banners
+- lifecycle M&D enforcement in Phase 7B
+
+However, prior reports may be incomplete or optimistic.
+This phase exists to verify truth, not to repeat claims.
+
+PRIMARY OBJECTIVE
+
+Audit the live repo state against the claimed canonical truth from Phases 1–7B, identify what is actually complete vs partial vs not implemented, verify whether Phase 7B is truly closed, and produce the next exact implementation prompt based on code truth.
+
+This is not a broad feature build phase.
+This is a state audit + truth reconciliation + next-phase definition phase.
+
+PHASE A — REPO TRUTH AUDIT
+
+OBJECTIVE
+
+Determine the actual implementation state from code, not from prior summaries.
+
+REQUIRED ACTIONS
+
+1. Review the current repo and identify the real implementation state of the following areas:
+- Settings > System environment truth and governance UI
+- role gating by user role
+- demo/test governance coverage across estimates, quotes, projects, jobs, invoices, CRM entities if present
+- archive vs delete safety rules
+- Xero-linked record protections
+- lifecycle preview/read-only truth
+- Next Actions panel behavior on quote/job/project surfaces
+- Measurement & Dimensions guidance and readiness UI
+- Phase 7B lifecycle enforcement point and error handling
+
+2. For each of the above, classify status as exactly one of:
+- COMPLETE
+- PARTIAL
+- NOT IMPLEMENTED
+- IMPLEMENTED BUT MISALIGNED
+
+3. For each classification, cite the exact files/components/routes/services that prove the classification.
+
+ACCEPTANCE CRITERIA
+
+- the audit is based on actual repo code
+- each claimed area has an explicit status
+- claims are evidence-backed, not inferred loosely
+
+PHASE B — PHASE 7B CLOSEOUT VALIDATION
+
+OBJECTIVE
+
+Determine whether Phase 7B is actually complete or only partially complete.
+
+REQUIRED ACTIONS
+
+1. Verify the exact canonical enforcement point selected for M&D readiness.
+2. Confirm whether that point is truly authoritative or whether there are alternative progression paths/bypasses.
+3. Re-run and verify all required Phase 7B test cases at repo/runtime level:
+
+- TC-001 both Measurement Requirement and Dimension Source missing
+- TC-002 Measurement Requirement missing only
+- TC-003 Dimension Source missing only
+- TC-004 measurementRequirement = "not_required"
+- TC-005 both required values present and target progression succeeds normally
+- TC-006 blocked-state messaging and readiness banners remain clear
+- TC-007 no regression in governance protections, Xero protections, Settings > System truth, invoice numbering controls
+
+4. Do not accept substitute evidence for TC-005.
+You must verify a clean targeted pass condition where the M&D gate is not what blocks progression.
+
+5. State clearly whether Phase 7B is:
+- CLOSED
+- MOSTLY CLOSED WITH SPECIFIC GAPS
+- NOT CLOSED
+
+ACCEPTANCE CRITERIA
+
+- Phase 7B status is determined truthfully
+- all test cases are explicitly reported
+- bypass risk is assessed
+- no optimistic completion claim remains unchallenged
+
+PHASE C — HANDOVER TRUTH RECONCILIATION
+
+OBJECTIVE
+
+Reconcile the current repo with the canonical handover truth.
+
+REQUIRED ACTIONS
+
+1. Identify every material mismatch between:
+- previous canonical/phase claims
+- actual current code truth
+
+2. For each mismatch, classify it as:
+- prior report overstated completion
+- feature exists but only backend-complete
+- feature exists but only UI-complete
+- feature exists but lacks parity
+- feature exists but is misleading
+- feature exists but needs hardening
+- no mismatch
+
+3. Produce a concise “current operating truth” summary for the repo as it exists now.
+
+ACCEPTANCE CRITERIA
+
+- mismatches are explicit
+- repo truth becomes the new canonical working truth
+- no stale assumption remains unchallenged
+
+PHASE D — NEXT PHASE DEFINITION
+
+OBJECTIVE
+
+Define the next implementation phase based on verified truth.
+
+REQUIRED ACTIONS
+
+1. From the audit findings, determine the single highest-value next phase.
+2. That next phase must be:
+- architecture-preserving
+- operationally meaningful
+- narrow enough to execute cleanly
+- based on verified gaps, not speculation
+
+3. Write the next full strict Replit execution prompt inside your report.
+4. The next prompt must:
+- include a hard control header
+- preserve architecture/governance/Xero protections
+- target only verified gaps
+- include exact objectives, non-goals, test cases, deliverables, and output format
+- not assume unproven functionality exists
+
+ACCEPTANCE CRITERIA
+
+- the next phase is justified by the audit
+- the next prompt is ready to paste into Replit without further rewriting
+
+STRICT NON-GOALS
+
+Do NOT:
+- start implementing a large new phase unless a tiny fix is absolutely necessary to complete the audit
+- redesign the governance architecture
+- redesign the lifecycle engine
+- redesign dashboards or navigation
+- add speculative automation
+- generalize validation frameworks
+- add speculative schema changes
+- claim full completion from narrow evidence
+- produce vague “looks good” summaries
+
+ALLOWED CODE CHANGES
+
+This is an assessment-first phase.
+Do not make code changes unless one of the following is true:
+- a tiny non-architectural fix is required to complete a blocked verification path
+- a test harness/logging aid already consistent with current architecture is required
+- you explicitly report why the tiny change was necessary
+
+If any code changes are made:
+- keep them minimal
+- list them exactly
+- explain why they were necessary for assessment
+- do not broaden scope
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide all of the following:
+
+1. repo-state summary by area
+2. exact status of each claimed Phase 1–7B capability
+3. exact Phase 7B closeout verdict
+4. evidence for the selected canonical enforcement point
+5. explicit bypass-risk assessment
+6. results of TC-001 through TC-007
+7. exact files inspected
+8. any exact files changed, if any
+9. exact routes/endpoints inspected or changed
+10. exact schema/data model findings
+11. exact mismatches between prior claims and repo truth
+12. the new current operating truth summary
+13. the next full strict Replit execution prompt
+14. known remaining gaps not yet chosen for the next phase
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. AUDIT SUMMARY
+- overall repo state
+- what is clearly complete
+- what is partial
+- what is not proven
+- whether any code changes were made during the audit
+
+2. FILES INSPECTED
+- full file list
+- one-line relevance of each file
+
+3. FILES CHANGED
+- full file list
+- one-line purpose of each change
+- or state explicitly that no code changes were required
+
+4. SCHEMA / DATA MODEL FINDINGS
+- exact fields/tables/models relevant to the audited areas
+- whether any schema changes were made
+- or state explicitly that no schema changes were required
+
+5. ROUTES / ENDPOINTS REVIEWED
+- exact route list
+- one-line purpose of each
+- whether any route changes were made
+- or state explicitly that no route changes were required
+
+6. CAPABILITY STATUS MATRIX
+For each item below, report:
+- status: COMPLETE / PARTIAL / NOT IMPLEMENTED / IMPLEMENTED BUT MISALIGNED
+- evidence
+- notes
+
+Items:
+- Environment Information truth
+- removal/replacement of fake environment switching
+- governance role gating
+- demo/test governance on estimates
+- demo/test governance on quotes
+- demo/test governance on projects
+- demo/test governance on jobs
+- demo/test governance on invoices
+- CRM/shared-live governance protection
+- archive vs delete safety
+- Xero-linked safety
+- governance audit visibility
+- lifecycle preview/read-only truth
+- Next Actions on quote/project/job surfaces
+- M&D guidance UI
+- M&D readiness banners
+- M&D lifecycle enforcement
+- blocked-state UI/error clarity
+
+7. PHASE 7B VALIDATION
+- canonical enforcement point
+- why it is or is not authoritative
+- bypass-risk assessment
+- exact old vs new behavior
+- Phase 7B verdict: CLOSED / MOSTLY CLOSED WITH SPECIFIC GAPS / NOT CLOSED
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+
+9. PRIOR-CLAIM VS REPO-TRUTH MISMATCHES
+- each mismatch
+- classification
+- exact impact
+
+10. CURRENT OPERATING TRUTH
+- concise canonical truth summary of the app as it exists now
+
+11. NEXT PHASE RECOMMENDATION
+- exact next phase name
+- why it is the highest-value next phase
+- what it should not try to do
+
+12. NEXT FULL STRICT REPLIT PROMPT
+- provide the full ready-to-paste next implementation prompt
+
+13. KNOWN REMAINING GAPS
+- exact remaining limitations
+- what should be deferred to later phases
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Trust repo truth over prior summaries.
+Be strict.
+Be exact.
+Do not over-claim completion.
+Produce a canonical state assessment first, then define the next build phase from verified truth.
