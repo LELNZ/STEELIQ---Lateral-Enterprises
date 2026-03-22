@@ -1,0 +1,221 @@
+STEELIQ CANONICAL CLOSEOUT AUDIT — PHASE 7B FINAL PROOF + REMAINING GAP PRIORITIZATION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a strict verification and prioritization phase, not a feature sprint.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle architecture.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not weaken Xero/accounting safeguards.
+- Do not weaken governance protections.
+- Do not mark any capability COMPLETE unless both code evidence and operational surface evidence support that claim.
+- Do not treat backend field existence as proof of admin usability.
+- Do not treat a single route as the sole authority unless you have searched for and ruled out other mutation paths.
+- Treat current repo truth as authoritative over prior summaries.
+
+CURRENT ISSUE
+
+The previous audit is directionally useful but still over-claims completion in several places.
+This phase exists to:
+1. finalize whether Phase 7B is truly closed
+2. separate backend capability from operational UI/admin parity
+3. identify the highest-value next phase based on verified remaining gaps
+
+PRIMARY OBJECTIVE
+
+Produce a stricter canonical truth assessment that distinguishes:
+- backend support
+- route protection
+- UI/admin operational usability
+- end-to-end proof
+
+Then define the next implementation phase based only on verified remaining gaps.
+
+PHASE A — PHASE 7B FINAL PROOF
+
+REQUIRED ACTIONS
+
+1. Re-verify the M&D enforcement point in code.
+2. Search the repo for any alternative lifecycle task state mutation path, including:
+- direct storage writes
+- other lifecycle task update routes
+- admin/test utilities
+- any client path that bypasses PATCH /api/lifecycle-instances/:instanceId/tasks
+
+3. Re-run and report all Phase 7B test cases:
+- TC-001 both missing
+- TC-002 Measurement Requirement missing only
+- TC-003 Dimension Source missing only
+- TC-004 not_required
+- TC-005 both fields present
+
+4. For TC-005, do not rely only on API success.
+You must determine whether:
+- there is a real end-to-end UI path already available, or
+- only API-level proof is currently practical
+
+5. Based on that, classify Phase 7B as exactly one of:
+- CLOSED
+- CLOSED WITH LIMITED UI PROOF
+- MOSTLY CLOSED
+- NOT CLOSED
+
+PHASE B — GOVERNANCE PARITY TRUTH TEST
+
+OBJECTIVE
+
+Determine whether demo/test governance is operationally complete across the required entities, not just present in schema/backend.
+
+REQUIRED ACTIONS
+
+For each entity below, assess four separate dimensions:
+- record-level field/model support
+- backend governance/archive/delete protection
+- admin UI flag/unflag visibility/usability
+- admin review/archive workflow usability
+
+Entities:
+- estimates
+- quotes
+- projects
+- jobs / op-jobs
+- invoices
+- customers
+- contacts
+
+For each entity, classify each dimension as:
+- COMPLETE
+- PARTIAL
+- NOT IMPLEMENTED
+
+Do not collapse these dimensions into one broad “complete” claim.
+
+PHASE C — NEXT ACTIONS / OPERATIONAL SURFACE VALIDATION
+
+OBJECTIVE
+
+Verify surface-level claims precisely.
+
+REQUIRED ACTIONS
+
+1. Validate whether distinct Next Actions surfaces truly exist on:
+- quote surface
+- project surface
+- job surface
+
+2. Distinguish between:
+- dedicated Next Actions panel
+- generic lifecycle nextAction text
+- general workflow cues
+
+3. Reclassify the claim accordingly.
+
+PHASE D — NEXT PHASE PRIORITIZATION
+
+OBJECTIVE
+
+Choose the next phase only after stricter verification.
+
+REQUIRED ACTIONS
+
+1. Compare the remaining verified gaps.
+2. Decide whether the highest-value next phase is:
+- governance parity / admin usability hardening
+- lifecycle stage progression hardening
+- another narrower verified gap
+
+3. Justify the choice with repo evidence.
+
+STRICT NON-GOALS
+
+Do NOT:
+- implement a large new phase
+- redesign governance
+- redesign lifecycle
+- create speculative prompts based on unproven assumptions
+- treat backend support as UI completeness
+- over-claim completion
+
+ALLOWED CODE CHANGES
+
+No code changes unless absolutely necessary to complete blocked verification.
+If any code changes are made:
+- keep them minimal
+- list them exactly
+- explain why they were necessary
+
+REQUIRED DELIVERABLES
+
+1. exact Phase 7B verdict
+2. exact bypass-risk verdict with evidence
+3. exact repo search evidence for alternative mutation paths
+4. governance parity matrix by entity and by dimension
+5. corrected Next Actions surface classification
+6. updated highest-value next phase recommendation
+7. one new full strict Replit prompt based only on verified gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your report in this exact structure:
+
+1. PHASE 7B FINAL VERDICT
+- verdict
+- why
+- what is proven
+- what remains limited
+
+2. LIFECYCLE MUTATION PATH AUDIT
+- all lifecycle task mutation paths found
+- whether PATCH /api/lifecycle-instances/:instanceId/tasks is truly authoritative
+- bypass-risk verdict
+
+3. PHASE 7B TEST RESULTS
+- TC-001
+- TC-002
+- TC-003
+- TC-004
+- TC-005
+- note clearly whether TC-005 was UI-proven or API-only
+
+4. GOVERNANCE PARITY MATRIX
+For each entity:
+- model support
+- backend protection
+- admin UI flagging
+- admin review/archive usability
+- overall status
+
+5. NEXT ACTIONS SURFACE VALIDATION
+- quote surface status
+- project surface status
+- job surface status
+- notes on dedicated panel vs generic lifecycle messaging
+
+6. CORRECTED CURRENT OPERATING TRUTH
+- concise canonical truth with no over-claims
+
+7. NEXT PHASE RECOMMENDATION
+- exact phase name
+- why it is highest value
+- what it should not do
+
+8. NEXT FULL STRICT REPLIT PROMPT
+- full ready-to-paste prompt
+
+9. KNOWN REMAINING GAPS
+- exact verified gaps only
+
+FINAL EXECUTION STANDARD
+
+Be strict.
+Be evidence-based.
+Do not over-claim.
+Separate backend truth from operational usability truth.
+Choose the next phase only after that separation is complete.
