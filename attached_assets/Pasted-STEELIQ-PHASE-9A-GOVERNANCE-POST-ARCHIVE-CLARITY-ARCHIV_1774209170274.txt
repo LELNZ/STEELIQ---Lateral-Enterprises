@@ -1,0 +1,213 @@
+STEELIQ PHASE 9A — GOVERNANCE POST-ARCHIVE CLARITY + ARCHIVED DISCOVERABILITY + QUOTE FLAG INDICATOR FIX
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow post-archive governance clarity and admin usability hardening phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not undo Phase 9 shielding.
+- Do not change the single-live-environment model.
+- Do not weaken owner/admin governance access.
+- Do not weaken Xero protections, delete safety, archive behavior, or governance audit history.
+- Do not change lifecycle logic.
+- Do not introduce schema creep.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden into estimate lifecycle, linked-record cascade, or environment redesign.
+
+CURRENT LIVE TRUTH
+
+Bulk archive is functioning operationally:
+- flagged test projects/jobs/customers/contacts are removed from active operational views
+- Xero-linked invoices remain protected as expected
+
+However, the live admin UX is still misleading in three ways:
+1. Settings > System governance sections continue to show archived flagged records mixed with active flagged records, making counts and actionability unclear
+2. Archived discoverability is uneven (especially projects)
+3. Quote list flag indicators are not truthfully/consistently visible in the live admin view even when quotes are flagged
+
+PRIMARY OBJECTIVE
+
+Make post-archive governance truth clear and operationally usable for owner/admin users without changing the underlying governance model.
+
+PHASE A — GOVERNANCE SECTION STATE SEPARATION
+
+Review the current Settings > System governance section and separate flagged records into truthful states:
+
+- active flagged records
+- archived flagged records
+- skipped/protected flagged records
+
+Required behavior:
+1. Counts and labels must no longer imply that archived flagged records are still active cleanup items.
+2. If a section has no active flagged items but does have archived flagged history, that must be obvious.
+3. Protected/skipped items (for example Xero-linked invoices) must be visibly distinct from archived records.
+
+PHASE B — BULK ARCHIVE RESULT CLARITY
+
+After bulk archive, the admin must be able to understand:
+- what was archived
+- what was skipped
+- what remains active and why
+
+Required behavior:
+1. Improve the Settings > System result summary and/or section state so the outcome of bulk archive is obvious.
+2. Make it clear that archived flagged records remain historically visible in governance, but are no longer active operational records.
+3. Keep archive separate from delete.
+
+PHASE C — ARCHIVED DISCOVERABILITY HARDENING
+
+Review archived discoverability for archived flagged records across the affected entities.
+
+Required behavior:
+1. Confirm where archived records can currently be found for:
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+- estimates
+
+2. If one or more entity types have no practical archived discoverability surface for admin users, add the narrowest truthful admin-facing discoverability improvement.
+3. Do not redesign pages broadly.
+4. For projects specifically, resolve the current “where did it go?” problem in a clear, admin-usable way.
+
+PHASE D — QUOTE LIST FLAG INDICATOR FIX
+
+Review the live quote list implementation and fix any mismatch between record truth and visible admin indicators.
+
+Required behavior:
+1. If a quote is flagged as demo/test and visible to an admin on the quotes list, the list must clearly indicate that.
+2. Ensure the correct list/table/card component actually renders the badge/toggle in the live admin view.
+3. Preserve hiding of these indicators from non-privileged users.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the governance architecture
+- redesign the settings page broadly
+- redesign entity pages broadly
+- alter shielding rules
+- alter Xero rules
+- alter archive/delete rules
+- add linked-record auto-cascade
+- start estimate lifecycle work
+- add new schema
+
+REQUIRED TEST CASES
+
+TC-P9A-001
+Run bulk archive on flagged demo/test data.
+Expected:
+- archived records move out of active operational views
+- Settings > System clearly distinguishes archived vs active vs protected/skipped flagged records
+
+TC-P9A-002
+Review Quotes governance section after archive.
+Expected:
+- counts and rows do not misleadingly imply archived quotes are still active cleanup items
+
+TC-P9A-003
+Review Invoices governance section after archive.
+Expected:
+- archived flagged invoices and protected Xero-linked invoices are clearly distinguished
+
+TC-P9A-004
+Locate archived project(s) after bulk archive.
+Expected:
+- admin has a clear discoverability path and does not have to guess where the project went
+
+TC-P9A-005
+Locate archived op-job(s) after bulk archive.
+Expected:
+- archived discoverability remains clear
+
+TC-P9A-006
+Open live quotes list as admin with flagged quote(s).
+Expected:
+- flagged quotes show visible demo/test indicator in the actual live list surface
+
+TC-P9A-007
+Open standard-user operational views.
+Expected:
+- no regression to demo shielding
+- no admin-only indicators appear
+
+TC-P9A-008
+Verify governance audit/history remains intact.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact governance state distinctions implemented
+3. exact bulk archive result clarity changes
+4. exact archived discoverability changes by entity
+5. exact quote-list indicator fix implemented
+6. results of all required test cases
+7. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. GOVERNANCE STATE CLARITY
+- how active flagged vs archived flagged vs protected/skipped are now represented
+- what was misleading before
+- what is truthful now
+
+4. BULK ARCHIVE OUTCOME CLARITY
+- what the admin now sees after archive
+- how archived history is distinguished from active cleanup backlog
+
+5. ARCHIVED DISCOVERABILITY
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+For each:
+- where archived records can now be found
+- any change made
+
+6. QUOTE LIST FLAG INDICATOR
+- what was broken/misaligned
+- what was fixed
+- where the indicator now renders
+
+7. TEST RESULTS
+- TC-P9A-001 result
+- TC-P9A-002 result
+- TC-P9A-003 result
+- TC-P9A-004 result
+- TC-P9A-005 result
+- TC-P9A-006 result
+- TC-P9A-007 result
+- TC-P9A-008 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Preserve shielding and governance protections.
+Make post-archive outcomes truthful and easy to understand for admin users.
+Fix quote flag indicator inconsistency in the actual live list surface.
+Report truthfully and exactly.

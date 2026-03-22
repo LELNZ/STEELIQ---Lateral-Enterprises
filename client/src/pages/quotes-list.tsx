@@ -18,10 +18,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  FileText, ArrowRight, Search, ArrowUpDown, Filter, Calendar, X, Trash2, BookOpen,
+  FileText, ArrowRight, Search, ArrowUpDown, Filter, Calendar, X, Trash2, BookOpen, FlaskConical,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/lib/auth-context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
@@ -76,6 +77,20 @@ function isArchived(q: EnrichedQuote): boolean {
 export default function QuotesList() {
   const { data: quotes, isLoading } = useQuery<EnrichedQuote[]>({ queryKey: ["/api/quotes"] });
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const { toast } = useToast();
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async ({ id, isDemoRecord }: { id: string; isDemoRecord: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/quotes/${id}/demo-flag`, { isDemoRecord });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({ title: "Demo flag updated" });
+    },
+  });
 
   const [activeTab, setActiveTab] = useState("active");
   const [searchQuery, setSearchQuery] = useState("");
@@ -386,9 +401,9 @@ export default function QuotesList() {
               ) : (
                 <>
                   {isMobile ? (
-                    <MobileQuoteCards quotes={filteredQuotes} />
+                    <MobileQuoteCards quotes={filteredQuotes} isAdmin={isAdmin} demoFlagMutation={demoFlagMutation} />
                   ) : (
-                    <DesktopQuoteTable quotes={filteredQuotes} />
+                    <DesktopQuoteTable quotes={filteredQuotes} isAdmin={isAdmin} demoFlagMutation={demoFlagMutation} />
                   )}
                 </>
               )}
@@ -417,7 +432,7 @@ function QuoteBadges({ quote }: { quote: EnrichedQuote }) {
   );
 }
 
-function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
+function DesktopQuoteTable({ quotes, isAdmin, demoFlagMutation }: { quotes: EnrichedQuote[]; isAdmin: boolean; demoFlagMutation: any }) {
   return (
     <div className="rounded-lg border bg-card">
       <Table>
@@ -438,7 +453,14 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
           {quotes.map((q) => (
             <TableRow key={q.id} data-testid={`row-quote-${q.id}`}>
               <TableCell className="font-mono font-medium" data-testid={`text-quote-number-${q.id}`}>
-                {q.number}
+                <div className="flex items-center gap-1.5">
+                  {q.number}
+                  {isAdmin && q.isDemoRecord && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-quote-${q.id}`}>
+                      <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell data-testid={`text-quote-customer-${q.id}`}>{q.customer}</TableCell>
               <TableCell className="hidden xl:table-cell text-sm text-muted-foreground" data-testid={`text-quote-source-${q.id}`}>
@@ -461,6 +483,19 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
               </TableCell>
               <TableCell>
                 <div className="flex items-center justify-end gap-1">
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-7 px-2 text-xs ${q.isDemoRecord ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+                      onClick={() => demoFlagMutation.mutate({ id: q.id, isDemoRecord: !q.isDemoRecord })}
+                      disabled={demoFlagMutation.isPending}
+                      data-testid={`button-toggle-demo-quote-${q.id}`}
+                      title={q.isDemoRecord ? "Remove demo/test flag" : "Flag as demo/test"}
+                    >
+                      <FlaskConical className="w-3 h-3" />
+                    </Button>
+                  )}
                   {q.status === "draft" && (
                     <QuoteDeleteButton quoteId={q.id} quoteNumber={q.number} />
                   )}
@@ -479,7 +514,7 @@ function DesktopQuoteTable({ quotes }: { quotes: EnrichedQuote[] }) {
   );
 }
 
-function MobileQuoteCards({ quotes }: { quotes: EnrichedQuote[] }) {
+function MobileQuoteCards({ quotes, isAdmin, demoFlagMutation }: { quotes: EnrichedQuote[]; isAdmin: boolean; demoFlagMutation: any }) {
   return (
     <div className="space-y-3">
       {quotes.map((q) => (
@@ -489,9 +524,16 @@ function MobileQuoteCards({ quotes }: { quotes: EnrichedQuote[] }) {
             data-testid={`card-quote-${q.id}`}
           >
             <div className="flex items-start justify-between gap-2 flex-wrap">
-              <span className="font-mono font-medium text-sm" data-testid={`text-quote-number-mobile-${q.id}`}>
-                {q.number}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-medium text-sm" data-testid={`text-quote-number-mobile-${q.id}`}>
+                  {q.number}
+                </span>
+                {isAdmin && q.isDemoRecord && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-quote-mobile-${q.id}`}>
+                    Demo
+                  </Badge>
+                )}
+              </div>
               <QuoteBadges quote={q} />
             </div>
             <p className="mt-2 text-sm" data-testid={`text-quote-customer-mobile-${q.id}`}>

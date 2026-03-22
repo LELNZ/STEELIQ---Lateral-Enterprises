@@ -1,0 +1,200 @@
+STEELIQ HOTFIX — DEPOSIT INVOICE FIXED-AMOUNT WORKFLOW TRUTH + VALIDATION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a production hotfix phase for the accepted-quote deposit invoice workflow.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the invoice system broadly.
+- Do not change Xero protections or posting behavior unless required by the listed fix.
+- Do not change unrelated governance, lifecycle, or environment logic.
+- Do not introduce schema creep unless absolutely required and you stop to explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond the deposit invoice modal, calculation truth, and validation behavior.
+
+CURRENT LIVE ISSUE
+
+In the live quote invoice workflow, the Create Invoice modal allows:
+- Deposit invoice type
+- Percentage vs Fixed Amount
+- Excl GST vs Incl GST
+
+But when a user selects Fixed Amount and enters an actual deposit received amount, the modal still appears to be governed by the default percentage allowance, and the entered amount is rejected with:
+
+OVER_DEPOSIT_ALLOWANCE
+
+This creates a live workflow problem and unclear product truth.
+
+PRIMARY OBJECTIVE
+
+Determine the correct business rule for deposit invoices and make the modal, calculations, and validation all tell the same truthful story.
+
+PHASE A — AUDIT CURRENT DEPOSIT RULE TRUTH
+
+1. Review the current deposit invoice implementation in code:
+- how deposit allowance is calculated
+- how Percentage mode works
+- how Fixed Amount mode works
+- how Incl GST vs Excl GST is normalized
+- where OVER_DEPOSIT_ALLOWANCE is enforced
+
+2. Report exactly whether current code treats Fixed Amount as:
+- just another input method still capped by the same deposit allowance, or
+- a true override path
+
+3. Identify whether the current validation compares:
+- excl-to-excl correctly
+- incl-to-incl correctly
+- or mixes incl and excl values incorrectly
+
+PHASE B — IMPLEMENT THE CORRECT BUSINESS RULE
+
+Use current operational truth from the user:
+
+The actual workflow need is that a client may pay a specific deposit amount into the bank account, and the user must be able to create the corresponding deposit invoice truthfully.
+
+Implement the narrowest correct behavior based on code review and repo truth.
+
+Expected likely behavior:
+- Percentage mode = default calculated allowance path
+- Fixed Amount mode = manual amount path
+- GST mode toggle must be respected correctly
+- validation must compare like-for-like values
+- modal summary must clearly show what is allowed and what is being entered
+
+If current code is incorrectly mixing GST bases, fix that.
+If current code incorrectly blocks a valid fixed amount, fix that.
+If the true business rule is that fixed amount still cannot exceed a cap, make that crystal clear in the UI and validation messaging.
+
+PHASE C — MODAL CLARITY
+
+The modal must truthfully show:
+- base contract amount
+- default deposit allowance
+- remaining deposit allowance
+- entered amount
+- whether entered amount is incl or excl GST
+- what rule is being enforced
+
+If Fixed Amount is selected, the UI must no longer imply one thing while validation does another.
+
+PHASE D — LIVE SAFETY
+
+1. Preserve invoice numbering.
+2. Preserve quote → invoice workflow integrity.
+3. Preserve Xero-ready behavior.
+4. Do not break progress/final/variation invoice paths.
+5. Do not weaken over-invoicing protections outside the deposit rule actually intended.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign all invoice creation UX
+- redesign quote detail
+- change archive/governance behavior
+- change lifecycle behavior
+- change unrelated pricing logic
+- add speculative accounting features
+
+REQUIRED TEST CASES
+
+TC-HOTFIX-001
+Create a deposit invoice using Percentage mode.
+Expected:
+- amount calculates correctly
+- invoice creates successfully when within allowed rule
+
+TC-HOTFIX-002
+Create a deposit invoice using Fixed Amount + Excl GST.
+Expected:
+- validation uses correct basis
+- invoice creates successfully if valid under the intended rule
+
+TC-HOTFIX-003
+Create a deposit invoice using Fixed Amount + Incl GST.
+Expected:
+- validation uses correct basis
+- invoice creates successfully if valid under the intended rule
+
+TC-HOTFIX-004
+Reproduce the live Q-0135-LJ style scenario with a fixed amount slightly above the default 50% allowance.
+Expected:
+- either:
+  a) it is allowed because fixed amount is a valid manual override, or
+  b) it is blocked with a clear, truthful message explaining the exact cap and by how much it is exceeded
+- in either case, the UI and backend must agree
+
+TC-HOTFIX-005
+Verify the modal summary updates truthfully when switching between:
+- Percentage / Fixed Amount
+- Excl GST / Incl GST
+
+TC-HOTFIX-006
+Verify no regression to other invoice types:
+- progress
+- variation
+- final
+
+TC-HOTFIX-007
+Verify no regression to Xero workflow or quote invoice summaries.
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact old deposit rule behavior
+3. exact new deposit rule behavior
+4. exact GST-basis handling
+5. exact validation logic fixed or confirmed
+6. exact modal wording/summary changes
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was fixed
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. OLD VS NEW DEPOSIT RULE
+- old behavior
+- new behavior
+- whether Fixed Amount is capped or override-capable
+- why
+
+4. GST / VALIDATION HANDLING
+- how incl/excl values are now handled
+- what bug was found, if any
+- how it was fixed
+
+5. MODAL CLARITY CHANGES
+- what the user now sees
+- how the rule is explained truthfully
+
+6. TEST RESULTS
+- TC-HOTFIX-001 result
+- TC-HOTFIX-002 result
+- TC-HOTFIX-003 result
+- TC-HOTFIX-004 result
+- TC-HOTFIX-005 result
+- TC-HOTFIX-006 result
+- TC-HOTFIX-007 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Fix the live deposit invoice workflow truthfully.
+Do not leave the UI and validation telling different stories.
+Report exactly what rule the system now enforces.

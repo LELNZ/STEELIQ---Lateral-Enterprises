@@ -220,7 +220,7 @@ export default function JobsList() {
                         <TableCell className="font-medium text-sm py-2.5" data-testid={`text-job-name-${job.id}`}>
                           <div className="flex items-center gap-1.5">
                             {job.name}
-                            {job.isDemoRecord && (
+                            {isAdmin && job.isDemoRecord && (
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0" data-testid={`badge-demo-estimate-${job.id}`}>
                                 <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
                               </Badge>

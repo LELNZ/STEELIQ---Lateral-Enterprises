@@ -1,0 +1,246 @@
+STEELIQ TRUTH RECONCILIATION — LIVE ADMIN TESTING MODEL VS STANDARD USER PRODUCTION-ONLY EXPERIENCE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a truth-reconciliation and enforcement-audit phase, not a feature sprint.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not invent a fake environment model.
+- Do not describe the system as a true environment/database/runtime switch unless the code explicitly proves that.
+- Do not remove owner/admin testing capability if it already exists and is part of live operations.
+- Do not weaken governance protections or Xero protections.
+- Do not change lifecycle architecture in this phase.
+- Do not introduce schema creep.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden into a large new feature phase.
+- Report repo/runtime truth exactly, even if prior prompts or reports were incomplete.
+
+CURRENT REALITY TO VERIFY
+
+Operationally, the live platform is being used like this:
+- owner and high-level admin can access demo/test data or a demo/testing context
+- other users see production-only
+- this is used so end-to-end testing can occur without disrupting normal daily users
+
+This may or may not be a true infrastructure environment switch.
+It may instead be a role-gated visibility/governance/testing model inside the live production app.
+
+IMPORTANT CODE TRUTH TO VERIFY
+
+Current repo review suggests:
+- admin/owner-only demo/test governance controls do exist
+- but broad backend list/read routes may not currently filter out demo/test records for standard users
+- many routes appear to filter by division only, not by isDemoRecord
+
+This must now be confirmed or disproven exactly.
+
+PRIMARY OBJECTIVE
+
+Determine the exact truth of how the live app separates:
+1. infrastructure/runtime environment
+2. privileged admin test/demo access
+3. standard-user production-only experience
+
+Then report whether standard-user protection from demo/test records is:
+- fully enforced in backend/data access
+- partially enforced in UI only
+- partially enforced by role-gated controls only
+- not actually enforced as currently believed
+
+PHASE A — AUDIT THE ACTUAL ACCESS / VISIBILITY MODEL
+
+1. Review the current code and determine exactly:
+- whether there is a real separate dev/demo/prod runtime or database target
+- whether owner/admin users see different records, controls, or views from standard users
+- whether non-high-level users are filtered away from demo/test records
+- whether demo/test behavior is driven by:
+  - role-based filtering
+  - record-level isDemoRecord gating
+  - UI-only hiding
+  - backend query filtering
+  - org/system settings
+  - another mechanism
+
+2. You must audit both:
+- UI-level control visibility
+- backend read/list/query enforcement
+
+3. Review at minimum all main operational list/detail routes for:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+For each, state whether standard users can still receive demo/test records from the backend.
+
+PHASE B — IDENTIFY THE TRUE MODEL
+
+Classify the actual live/repo model as exactly one of:
+- TRUE SEPARATE ENVIRONMENT MODEL
+- SINGLE LIVE ENVIRONMENT + ADMIN-ONLY GOVERNANCE CONTROLS
+- SINGLE LIVE ENVIRONMENT + ADMIN-ONLY GOVERNANCE + BACKEND DEMO RECORD FILTERING FOR STANDARD USERS
+- MIXED / INCONSISTENT MODEL
+
+Explain why.
+
+PHASE C — WORDING TRUTH AUDIT
+
+Review wording in:
+- Settings > System
+- record-level demo/test sections on quote/job/project/etc.
+- any environment information panels
+- governance explanation text
+
+Determine whether wording currently:
+- overstates “record-level only”
+- understates admin-only testing capability
+- incorrectly implies all users share the same operational data view
+- incorrectly implies a real environment switch
+
+PHASE D — MINIMAL TRUTHFUL FIXES ONLY
+
+Only if needed, make minimal wording/clarity changes so the UI truthfully reflects the actual system behavior.
+
+Do not implement broad new filtering in this phase unless:
+- you discover a critical mismatch that makes the current live system unsafe for standard users, and
+- you first report that mismatch clearly
+
+PHASE E — ENFORCEMENT GAP REPORT
+
+If standard-user protection from demo/test records is not fully enforced in backend/data access, report exactly:
+- where it is missing
+- whether the gap is route-level, query-level, or UI-level
+- what the narrowest future hardening phase should be
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the environment model
+- redesign governance architecture
+- redesign entity pages broadly
+- implement linked-record auto-cascade in this phase
+- start estimate lifecycle work in this phase
+- add a new multi-environment infrastructure model
+- claim there is a true dev environment unless code proves it
+- remove valid owner/admin testing capability
+
+REQUIRED TEST CASES
+
+TC-TRUTH-001
+Verify whether the system actually switches runtime/database/environment by user role.
+Expected:
+- exact truth reported
+
+TC-TRUTH-002
+Verify what owner/admin can see or do regarding demo/test records that standard users cannot.
+Expected:
+- exact role-based differences reported
+
+TC-TRUTH-003
+Verify whether non-high-level users are actually protected from demo/test records in operational surfaces.
+Expected:
+- exact enforcement truth reported for estimates, quotes, projects, op-jobs, invoices, customers, contacts
+
+TC-TRUTH-004
+Review backend list/read routes for demo/test filtering.
+Expected:
+- exact route-by-route truth reported
+
+TC-TRUTH-005
+Review Settings > System wording.
+Expected:
+- wording is confirmed or minimally updated to reflect actual architecture and access model truthfully
+
+TC-TRUTH-006
+Review record-level demo/test admin wording.
+Expected:
+- wording is confirmed or minimally updated to reflect record-level classification plus admin-only testing/governance truthfully
+
+TC-TRUTH-007
+Verify no regression to governance protections, Xero safety, or Users-page cleanup consolidation.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files inspected
+2. exact files changed, if any
+3. exact access/visibility model found in code
+4. exact role-based behavior differences found
+5. exact truth about runtime/environment vs admin-only testing/governance
+6. route-by-route backend filtering findings
+7. exact wording changes made, if any
+8. exact remaining enforcement gaps, if any
+9. results of all required test cases
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what truth was found
+- what was proven
+- what was not proven
+- what was intentionally not changed
+
+2. FILES INSPECTED
+- full file list
+- one-line relevance of each
+
+3. FILES CHANGED
+- full file list
+- one-line purpose of each change
+- or state explicitly that no code changes were required
+
+4. ACCESS / VISIBILITY MODEL TRUTH
+- runtime/environment truth
+- admin/owner truth
+- standard-user truth
+- exact enforcement mechanisms
+
+5. ROUTE-BY-ROUTE FILTERING FINDINGS
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+For each:
+- backend filtered from standard users: yes / no / partial / not proven
+- UI-only restriction: yes / no / partial
+- notes
+
+6. WORDING / UX CHANGES
+- Settings > System wording changes
+- record-level demo/test wording changes
+- any other wording changes
+- why they are now more truthful
+
+7. TEST RESULTS
+- TC-TRUTH-001 result
+- TC-TRUTH-002 result
+- TC-TRUTH-003 result
+- TC-TRUTH-004 result
+- TC-TRUTH-005 result
+- TC-TRUTH-006 result
+- TC-TRUTH-007 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- exact future hardening phase recommended
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Report the environment/testing/governance model truthfully.
+Do not confuse runtime environment with admin-only governance tools.
+Prove or disprove standard-user protection from demo/test records at the backend level.
+Update the UI only where minimal truth clarification is required.

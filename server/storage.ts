@@ -161,6 +161,7 @@ export interface IStorage {
   getJobsByContact(contactId: string): Promise<Job[]>;
 
   getAllProjects(): Promise<Project[]>;
+  getArchivedProjects(): Promise<Project[]>;
   getProjectsByCustomer(customerId: string): Promise<Project[]>;
   getProject(id: string): Promise<Project | undefined>;
   createProject(data: InsertProject): Promise<Project>;
@@ -822,6 +823,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(projects).where(isNull(projects.archivedAt)).orderBy(desc(projects.createdAt));
   }
 
+  async getArchivedProjects(): Promise<Project[]> {
+    return db.select().from(projects).where(isNotNull(projects.archivedAt)).orderBy(desc(projects.createdAt));
+  }
+
   async getProjectsByCustomer(customerId: string): Promise<Project[]> {
     return db.select().from(projects).where(and(eq(projects.customerId, customerId), isNull(projects.archivedAt))).orderBy(desc(projects.createdAt));
   }
@@ -1031,11 +1036,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDemoJobs(): Promise<Job[]> {
-    return db.select().from(jobs).where(and(eq(jobs.isDemoRecord, true), isNull(jobs.archivedAt)));
+    return db.select().from(jobs).where(eq(jobs.isDemoRecord, true));
   }
 
   async getDemoProjects(): Promise<Project[]> {
-    return db.select().from(projects).where(and(eq(projects.isDemoRecord, true), isNull(projects.archivedAt)));
+    return db.select().from(projects).where(eq(projects.isDemoRecord, true));
   }
 
   async getDemoInvoices(): Promise<Invoice[]> {

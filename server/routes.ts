@@ -279,6 +279,11 @@ export async function registerRoutes(
     }
   }
 
+  const isPrivilegedUser = (req: any): boolean => {
+    const role = req.user?.role;
+    return role === "owner" || role === "admin";
+  };
+
   app.post("/api/jobs", async (req, res) => {
     try {
       const parsed = insertJobSchema.parse(req.body);
@@ -292,9 +297,12 @@ export async function registerRoutes(
   app.get("/api/jobs", async (req, res) => {
     try {
       const scope = req.query.scope as string | undefined;
-      const allJobs = scope === "archived"
+      let allJobs = scope === "archived"
         ? await storage.getArchivedJobs()
         : await storage.getAllJobs();
+      if (!isPrivilegedUser(req)) {
+        allJobs = allJobs.filter(j => !j.isDemoRecord);
+      }
       const jobsWithCounts = await Promise.all(
         allJobs.map(async (job) => {
           const items = await storage.getJobItems(job.id);
@@ -318,6 +326,7 @@ export async function registerRoutes(
     try {
       const job = await storage.getJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Job not found" });
       const items = await storage.getJobItems(job.id);
       res.json({ ...job, items });
     } catch (e: any) {
@@ -1167,9 +1176,12 @@ export async function registerRoutes(
 
       const userDivision = req.user?.divisionCode;
       const isAllDivision = !req.user?.divisionCode || req.user?.role === "admin" || req.user?.role === "owner";
-      const filtered = isAllDivision
+      let filtered = isAllDivision
         ? enriched
         : enriched.filter(q => (q.divisionId || null) === userDivision);
+      if (!isPrivilegedUser(req)) {
+        filtered = filtered.filter(q => !q.isDemoRecord);
+      }
 
       const jobIds = Array.from(new Set(filtered.map(q => q.sourceJobId).filter(Boolean))) as string[];
       const jobNameMap: Record<string, string> = {};
@@ -1193,6 +1205,7 @@ export async function registerRoutes(
     try {
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (quote.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Quote not found" });
       const userDivision = req.user?.divisionCode;
       const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
       if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
@@ -2209,9 +2222,13 @@ export async function registerRoutes(
   });
 
   // ─── Customer Routes ─────────────────────────────────────────────────────
-  app.get("/api/customers", async (_req, res) => {
+  app.get("/api/customers", async (req, res) => {
     try {
-      return res.json(await storage.getAllCustomers());
+      let all = await storage.getAllCustomers();
+      if (!isPrivilegedUser(req)) {
+        all = all.filter(c => !c.isDemoRecord);
+      }
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2237,6 +2254,7 @@ export async function registerRoutes(
   app.get("/api/customers/:id", async (req, res) => {
     const customer = await storage.getCustomer(req.params.id);
     if (!customer) return res.status(404).json({ error: "Not found" });
+    if (customer.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
     return res.json(customer);
   });
 
@@ -2265,7 +2283,11 @@ export async function registerRoutes(
       const customerId = req.query.customerId as string | undefined;
       const category = req.query.category as string | undefined;
       const search = req.query.q as string | undefined;
-      return res.json(await storage.listContacts({ customerId, category, search }));
+      let all = await storage.listContacts({ customerId, category, search });
+      if (!isPrivilegedUser(req)) {
+        all = all.filter(c => !c.isDemoRecord);
+      }
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2275,6 +2297,7 @@ export async function registerRoutes(
     try {
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Not found" });
+      if (contact.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
       return res.json(contact);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2353,9 +2376,16 @@ export async function registerRoutes(
   });
 
   // ─── Project Routes ───────────────────────────────────────────────────────
-  app.get("/api/projects", async (_req, res) => {
+  app.get("/api/projects", async (req, res) => {
     try {
-      return res.json(await storage.getAllProjects());
+      const scope = req.query.scope as string | undefined;
+      let all = scope === "archived"
+        ? await storage.getArchivedProjects()
+        : await storage.getAllProjects();
+      if (!isPrivilegedUser(req)) {
+        all = all.filter(p => !p.isDemoRecord);
+      }
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2381,6 +2411,7 @@ export async function registerRoutes(
   app.get("/api/projects/:id", async (req, res) => {
     const project = await storage.getProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Not found" });
+    if (project.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
     return res.json(project);
   });
 
@@ -2589,7 +2620,10 @@ export async function registerRoutes(
       const all = await storage.getAllInvoicesEnriched();
       const userDivision = req.user?.divisionCode;
       const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-      const filtered = isAllDivision ? all : all.filter(i => (i.divisionCode || null) === userDivision);
+      let filtered = isAllDivision ? all : all.filter(i => (i.divisionCode || null) === userDivision);
+      if (!isPrivilegedUser(req)) {
+        filtered = filtered.filter(i => !i.isDemoRecord);
+      }
       return res.json(filtered);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2921,6 +2955,7 @@ export async function registerRoutes(
   app.get("/api/invoices/:id", async (req, res) => {
     const invoice = await storage.getInvoice(req.params.id);
     if (!invoice) return res.status(404).json({ error: "Not found" });
+    if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
     return res.json(invoice);
   });
 
@@ -3410,13 +3445,18 @@ export async function registerRoutes(
     try {
       const userDivision = (req as any).user?.divisionCode;
       const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      const privileged = isPrivilegedUser(req);
       const scope = req.query.scope as string | undefined;
       if (scope === "archived") {
-        const all = await storage.getArchivedOpJobs();
-        return res.json(isAllDivision ? all : all.filter(j => (j.divisionId || null) === userDivision));
+        let all = await storage.getArchivedOpJobs();
+        if (!isAllDivision) all = all.filter(j => (j.divisionId || null) === userDivision);
+        if (!privileged) all = all.filter(j => !j.isDemoRecord);
+        return res.json(all);
       }
-      const all = await storage.getAllOpJobs();
-      return res.json(isAllDivision ? all : all.filter(j => (j.divisionId || null) === userDivision));
+      let all = await storage.getAllOpJobs();
+      if (!isAllDivision) all = all.filter(j => (j.divisionId || null) === userDivision);
+      if (!privileged) all = all.filter(j => !j.isDemoRecord);
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -3514,34 +3554,144 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
 
+      const results = {
+        estimates: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        quotes: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        opJobs: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        projects: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        invoices: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        customers: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        contacts: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+      };
+
+      const demoEstimates = await storage.getDemoJobs();
+      for (const e of demoEstimates) {
+        if (!e.archivedAt) {
+          await storage.archiveJob(e.id);
+          results.estimates.archived++;
+        }
+      }
+
       const demoQuotes = await storage.getDemoQuotes();
-      const demoJobs = await storage.getDemoOpJobs();
-
-      let quotesArchived = 0;
-      let jobsArchived = 0;
-
       for (const q of demoQuotes) {
         if (!q.archivedAt && !q.deletedAt) {
           await archiveQuote(q.id);
-          quotesArchived++;
+          results.quotes.archived++;
         }
       }
-      for (const j of demoJobs) {
+
+      const demoOpJobs = await storage.getDemoOpJobs();
+      for (const j of demoOpJobs) {
         if (!j.archivedAt) {
           await storage.archiveOpJob(j.id);
-          jobsArchived++;
+          results.opJobs.archived++;
         }
       }
+
+      const demoProjects = await storage.getDemoProjects();
+      for (const p of demoProjects) {
+        if (!p.archivedAt) {
+          await storage.archiveProject(p.id);
+          results.projects.archived++;
+        }
+      }
+
+      const demoInvoices = await storage.getDemoInvoices();
+      for (const inv of demoInvoices) {
+        if (inv.archivedAt) continue;
+        if (inv.xeroInvoiceId) {
+          results.invoices.skipped++;
+          if (!results.invoices.skipReasons.includes("Xero-linked")) {
+            results.invoices.skipReasons.push("Xero-linked");
+          }
+          continue;
+        }
+        await storage.archiveInvoice(inv.id);
+        results.invoices.archived++;
+      }
+
+      const demoCustomers = await storage.getDemoCustomers();
+      for (const c of demoCustomers) {
+        if (c.archivedAt) continue;
+        if (c.xeroContactId) {
+          results.customers.skipped++;
+          if (!results.customers.skipReasons.includes("Xero-linked")) {
+            results.customers.skipReasons.push("Xero-linked");
+          }
+          continue;
+        }
+        const [liveQuotes, liveJobs, liveProjects, liveInvoices] = await Promise.all([
+          storage.getQuotesByCustomer(c.id),
+          storage.getJobsByCustomer(c.id),
+          storage.getProjectsByCustomer(c.id),
+          storage.getInvoicesByCustomer(c.id),
+        ]);
+        const liveNonDemo = [
+          ...liveQuotes.filter(q => !q.isDemoRecord),
+          ...liveJobs.filter(j => !j.isDemoRecord),
+          ...liveProjects.filter(p => !p.isDemoRecord),
+          ...liveInvoices.filter(i => !i.isDemoRecord),
+        ];
+        if (liveNonDemo.length > 0) {
+          results.customers.skipped++;
+          if (!results.customers.skipReasons.includes("shared with live data")) {
+            results.customers.skipReasons.push("shared with live data");
+          }
+          continue;
+        }
+        await storage.archiveCustomer(c.id);
+        results.customers.archived++;
+      }
+
+      const demoContacts = await storage.getDemoContacts();
+      for (const ct of demoContacts) {
+        if (ct.archivedAt) continue;
+        const parentCustomer = await storage.getCustomer(ct.customerId);
+        if (parentCustomer) {
+          const [liveQuotes, liveJobs, liveProjects, liveInvoices] = await Promise.all([
+            storage.getQuotesByCustomer(ct.customerId),
+            storage.getJobsByCustomer(ct.customerId),
+            storage.getProjectsByCustomer(ct.customerId),
+            storage.getInvoicesByCustomer(ct.customerId),
+          ]);
+          const liveNonDemo = [
+            ...liveQuotes.filter(q => !q.isDemoRecord),
+            ...liveJobs.filter(j => !j.isDemoRecord),
+            ...liveProjects.filter(p => !p.isDemoRecord),
+            ...liveInvoices.filter(i => !i.isDemoRecord),
+          ];
+          if (liveNonDemo.length > 0) {
+            results.contacts.skipped++;
+            if (!results.contacts.skipReasons.includes("parent customer shared with live data")) {
+              results.contacts.skipReasons.push("parent customer shared with live data");
+            }
+            continue;
+          }
+        }
+        await storage.archiveContact(ct.id);
+        results.contacts.archived++;
+      }
+
+      const totalArchived = results.estimates.archived + results.quotes.archived + results.opJobs.archived +
+        results.projects.archived + results.invoices.archived + results.customers.archived + results.contacts.archived;
+      const totalSkipped = Object.values(results).reduce((sum, r) => sum + r.skipped, 0);
 
       await storage.createAuditLog({
         entityType: "system",
         entityId: "admin-cleanup",
         action: "demo_cleanup",
         performedByUserId: user.id,
-        metadataJson: { quotesArchived, jobsArchived },
+        metadataJson: { totalArchived, totalSkipped, results },
       });
 
-      res.json({ ok: true, quotesArchived, jobsArchived });
+      res.json({
+        ok: true,
+        totalArchived,
+        totalSkipped,
+        results,
+        quotesArchived: results.quotes.archived,
+        jobsArchived: results.opJobs.archived,
+      });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -4319,6 +4469,7 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Job not found" });
       const userDivision = (req as any).user?.divisionCode;
       const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
       if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
