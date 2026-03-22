@@ -1,0 +1,359 @@
+STEELIQ PRODUCTION WORKFLOW HARDENING — PHASE 6
+LIFECYCLE TRUTH + POST-PROJECT NEXT-STEP CLARITY + JOB GUIDANCE + DEMO/TEST PROPAGATION TRUTH
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle business rules unless explicitly required below for UI truth, interaction locking, or truthful editability.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not weaken any governance protections introduced in Phases 1–5.
+- Do not mark this phase complete unless the required user-facing surfaces are operationally usable in live workflow.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If older prompt language conflicts with actual repo code, follow current code truth and report the mismatch.
+- Preserve the Settings > System Environment Information and role-gated Governance architecture from Phases 1–5.
+- Preserve invoice archive behavior introduced in Phase 2.
+- Preserve CRM governance protections introduced in Phase 3.
+- Preserve governance hardening/audit visibility introduced in Phase 4.
+- Preserve Phase 5 refresh invalidation and invoice numbering work unless explicitly fixing defects.
+- Do not start a broad dashboard redesign.
+- Do not start a workflow re-architecture.
+- Do not introduce speculative event-bus/state-management rewrites.
+
+CURRENT CONTEXT
+
+SteelIQ is live and Xero push works.
+
+Accepted baseline already in place:
+- truthful environment clarity and role-gated governance
+- invoice archive truth
+- downstream delete safety on key chains
+- CRM governance and shared-live protection
+- governance audit visibility and summary hardening
+- invoice numbering prefix control
+- quote-detail invoice refresh invalidation improvements
+- accepted quote Create Project banner
+- customer-facing details default open
+- lifecycle panel active-stage default expansion
+- job-page lifecycle moved lower
+
+CURRENT LIVE WORKFLOW ISSUES TO FIX NOW
+
+These issues are still being observed in the live workflow and must now be addressed directly:
+
+1. Lifecycle truth is still confusing across estimate -> quote -> job.
+Observed examples:
+- estimate page may not surface lifecycle where users expect it
+- quote page shows estimate/quote lifecycle state but required tasks appear incomplete and locked
+- accepted quote still does not make lifecycle state feel truthful
+- job page allows radio/button interaction that earlier surfaces do not
+This creates contradictory signals about what is editable, what is complete, and what is historical.
+
+2. After project creation, the next step is still not strong enough.
+Observed example:
+- after clicking Create Project, the next operational step (create deposit invoice and/or convert to job) is still too easy to miss
+
+3. Measurement & Dimensions cards on the job page lack operator guidance.
+Observed example:
+- users do not know what these fields are for
+- when they should be filled out
+- where/how they are edited
+- why they matter in the workflow
+
+4. Demo/test propagation truth is unclear.
+Observed example:
+- marking a job as demo/test does not visibly update linked estimate/quote/job/project chain as the user expects
+This must be made truthful:
+- either implement safe propagation where already supported
+- or clearly communicate that demo/test classification is record-level only
+- but do not leave the UI implying chain propagation if it does not exist
+
+PRIMARY OBJECTIVE
+
+Harden workflow truth and operator guidance so users get:
+1. lifecycle surfaces that read truthfully and consistently across estimate, quote, and job
+2. clearer next-step guidance after project creation
+3. clearer guidance for Measurement & Dimensions on job pages
+4. truthful demo/test propagation behavior or truthful non-propagation messaging
+5. no contradictions between what appears editable and what is actually allowed
+
+Do not broaden scope beyond that.
+
+PHASE A — LIFECYCLE TRUTH REVIEW + FIX
+
+OBJECTIVE
+
+Make lifecycle surfaces truthful, predictable, and internally consistent across estimate, quote, and job contexts.
+
+REQUIRED IMPLEMENTATION
+
+1. Review all lifecycle-related UI surfaces currently visible in:
+- estimate context
+- quote context
+- job context
+
+2. Determine and report the actual intended behavior for lifecycle tasks in each context:
+- which lifecycle tasks are editable at which stage
+- which surfaces are read-only summary/history
+- which surfaces are the canonical place for interaction
+- what should happen after quote acceptance
+- what should happen after job creation
+
+3. Fix the UI so it no longer feels contradictory:
+- do not show unticked required tasks in a way that looks broken if they are actually historical/read-only
+- do not show controls as locked without explanation
+- do not allow editability in one surface if the same stage is intended read-only elsewhere, unless the UI clearly explains why
+- if estimate/quote lifecycle on quote or job pages is intended to be informational only, style and label it that way
+- if tasks should be interactable earlier in the process, enable them only in the correct stage/surface
+
+4. If lifecycle is intentionally not available on the estimate executive summary surface, state that clearly and explain the intended UX.
+If it should be surfaced there, add it in the smallest architecture-preserving way.
+
+ACCEPTANCE CRITERIA
+
+- lifecycle no longer feels broken or contradictory across estimate/quote/job
+- users can tell what is editable, what is complete, and what is historical
+- accepted quote state does not leave estimate/quote lifecycle appearing incomplete but inexplicably locked
+
+PHASE B — POST-PROJECT NEXT-STEP CLARITY
+
+OBJECTIVE
+
+Make the next operational actions after project creation much clearer.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the accepted quote page after a project has already been created and linked.
+2. Strengthen the next-step guidance so the user can clearly see what to do next, such as:
+- create first/deposit invoice
+- convert/create job
+- or both, if both are valid next steps
+
+3. The UI must clearly communicate:
+- project has been created
+- operational delivery continues from here
+- the next action(s) are now invoice creation and/or job conversion, depending on current state
+
+4. Make this stronger and more deliberate without redesigning the whole page.
+
+ACCEPTANCE CRITERIA
+
+- after project creation, the user can immediately identify the next operational action(s)
+- invoice and/or convert-to-job next steps are no longer easy to miss
+
+PHASE C — JOB PAGE MEASUREMENT & DIMENSIONS GUIDANCE
+
+OBJECTIVE
+
+Make Measurement & Dimensions understandable and usable.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the Measurement & Dimensions section on the job detail page.
+2. Add clear operator guidance explaining:
+- what these fields are for
+- when they should be filled out
+- how to update them
+- how they affect workflow or downstream execution, if applicable
+
+3. Improve edit affordance clarity if needed.
+4. Do not redesign the whole job page.
+
+ACCEPTANCE CRITERIA
+
+- operators can understand the purpose of Measurement & Dimensions without guessing
+- the section no longer feels like unexplained dead space
+
+PHASE D — DEMO/TEST PROPAGATION TRUTH
+
+OBJECTIVE
+
+Make demo/test behavior truthful across linked records.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the current demo/test flagging behavior across linked estimate/quote/project/job/invoice chains.
+2. Determine the actual implemented truth:
+- full chain propagation
+- partial propagation
+- record-level only
+- or mixed behavior by entity
+
+3. Then do one of the following:
+- if safe propagation already exists or can be completed narrowly without architecture drift, implement the missing propagation needed for truthful behavior
+OR
+- if propagation is not safely supported in the current architecture, update the UI/governance wording so it clearly states that the flag is record-level only and does not automatically propagate to linked records
+
+4. Do not leave the user assuming chain-wide flagging if that is not true.
+
+ACCEPTANCE CRITERIA
+
+- demo/test behavior is now truthful
+- linked record behavior is either correctly propagated or clearly explained
+- no misleading implication of chain-wide propagation remains
+
+PHASE E — SAFETY / UX PRESERVATION
+
+OBJECTIVE
+
+Preserve all existing protections and prior accepted improvements while making this workflow truth pass.
+
+REQUIRED IMPLEMENTATION
+
+Do not weaken:
+- Owner/Admin governance restrictions
+- Xero protections
+- invoice archive truth
+- refresh/invalidation improvements from Phase 5
+- invoice numbering controls from Phase 5
+- accepted quote Create Project CTA when no project exists
+- customer-facing details default open
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the app architecture
+- redesign the lifecycle engine broadly
+- rewrite business workflow rules beyond UI truth / interaction clarity
+- redesign governance architecture
+- add speculative automation
+- add speculative batch propagation if the architecture does not support it safely
+- start a new reporting/dashboard phase
+- weaken any safety checks
+
+REQUIRED TEST CASES
+
+TC-001
+Review lifecycle on estimate context.
+Expected:
+- if lifecycle is intended there, it is visible and coherent
+- if not intended there, the UX clearly makes the canonical lifecycle interaction surface understandable
+
+TC-002
+Review lifecycle on quote context.
+Expected:
+- estimate/quote lifecycle does not appear contradictory
+- locked/read-only states are clearly explained if not editable
+- no broken-looking incomplete-but-untouchable experience remains
+
+TC-003
+Review lifecycle on job context.
+Expected:
+- current stage remains the only default-open stage
+- editability is truthful and consistent with workflow intent
+- no contradiction with estimate/quote surfaces
+
+TC-004
+Review accepted quote after project creation.
+Expected:
+- next step(s) are now clearly visible
+- invoice creation and/or convert-to-job actions are stronger and easier to identify
+
+TC-005
+Review Measurement & Dimensions on the job page.
+Expected:
+- purpose, timing, and edit path are now clear
+
+TC-006
+Review demo/test flagging on linked records.
+Expected:
+- behavior is truthful
+- either propagation now works where intended or the UI clearly states record-level-only behavior
+
+TC-007
+Verify non-targeted systems did not regress.
+Expected:
+- governance protections still intact
+- Xero protections still intact
+- Settings > System still truthful
+- invoice numbering controls still intact
+- no fake environment selector reintroduced
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact lifecycle truth fixes implemented
+5. exact post-project next-step clarity improvements implemented
+6. exact Measurement & Dimensions guidance improvements implemented
+7. exact demo/test propagation truth fix or clarification implemented
+8. results of all required test cases
+9. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+- or state explicitly that no schema changes were required
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+- or state explicitly that no route changes were required
+
+5. LIFECYCLE TRUTH FIXES
+- estimate context
+- quote context
+- job context
+- canonical interaction surface
+- exact read-only vs editable truth implemented
+
+6. POST-PROJECT NEXT-STEP CLARITY
+- old behavior
+- new behavior
+- exact UI changes made
+
+7. MEASUREMENT & DIMENSIONS GUIDANCE
+- old behavior
+- new behavior
+- exact guidance/editability improvements made
+
+8. DEMO/TEST PROPAGATION TRUTH
+- old behavior
+- new behavior
+- whether propagation now occurs or is explicitly clarified as record-level only
+- exact UI/governance wording changes if applicable
+
+9. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+
+10. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Preserve Xero safety.
+Fix the workflow truth issues directly and clearly.
+Report truthfully and exactly.

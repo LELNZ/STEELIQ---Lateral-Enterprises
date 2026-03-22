@@ -118,9 +118,10 @@ interface TaskRowProps {
   instanceId: string;
   pendingKey: string | null;
   onToggle: (stageKey: string, taskKey: string, completed: boolean) => void;
+  previewMode?: boolean;
 }
 
-function TaskRow({ task, stageKey, instanceId: _instanceId, pendingKey, onToggle }: TaskRowProps) {
+function TaskRow({ task, stageKey, instanceId: _instanceId, pendingKey, onToggle, previewMode = false }: TaskRowProps) {
   const isPending = pendingKey === `${stageKey}:${task.key}`;
   const isDisabled = !task.editable || isPending;
 
@@ -161,7 +162,12 @@ function TaskRow({ task, stageKey, instanceId: _instanceId, pendingKey, onToggle
             {task.label}
           </span>
           {task.required && (
-            <span className="text-[10px] font-medium text-rose-600 dark:text-rose-400 shrink-0">
+            <span className={[
+              "text-[10px] font-medium shrink-0",
+              previewMode
+                ? "text-muted-foreground/40"
+                : "text-rose-600 dark:text-rose-400",
+            ].join(" ")}>
               Required
             </span>
           )}
@@ -215,7 +221,7 @@ function TaskChecklist({ stage, instanceId, pendingKey, onToggle }: TaskChecklis
       {!hasInstance && (
         <div className="flex items-center gap-1.5 py-1 text-[10px] text-muted-foreground/60 italic">
           <Lock className="h-3 w-3 shrink-0" />
-          Tasks editable after acceptance
+          Tasks become active when this quote is accepted
         </div>
       )}
 
@@ -228,6 +234,7 @@ function TaskChecklist({ stage, instanceId, pendingKey, onToggle }: TaskChecklis
           instanceId={instanceId ?? ""}
           pendingKey={pendingKey}
           onToggle={onToggle}
+          previewMode={!hasInstance}
         />
       ))}
 
@@ -577,8 +584,18 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
         </div>
       </div>
 
+      {/* Pre-acceptance preview notice — panel level */}
+      {!lifecycle.instanceId && (
+        <div className="flex items-start gap-2 rounded-md bg-muted/40 border border-border/50 px-3 py-2" data-testid="lifecycle-preview-notice">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground/70 italic">
+            This shows the planned lifecycle template. Tasks unlock and become editable once the quote is accepted.
+          </p>
+        </div>
+      )}
+
       {/* Current stage summary */}
-      {currentStage && (
+      {currentStage && lifecycle.instanceId && (
         <div
           data-testid="lifecycle-current-stage-summary"
           className="flex items-center gap-2 text-sm rounded-md bg-muted/50 px-3 py-2"

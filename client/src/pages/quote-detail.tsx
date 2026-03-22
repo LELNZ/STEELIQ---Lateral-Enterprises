@@ -673,7 +673,7 @@ export default function QuoteDetail() {
           <Separator />
           <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-admin-demo-flag">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Admin: Demo / Test Record</p>
-            <p className="text-xs text-muted-foreground">Flag this quote as a demo/test record so it can be bulk-archived from the admin panel without affecting real operational data.</p>
+            <p className="text-xs text-muted-foreground">Flag this quote as a demo/test record so it can be bulk-archived from the Governance panel. <strong>Record-level only</strong> — does not automatically propagate to linked estimates, projects, jobs, or invoices. Use the Governance panel in Settings to manage chain-level classification.</p>
             <div className="flex items-center gap-3">
               <Button
                 variant={quote.isDemoRecord ? "secondary" : "outline"}
@@ -1117,6 +1117,34 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
               )}
             </div>
           </div>
+
+          {quoteStatus === "accepted" && projectId && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2" data-testid="banner-next-steps-post-project">
+              <p className="text-xs font-semibold text-foreground/80 uppercase tracking-wider">Next Actions</p>
+              <div className="space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <span className={["h-4 w-4 shrink-0 mt-0.5 rounded-full flex items-center justify-center text-[10px] font-bold", invoices.length > 0 ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" : "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400"].join(" ")}>
+                    {invoices.length > 0 ? "✓" : "1"}
+                  </span>
+                  <div>
+                    <p className="text-xs font-medium text-foreground/80">
+                      {invoices.length > 0 ? `${invoices.length} invoice${invoices.length !== 1 ? "s" : ""} raised` : "Raise deposit invoice"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {invoices.length > 0 ? "Invoices in progress — continue in the Invoices section below." : "Start billing by creating a deposit invoice in the Invoices section below."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="h-4 w-4 shrink-0 mt-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 flex items-center justify-center text-[10px] font-bold">2</span>
+                  <div>
+                    <p className="text-xs font-medium text-foreground/80">Convert to operational job</p>
+                    <p className="text-[11px] text-muted-foreground">Create a job shell in the Convert to Job section below to track production and site work.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {quoteStatus === "accepted" && !projectId && customerId && (
             <div className="rounded-lg border-2 border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 p-4 space-y-2" data-testid="banner-create-project-cta">
