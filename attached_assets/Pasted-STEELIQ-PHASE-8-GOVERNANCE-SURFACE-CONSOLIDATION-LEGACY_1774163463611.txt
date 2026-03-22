@@ -1,0 +1,201 @@
+STEELIQ PHASE 8 — GOVERNANCE SURFACE CONSOLIDATION + LEGACY DEMO CLEANUP REMOVAL
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is about governance-surface consolidation and removal of misleading legacy demo/test cleanup controls.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the centralized governance model already present in Settings > System.
+- Do not change Xero protections, archive/delete safety, or record-level governance rules unless required to preserve current behavior during consolidation.
+- Do not change the lifecycle engine.
+- Do not change Phase 7B M&D enforcement.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints unless strictly necessary to preserve existing behavior after removing legacy UI duplication.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not leave duplicate demo/test governance surfaces in place.
+- Do not keep misleading “environment reset” wording in a live production UI if it is not a true infrastructure/tenant reset.
+
+CURRENT LIVE TRUTH
+
+The live app currently has two places dealing with demo/test data governance:
+1. /settings > System
+   - Environment Information
+   - Test / Demo Data Governance
+   - flagged-record review
+   - bulk archive
+   - governance activity
+2. /admin > Users
+   - Demo / Test Data Cleanup
+   - Reset Demo Environment
+
+This creates duplicated and misleading governance surfaces.
+
+PRIMARY OBJECTIVE
+
+Consolidate demo/test governance into one canonical location:
+- Settings > System
+
+Remove or relocate legacy duplicate cleanup/reset controls from Admin > Users so that:
+- User Management only handles users/security/account access
+- Settings > System is the sole canonical place for demo/test governance and environment truth
+
+PHASE A — AUDIT THE LEGACY ADMIN/USERS CLEANUP CONTROLS
+
+1. Review exactly what these controls on /admin > Users currently do in code:
+- Demo / Test Data Cleanup
+- Reset Demo Environment
+
+2. Report truthfully:
+- which routes/actions they call
+- whether they duplicate current Settings > System governance actions
+- whether either one performs behavior not currently available in Settings > System
+- whether either one uses misleading wording relative to actual behavior
+
+3. If they perform unique logic still needed, preserve the behavior but move/relabel it appropriately under the canonical governance model.
+
+PHASE B — REMOVE DUPLICATE / MISLEADING GOVERNANCE FROM ADMIN > USERS
+
+1. Remove demo/test cleanup/reset controls from /admin > Users unless a minimal transitional link/message is required.
+2. Keep /admin > Users focused on:
+- user management
+- roles
+- account security
+- bootstrap account warning if still applicable
+
+3. Do not leave “Reset Demo Environment” on a live production user-management page.
+
+PHASE C — MAKE SETTINGS > SYSTEM THE SINGLE CANONICAL GOVERNANCE SURFACE
+
+1. Preserve Settings > System as the canonical location for:
+- Environment Information
+- Test / Demo Data Governance
+- flagged record review
+- bulk archive
+- governance activity / audit visibility
+
+2. If the old Admin > Users controls had unique still-needed behavior not exposed here, add only the minimal truthful surface needed to Settings > System.
+3. Use truthful wording:
+- record governance, not environment switching
+- archive preferred over deletion
+- Xero-linked records require caution
+
+PHASE D — WORDING HARDENING
+
+1. Remove misleading wording that implies:
+- the live production environment can be reset from the UI
+- demo/test governance changes infrastructure environment
+- onboarding reset actions are safe generic actions in production
+
+2. Replace with enterprise-safe wording consistent with current governance architecture.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign Settings > System broadly
+- start entity-page demo-flag parity work yet unless an extremely small change is unavoidable
+- redesign Users admin
+- alter archive/delete rules
+- alter Xero protections
+- alter lifecycle behavior
+- add speculative health/environment controls
+- add sandbox/environment switching
+
+REQUIRED TEST CASES
+
+TC-P8A-001
+Open /admin > Users.
+Expected:
+- no duplicate demo/test cleanup/reset governance controls remain there
+- user/security management still works normally
+
+TC-P8A-002
+Open /settings > System.
+Expected:
+- Environment Information remains present
+- Test / Demo Data Governance remains present
+- this is clearly the canonical governance surface
+
+TC-P8A-003
+Verify any legacy actions removed from /admin > Users are either:
+- safely removed because they duplicated canonical behavior, or
+- truthfully relocated to /settings > System
+
+TC-P8A-004
+Verify no misleading “Reset Demo Environment” wording remains in live production UI unless code proves a true isolated demo tenant reset exists.
+Expected:
+- misleading reset wording removed or replaced
+
+TC-P8A-005
+Verify governance protections and Xero-linked safety remain unchanged.
+Expected:
+- no regression
+
+TC-P8A-006
+Verify user-management/admin functionality remains intact after removal of the duplicate cleanup controls.
+Expected:
+- add user / role guide / user list / warnings still work normally
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact meaning of the old /admin > Users cleanup controls in code
+3. exact routes/actions those controls used
+4. exact duplicate vs unique behavior identified
+5. exact UI removed from /admin > Users
+6. exact canonical governance behavior preserved in /settings > System
+7. exact wording changes made
+8. results of all required test cases
+9. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was consolidated
+- what was removed
+- what was intentionally preserved
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. LEGACY ADMIN/USERS CONTROL TRUTH
+- Demo / Test Data Cleanup: what it did
+- Reset Demo Environment: what it did
+- routes/actions used
+- whether each was duplicate or unique
+
+4. CANONICAL GOVERNANCE SURFACE
+- what remains in Settings > System
+- any behavior moved there
+- why this is now the single source of truth
+
+5. WORDING / UX HARDENING
+- exact misleading wording removed
+- exact truthful wording now used
+
+6. TEST RESULTS
+- TC-P8A-001 result
+- TC-P8A-002 result
+- TC-P8A-003 result
+- TC-P8A-004 result
+- TC-P8A-005 result
+- TC-P8A-006 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to the next phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Preserve governance protections.
+Preserve Xero safety.
+Remove duplicate and misleading governance surfaces.
+Make Settings > System the single canonical place for environment truth and demo/test data governance.
+Report truthfully and exactly.
