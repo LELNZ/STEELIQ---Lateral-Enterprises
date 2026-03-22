@@ -1077,14 +1077,15 @@ export default function QuoteBuilder() {
   function ensurePanelRows(count: number) {
     const current = w.panelRows || [];
     if (current.length === count) return;
+    const defaultType = isStacker ? "sliding" as const : "fixed" as const;
     const next: EntranceDoorRow[][] = Array.from({ length: count }, (_, i) => {
       if (i < current.length) return current[i];
-      return [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }];
+      return [{ height: 0, type: defaultType, slideDirection: "right" as const }];
     });
     form.setValue("panelRows", next);
   }
 
-  const DEFAULT_PANEL_ROW: EntranceDoorRow = { height: 0, type: "fixed", slideDirection: "right" };
+  const DEFAULT_PANEL_ROW: EntranceDoorRow = { height: 0, type: isStacker ? "sliding" : "fixed", slideDirection: "right" };
 
   function setPanelRowCount(panelIdx: number, count: number) {
     const current = [...(w.panelRows || [])];
