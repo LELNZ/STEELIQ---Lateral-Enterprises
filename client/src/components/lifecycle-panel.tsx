@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
 import type {
   ComputedLifecycleState,
   ComputedStageState,
@@ -118,9 +119,10 @@ interface TaskRowProps {
   instanceId: string;
   pendingKey: string | null;
   onToggle: (stageKey: string, taskKey: string, completed: boolean) => void;
+  previewMode?: boolean;
 }
 
-function TaskRow({ task, stageKey, instanceId: _instanceId, pendingKey, onToggle }: TaskRowProps) {
+function TaskRow({ task, stageKey, instanceId: _instanceId, pendingKey, onToggle, previewMode = false }: TaskRowProps) {
   const isPending = pendingKey === `${stageKey}:${task.key}`;
   const isDisabled = !task.editable || isPending;
 
@@ -161,7 +163,12 @@ function TaskRow({ task, stageKey, instanceId: _instanceId, pendingKey, onToggle
             {task.label}
           </span>
           {task.required && (
-            <span className="text-[10px] font-medium text-rose-600 dark:text-rose-400 shrink-0">
+            <span className={[
+              "text-[10px] font-medium shrink-0",
+              previewMode
+                ? "text-muted-foreground/40"
+                : "text-rose-600 dark:text-rose-400",
+            ].join(" ")}>
               Required
             </span>
           )}
@@ -215,7 +222,7 @@ function TaskChecklist({ stage, instanceId, pendingKey, onToggle }: TaskChecklis
       {!hasInstance && (
         <div className="flex items-center gap-1.5 py-1 text-[10px] text-muted-foreground/60 italic">
           <Lock className="h-3 w-3 shrink-0" />
-          Tasks editable after acceptance
+          Tasks become active when this quote is accepted
         </div>
       )}
 
@@ -228,6 +235,7 @@ function TaskChecklist({ stage, instanceId, pendingKey, onToggle }: TaskChecklis
           instanceId={instanceId ?? ""}
           pendingKey={pendingKey}
           onToggle={onToggle}
+          previewMode={!hasInstance}
         />
       ))}
 
@@ -265,14 +273,15 @@ interface StageRowProps {
   instanceId: string | null;
   pendingKey: string | null;
   onToggleTask: (stageKey: string, taskKey: string, completed: boolean) => void;
+  previewMode?: boolean;
 }
 
-function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendingKey, onToggleTask }: StageRowProps) {
-  const isActive = stage.status === "active";
-  const isComplete = stage.status === "complete";
-  const isNA = stage.status === "not_applicable";
-  const isNotStarted = stage.status === "not_started";
-  const isBlocked = stage.status === "blocked";
+function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendingKey, onToggleTask, previewMode = false }: StageRowProps) {
+  const isActive = !previewMode && stage.status === "active";
+  const isComplete = !previewMode && stage.status === "complete";
+  const isNA = !previewMode && stage.status === "not_applicable";
+  const isNotStarted = !previewMode && stage.status === "not_started";
+  const isBlocked = !previewMode && stage.status === "blocked";
   const hasTasks = stage.tasks.length > 0;
 
   return (
@@ -280,9 +289,10 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
       data-testid={`lifecycle-stage-${stage.key}`}
       className={[
         "rounded-md transition-colors",
-        isActive ? "bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30" : "",
-        isBlocked ? "bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30" : "",
-        isNA || isNotStarted ? "opacity-50" : "",
+        previewMode ? "border border-dashed border-border/60 opacity-70" : "",
+        !previewMode && isActive ? "bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30" : "",
+        !previewMode && isBlocked ? "bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30" : "",
+        !previewMode && (isNA || isNotStarted) ? "opacity-50" : "",
       ].join(" ")}
     >
       {/* Stage header — only this div toggles expand; task body is outside */}
@@ -312,22 +322,26 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
                 data-testid={`lifecycle-stage-label-${stage.key}`}
                 className={[
                   "text-sm font-medium leading-snug",
-                  isActive ? "text-blue-800 dark:text-blue-200" : "",
-                  isComplete ? "text-emerald-800 dark:text-emerald-200" : "",
-                  isBlocked ? "text-amber-800 dark:text-amber-200" : "",
-                  isNA || isNotStarted ? "text-muted-foreground" : "text-foreground",
+                  previewMode ? "text-muted-foreground" : "",
+                  !previewMode && isActive ? "text-blue-800 dark:text-blue-200" : "",
+                  !previewMode && isComplete ? "text-emerald-800 dark:text-emerald-200" : "",
+                  !previewMode && isBlocked ? "text-amber-800 dark:text-amber-200" : "",
+                  !previewMode && (isNA || isNotStarted) ? "text-muted-foreground" : "",
+                  !previewMode && !isActive && !isComplete && !isBlocked && !isNA && !isNotStarted ? "text-foreground" : "",
                 ].join(" ")}
               >
                 {stage.label}
               </span>
-              {hasTasks && (
+              {hasTasks && !previewMode && (
                 <span className="text-[10px] text-muted-foreground/60 tabular-nums">
                   {stage.tasks.filter((t) => t.completed).length}/{stage.tasks.length}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {statusBadge(stage.status)}
+              {previewMode
+                ? <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-muted-foreground/50 border-dashed border-muted-foreground/30">planned</Badge>
+                : statusBadge(stage.status)}
               {hasTasks && (
                 isExpanded
                   ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -347,7 +361,7 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
             </span>
           </div>
 
-          {isActive && stage.nextAction && (
+          {!previewMode && isActive && stage.nextAction && (
             <div
               data-testid={`lifecycle-next-action-${stage.key}`}
               className="flex items-start gap-1 mt-1 text-xs text-blue-700 dark:text-blue-300"
@@ -357,7 +371,7 @@ function StageRow({ stage, isLast, isExpanded, onToggleExpand, instanceId, pendi
             </div>
           )}
 
-          {stage.status === "blocked" && stage.blockedReason && (
+          {!previewMode && stage.status === "blocked" && stage.blockedReason && (
             <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
               {stage.blockedReason}
             </div>
@@ -442,6 +456,7 @@ interface LifecyclePanelProps {
 }
 
 export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) {
+  const { toast } = useToast();
   const endpoint = jobId
     ? `/api/op-jobs/${jobId}/lifecycle`
     : quoteId
@@ -516,8 +531,26 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
         queryClient.invalidateQueries({ queryKey: [`/api/op-jobs/${jobId}/lifecycle`] });
       }
     },
-    onError: () => {
+    onError: (e: any) => {
       setPendingKey(null);
+      // Parse structured error from the API (format: "400: {json}")
+      let message = "Failed to update task. Please try again.";
+      try {
+        const match = e?.message?.match(/^\d+:\s*(\{[\s\S]*\})$/);
+        if (match) {
+          const body = JSON.parse(match[1]);
+          if (body?.error) message = body.error;
+        } else if (e?.message) {
+          message = e.message;
+        }
+      } catch {
+        if (e?.message) message = e.message;
+      }
+      toast({
+        title: "Task blocked",
+        description: message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -570,15 +603,30 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground" data-testid="lifecycle-progress">
-            {completedCount}/{totalCount} stages
-          </span>
-          <OverallStatusBadge status={lifecycle.overallStatus} />
+          {lifecycle.instanceId && (
+            <span className="text-xs text-muted-foreground" data-testid="lifecycle-progress">
+              {completedCount}/{totalCount} stages
+            </span>
+          )}
+          {lifecycle.instanceId
+            ? <OverallStatusBadge status={lifecycle.overallStatus} />
+            : <Badge variant="outline" className="text-[10px] border-dashed text-muted-foreground/60">Preview</Badge>
+          }
         </div>
       </div>
 
+      {/* Pre-acceptance preview notice — panel level */}
+      {!lifecycle.instanceId && (
+        <div className="flex items-start gap-2 rounded-md bg-muted/40 border border-border/50 px-3 py-2" data-testid="lifecycle-preview-notice">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground/70 italic">
+            This shows the planned lifecycle template. Tasks unlock and become editable once the quote is accepted.
+          </p>
+        </div>
+      )}
+
       {/* Current stage summary */}
-      {currentStage && (
+      {currentStage && lifecycle.instanceId && (
         <div
           data-testid="lifecycle-current-stage-summary"
           className="flex items-center gap-2 text-sm rounded-md bg-muted/50 px-3 py-2"
@@ -596,7 +644,7 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
       <Separator />
 
       {/* Stage list */}
-      <div className="space-y-0">
+      <div className={["space-y-1", !lifecycle.instanceId ? "opacity-90" : ""].join(" ")}>
         {lifecycle.stages.map((stage, idx) => (
           <StageRow
             key={stage.key}
@@ -607,6 +655,7 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
             instanceId={lifecycle.instanceId}
             pendingKey={pendingKey}
             onToggleTask={handleToggleTask}
+            previewMode={!lifecycle.instanceId}
           />
         ))}
       </div>

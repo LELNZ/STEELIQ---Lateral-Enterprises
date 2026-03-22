@@ -496,6 +496,32 @@ export default function OpJobDetail() {
             </button>
           )}
         </div>
+        <p className="text-xs text-muted-foreground">
+          Specifies whether a physical site measure is needed and where production dimensions originate.
+          Set <span className="font-medium">Measurement Requirement</span> before the Survey/Measure lifecycle stage begins, and update <span className="font-medium">Dimension Source</span> once dimensions are confirmed — this drives lifecycle tracking and production readiness.
+          Use the <span className="font-medium">Edit</span> button to update these fields.
+        </p>
+
+        {/* Readiness guard — fires when measurement is required but fields are incomplete */}
+        {job.measurementRequirement !== "not_required" && (!job.measurementRequirement || !job.dimensionSource) && !job.archivedAt && (
+          <div className="flex items-start gap-2.5 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5" data-testid="banner-md-readiness-guard">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Measurement readiness incomplete</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                {!job.measurementRequirement && !job.dimensionSource
+                  ? "Both Measurement Requirement and Dimension Source must be set before the Survey/Measure stage can progress."
+                  : !job.measurementRequirement
+                  ? "Measurement Requirement must be set to indicate whether a site visit is needed before production."
+                  : "Dimension Source must be set once dimensions are confirmed — this is required before production can begin."}
+              </p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                Use the <span className="font-medium">Edit</span> button above to complete these fields before progressing the lifecycle.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="rounded-lg border bg-card p-3 space-y-1">
             <p className="text-xs text-muted-foreground">Measurement Requirement</p>
@@ -507,6 +533,12 @@ export default function OpJobDetail() {
               )}
               {!job.measurementRequirement && <span className="text-muted-foreground italic">Not set</span>}
             </p>
+            <p className="text-[11px] text-muted-foreground/60 italic">
+              {job.measurementRequirement === "pre_quote" && "Measure was needed before quoting. Confirm dimensions are captured."}
+              {job.measurementRequirement === "post_acceptance" && "A site measure is required after acceptance. Schedule and complete before production begins."}
+              {job.measurementRequirement === "not_required" && "No physical measure required — dimensions confirmed from drawings or client-supplied data."}
+              {!job.measurementRequirement && "Set this to indicate whether a physical site visit is required before production."}
+            </p>
           </div>
           <div className="rounded-lg border bg-card p-3 space-y-1">
             <p className="text-xs text-muted-foreground">Dimension Source</p>
@@ -515,13 +547,31 @@ export default function OpJobDetail() {
                 ? job.dimensionSource.replace(/_/g, " ")
                 : <span className="text-muted-foreground italic">Not set</span>}
             </p>
+            <p className="text-[11px] text-muted-foreground/60 italic">
+              {job.dimensionSource === "site_measure" && "Dimensions taken from a physical site visit. Most accurate."}
+              {job.dimensionSource === "confirmed_drawings" && "Dimensions from signed-off architectural or engineering drawings."}
+              {job.dimensionSource === "client_supplied" && "Dimensions provided by the client. Confirm accuracy before production."}
+              {job.dimensionSource === "engineer_drawings" && "Dimensions from structural or engineering specifications."}
+              {job.dimensionSource === "architectural_drawings" && "Dimensions from architectural plans. Verify against site if possible."}
+              {job.dimensionSource === "other" && "Non-standard dimension source. Document in job notes for traceability."}
+              {!job.dimensionSource && "Set this once dimensions are confirmed to record their origin for production traceability."}
+            </p>
           </div>
         </div>
       </div>
 
       <Separator />
 
-      <div data-testid="section-lifecycle-job" className="rounded-lg border bg-card p-4">
+      <div data-testid="section-lifecycle-job" className="rounded-lg border bg-card p-4 space-y-3">
+        {job.measurementRequirement !== "not_required" && (!job.measurementRequirement || !job.dimensionSource) && !job.archivedAt && (
+          <div className="flex items-start gap-2 rounded border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 px-2.5 py-2" data-testid="banner-lifecycle-md-reminder">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              <span className="font-semibold">Measurement readiness incomplete.</span>{" "}
+              Complete the Measurement &amp; Dimensions fields above before progressing the Survey/Measure lifecycle stage.
+            </p>
+          </div>
+        )}
         <LifecyclePanel jobId={jobId} />
       </div>
 
@@ -716,7 +766,7 @@ export default function OpJobDetail() {
           <Separator />
           <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-admin-demo-flag-job">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Admin: Demo / Test Record</p>
-            <p className="text-xs text-muted-foreground">Flag this job as a demo/test record so it can be bulk-archived from the admin panel.</p>
+            <p className="text-xs text-muted-foreground">Flag this job as a demo/test record so it can be bulk-archived from the Governance panel. <strong>Record-level only</strong> — does not automatically propagate to the linked quote, project, estimates, or invoices. Use the Governance panel in Settings to manage chain-level classification.</p>
             <div className="flex items-center gap-3">
               <Button
                 variant={job.isDemoRecord ? "secondary" : "outline"}
