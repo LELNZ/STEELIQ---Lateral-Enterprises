@@ -1,0 +1,225 @@
+STEELIQ HOTFIX — PROTECTED DEMO/XERO INVOICE CLEAR-LINK ACTION NOT VISIBLE IN LIVE GOVERNANCE UI
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a narrow production hotfix for the demo/test invoice cleanup workflow in Settings > System.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not weaken Xero protections.
+- Do not weaken governance protections.
+- Do not change invoice creation logic.
+- Do not change lifecycle logic.
+- Do not change unrelated governance surfaces broadly.
+- Do not introduce schema creep.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond making the protected demo invoice clear-link workflow visible and operational in the live governance UI.
+
+CURRENT LIVE ISSUE
+
+In the live app, demo/test invoices that were previously Xero-linked still appear in:
+Settings > System > Test / Demo Data Governance > Invoices
+as:
+
+- Protected
+- Xero-linked
+
+This is correct.
+
+However, after the corresponding Xero invoice has already been deleted/voided externally, owner/admin users still cannot proceed because the expected admin action is not visible in the live UI.
+
+Expected based on the prior implementation report:
+- a protected-row admin action should appear:
+  "Clear Xero Link (post-void cleanup)"
+- after clearing, the invoice should move from Protected to Actionable
+- then the invoice should be archivable/deletable using the normal governance actions
+
+Actual live result:
+- the protected invoice rows show no clear-link action/button
+- reverting the invoice to Draft does not help, because protection is based on stored Xero link fields, not workflow status
+- the invoices remain stuck as Protected
+
+PRIMARY OBJECTIVE
+
+Fix the protected demo invoice row rendering and/or action wiring in Settings > System so owner/admin users can actually perform the intended post-Xero cleanup workflow in the live app.
+
+PHASE A — AUDIT CURRENT LIVE/REPO TRUTH
+
+1. Review the current implementation for the protected demo invoice clear-link workflow.
+2. Determine exactly:
+- which route handles clearing the stale Xero link
+- which component should render the action/button
+- under what row conditions the button should appear
+- why the button/action is not visible in the live protected invoice rows
+
+3. Report whether the issue is:
+- UI rendering logic
+- conditional gating logic
+- missing query/state refresh logic
+- route mismatch
+- not actually shipped in the rendered live surface
+- another narrow cause
+
+PHASE B — FIX THE PROTECTED ROW ACTION VISIBILITY
+
+1. Ensure that for owner/admin users, protected invoice rows in Settings > System show a clear admin action when all of the following are true:
+- entity type is invoice
+- invoice is flagged as demo/test
+- invoice still has a stored Xero link
+- row is in the Protected section/state
+
+2. The action must be clearly labeled, for example:
+- Clear Xero Link (post-void cleanup)
+
+3. The action must not appear for:
+- non-admin/non-owner users
+- non-demo invoices
+- rows that are not actually protected by Xero link
+
+PHASE C — COMPLETE THE END-TO-END CLEANUP FLOW
+
+1. After the clear-link action succeeds:
+- the invoice should no longer be classified as Xero-linked protected
+- it should move into the actionable/archive-delete state as current governance rules allow
+- the Settings > System invoice governance section must refresh truthfully
+
+2. Owner/admin must then be able to:
+- archive the invoice
+- or delete the invoice if current demo/test governance rules allow it
+
+3. Keep this flow entirely within the canonical governance context in Settings > System.
+
+PHASE D — UI / WORDING CLARITY
+
+1. Keep the wording serious and explicit.
+2. Make it clear that:
+- Draft/Returned to Draft status does not clear a Xero link
+- clearing the stale Xero link is a governance/admin cleanup action after external Xero void/delete
+- this applies only to demo/test invoices
+
+3. Do not redesign the governance panel broadly.
+Only make the smallest truthful change needed.
+
+PHASE E — SAFETY PRESERVATION
+
+1. Preserve protections for real production Xero-linked invoices.
+2. Preserve demo-only restriction on the clear-link path.
+3. Preserve audit logging.
+4. Preserve standard-user shielding.
+5. Do not allow broad unlinking of non-demo invoices.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign Xero integration
+- redesign invoice list page
+- redesign Settings > System broadly
+- change invoice numbering
+- change deposit/progress/final invoice behavior
+- add speculative reconciliation systems
+- add schema
+
+REQUIRED TEST CASES
+
+TC-CLEAR-001
+As owner/admin, open Settings > System > Invoices with protected demo/test Xero-linked invoices present.
+Expected:
+- each eligible protected row shows the clear-link action/button
+
+TC-CLEAR-002
+As owner/admin, click the clear-link action for an eligible demo/test invoice.
+Expected:
+- confirmation flow appears
+- clear-link succeeds
+- row no longer remains in protected/Xero-linked state
+
+TC-CLEAR-003
+After clear-link, verify the invoice becomes actionable.
+Expected:
+- archive and/or delete action becomes available according to current governance rules
+
+TC-CLEAR-004
+Archive the cleared demo/test invoice.
+Expected:
+- removed from active invoices list
+- retained historically if archived
+
+TC-CLEAR-005
+If delete is allowed after clear-link, verify delete works for eligible demo/test invoice.
+Expected:
+- delete succeeds only when safe under current governance rules
+
+TC-CLEAR-006
+Verify non-demo invoices do not expose the clear-link action.
+Expected:
+- no unsafe action leakage
+
+TC-CLEAR-007
+Verify non-admin users do not see the clear-link action.
+Expected:
+- role gating preserved
+
+TC-CLEAR-008
+Verify governance audit/history records the clear-link action and subsequent archive/delete action.
+Expected:
+- action trail remains truthful
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact reason the clear-link action was not visible in the live UI
+3. exact rendering/gating fix implemented
+4. exact end-to-end state transition after clear-link
+5. exact role/record conditions under which the action appears
+6. results of all required test cases
+7. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was fixed
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. ROOT CAUSE
+- exact reason the clear-link action was missing in live governance UI
+- whether it was rendering, gating, state, or shipping mismatch
+
+4. UI / ACTION FIX
+- where the action now appears
+- exact conditions for visibility
+- how the action behaves
+
+5. END-TO-END CLEANUP FLOW
+- before clear-link
+- after clear-link
+- after archive/delete
+
+6. TEST RESULTS
+- TC-CLEAR-001 result
+- TC-CLEAR-002 result
+- TC-CLEAR-003 result
+- TC-CLEAR-004 result
+- TC-CLEAR-005 result
+- TC-CLEAR-006 result
+- TC-CLEAR-007 result
+- TC-CLEAR-008 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve Xero safety.
+Preserve governance protections.
+Make the protected demo invoice clear-link workflow actually visible and usable in the live Settings > System governance UI.
+Report truthfully and exactly.

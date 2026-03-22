@@ -2868,8 +2868,10 @@ export async function registerRoutes(
               });
             }
 
-            // Deposit-specific cap (50% of base contract only, not variations)
-            if (invoiceType === "deposit") {
+            // Deposit-specific cap (percentage mode only — 50% of base contract)
+            // Fixed amount mode bypasses the percentage cap but is still subject to
+            // the standard contract value ceiling enforced above (OVER_CONTRACT_VALUE).
+            if (invoiceType === "deposit" && parsed.data.depositType !== "fixed") {
               const depositAllowanceExcl = contractValue * (MAX_DEPOSIT_PCT / 100);
               const depositInvoicedExcl = activeInvoices
                 .filter((i) => i.type === "deposit")
@@ -2878,7 +2880,7 @@ export async function registerRoutes(
 
               if (depositRemainingExcl <= 0.005) {
                 return res.status(422).json({
-                  error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full.`,
+                  error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full. Use Fixed Amount mode to enter a specific deposit amount.`,
                   code: "DEPOSIT_ALLOWANCE_EXHAUSTED",
                   depositAllowanceExcl,
                   depositInvoicedExcl,
@@ -2888,7 +2890,7 @@ export async function registerRoutes(
 
               if (newAmountExcl > depositRemainingExcl + 0.005) {
                 return res.status(422).json({
-                  error: `Deposit amount exceeds remaining deposit allowance. Only $${depositRemainingExcl.toFixed(2)} excl. GST remains of the ${MAX_DEPOSIT_PCT}% deposit allowance.`,
+                  error: `Deposit amount exceeds remaining ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositRemainingExcl.toFixed(2)} excl. GST remaining). Use Fixed Amount mode to enter the actual deposit received.`,
                   code: "OVER_DEPOSIT_ALLOWANCE",
                   depositAllowanceExcl,
                   depositInvoicedExcl,
@@ -4275,6 +4277,57 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Governance: Clear Xero link on a demo/test invoice ─────────────────
+  // Allows admin/owner to clear xeroInvoiceId/xeroInvoiceNumber/xeroStatus
+  // on a demo/test invoice after the corresponding Xero invoice has been
+  // voided or deleted on the Xero side. This unblocks archive/delete.
+  app.post("/api/admin/governance/clear-xero-link/:invoiceId", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { invoiceId } = req.params;
+      const inv = await storage.getInvoice(invoiceId);
+      if (!inv) return res.status(404).json({ error: "Invoice not found" });
+      if (!inv.isDemoRecord) {
+        return res.status(400).json({
+          error: "Only demo/test flagged invoices can have their Xero link cleared via governance. Production invoices must be managed through standard Xero workflows.",
+          code: "NOT_DEMO_RECORD",
+        });
+      }
+      if (!inv.xeroInvoiceId) {
+        return res.status(400).json({
+          error: "This invoice is not linked to Xero. No action needed.",
+          code: "NOT_XERO_LINKED",
+        });
+      }
+      const previousXeroNumber = inv.xeroInvoiceNumber;
+      const previousXeroId = inv.xeroInvoiceId;
+      const updated = await storage.clearInvoiceXeroLink(invoiceId);
+      await storage.createAuditLog({
+        entityType: "invoice",
+        entityId: invoiceId,
+        action: "xero_link_cleared",
+        performedByUserId: user.id,
+        metadataJson: {
+          previousXeroInvoiceId: previousXeroId,
+          previousXeroInvoiceNumber: previousXeroNumber,
+          reason: "Admin cleared Xero link for demo/test invoice governance cleanup",
+          isDemoRecord: true,
+        },
+      });
+      return res.json({
+        success: true,
+        message: `Xero link cleared for ${inv.number}. Previous Xero reference: ${previousXeroNumber || previousXeroId}. This invoice can now be archived or deleted.`,
+        invoice: updated,
+      });
+    } catch (err: any) {
+      console.error("Clear Xero link error:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ─── Governance: Delete a single flagged demo/test record ─────────────────
   // Hard delete is ONLY allowed when:
   //   1. The record is explicitly flagged as isDemoRecord=true
@@ -4318,6 +4371,7 @@ export async function registerRoutes(
         for (const inv of linkedInvoices) {
           await storage.deleteInvoice(inv.id);
         }
+        await storage.deleteLifecycleDataForQuote(entityId);
         await storage.deleteQuote(entityId);
       } else if (entityType === "opJob") {
         const j = await storage.getOpJob(entityId);

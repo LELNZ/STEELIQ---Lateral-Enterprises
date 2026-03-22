@@ -1,7 +1,7 @@
 # SteelIQ – Lateral Enterprises
 
 ## Overview
-SteelIQ is a professional quotation and estimating platform for the window and door industry. Its primary goal is to streamline the entire quotation process, from configuration and visualization to pricing and export, by offering a robust system for configuring items, generating live SVG technical drawings, and managing estimates and quotes. The platform aims to be a leading solution for efficient and accurate quoting within the industry by providing real-time drawing previews, comprehensive estimate and quote lifecycle management, detailed pricing breakdowns, and a template-driven PDF engine.
+SteelIQ is a professional quotation and estimating platform specifically designed for the window and door industry. Its core purpose is to automate and optimize the entire quotation workflow, encompassing item configuration, real-time visual representation, accurate pricing, and efficient document generation. The platform aims to be a leading solution by providing live SVG technical drawings, comprehensive estimate and quote lifecycle management, detailed pricing breakdowns, and a flexible template-driven PDF engine. It offers robust tools for managing organizational and division-specific settings, dynamic specification displays, and a project-centric CRM workflow.
 
 ## User Preferences
 I want iterative development.
@@ -10,53 +10,35 @@ I prefer detailed explanations.
 Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/estimate-snapshot.ts (approved).
 
 ## System Architecture
-**Frontend**: React, TypeScript, Shadcn UI for a responsive, mobile-first design.
-**Backend**: Express.js with PostgreSQL, Drizzle ORM, and node-postgres.
-**Drawing Engine**: SVG for real-time rendering and PNG export.
-**State Management**: React state for UI components; TanStack Query for API data.
-**Global Settings**: Managed via React Context and localStorage.
-**Routing**: Wouter for client-side navigation.
-**Export Capabilities**: SVG to PNG conversion and multi-page, vector-text selectable PDF generation using jsPDF.
-**Storage**: Item photos in PostgreSQL (`bytea`) with in-memory cache; drawing PNGs on filesystem; division logos as base64 data URLs in PostgreSQL.
-**Multi-Division Architecture**: Supports organizational and division-specific settings, including `division_scope` for library entries.
-**Spec Dictionary System**: Configurable `spec_dictionary` entries for dynamic specification display and override.
-**Quote Management**: Comprehensive lifecycle (Draft, Review, Sent, Accepted/Declined, Archived), atomic sequential numbering, immutable revision history, and server-side status transition enforcement. Quotes include an `EstimateSnapshot` for immutable revision data.
-**Pricing System**: Calculates material, labor, glass, liner, and handle costs, providing net cost, sale price, and margin, including configurable GST. Features manual price override and includes removal/rubbish fees.
-**Configuration & Drawing**: Dedicated tables for frame configurations, profiles, accessories, and labor, with auto-detection of configurations, standard frame sizes, and dynamic opening indicators. Supports various window types, including French windows and hardened stacker door logic.
-**Master Library Systems**: Centralized libraries for direct materials, manufacturing labor, installation labor, and delivery methods.
-**Site Visit Mode**: Client-only `siteType` state for jobs to apply "renovation" and "new_build" defaults.
-**Mobile Architecture**: Optimized with `native-scroll`, sticky action bars, enhanced item cards, and a collapsible header.
-**Quote Document Model**: `PreviewData` (API response), `QuoteDocumentModel` (normalized rendering contract), and `buildQuoteDocumentModel()` (mapper).
-**Quote Renderer**: `QuoteRenderModel` (presentation-ready structure) and `buildQuoteRenderModel()` (pure mapper from `QuoteDocumentModel`) for preview page rendering.
-**Lifecycle Service**: Centralized handling for archive, soft-delete, hard-delete, cascade operations, orphan detection, and development cleanup routines. Template-driven, read-only lifecycle visibility for all quotes and operational jobs, with template locking upon quote acceptance.
-**CRM Workflow (Projects-First)**: Project-centric CRM with automatic customer linking from quotes, project creation linked to quotes, and sub-query endpoints for project-related data (quotes, jobs, invoices). Enforces customer linkage for invoicing.
-**Invoice Allocation Control**: Prevents over-invoicing with deposit caps (50% of accepted value, base contract only) and invoiceable ceiling caps. The invoiceable ceiling = accepted contract value + total approved variation amounts. Provides a detailed invoice allocation state via API including variation breakdown.
-**Variations Commercial Model**: Project-level variations table (`draft → sent → approved → invoiced`). Variations link to both `projectId` and `quoteId`. Approved variations expand the invoiceable ceiling on the linked quote. Variation invoices must be linked to a specific approved variation record and cannot exceed its remaining value.
-**Retention Commercial Model**: Optional percentage-based retention withheld from the base contract only (not variations). `retentionPercentage` and `retentionHeldValue` stored on the `quotes` table. Standard invoice ceiling = `(acceptedValue − retentionHeld) + approvedVariations`. Retention released via a dedicated `retention_release` invoice type, capped at remaining unreleased retention.
-**UI/UX Enhancements**: Improved table responsiveness for quotes and invoices lists, collapsing secondary columns on smaller viewports. PDF generation includes polished spec row formatting to handle wrapped lines cleanly. Project dashboard includes guidance text and links to related entities. Customer relink safeguard with confirmation dialog if invoices exist. Measurement logic on `op_jobs` table for `measurementRequirement` and `dimensionSource`.
-**Detail Page Commercial Standardization**: Quote detail shows the full 9-row commercial hierarchy (Base Contract → +Variations → =Total Contract → −Retention → Std.Invoiced → +RetentionReleased → =TotalInvoiced → Std.Remaining). Color-coded invoice type pill badges consistent across quote-detail, project-detail, and op-job-detail surfaces.
-**Enterprise App Shell / Navigation Architecture**: Sidebar restructured into 6 workflow-domain groups: Sales, Delivery, Finance, Master Data, Platform Roadmap (disabled placeholders), System. A "+ New" quick-access dropdown is added to the top header bar with domain-grouped quick actions.
-**UI Standardization Phase 1 (Page Shell & Layout)**: Quote Builder `itemsExpanded` now defaults to `true`. Estimates (`jobs-list.tsx`) converted to a proper operational table. Op-Jobs list removed `max-w-5xl mx-auto` constraint and applied full-width Library shell. Projects, Invoices, Customers, Contacts migrated to the Library benchmark shell.
-**UI/UX Hardening Phase 2 (Workflow Honesty + Estimator Polish + Data-State Clarity)**: Global + New menu pruned to "New Estimate", "New Customer", "New Contact". Quote Builder desktop polish includes "Quote Schedule" heading, secondary metrics, and improved toggle labels. Invoice unlinked-state clarity shows "Unlinked" badges and repair links. Settings + Users shell standardized. Quotes list (`quotes-list.tsx`) migrated to Library shell.
-**Environment Clarity + Test Data Governance**: Replaced system-mode selector in Settings with environment info panel. True invoice archive with `archivedAt` column on `invoices` table. `isDemoRecord boolean` added to `customers` and `customer_contacts` for CRM governance, with storage methods and flag endpoints for management.
-**UI/UX Hardening Phase 3 (Interior Page Maturity + Enterprise Density)**: Applied enterprise table density improvements across 8 pages, including Invoices, Projects-list, Op-Jobs-list, Customers, Contacts, Settings, Users, and Quote Builder. Enhancements include updated table headers, financial column formatting, avatar circles, and theme-aware backgrounds.
-**Production Workflow Hardening (Phase 5)**: InvoiceSection mutations invalidate relevant API endpoints. Accepted-quote-without-project shows "Next Step: Create Project" CTA banner. InvoiceSection header shows invoice count and dynamic button labels; empty state replaced with instructional card; "Returned to Draft" invoices show re-queue note. Lifecycle panel only auto-expands the active stage and moved in `op-job-detail.tsx`. Customer-facing Details in quote-detail `defaultOpen={true}`. Invoice Numbering card added to Settings with prefix input and live preview.
-**M&D Lifecycle Enforcement (Phase 7B)**: Server-side guard on PATCH /api/lifecycle-instances/:instanceId/tasks blocks site_measure task completion when M&D fields are missing. Structured 400 error with field-specific messaging. Frontend surfaces errors via destructive toast. UI readiness banners in both M&D section and lifecycle section of op-job-detail.
-**Governance Surface Consolidation (Phase 8A)**: Removed duplicate "Demo / Test Data Cleanup" and misleading "Reset Demo Environment" controls from Admin > Users page. Removed legacy `/api/admin/reset-demo-environment` and `/api/admin/demo-stats` routes. Settings > System is now the single canonical location for all demo/test data governance, environment truth, and bulk archive actions. User Management page is now focused solely on user/role/account management.
-**Governance Demo/Test Flag UI Parity (Phase 8B)**: Added direct demo/test flag toggle UI to the three entity surfaces that previously lacked it: estimates (jobs-list.tsx — per-row flask icon toggle + amber badge), projects (project-detail.tsx — admin section with toggle button + blue banner), invoices (invoices.tsx — per-row flask icon toggle + amber badge). All controls are role-gated to owner/admin. Uses existing PATCH demo-flag endpoints. No new routes or schema added.
-**Governance Bulk Archive Parity (Phase 8C)**: Extended `POST /api/admin/cleanup-demo` to archive all 7 entity types (estimates, quotes, op-jobs, projects, invoices, customers, contacts). Includes Xero-linked protection (skips invoices with `xeroInvoiceId`, customers with `xeroContactId`) and live-data safety checks (skips customers/contacts shared with non-demo operational data). Returns per-entity breakdown with archived/skipped counts and skip reasons. UI updated to show expanded scope, Xero protection notes, and detailed result summary.
-**Truth Reconciliation Audit**: Confirmed system operates as SINGLE LIVE ENVIRONMENT + ADMIN-ONLY GOVERNANCE CONTROLS. No separate dev/demo/prod runtime or database switch exists. All governance routes enforce admin/owner role (403 for others). Full audit report at `.local/audit-report-truth-reconciliation.md`.
-**Standard-User Demo/Test Record Shielding (Phase 9)**: Backend filtering on all 14 primary list and detail routes (7 entity types: estimates, quotes, customers, contacts, projects, invoices, op-jobs) hides `isDemoRecord: true` records from non-admin/owner users. List routes filter out demo records; detail routes return 404. `isPrivilegedUser(req)` helper in routes.ts centralizes the role check. Frontend demo badges and toggle buttons in jobs-list.tsx, invoices.tsx, and quotes-list.tsx are gated behind `isAdmin` so standard users never see demo indicators. Governance banner in settings.tsx updated to reflect shielding is active. Sub-resource routes (e.g., `/api/projects/:id/quotes`) are not individually shielded but parent detail routes block access.
-**Governance Post-Archive Clarity (Phase 9A)**: (A) GovernanceEntitySection in settings.tsx now separates flagged records into three explicit sub-groups: actionable active, protected (Xero-linked/shared-with-live), and archived — each with distinct header, styling, and badge counts. (B) Bulk archive result summary uses success (green) vs warning (amber) border styling based on skip count. (C) Projects list (projects-list.tsx) gains Active/Archived tabs with backend `GET /api/projects?scope=archived` support via `storage.getArchivedProjects()`. (D) MobileQuoteCards in quotes-list.tsx now receives `isAdmin` and `demoFlagMutation` props, rendering demo badge on mobile cards matching desktop parity. getDemoJobs/getDemoProjects storage methods no longer filter by archivedAt, ensuring governance summary is truthful across all entity types.
+**Frontend**: Built with React and TypeScript, utilizing Shadcn UI for a responsive, mobile-first user experience.
+**Backend**: An Express.js application interacting with a PostgreSQL database, managed through Drizzle ORM and node-postgres.
+**Drawing Engine**: Employs SVG for real-time technical drawing rendering and PNG export.
+**State Management**: React state manages UI components, while TanStack Query handles API data fetching and caching.
+**Global Settings**: Managed via React Context and persisted in localStorage.
+**Routing**: Client-side navigation is handled by Wouter.
+**Export Capabilities**: Supports SVG to PNG conversion and multi-page, vector-text selectable PDF generation using jsPDF.
+**Storage**: Item photos are stored in PostgreSQL (`bytea`) with an in-memory cache, drawing PNGs on the filesystem, and division logos as base64 data URLs in PostgreSQL.
+**Multi-Division Architecture**: The system supports organizational and division-specific settings, including `division_scope` for library entries.
+**Spec Dictionary System**: Configurable `spec_dictionary` entries allow for dynamic display and override of specifications.
+**Quote Management**: Features a comprehensive lifecycle (Draft, Review, Sent, Accepted/Declined, Archived), atomic sequential numbering, immutable revision history, and server-side status transition enforcement. Quotes include an `EstimateSnapshot` for immutable revision data.
+**Pricing System**: Calculates material, labor, glass, liner, and handle costs, providing net cost, sale price, and margin, including configurable GST. It supports manual price override and includes removal/rubbish fees.
+**Configuration & Drawing**: Dedicated database tables for frame configurations, profiles, accessories, and labor, with auto-detection of configurations and dynamic opening indicators. Supports various window types, including French windows and hardened stacker door logic.
+**Master Library Systems**: Centralized libraries manage direct materials, manufacturing labor, installation labor, and delivery methods.
+**CRM Workflow (Projects-First)**: A project-centric CRM with automatic customer linking from quotes, project creation linked to quotes, and sub-query endpoints for project-related data. Enforces customer linkage for invoicing.
+**Invoice Allocation Control**: Prevents over-invoicing with deposit caps and invoiceable ceiling caps.
+**Variations Commercial Model**: Manages project-level variations with a defined lifecycle (draft → sent → approved → invoiced).
+**Retention Commercial Model**: Supports optional percentage-based retention withheld from the base contract.
+**UI/UX**: Features responsive tables, polished spec row formatting in PDFs, project dashboard guidance, and customer relink safeguards. The enterprise app shell organizes navigation into workflow-domain groups.
+**Governance and Data Integrity**: Includes robust features for environment clarity, test data governance, and shielding of demo/test records from standard users. This includes mechanisms for archiving, clearing Xero links for demo invoices, and ensuring data integrity during quote deletions.
 
 ## External Dependencies
-- **PostgreSQL**: Primary database.
-- **Drizzle ORM**: ORM for PostgreSQL.
-- **node-postgres**: PostgreSQL client.
-- **React**: Frontend UI library.
-- **TypeScript**: For static typing.
-- **Shadcn UI**: Component library.
-- **TanStack Query**: Data fetching and caching.
-- **Wouter**: Client-side routing.
-- **jsPDF**: PDF generation.
-- **multer**: File uploads.
+- **PostgreSQL**: Primary relational database.
+- **Drizzle ORM**: Object-Relational Mapper for database interactions.
+- **node-postgres**: PostgreSQL client for Node.js.
+- **React**: JavaScript library for building user interfaces.
+- **TypeScript**: Superset of JavaScript for static typing.
+- **Shadcn UI**: UI component library.
+- **TanStack Query**: Data fetching, caching, and state management library.
+- **Wouter**: Small routing library for React.
+- **jsPDF**: Client-side JavaScript PDF generation library.
+- **multer**: Middleware for handling `multipart/form-data`, primarily for file uploads.

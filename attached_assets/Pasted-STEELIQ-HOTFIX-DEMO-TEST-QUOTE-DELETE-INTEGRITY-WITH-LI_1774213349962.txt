@@ -1,0 +1,180 @@
+STEELIQ HOTFIX — DEMO/TEST QUOTE DELETE INTEGRITY WITH LINKED LIFECYCLE RECORDS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a narrow production hotfix for governance delete integrity on demo/test quotes.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not weaken governance protections.
+- Do not weaken referential integrity.
+- Do not introduce unsafe hard deletion for production/live records.
+- Do not change lifecycle architecture broadly.
+- Do not change quote lifecycle business rules.
+- Do not change Xero protections.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond quote delete integrity for linked lifecycle data.
+
+CURRENT LIVE ISSUE
+
+A demo/test quote that was archived and then restored cannot be deleted. The live app throws a database integrity error:
+
+update or delete on table "quotes" violates foreign key constraint "lifecycle_instances_quote_id_quotes_id_fk" on table "lifecycle_instances"
+
+This means the governance delete path for quotes does not correctly handle linked lifecycle records.
+
+PRIMARY OBJECTIVE
+
+Fix the demo/test quote governance delete path so that:
+- it no longer fails with a raw DB foreign-key error
+- lifecycle-linked demo/test quotes are handled safely and truthfully
+- referential integrity is preserved
+- unsafe deletion of live/business records is not introduced
+
+PHASE A — AUDIT CURRENT DELETE CHAIN TRUTH
+
+1. Review the current quote governance delete logic in code.
+2. Identify exactly:
+- what route/action handles quote delete
+- what dependent records it already checks or removes
+- whether lifecycle_instances and lifecycle_task_states are currently included
+- whether other lifecycle-linked tables also exist and matter
+
+3. Report the exact current delete chain truth.
+
+PHASE B — IMPLEMENT SAFE DEMO/TEST DELETE HANDLING
+
+Implement the narrowest safe fix.
+
+Expected likely rule:
+- for eligible demo/test quotes only, if delete is allowed under current governance rules, the delete workflow must first safely remove or otherwise handle dependent lifecycle records before deleting the quote
+- if dependent lifecycle cleanup is not safe under current conditions, block delete with a clear admin-facing message instead of surfacing a raw DB error
+
+Also consider linked lifecycle child data such as:
+- lifecycle_instances
+- lifecycle_task_states
+- any related lifecycle audit/state rows if present
+
+Do not add unsafe broad cascade behavior for non-demo/live records.
+
+PHASE C — CLEAR ADMIN ERROR SURFACE
+
+If delete still must be blocked in some situations, the UI/API must return a clear business error like:
+- quote cannot be deleted because linked lifecycle records still exist
+- archive instead, or remove linked dependent demo/test records first
+
+Do not expose raw SQL/DB constraint messages to the live user.
+
+PHASE D — SAFETY PRESERVATION
+
+1. Preserve all current production/live protections.
+2. Preserve Xero/downstream chain protections.
+3. Preserve lifecycle integrity for real records.
+4. Do not weaken governance audit visibility.
+5. Do not change standard user shielding behavior.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign lifecycle
+- redesign governance architecture
+- change quote numbering
+- change quote preview/PDF pipeline
+- change archive logic broadly
+- change project/job/invoice delete logic unless strictly required by the linked lifecycle fix
+- add schema unless absolutely required and you stop to explain first
+
+REQUIRED TEST CASES
+
+TC-DEL-001
+Attempt to delete an eligible demo/test quote with no lifecycle linkage.
+Expected:
+- delete succeeds normally
+
+TC-DEL-002
+Attempt to delete an eligible demo/test quote with linked lifecycle instance/task state records.
+Expected:
+- either:
+  a) safe dependent cleanup occurs and delete succeeds, or
+  b) delete is blocked with a clear business message
+- no raw DB constraint error appears
+
+TC-DEL-003
+Attempt to delete a non-demo/live quote with lifecycle linkage.
+Expected:
+- existing protections remain intact
+- no unsafe delete introduced
+
+TC-DEL-004
+Attempt to delete a demo/test quote with other protected downstream relationships, if applicable.
+Expected:
+- existing chain protections still apply
+
+TC-DEL-005
+Verify archive/restore behavior still works.
+Expected:
+- no regression
+
+TC-DEL-006
+Verify lifecycle behavior for remaining valid quotes is unchanged.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact old delete behavior
+3. exact new delete behavior
+4. exact lifecycle-linked dependency handling implemented
+5. exact admin-facing error behavior
+6. results of all required test cases
+7. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was fixed
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. OLD VS NEW DELETE BEHAVIOR
+- old behavior
+- new behavior
+- when delete is allowed
+- when delete is blocked
+
+4. LIFECYCLE DEPENDENCY HANDLING
+- which lifecycle tables/records are now considered
+- how they are handled
+- why this is safe
+
+5. ADMIN ERROR / UX BEHAVIOR
+- what the admin now sees if delete is blocked
+- how raw DB errors were removed from the live flow
+
+6. TEST RESULTS
+- TC-DEL-001 result
+- TC-DEL-002 result
+- TC-DEL-003 result
+- TC-DEL-004 result
+- TC-DEL-005 result
+- TC-DEL-006 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Fix the live quote delete integrity issue truthfully.
+Preserve referential integrity.
+Do not leave raw DB constraint failures exposed to the user.
+Report exactly what rule the system now enforces.

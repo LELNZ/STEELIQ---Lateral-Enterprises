@@ -2188,23 +2188,45 @@ function InvoiceSection({
             </div>
 
             {invoiceType === "deposit" && allocation && (
-              <div className={`rounded-md px-3 py-2 text-xs space-y-0.5 ${allocation.depositAllowanceFullyUsed ? "bg-destructive/10 border border-destructive/30 text-destructive" : "bg-muted/50"}`} data-testid="panel-deposit-allowance">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Deposit allowance ({allocation.depositAllowancePct}% of contract)</span>
-                  <span className="font-medium">{fmt(allocation.depositAllowanceExcl)} excl.</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Already invoiced (deposit)</span>
-                  <span className="font-medium">{fmt(allocation.depositInvoicedExcl)} excl.</span>
-                </div>
-                <div className="flex justify-between border-t pt-0.5 mt-0.5">
-                  <span className={allocation.depositAllowanceFullyUsed ? "text-destructive font-medium" : "text-muted-foreground"}>Remaining deposit allowance</span>
-                  <span className={`font-semibold ${allocation.depositAllowanceFullyUsed ? "text-destructive" : "text-green-600 dark:text-green-400"}`}>
-                    {fmt(allocation.depositAllowanceRemainingExcl)} excl.
-                  </span>
-                </div>
-                {allocation.depositAllowanceFullyUsed && (
-                  <p className="text-destructive font-medium pt-1">Deposit allocation already fully used for this quote.</p>
+              <div className={`rounded-md px-3 py-2 text-xs space-y-0.5 ${depositMode === "percentage" && allocation.depositAllowanceFullyUsed ? "bg-destructive/10 border border-destructive/30 text-destructive" : "bg-muted/50"}`} data-testid="panel-deposit-allowance">
+                {depositMode === "percentage" ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Deposit allowance ({allocation.depositAllowancePct}% of contract)</span>
+                      <span className="font-medium">{fmt(allocation.depositAllowanceExcl)} excl.</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Already invoiced (deposit)</span>
+                      <span className="font-medium">{fmt(allocation.depositInvoicedExcl)} excl.</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-0.5 mt-0.5">
+                      <span className={allocation.depositAllowanceFullyUsed ? "text-destructive font-medium" : "text-muted-foreground"}>Remaining deposit allowance</span>
+                      <span className={`font-semibold ${allocation.depositAllowanceFullyUsed ? "text-destructive" : "text-green-600 dark:text-green-400"}`}>
+                        {fmt(allocation.depositAllowanceRemainingExcl)} excl.
+                      </span>
+                    </div>
+                    {allocation.depositAllowanceFullyUsed && (
+                      <p className="text-destructive font-medium pt-1">Deposit percentage allowance used. Switch to Fixed Amount to enter the actual deposit received.</p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Base contract value</span>
+                      <span className="font-medium">{fmt(allocation.acceptedValueExcl)} excl.</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total invoiced (all types)</span>
+                      <span className="font-medium">{fmt(allocation.standardInvoicedExcl)} excl.</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-0.5 mt-0.5">
+                      <span className="text-muted-foreground">Remaining invoiceable</span>
+                      <span className="font-semibold text-green-600 dark:text-green-400">
+                        {fmt(allocation.standardRemainingExcl)} excl.
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground pt-1">Fixed amount mode — enter the actual deposit received. Capped at remaining contract value, not the {allocation.depositAllowancePct}% default.</p>
+                  </>
                 )}
               </div>
             )}
@@ -2393,7 +2415,7 @@ function InvoiceSection({
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button
               onClick={() => createMutation.mutate()}
-              disabled={createMutation.isPending || exclGst <= 0 || (invoiceType === "deposit" && allocation?.depositAllowanceFullyUsed)}
+              disabled={createMutation.isPending || exclGst <= 0 || (invoiceType === "deposit" && depositMode === "percentage" && allocation?.depositAllowanceFullyUsed)}
               data-testid="button-save-invoice"
             >
               {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
