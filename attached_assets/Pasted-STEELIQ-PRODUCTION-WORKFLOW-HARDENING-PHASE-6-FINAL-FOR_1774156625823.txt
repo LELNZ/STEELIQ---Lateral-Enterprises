@@ -1,0 +1,131 @@
+STEELIQ PRODUCTION WORKFLOW HARDENING — PHASE 6 FINAL FORMAL CLOSEOUT REPORT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are continuing work on an existing live, production-oriented system. You must preserve the current architecture and provide the final formal completion report for Phase 6 only.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle business rules unless explicitly required for UI truth, interaction locking, or truthful editability already implemented in Phase 6.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what was required to complete the listed functionality.
+- Do not add unapproved endpoints outside what was needed for Phase 6.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not weaken any governance protections introduced in Phases 1–5.
+- Do not start a new phase.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- Preserve the accepted governance and workflow architecture from prior phases.
+- Do not broaden scope further in this response.
+
+CURRENT CONTEXT
+
+The latest summary claims Phase 6 implemented:
+- lifecycle preview mode clarity
+- post-project next-step panel
+- Measurement & Dimensions guidance
+- demo/test propagation truth improvements
+
+This response is NOT for more implementation scope.
+This response is only to provide the final formal completion report for Phase 6 in the exact required structure.
+
+PRIMARY OBJECTIVE
+
+Provide the exact final formal completion report for Phase 6.
+Do not broaden scope.
+Do not start Phase 7.
+Do not add new implementation beyond what is strictly required to verify/report the current state.
+
+REQUIRED VERIFICATION
+
+Before reporting, verify and state clearly:
+1. exact files changed across the full Phase 6 work
+2. exact lifecycle truth fix behavior in estimate, quote, and job contexts
+3. exact post-project next-step clarity changes
+4. exact Measurement & Dimensions guidance changes
+5. exact demo/test propagation truth behavior now implemented
+6. exact role/safety preservation
+7. exact test results
+8. exact known remaining gaps
+
+STRICT NON-GOALS
+
+Do NOT:
+- add new features
+- redesign lifecycle architecture
+- redesign job pages broadly
+- redesign governance architecture
+- open new implementation scope
+- give a summary without the exact formal structure below
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+- or state explicitly that no schema changes were required
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+- or state explicitly that no route changes were required
+
+5. LIFECYCLE TRUTH FIXES
+- estimate context
+- quote context
+- job context
+- canonical interaction surface
+- exact read-only vs editable truth implemented
+- exact preview-mode wording/behavior added
+
+6. POST-PROJECT NEXT-STEP CLARITY
+- old behavior
+- new behavior
+- exact UI changes made
+- what happens before project creation vs after project creation
+
+7. MEASUREMENT & DIMENSIONS GUIDANCE
+- old behavior
+- new behavior
+- exact guidance/editability improvements made
+
+8. DEMO/TEST PROPAGATION TRUTH
+- old behavior
+- new behavior
+- whether propagation now occurs or is explicitly clarified as record-level only
+- exact UI/governance wording changes if applicable
+
+9. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+
+10. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Preserve Xero safety.
+Fix the workflow truth issues directly and clearly.
+Report truthfully and exactly.
