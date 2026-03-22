@@ -2290,14 +2290,69 @@ function GovernanceEntitySection({
                     || id;
                   const sub = item.customer || item.status || "";
                   const xeroLinked = item._xeroLinked || item._isolation?.xeroLinked;
+                  const isXeroLinkedInvoice = entityType === "invoice" && item._xeroLinked;
                   return (
-                    <div key={id} className="px-4 py-2.5" data-testid={`governance-row-protected-${entityType}-${id}`}>
+                    <div key={id} className="px-4 py-2.5 space-y-1.5" data-testid={`governance-row-protected-${entityType}-${id}`}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{label}</span>
                         {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
                         {xeroLinked && <Badge variant="destructive" className="text-xs">Xero-linked</Badge>}
                         <Badge variant="outline" className="text-xs border-destructive/40 text-destructive">Protected</Badge>
                       </div>
+                      {isXeroLinkedInvoice && (
+                        <div className="text-xs space-y-1.5">
+                          <div className="text-destructive">
+                            Xero invoice: {item._xeroNumber || "linked"} — archive/delete blocked while Xero link is active.
+                            Returning to Draft does not clear the Xero link.
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {confirmClearXero === id ? (
+                              <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded px-2 py-1">
+                                <span className="text-amber-800 dark:text-amber-300 text-xs">Confirm: has this Xero invoice been voided or deleted in Xero?</span>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-5 px-2 text-xs"
+                                  disabled={clearXeroLinkMutation.isPending}
+                                  onClick={() => clearXeroLinkMutation.mutate(id)}
+                                  data-testid={`button-confirm-clear-xero-${id}`}
+                                >
+                                  {clearXeroLinkMutation.isPending ? "Clearing..." : "Yes, clear link"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 px-2 text-xs"
+                                  onClick={() => setConfirmClearXero(null)}
+                                  data-testid={`button-cancel-clear-xero-${id}`}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-5 px-2 text-xs border-amber-400 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                onClick={() => setConfirmClearXero(id)}
+                                data-testid={`button-clear-xero-link-${id}`}
+                              >
+                                Clear Xero Link (post-void cleanup)
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {item._isolation?.xeroLinked && entityType === "customer" && (
+                        <div className="text-xs text-destructive">
+                          Xero contact linked — archive/delete blocked until Xero link is removed
+                        </div>
+                      )}
+                      {item._isolation?.isSharedWithLiveData && (
+                        <div className="text-xs text-destructive">
+                          Shared with live data — archive/delete blocked
+                        </div>
+                      )}
                     </div>
                   );
                 })}
