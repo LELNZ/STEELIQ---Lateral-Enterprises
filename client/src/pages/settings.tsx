@@ -1972,6 +1972,24 @@ function GovernanceEntitySection({
     },
   });
 
+  const clearXeroLinkMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      const res = await apiRequest("POST", `/api/admin/governance/clear-xero-link/${invoiceId}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Clear Xero link failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Xero link cleared", description: data.message || "Invoice is now eligible for archive or delete." });
+      onRefresh();
+    },
+    onError: (e: any) => toast({ title: "Clear Xero link failed", description: e.message, variant: "destructive" }),
+  });
+
+  const [confirmClearXero, setConfirmClearXero] = useState<string | null>(null);
+
   const activeItems = items.filter((i: any) => !i.archivedAt);
   const archivedItems = items.filter((i: any) => !!i.archivedAt);
   const isProtected = (i: any) => i._isolation?.xeroLinked || i._isolation?.isSharedWithLiveData || i._xeroLinked;
@@ -2082,8 +2100,48 @@ function GovernanceEntitySection({
                       </div>
                     )}
                     {item._xeroLinked && (
-                      <div className="text-xs text-destructive">
-                        Xero invoice: {item._xeroNumber || "linked"} — cannot delete without voiding in Xero first
+                      <div className="text-xs space-y-1">
+                        <div className="text-destructive">
+                          Xero invoice: {item._xeroNumber || "linked"} — archive/delete blocked while Xero link is active
+                        </div>
+                        {entityType === "invoice" && (
+                          <div className="flex items-center gap-2">
+                            {confirmClearXero === item.id ? (
+                              <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded px-2 py-1">
+                                <span className="text-amber-800 dark:text-amber-300 text-xs">Confirm: has this Xero invoice been voided or deleted in Xero?</span>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-5 px-2 text-xs"
+                                  disabled={clearXeroLinkMutation.isPending}
+                                  onClick={() => clearXeroLinkMutation.mutate(item.id)}
+                                  data-testid={`button-confirm-clear-xero-${item.id}`}
+                                >
+                                  {clearXeroLinkMutation.isPending ? "Clearing..." : "Yes, clear link"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 px-2 text-xs"
+                                  onClick={() => setConfirmClearXero(null)}
+                                  data-testid={`button-cancel-clear-xero-${item.id}`}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-5 px-2 text-xs border-amber-400 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                onClick={() => setConfirmClearXero(item.id)}
+                                data-testid={`button-clear-xero-link-${item.id}`}
+                              >
+                                Clear Xero Link (post-void cleanup)
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                     {/* CRM isolation info for customers */}

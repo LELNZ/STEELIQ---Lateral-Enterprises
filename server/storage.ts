@@ -199,6 +199,7 @@ export interface IStorage {
   updateJobDemoFlag(id: string, isDemoRecord: boolean): Promise<Job | undefined>;
   updateProjectDemoFlag(id: string, isDemoRecord: boolean): Promise<Project | undefined>;
   updateInvoiceDemoFlag(id: string, isDemoRecord: boolean): Promise<Invoice | undefined>;
+  clearInvoiceXeroLink(id: string): Promise<Invoice | undefined>;
   deleteInvoice(id: string): Promise<void>;
   deleteJob(id: string): Promise<void>;
   deleteOpJob(id: string): Promise<void>;
@@ -594,6 +595,7 @@ export class DatabaseStorage implements IStorage {
     const GOVERNANCE_ACTIONS = [
       "demo_flagged", "demo_unflagged",
       "governance_archive", "governance_delete",
+      "xero_link_cleared",
     ];
     return db.select().from(auditLogs)
       .where(inArray(auditLogs.action, GOVERNANCE_ACTIONS))
@@ -1059,6 +1061,14 @@ export class DatabaseStorage implements IStorage {
 
   async updateInvoiceDemoFlag(id: string, isDemoRecord: boolean): Promise<Invoice | undefined> {
     const [updated] = await db.update(invoices).set({ isDemoRecord } as any).where(eq(invoices.id, id)).returning();
+    return updated;
+  }
+
+  async clearInvoiceXeroLink(id: string): Promise<Invoice | undefined> {
+    const [updated] = await db.update(invoices)
+      .set({ xeroInvoiceId: null, xeroInvoiceNumber: null, xeroStatus: null, updatedAt: new Date() } as any)
+      .where(eq(invoices.id, id))
+      .returning();
     return updated;
   }
 
