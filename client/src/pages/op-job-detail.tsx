@@ -1,7 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { useSystemMode } from "@/hooks/use-system-mode";
 import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, type Invoice, type Variation, OP_JOB_STATUSES, MEASUREMENT_REQUIREMENTS, DIMENSION_SOURCES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,9 +55,7 @@ export default function OpJobDetail() {
   const [editMeasurementReq, setEditMeasurementReq] = useState<string>("__none__");
   const [editDimensionSource, setEditDimensionSource] = useState<string>("__none__");
   const { user } = useAuth();
-  const { mode: systemMode, isLoading: modeLoading } = useSystemMode();
-  const isProduction = !modeLoading && systemMode === "production";
-  const showDemoTools = !modeLoading && systemMode !== "production";
+  const showDemoTools = user?.role === "owner" || user?.role === "admin";
 
   const { data: job, isLoading } = useQuery<OpJob>({
     queryKey: ["/api/op-jobs", jobId],

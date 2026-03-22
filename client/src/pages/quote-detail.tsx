@@ -2,7 +2,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
-import { useSystemMode } from "@/hooks/use-system-mode";
 import { type Quote, type QuoteRevision, type AuditLog, type Invoice, type Customer, type Project, type OpJob, VALID_STATUS_TRANSITIONS, type QuoteStatus, type Variation } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,9 +81,7 @@ export default function QuoteDetail() {
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const { user } = useAuth();
-  const { mode: systemMode, isLoading: modeLoading } = useSystemMode();
-  const isProduction = !modeLoading && systemMode === "production";
-  const showDemoTools = !modeLoading && systemMode !== "production";
+  const showDemoTools = user?.role === "owner" || user?.role === "admin";
 
   async function handleExportPdf() {
     if (!quoteId || pdfExporting) return;
