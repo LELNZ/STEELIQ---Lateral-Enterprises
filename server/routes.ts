@@ -3952,21 +3952,50 @@ export async function registerRoutes(
         };
       }));
 
-      // Contact isolation — derived from parent customer isolation plus direct job linkage
+      // Contact isolation — direct parent-customer live-data check (unconditional, not limited to demo-flagged parents)
       const contactsWithIsolation = await Promise.all(demoContacts.map(async (contact) => {
-        const parentCustomer = await storage.getCustomer(contact.customerId);
-        const linkedJobs = await storage.getJobsByContact(contact.id);
+        const [parentCustomer, linkedJobs] = await Promise.all([
+          storage.getCustomer(contact.customerId),
+          storage.getJobsByContact(contact.id),
+        ]);
         const liveJobs = linkedJobs.filter(j => !j.isDemoRecord);
-        const parentIsShared = parentCustomer
-          ? customersWithIsolation.find(c => c.id === contact.customerId)?._isolation.isSharedWithLiveData ?? false
-          : false;
+
+        // Always query parent customer's live records regardless of whether the parent is itself demo-flagged.
+        // This closes the gap where a non-demo parent customer with live data would be missed.
+        let parentIsShared = false;
+        let parentXeroLinked = false;
+        let parentLiveCounts = { quotes: 0, jobs: 0, projects: 0, invoices: 0 };
+        if (parentCustomer) {
+          const [parentQuotes, parentJobs, parentProjects, parentInvoices] = await Promise.all([
+            storage.getQuotesByCustomer(contact.customerId),
+            storage.getJobsByCustomer(contact.customerId),
+            storage.getProjectsByCustomer(contact.customerId),
+            storage.getInvoicesByCustomer(contact.customerId),
+          ]);
+          const liveParentQuotes = parentQuotes.filter(q => !q.isDemoRecord);
+          const liveParentJobs = parentJobs.filter(j => !j.isDemoRecord);
+          const liveParentProjects = parentProjects.filter(p => !p.isDemoRecord);
+          const liveParentInvoices = parentInvoices.filter(i => !i.isDemoRecord);
+          parentIsShared = liveParentQuotes.length > 0 || liveParentJobs.length > 0 || liveParentProjects.length > 0 || liveParentInvoices.length > 0;
+          parentXeroLinked = !!parentCustomer.xeroContactId;
+          parentLiveCounts = {
+            quotes: liveParentQuotes.length,
+            jobs: liveParentJobs.length,
+            projects: liveParentProjects.length,
+            invoices: liveParentInvoices.length,
+          };
+        }
+
         const isSharedWithLiveData = parentIsShared || liveJobs.length > 0;
         return {
           ...contact,
           _isolation: {
             isSharedWithLiveData,
             parentCustomerName: parentCustomer?.name ?? null,
+            parentCustomerIsDemoFlagged: !!(parentCustomer as any)?.isDemoRecord,
             parentCustomerShared: parentIsShared,
+            parentXeroLinked,
+            parentLiveCounts,
             liveJobCount: liveJobs.length,
             safeToArchive: !isSharedWithLiveData,
             safeToDelete: !isSharedWithLiveData,

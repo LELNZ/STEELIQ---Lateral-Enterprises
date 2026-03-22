@@ -4,6 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact } from "@shared/schema";
 import { CONTACT_CATEGORIES } from "@shared/schema";
 import { contactDisplayName } from "@/lib/contact-utils";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +21,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Search, User, Pencil, Archive } from "lucide-react";
+import { Plus, Search, User, Pencil, Archive, Flag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -185,6 +186,24 @@ export default function Contacts() {
   const [editContact, setEditContact] = useState<CustomerContact | null>(null);
   const [createForm, setCreateForm] = useState({ ...emptyForm });
   const [editForm, setEditForm] = useState({ ...emptyForm });
+  const { user } = useAuth();
+  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async ({ id, isDemoRecord }: { id: string; isDemoRecord: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/customer-contacts/${id}/demo-flag`, { isDemoRecord });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to update flag");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, { isDemoRecord }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      toast({ title: isDemoRecord ? "Flagged as test/demo" : "Demo flag removed" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const searchParams = new URLSearchParams();
   if (deferredSearch.trim()) searchParams.set("q", deferredSearch.trim());
@@ -353,6 +372,11 @@ export default function Contacts() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm" data-testid={`text-contact-name-${contact.id}`}>{contactDisplayName(contact)}</span>
                           {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
+                          {(contact as any).isDemoRecord && (
+                            <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400">
+                              <Flag className="h-2.5 w-2.5 mr-1" />Test/Demo
+                            </Badge>
+                          )}
                         </div>
                         {contact.roleTitle && <span className="text-xs text-muted-foreground">{contact.roleTitle}</span>}
                       </div>
@@ -374,6 +398,19 @@ export default function Contacts() {
                   </TableCell>
                   <TableCell className="py-3">
                     <div className="flex items-center gap-1">
+                      {isOwnerOrAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={`h-7 w-7 p-0 ${(contact as any).isDemoRecord ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500"}`}
+                          title={(contact as any).isDemoRecord ? "Remove test/demo flag" : "Flag as test/demo"}
+                          onClick={() => demoFlagMutation.mutate({ id: contact.id, isDemoRecord: !(contact as any).isDemoRecord })}
+                          disabled={demoFlagMutation.isPending}
+                          data-testid={`button-demo-flag-contact-${contact.id}`}
+                        >
+                          <Flag className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"

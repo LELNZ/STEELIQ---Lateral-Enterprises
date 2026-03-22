@@ -2006,17 +2006,46 @@ function GovernanceEntitySection({
                     {/* CRM isolation info for customers */}
                     {item._isolation && (
                       <div className="text-xs space-y-0.5">
+                        {/* Customer: Xero link warning */}
                         {item._isolation.xeroLinked && (
                           <div className="text-destructive">Xero contact linked — archive/delete blocked until Xero link is removed</div>
                         )}
+                        {/* Contact: parent customer Xero link warning */}
+                        {item._isolation.parentXeroLinked && (
+                          <div className="text-destructive">Parent customer is Xero-linked — governance actions are restricted</div>
+                        )}
                         {item._isolation.isSharedWithLiveData ? (
-                          <div className="text-destructive font-medium">
-                            ⚠ Shared with live data —
-                            {item._isolation.liveQuoteCount > 0 && ` ${item._isolation.liveQuoteCount} live quote(s)`}
-                            {item._isolation.liveJobCount > 0 && ` ${item._isolation.liveJobCount} live job(s)`}
-                            {item._isolation.liveProjectCount > 0 && ` ${item._isolation.liveProjectCount} live project(s)`}
-                            {item._isolation.liveInvoiceCount > 0 && ` ${item._isolation.liveInvoiceCount} live invoice(s)`}
-                            {item._isolation.parentCustomerShared && " (parent customer is shared with live data)"}
+                          <div className="space-y-0.5">
+                            <div className="text-destructive font-medium">
+                              ⚠ Shared with live data — archive and delete blocked
+                            </div>
+                            {/* Customer-level live record counts */}
+                            {item._isolation.liveQuoteCount > 0 && (
+                              <div className="text-destructive">→ {item._isolation.liveQuoteCount} live quote(s)</div>
+                            )}
+                            {item._isolation.liveJobCount > 0 && entityType === "customer" && (
+                              <div className="text-destructive">→ {item._isolation.liveJobCount} live estimate(s)</div>
+                            )}
+                            {item._isolation.liveProjectCount > 0 && (
+                              <div className="text-destructive">→ {item._isolation.liveProjectCount} live project(s)</div>
+                            )}
+                            {item._isolation.liveInvoiceCount > 0 && (
+                              <div className="text-destructive">→ {item._isolation.liveInvoiceCount} live invoice(s)</div>
+                            )}
+                            {/* Contact-level: parent customer live counts */}
+                            {item._isolation.parentCustomerShared && item._isolation.parentLiveCounts && (
+                              <div className="text-destructive">
+                                → Parent customer "{item._isolation.parentCustomerName}" has live records:
+                                {item._isolation.parentLiveCounts.quotes > 0 && ` ${item._isolation.parentLiveCounts.quotes} quote(s)`}
+                                {item._isolation.parentLiveCounts.jobs > 0 && ` ${item._isolation.parentLiveCounts.jobs} estimate(s)`}
+                                {item._isolation.parentLiveCounts.projects > 0 && ` ${item._isolation.parentLiveCounts.projects} project(s)`}
+                                {item._isolation.parentLiveCounts.invoices > 0 && ` ${item._isolation.parentLiveCounts.invoices} invoice(s)`}
+                              </div>
+                            )}
+                            {/* Contact: direct live job linkage */}
+                            {item._isolation.liveJobCount > 0 && entityType === "contact" && (
+                              <div className="text-destructive">→ {item._isolation.liveJobCount} live estimate(s) directly reference this contact</div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-green-700 dark:text-green-400">
@@ -2025,11 +2054,12 @@ function GovernanceEntitySection({
                             {item._isolation.totalLinkedJobs > 0 && ` (${item._isolation.totalLinkedJobs} linked job(s), all demo-flagged)`}
                           </div>
                         )}
+                        {/* Contact: parent customer context line (always shown) */}
                         {item._isolation.parentCustomerName && (
-                          <div className="text-muted-foreground">Parent customer: {item._isolation.parentCustomerName}</div>
-                        )}
-                        {item._isolation.liveJobCount > 0 && entityType === "contact" && (
-                          <div className="text-amber-600 dark:text-amber-400">→ {item._isolation.liveJobCount} live job(s) reference this contact</div>
+                          <div className="text-muted-foreground">
+                            Parent: {item._isolation.parentCustomerName}
+                            {item._isolation.parentCustomerIsDemoFlagged ? " (demo-flagged)" : " (live customer)"}
+                          </div>
                         )}
                       </div>
                     )}
