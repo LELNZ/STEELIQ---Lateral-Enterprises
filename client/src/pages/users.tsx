@@ -12,10 +12,6 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -26,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import {
   Plus, Pencil, KeyRound, UserCheck, UserX, ShieldAlert, Users as UsersIcon,
-  AlertTriangle, Copy, CheckCircle2, Info, Archive, RefreshCw,
+  AlertTriangle, Copy, CheckCircle2, Info,
 } from "lucide-react";
 type SafeUser = Omit<User, "password">;
 
@@ -439,65 +435,6 @@ export default function Users() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
-  const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [demoStatsEnabled, setDemoStatsEnabled] = useState(false);
-
-  const { data: demoStats, isLoading: demoStatsLoading, refetch: refetchDemoStats } = useQuery<{ quotes: number; opJobs: number }>({
-    queryKey: ["/api/admin/demo-stats"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/demo-stats", { credentials: "include" });
-      return res.json();
-    },
-    enabled: demoStatsEnabled,
-  });
-
-  const cleanupMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/cleanup-demo", {});
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Cleanup failed");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
-      setCleanupDialogOpen(false);
-      setDemoStatsEnabled(false);
-      toast({
-        title: "Demo cleanup complete",
-        description: `Archived ${data.archivedQuotes ?? 0} quotes and ${data.archivedOpJobs ?? 0} jobs.`,
-      });
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/reset-demo-environment", {});
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Reset failed");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/op-jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
-      setResetDialogOpen(false);
-      setDemoStatsEnabled(false);
-      toast({
-        title: "Demo environment reset",
-        description: data.preserved
-          ? `Preserved ${data.preserved}. Archived ${data.quotesArchived ?? 0} quotes, ${data.jobsArchived ?? 0} jobs, ${data.customersArchived ?? 0} customers.`
-          : `Reset complete. Archived ${data.quotesArchived ?? 0} quotes.`,
-      });
-    },
-    onError: (e: any) => toast({ title: "Reset failed", description: e.message, variant: "destructive" }),
-  });
 
   if (!isAdmin) {
     return (
@@ -655,85 +592,6 @@ export default function Users() {
 
       <Separator />
 
-      <>
-          <div className="rounded-lg border border-dashed p-4 space-y-3" data-testid="section-demo-cleanup">
-            <div className="flex items-center gap-2">
-              <Archive className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold">Demo / Test Data Cleanup</h2>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Archive all quotes and jobs flagged as demo/test records. Archived records are moved out of the active view and can be restored individually. This does not delete any data.
-            </p>
-            {!demoStatsEnabled ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDemoStatsEnabled(true)}
-                data-testid="button-load-demo-stats"
-              >
-                Check Demo Records
-              </Button>
-            ) : (
-              <div className="space-y-3">
-                {demoStatsLoading ? (
-                  <p className="text-xs text-muted-foreground">Loading stats…</p>
-                ) : (
-                  <div className="flex items-center gap-4 text-sm">
-                    <span data-testid="text-demo-quotes-count">
-                      <span className="font-semibold">{demoStats?.quotes ?? 0}</span> demo quote{demoStats?.quotes !== 1 ? "s" : ""}
-                    </span>
-                    <span className="text-muted-foreground/40">·</span>
-                    <span data-testid="text-demo-jobs-count">
-                      <span className="font-semibold">{demoStats?.opJobs ?? 0}</span> demo job{demoStats?.opJobs !== 1 ? "s" : ""}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs text-muted-foreground"
-                      onClick={() => refetchDemoStats()}
-                      data-testid="button-refresh-demo-stats"
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" /> Refresh
-                    </Button>
-                  </div>
-                )}
-                {!demoStatsLoading && (demoStats?.quotes ?? 0) + (demoStats?.opJobs ?? 0) > 0 ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setCleanupDialogOpen(true)}
-                    data-testid="button-run-demo-cleanup"
-                  >
-                    Archive All Demo Records
-                  </Button>
-                ) : !demoStatsLoading ? (
-                  <p className="text-xs text-green-700 dark:text-green-400">No demo records found — nothing to clean up.</p>
-                ) : null}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg border border-dashed border-destructive/30 p-4 space-y-3" data-testid="section-reset-demo-environment">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-              <h2 className="text-sm font-semibold text-destructive">Reset Demo Environment</h2>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Permanently archives all demo/test data to prepare for a new company onboarding. Preserves Quote Q-0135 and its linked customer, project, and estimate. Quote numbering continues from the current sequence.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={() => setResetDialogOpen(true)}
-              disabled={resetMutation.isPending}
-              data-testid="button-open-reset-demo"
-            >
-              Reset Demo Environment…
-            </Button>
-          </div>
-      </>
-
       <div className="rounded-lg bg-muted/30 border px-4 py-3 text-xs text-muted-foreground space-y-1">
         <p className="font-medium text-foreground/70">Bootstrap admin</p>
         <p>
@@ -746,61 +604,6 @@ export default function Users() {
       </div>
       </div>
 
-      <AlertDialog open={cleanupDialogOpen} onOpenChange={setCleanupDialogOpen}>
-        <AlertDialogContent data-testid="dialog-confirm-demo-cleanup">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Archive all demo records?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will archive <strong>{(demoStats?.quotes ?? 0) + (demoStats?.opJobs ?? 0)}</strong> demo/test record{((demoStats?.quotes ?? 0) + (demoStats?.opJobs ?? 0)) !== 1 ? "s" : ""} ({demoStats?.quotes ?? 0} quote{demoStats?.quotes !== 1 ? "s" : ""}, {demoStats?.opJobs ?? 0} job{demoStats?.opJobs !== 1 ? "s" : ""}).
-              Records are archived — not deleted — and can be restored individually from the Archived tabs.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => cleanupMutation.mutate()}
-              disabled={cleanupMutation.isPending}
-              data-testid="button-confirm-demo-cleanup"
-            >
-              {cleanupMutation.isPending ? "Archiving…" : "Archive All Demo Records"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-        <AlertDialogContent data-testid="dialog-confirm-reset-demo">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-destructive" /> Reset Demo Environment?
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>This will permanently remove demo and test data while preserving Q-0135 and its linked live records. Numbering will continue from the current sequence.</p>
-                <p className="font-medium text-foreground">The following will be archived:</p>
-                <ul className="list-disc list-inside text-xs space-y-0.5">
-                  <li>All quotes except Q-0135</li>
-                  <li>All operational jobs not linked to Q-0135</li>
-                  <li>All estimates except Q-0135's linked estimate</li>
-                  <li>All customers and projects except Q-0135's records</li>
-                </ul>
-                <p className="text-xs font-medium text-foreground">This action cannot be undone.</p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-reset-demo">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => resetMutation.mutate()}
-              disabled={resetMutation.isPending}
-              data-testid="button-confirm-reset-demo"
-            >
-              {resetMutation.isPending ? "Resetting…" : "Confirm Reset"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <CreateUserDialog open={showCreate} onOpenChange={setShowCreate} onCreated={(info) => setOnboardingInfo(info)} />
       {editUser && <EditUserDialog user={editUser} open={!!editUser} onOpenChange={(v) => !v && setEditUser(null)} />}

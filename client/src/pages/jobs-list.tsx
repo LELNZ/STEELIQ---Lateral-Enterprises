@@ -16,8 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square } from "lucide-react";
+import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import type { Job, Quote } from "@shared/schema";
 
 type JobWithCount = Job & { itemCount: number; totalSqm: number };
@@ -29,8 +30,28 @@ type CascadeDialogState =
 
 export default function JobsList() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
   const [cascadeDialog, setCascadeDialog] = useState<CascadeDialogState>({ type: "none" });
   const [activeTab, setActiveTab] = useState("active");
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async ({ id, isDemoRecord }: { id: string; isDemoRecord: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/jobs/${id}/demo-flag`, { isDemoRecord });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
 
   const { data: activeJobs = [], isLoading: loadingActive } = useQuery<JobWithCount[]>({
     queryKey: ["/api/jobs"],
@@ -197,7 +218,14 @@ export default function JobsList() {
                     {jobs.map((job) => (
                       <TableRow key={job.id} className="hover:bg-muted/30" data-testid={`row-job-${job.id}`}>
                         <TableCell className="font-medium text-sm py-2.5" data-testid={`text-job-name-${job.id}`}>
-                          {job.name}
+                          <div className="flex items-center gap-1.5">
+                            {job.name}
+                            {job.isDemoRecord && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0" data-testid={`badge-demo-estimate-${job.id}`}>
+                                <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground py-2.5 hidden md:table-cell">
                           {job.address ? (
@@ -227,6 +255,19 @@ export default function JobsList() {
                         </TableCell>
                         <TableCell className="py-2.5">
                           <div className="flex items-center gap-1 justify-end">
+                            {isAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`h-7 px-2 text-xs ${job.isDemoRecord ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+                                onClick={() => demoFlagMutation.mutate({ id: job.id, isDemoRecord: !job.isDemoRecord })}
+                                disabled={demoFlagMutation.isPending}
+                                data-testid={`button-toggle-demo-estimate-${job.id}`}
+                                title={job.isDemoRecord ? "Remove demo/test flag" : "Flag as demo/test"}
+                              >
+                                <FlaskConical className="w-3 h-3" />
+                              </Button>
+                            )}
                             <Link href={`/job/${job.id}`}>
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" data-testid={`button-open-job-${job.id}`}>
                                 <ExternalLink className="w-3 h-3 mr-1" /> Open
