@@ -279,6 +279,11 @@ export async function registerRoutes(
     }
   }
 
+  const isPrivilegedUser = (req: any): boolean => {
+    const role = req.user?.role;
+    return role === "owner" || role === "admin";
+  };
+
   app.post("/api/jobs", async (req, res) => {
     try {
       const parsed = insertJobSchema.parse(req.body);
@@ -292,9 +297,12 @@ export async function registerRoutes(
   app.get("/api/jobs", async (req, res) => {
     try {
       const scope = req.query.scope as string | undefined;
-      const allJobs = scope === "archived"
+      let allJobs = scope === "archived"
         ? await storage.getArchivedJobs()
         : await storage.getAllJobs();
+      if (!isPrivilegedUser(req)) {
+        allJobs = allJobs.filter(j => !j.isDemoRecord);
+      }
       const jobsWithCounts = await Promise.all(
         allJobs.map(async (job) => {
           const items = await storage.getJobItems(job.id);
@@ -318,6 +326,7 @@ export async function registerRoutes(
     try {
       const job = await storage.getJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Job not found" });
       const items = await storage.getJobItems(job.id);
       res.json({ ...job, items });
     } catch (e: any) {
@@ -1167,9 +1176,12 @@ export async function registerRoutes(
 
       const userDivision = req.user?.divisionCode;
       const isAllDivision = !req.user?.divisionCode || req.user?.role === "admin" || req.user?.role === "owner";
-      const filtered = isAllDivision
+      let filtered = isAllDivision
         ? enriched
         : enriched.filter(q => (q.divisionId || null) === userDivision);
+      if (!isPrivilegedUser(req)) {
+        filtered = filtered.filter(q => !q.isDemoRecord);
+      }
 
       const jobIds = Array.from(new Set(filtered.map(q => q.sourceJobId).filter(Boolean))) as string[];
       const jobNameMap: Record<string, string> = {};
@@ -1193,6 +1205,7 @@ export async function registerRoutes(
     try {
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (quote.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Quote not found" });
       const userDivision = req.user?.divisionCode;
       const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
       if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
@@ -2209,9 +2222,13 @@ export async function registerRoutes(
   });
 
   // ─── Customer Routes ─────────────────────────────────────────────────────
-  app.get("/api/customers", async (_req, res) => {
+  app.get("/api/customers", async (req, res) => {
     try {
-      return res.json(await storage.getAllCustomers());
+      let all = await storage.getAllCustomers();
+      if (!isPrivilegedUser(req)) {
+        all = all.filter(c => !c.isDemoRecord);
+      }
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2237,6 +2254,7 @@ export async function registerRoutes(
   app.get("/api/customers/:id", async (req, res) => {
     const customer = await storage.getCustomer(req.params.id);
     if (!customer) return res.status(404).json({ error: "Not found" });
+    if (customer.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
     return res.json(customer);
   });
 
@@ -2265,7 +2283,11 @@ export async function registerRoutes(
       const customerId = req.query.customerId as string | undefined;
       const category = req.query.category as string | undefined;
       const search = req.query.q as string | undefined;
-      return res.json(await storage.listContacts({ customerId, category, search }));
+      let all = await storage.listContacts({ customerId, category, search });
+      if (!isPrivilegedUser(req)) {
+        all = all.filter(c => !c.isDemoRecord);
+      }
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2275,6 +2297,7 @@ export async function registerRoutes(
     try {
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Not found" });
+      if (contact.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
       return res.json(contact);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2353,9 +2376,13 @@ export async function registerRoutes(
   });
 
   // ─── Project Routes ───────────────────────────────────────────────────────
-  app.get("/api/projects", async (_req, res) => {
+  app.get("/api/projects", async (req, res) => {
     try {
-      return res.json(await storage.getAllProjects());
+      let all = await storage.getAllProjects();
+      if (!isPrivilegedUser(req)) {
+        all = all.filter(p => !p.isDemoRecord);
+      }
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -2381,6 +2408,7 @@ export async function registerRoutes(
   app.get("/api/projects/:id", async (req, res) => {
     const project = await storage.getProject(req.params.id);
     if (!project) return res.status(404).json({ error: "Not found" });
+    if (project.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
     return res.json(project);
   });
 
@@ -2589,7 +2617,10 @@ export async function registerRoutes(
       const all = await storage.getAllInvoicesEnriched();
       const userDivision = req.user?.divisionCode;
       const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-      const filtered = isAllDivision ? all : all.filter(i => (i.divisionCode || null) === userDivision);
+      let filtered = isAllDivision ? all : all.filter(i => (i.divisionCode || null) === userDivision);
+      if (!isPrivilegedUser(req)) {
+        filtered = filtered.filter(i => !i.isDemoRecord);
+      }
       return res.json(filtered);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -2921,6 +2952,7 @@ export async function registerRoutes(
   app.get("/api/invoices/:id", async (req, res) => {
     const invoice = await storage.getInvoice(req.params.id);
     if (!invoice) return res.status(404).json({ error: "Not found" });
+    if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
     return res.json(invoice);
   });
 
@@ -3410,13 +3442,18 @@ export async function registerRoutes(
     try {
       const userDivision = (req as any).user?.divisionCode;
       const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
+      const privileged = isPrivilegedUser(req);
       const scope = req.query.scope as string | undefined;
       if (scope === "archived") {
-        const all = await storage.getArchivedOpJobs();
-        return res.json(isAllDivision ? all : all.filter(j => (j.divisionId || null) === userDivision));
+        let all = await storage.getArchivedOpJobs();
+        if (!isAllDivision) all = all.filter(j => (j.divisionId || null) === userDivision);
+        if (!privileged) all = all.filter(j => !j.isDemoRecord);
+        return res.json(all);
       }
-      const all = await storage.getAllOpJobs();
-      return res.json(isAllDivision ? all : all.filter(j => (j.divisionId || null) === userDivision));
+      let all = await storage.getAllOpJobs();
+      if (!isAllDivision) all = all.filter(j => (j.divisionId || null) === userDivision);
+      if (!privileged) all = all.filter(j => !j.isDemoRecord);
+      return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
@@ -4429,6 +4466,7 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
+      if (job.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Job not found" });
       const userDivision = (req as any).user?.divisionCode;
       const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
       if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });

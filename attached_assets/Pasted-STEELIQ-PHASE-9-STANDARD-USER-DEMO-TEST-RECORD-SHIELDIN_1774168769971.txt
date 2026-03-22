@@ -1,0 +1,245 @@
+STEELIQ PHASE 9 — STANDARD-USER DEMO/TEST RECORD SHIELDING
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase hardens the actual live operating model after truth reconciliation.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not introduce a fake environment switch.
+- Do not create a separate dev/demo/prod runtime model unless code already proves it exists.
+- Do not weaken owner/admin governance access.
+- Do not weaken Xero protections, archive/delete safety, governance audit behavior, or Settings > System as the canonical governance surface.
+- Do not change the lifecycle engine or Phase 7B M&D enforcement.
+- Do not introduce schema creep.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden into estimate lifecycle or linked-record cascade work in this phase.
+- Do not report completion from UI changes alone. Backend enforcement is required.
+
+CURRENT CANONICAL TRUTH
+
+Truth reconciliation established the actual model as:
+
+- SINGLE LIVE ENVIRONMENT + ADMIN-ONLY GOVERNANCE CONTROLS
+- all users share one live application instance and one database
+- owner/admin users have governance controls
+- standard users are currently NOT filtered from demo/test records at the backend
+- demo badges are visible to all users
+- records only disappear from standard operational views once archived
+
+This is weaker than the intended operating model.
+
+INTENDED OPERATING MODEL TO IMPLEMENT NOW
+
+The live system should behave as follows:
+- Owner/Admin can see and manage demo/test records and production records
+- Standard users should experience production-only operational views
+- Demo/test records should not appear to standard users in normal operational lists/details
+- This must be implemented as backend access filtering, not just hidden buttons or wording
+
+PRIMARY OBJECTIVE
+
+Implement backend shielding so non-owner/non-admin users do not receive active demo/test records in normal operational reads, while owner/admin users retain full visibility and governance capability.
+
+PHASE A — DEFINE THE SHIELDING RULE TRUTHFULLY
+
+1. Use current role model truth:
+- owner/admin: full visibility
+- all other roles: production-only visibility
+
+2. Use current record model truth:
+- active demo/test records are identified by isDemoRecord = true
+- archived records remain governed by existing archive behavior
+
+3. The shielding rule for standard users should be:
+- exclude active demo/test records from normal operational reads unless a route is explicitly admin/governance-only
+
+PHASE B — APPLY BACKEND FILTERING TO OPERATIONAL ROUTES
+
+Audit and harden at minimum the main operational read/list/detail routes for:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+Required behavior:
+1. For owner/admin:
+- existing visibility remains intact
+
+2. For standard users:
+- active demo/test records are excluded from normal operational backend responses
+
+3. Preserve existing division/archive filters.
+4. Preserve admin/governance surfaces.
+5. Do not accidentally block historically archived governance visibility where current architecture expects admin review.
+
+PHASE C — DETAIL ROUTE SAFETY
+
+1. Ensure standard users cannot access direct detail endpoints for active demo/test records if they know an ID.
+2. Required behavior:
+- backend should deny or hide access appropriately for non-owner/non-admin users
+- owner/admin access remains unchanged
+
+3. Report exactly how this is handled per entity:
+- filtered out
+- 404/not found
+- forbidden
+Choose the narrowest architecture-consistent pattern and use it consistently where practical.
+
+PHASE D — UI TRUTH ADJUSTMENT ONLY WHERE NEEDED
+
+1. If demo badges currently render for all users on surfaces that will no longer return demo records to standard users, update only what is minimally necessary.
+2. Do not do a broad UX redesign.
+3. Preserve truthful wording in Settings > System and admin governance surfaces.
+
+PHASE E — REGRESSION PROTECTION
+
+1. Preserve direct demo/test flagging for owner/admin.
+2. Preserve bulk archive and individual governance actions in Settings > System.
+3. Preserve Xero-linked safety.
+4. Preserve archive/delete distinction.
+5. Preserve audit logging.
+
+STRICT NON-GOALS
+
+Do NOT:
+- introduce a real environment switch
+- redesign governance architecture
+- redesign settings
+- redesign entity pages broadly
+- implement linked-record auto-cascade
+- add estimate lifecycle card in this phase
+- add schema
+- add speculative query abstractions unless absolutely necessary
+- weaken admin visibility for test/demo records
+
+REQUIRED TEST CASES
+
+TC-P9-001
+As owner/admin, request operational lists for all covered entities.
+Expected:
+- active demo/test and non-demo records remain visible as before
+
+TC-P9-002
+As a standard user, request operational lists for all covered entities.
+Expected:
+- active demo/test records are excluded from backend responses
+
+TC-P9-003
+As owner/admin, open direct detail views for demo/test records.
+Expected:
+- access still works
+
+TC-P9-004
+As a standard user, attempt direct detail access to known active demo/test records by ID.
+Expected:
+- access is blocked or hidden according to the implemented pattern
+
+TC-P9-005
+Archive a demo/test record, then verify normal standard-user operational views.
+Expected:
+- archived records remain absent from normal active views as before
+- no regression to archive behavior
+
+TC-P9-006
+Verify Settings > System governance still shows flagged records correctly for owner/admin.
+Expected:
+- no regression
+
+TC-P9-007
+Verify direct demo/test flagging still works for owner/admin on:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+TC-P9-008
+Verify Xero-linked protections and delete/archive safety remain unchanged.
+Expected:
+- no regression
+
+TC-P9-009
+Verify non-admin users no longer see demo badges in normal operational views simply because demo records are no longer present there.
+Expected:
+- production-only operational experience for standard users
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact routes hardened
+3. exact filtering rule implemented
+4. exact detail-access behavior for standard users
+5. exact role behavior by entity
+6. exact UI changes made, if any
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. ROUTES HARDENED
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+For each:
+- exact route(s)
+- filtering added
+- role behavior
+
+4. DETAIL ACCESS BEHAVIOR
+- exact standard-user behavior for direct access to active demo/test records
+- exact owner/admin behavior
+
+5. FILTERING RULE
+- exact backend rule used
+- where it is enforced
+- what remains admin-visible
+
+6. UI / WORDING CHANGES
+- exact UI changes made, if any
+- why they were necessary
+
+7. TEST RESULTS
+- TC-P9-001 result
+- TC-P9-002 result
+- TC-P9-003 result
+- TC-P9-004 result
+- TC-P9-005 result
+- TC-P9-006 result
+- TC-P9-007 result
+- TC-P9-008 result
+- TC-P9-009 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Preserve owner/admin governance capability.
+Implement real backend shielding of active demo/test records for standard users.
+Do not confuse this with environment switching.
+Report truthfully and exactly.

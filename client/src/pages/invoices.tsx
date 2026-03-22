@@ -332,7 +332,7 @@ export default function InvoicesPage() {
               <TableCell className="font-mono text-sm font-semibold py-3" data-testid={`text-invoice-number-${inv.id}`}>
                 <div className="flex items-center gap-1.5">
                   {inv.number}
-                  {inv.isDemoRecord && (
+                  {isAdmin && inv.isDemoRecord && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-invoice-${inv.id}`}>
                       <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
                     </Badge>
