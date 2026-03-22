@@ -1,0 +1,166 @@
+STEELIQ HOTFIX FOLLOW-UP — DEMO/XERO INVOICE CLEANUP AFTER EXTERNAL REMOVAL OR VOID
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow cleanup/governance hardening phase for demo/test invoices that were previously Xero-linked.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not weaken Xero protections.
+- Do not allow unsafe deletion of invoices that are still truly linked to live Xero records.
+- Do not change unrelated invoice creation logic.
+- Do not change lifecycle, governance architecture, or environment behavior broadly.
+- Do not introduce schema creep unless absolutely required and you stop to explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond the post-Xero cleanup path for demo/test invoices.
+
+CURRENT LIVE GAP
+
+In the live app, demo/test invoices that were pushed to Xero are correctly protected from unsafe archive/delete while the Xero link still exists.
+
+However, after the corresponding Xero invoice has been deleted, voided, or otherwise removed appropriately on the Xero side, the SteelIQ demo/test invoice still lacks a clean operational path to be archived or deleted and removed from the active invoices list.
+
+PRIMARY OBJECTIVE
+
+Implement a truthful and safe cleanup path for demo/test invoices after their external Xero linkage is no longer active/valid.
+
+PHASE A — AUDIT CURRENT XERO-LINK CLEANUP TRUTH
+
+1. Review current invoice delete/archive protections in code.
+2. Determine exactly:
+- what field(s) mark an invoice as Xero-linked
+- what logic blocks archive/delete
+- whether the system currently has any way to clear, invalidate, or re-evaluate a stale Xero link
+- whether “deleted in Xero” vs “voided in Xero” vs “still exists in Xero” are distinguished at all
+
+3. Report the exact current truth.
+
+PHASE B — DEFINE THE SAFE POST-XERO CLEANUP RULE
+
+Implement the narrowest truthful rule.
+
+Likely desired behavior:
+- If a demo/test invoice is still actively linked to a live Xero invoice, protections remain
+- If the Xero invoice has been properly voided/removed and the local record can be truthfully treated as no longer protected by that live link, owner/admin should be able to archive or delete it according to governance rules
+- This must not create unsafe behavior for real production invoices
+
+If current architecture cannot verify Xero-side truth automatically, provide the narrowest safe admin workflow to explicitly mark the link as cleared/voided for demo/test cleanup purposes, with strong role gating and warnings.
+
+PHASE C — OPERATIONAL UI PATH
+
+Add or improve the admin-only workflow on demo/test invoices so the next step is clear.
+
+Required behavior:
+1. If invoice is still protected by active Xero link:
+- clearly explain why archive/delete is blocked
+
+2. If invoice becomes eligible for cleanup after Xero-side resolution:
+- owner/admin can archive or delete it according to current governance rules
+- it disappears from the active invoices list appropriately
+
+3. Keep the UI serious and explicit — this is accounting-sensitive.
+
+PHASE D — SAFETY PRESERVATION
+
+1. Preserve Xero protection for real linked invoices.
+2. Preserve demo shielding for non-admin users.
+3. Preserve archive/delete distinction.
+4. Preserve audit logging.
+5. Do not allow broad unlinking of production invoices without safeguards.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign Xero integration broadly
+- redesign invoice list broadly
+- redesign governance architecture
+- change invoice numbering
+- change deposit/progress/final invoice creation
+- add speculative reconciliation systems
+
+REQUIRED TEST CASES
+
+TC-XERO-001
+Attempt archive/delete on a demo invoice with an active Xero link.
+Expected:
+- still blocked with clear explanation
+
+TC-XERO-002
+Resolve or simulate resolved Xero linkage according to current architecture truth.
+Expected:
+- invoice becomes eligible for the intended cleanup path
+
+TC-XERO-003
+Archive the demo/test invoice after Xero-side resolution.
+Expected:
+- removed from active invoice list
+- retained historically if archived
+
+TC-XERO-004
+If delete is allowed for eligible demo/test invoices, test delete path.
+Expected:
+- allowed only when safe under current governance rules
+
+TC-XERO-005
+Verify no regression for normal production Xero-linked invoices.
+Expected:
+- protections unchanged
+
+TC-XERO-006
+Verify audit/governance history remains truthful.
+Expected:
+- action traceable
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact old Xero-link cleanup behavior
+3. exact new cleanup behavior
+4. exact rules for when a demo/test invoice is still protected vs eligible
+5. exact UI/admin flow added or changed
+6. results of all required test cases
+7. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. OLD VS NEW XERO CLEANUP BEHAVIOR
+- old behavior
+- new behavior
+- when protections remain
+- when cleanup becomes allowed
+
+4. UI / ADMIN FLOW
+- what the admin now sees
+- how the next step is made clear
+
+5. TEST RESULTS
+- TC-XERO-001 result
+- TC-XERO-002 result
+- TC-XERO-003 result
+- TC-XERO-004 result
+- TC-XERO-005 result
+- TC-XERO-006 result
+
+6. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve Xero safety.
+Preserve governance protections.
+Add a truthful post-Xero cleanup path for eligible demo/test invoices.
+Report exactly what rule the system now enforces.
