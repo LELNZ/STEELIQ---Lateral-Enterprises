@@ -1592,14 +1592,6 @@ export async function registerRoutes(
     return VALID_SYSTEM_MODES.includes(mode) ? mode : "development";
   }
 
-  function requireNonProductionMode(res: any, mode: SystemMode): boolean {
-    if (mode === "production") {
-      res.status(403).json({ error: "This action is disabled in production mode." });
-      return false;
-    }
-    return true;
-  }
-
   app.get("/api/settings/system-mode", async (_req, res) => {
     try {
       const mode = await getSystemMode();
@@ -3952,38 +3944,90 @@ export async function registerRoutes(
         };
       }));
 
-      // Contact isolation — direct parent-customer live-data check (unconditional, not limited to demo-flagged parents)
-      const contactsWithIsolation = await Promise.all(demoContacts.map(async (contact) => {
-        const [parentCustomer, linkedJobs] = await Promise.all([
-          storage.getCustomer(contact.customerId),
-          storage.getJobsByContact(contact.id),
-        ]);
-        const liveJobs = linkedJobs.filter(j => !j.isDemoRecord);
+      // Contact isolation — optimized: reuse already-computed customer isolation data where parent is demo-flagged,
+      // and deduplicate linked-record queries for non-demo parents (one query set per unique parent, not per contact).
 
-        // Always query parent customer's live records regardless of whether the parent is itself demo-flagged.
-        // This closes the gap where a non-demo parent customer with live data would be missed.
-        let parentIsShared = false;
-        let parentXeroLinked = false;
-        let parentLiveCounts = { quotes: 0, jobs: 0, projects: 0, invoices: 0 };
-        if (parentCustomer) {
-          const [parentQuotes, parentJobs, parentProjects, parentInvoices] = await Promise.all([
-            storage.getQuotesByCustomer(contact.customerId),
-            storage.getJobsByCustomer(contact.customerId),
-            storage.getProjectsByCustomer(contact.customerId),
-            storage.getInvoicesByCustomer(contact.customerId),
-          ]);
-          const liveParentQuotes = parentQuotes.filter(q => !q.isDemoRecord);
-          const liveParentJobs = parentJobs.filter(j => !j.isDemoRecord);
-          const liveParentProjects = parentProjects.filter(p => !p.isDemoRecord);
-          const liveParentInvoices = parentInvoices.filter(i => !i.isDemoRecord);
-          parentIsShared = liveParentQuotes.length > 0 || liveParentJobs.length > 0 || liveParentProjects.length > 0 || liveParentInvoices.length > 0;
-          parentXeroLinked = !!parentCustomer.xeroContactId;
-          parentLiveCounts = {
+      // Step 1: build lookup map from the already-computed customer isolation analysis above
+      const demoCustomerIsolationMap = new Map(
+        customersWithIsolation.map(c => [c.id, c])
+      );
+
+      // Step 2: identify unique non-demo parent customer IDs (not already covered by customersWithIsolation)
+      const uniqueNonDemoParentIds = [
+        ...new Set(
+          demoContacts
+            .filter(c => !demoCustomerIsolationMap.has(c.customerId))
+            .map(c => c.customerId)
+        ),
+      ];
+
+      // Step 3: batch-fetch linked records for each unique non-demo parent (one query set per unique parent customer)
+      type ParentData = {
+        customer: Awaited<ReturnType<typeof storage.getCustomer>>;
+        isShared: boolean;
+        xeroLinked: boolean;
+        liveCounts: { quotes: number; jobs: number; projects: number; invoices: number };
+      };
+      const nonDemoParentDataMap = new Map<string, ParentData>();
+      await Promise.all(uniqueNonDemoParentIds.map(async (parentId) => {
+        const [parentCustomer, parentQuotes, parentJobs, parentProjects, parentInvoices] = await Promise.all([
+          storage.getCustomer(parentId),
+          storage.getQuotesByCustomer(parentId),
+          storage.getJobsByCustomer(parentId),
+          storage.getProjectsByCustomer(parentId),
+          storage.getInvoicesByCustomer(parentId),
+        ]);
+        if (!parentCustomer) return;
+        const liveParentQuotes = parentQuotes.filter(q => !q.isDemoRecord);
+        const liveParentJobs = parentJobs.filter(j => !j.isDemoRecord);
+        const liveParentProjects = parentProjects.filter(p => !p.isDemoRecord);
+        const liveParentInvoices = parentInvoices.filter(i => !i.isDemoRecord);
+        nonDemoParentDataMap.set(parentId, {
+          customer: parentCustomer,
+          isShared: liveParentQuotes.length > 0 || liveParentJobs.length > 0 || liveParentProjects.length > 0 || liveParentInvoices.length > 0,
+          xeroLinked: !!(parentCustomer as any).xeroContactId,
+          liveCounts: {
             quotes: liveParentQuotes.length,
             jobs: liveParentJobs.length,
             projects: liveParentProjects.length,
             invoices: liveParentInvoices.length,
+          },
+        });
+      }));
+
+      // Step 4: per-contact job linkage is inherently per-record; run those in parallel, parent data is now from cache
+      const contactsWithIsolation = await Promise.all(demoContacts.map(async (contact) => {
+        const linkedJobs = await storage.getJobsByContact(contact.id);
+        const liveJobs = linkedJobs.filter(j => !j.isDemoRecord);
+
+        let parentCustomerName: string | null = null;
+        let parentCustomerIsDemoFlagged = false;
+        let parentIsShared = false;
+        let parentXeroLinked = false;
+        let parentLiveCounts = { quotes: 0, jobs: 0, projects: 0, invoices: 0 };
+
+        const demoParent = demoCustomerIsolationMap.get(contact.customerId);
+        if (demoParent) {
+          // Parent is demo-flagged — reuse already-computed isolation without re-querying
+          parentCustomerName = demoParent.name;
+          parentCustomerIsDemoFlagged = true;
+          parentIsShared = demoParent._isolation.isSharedWithLiveData;
+          parentXeroLinked = demoParent._isolation.xeroLinked;
+          parentLiveCounts = {
+            quotes: demoParent._isolation.liveQuoteCount,
+            jobs: demoParent._isolation.liveJobCount,
+            projects: demoParent._isolation.liveProjectCount,
+            invoices: demoParent._isolation.liveInvoiceCount,
           };
+        } else {
+          const nonDemoParent = nonDemoParentDataMap.get(contact.customerId);
+          if (nonDemoParent) {
+            parentCustomerName = (nonDemoParent.customer as any).name ?? null;
+            parentCustomerIsDemoFlagged = false;
+            parentIsShared = nonDemoParent.isShared;
+            parentXeroLinked = nonDemoParent.xeroLinked;
+            parentLiveCounts = nonDemoParent.liveCounts;
+          }
         }
 
         const isSharedWithLiveData = parentIsShared || liveJobs.length > 0;
@@ -3991,8 +4035,8 @@ export async function registerRoutes(
           ...contact,
           _isolation: {
             isSharedWithLiveData,
-            parentCustomerName: parentCustomer?.name ?? null,
-            parentCustomerIsDemoFlagged: !!(parentCustomer as any)?.isDemoRecord,
+            parentCustomerName,
+            parentCustomerIsDemoFlagged,
             parentCustomerShared: parentIsShared,
             parentXeroLinked,
             parentLiveCounts,
@@ -4025,6 +4069,41 @@ export async function registerRoutes(
           contacts: demoContacts.length,
         },
       });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Governance: Recent governance audit history (Owner/Admin only) ──────────
+  app.get("/api/settings/governance/audit-history", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const limitParam = parseInt(String(req.query.limit ?? "50"), 10);
+      const limit = Math.min(Math.max(limitParam, 1), 200);
+
+      const [entries, allUsers] = await Promise.all([
+        storage.getGovernanceAuditHistory(limit),
+        storage.getAllUsers(),
+      ]);
+
+      const userMap: Record<string, string> = {};
+      allUsers.forEach(u => { userMap[u.id] = u.displayName || u.username; });
+
+      const enriched = entries.map(entry => ({
+        id: entry.id,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        action: entry.action,
+        actorId: entry.performedByUserId ?? null,
+        actorName: entry.performedByUserId ? (userMap[entry.performedByUserId] ?? "Unknown User") : "System",
+        metadata: entry.metadataJson,
+        createdAt: entry.createdAt,
+      }));
+
+      res.json({ entries: enriched });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

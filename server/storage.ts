@@ -117,6 +117,7 @@ export interface IStorage {
 
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(entityType: string, entityId: string): Promise<AuditLog[]>;
+  getGovernanceAuditHistory(limit: number): Promise<AuditLog[]>;
 
   getOrgSettings(): Promise<OrgSettings | undefined>;
   upsertOrgSettings(data: Partial<InsertOrgSettings>): Promise<OrgSettings>;
@@ -585,6 +586,17 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(auditLogs)
       .where(and(eq(auditLogs.entityType, entityType), eq(auditLogs.entityId, entityId)))
       .orderBy(desc(auditLogs.createdAt));
+  }
+
+  async getGovernanceAuditHistory(limit: number): Promise<AuditLog[]> {
+    const GOVERNANCE_ACTIONS = [
+      "demo_flagged", "demo_unflagged",
+      "governance_archive", "governance_delete",
+    ];
+    return db.select().from(auditLogs)
+      .where(inArray(auditLogs.action, GOVERNANCE_ACTIONS))
+      .orderBy(desc(auditLogs.createdAt))
+      .limit(limit);
   }
 
   async getOrgSettings(): Promise<OrgSettings | undefined> {

@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield, Hash, ExternalLink, CheckCircle2, XCircle, Archive, Trash2, Flag, Server, Database, RefreshCw, Info, ChevronDown, ChevronRight } from "lucide-react";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield, Hash, ExternalLink, CheckCircle2, XCircle, Archive, Trash2, Flag, Server, Database, RefreshCw, Info, ChevronDown, ChevronRight, Clock, Activity, User } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
@@ -2141,6 +2141,55 @@ function GovernanceEntitySection({
   );
 }
 
+type GovernanceAuditEntry = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  action: string;
+  actorId: string | null;
+  actorName: string;
+  metadata: Record<string, any> | null;
+  createdAt: string | null;
+};
+
+function formatGovernanceAction(action: string): string {
+  switch (action) {
+    case "demo_flagged":     return "Demo Flagged";
+    case "demo_unflagged":   return "Demo Flag Removed";
+    case "governance_archive": return "Archived (Governance)";
+    case "governance_delete":  return "Deleted (Governance)";
+    default: return action;
+  }
+}
+
+function formatGovernanceEntityType(entityType: string): string {
+  switch (entityType) {
+    case "estimate":  return "Estimate";
+    case "quote":     return "Quote";
+    case "op_job":    return "Op-Job";
+    case "job":       return "Estimate";
+    case "project":   return "Project";
+    case "invoice":   return "Invoice";
+    case "customer":  return "Customer";
+    case "contact":   return "Contact";
+    default: return entityType;
+  }
+}
+
+function formatRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60_000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
 function GovernanceSection() {
   const { toast } = useToast();
   const [bulkConfirm, setBulkConfirm] = useState(false);
@@ -2148,6 +2197,13 @@ function GovernanceSection() {
   const { data: summary, isLoading, refetch, isFetching } = useQuery<GovernanceSummary>({
     queryKey: ["/api/admin/governance/summary"],
     staleTime: 10_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: auditHistory, isLoading: auditLoading } = useQuery<{ entries: GovernanceAuditEntry[] }>({
+    queryKey: ["/api/settings/governance/audit-history"],
+    queryFn: () => fetch("/api/settings/governance/audit-history?limit=30").then(r => r.json()),
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
 
@@ -2319,6 +2375,80 @@ function GovernanceSection() {
       ) : (
         <p className="text-sm text-muted-foreground">Unable to load governance summary.</p>
       )}
+
+      {/* Recent Governance Activity */}
+      <Separator />
+      <div className="space-y-3" data-testid="governance-audit-section">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          <h4 className="text-sm font-semibold">Recent Governance Activity</h4>
+          <span className="text-xs text-muted-foreground ml-1">(last 30 actions)</span>
+        </div>
+        {auditLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
+          </div>
+        ) : !auditHistory?.entries?.length ? (
+          <div className="rounded-md border bg-muted/20 px-4 py-5 text-center">
+            <Clock className="h-6 w-6 mx-auto mb-2 text-muted-foreground opacity-50" />
+            <p className="text-sm text-muted-foreground">No governance actions have been recorded yet.</p>
+            <p className="text-xs text-muted-foreground mt-1">Actions such as flagging, archiving, and deleting demo records will appear here.</p>
+          </div>
+        ) : (
+          <div className="rounded-md border overflow-hidden" data-testid="governance-audit-table">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Record</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">
+                    <User className="h-3 w-3 inline mr-1" />Actor
+                  </th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Clock className="h-3 w-3 inline mr-1" />When
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditHistory.entries.map((entry, idx) => {
+                  const isDelete = entry.action === "governance_delete";
+                  const isFlag = entry.action === "demo_flagged";
+                  const isUnflag = entry.action === "demo_unflagged";
+                  const isArchive = entry.action === "governance_archive";
+                  return (
+                    <tr
+                      key={entry.id}
+                      className={`border-b last:border-0 ${idx % 2 === 0 ? "bg-background" : "bg-muted/20"}`}
+                      data-testid={`row-audit-entry-${entry.id}`}
+                    >
+                      <td className="px-3 py-2">
+                        <span className={`font-medium ${
+                          isDelete ? "text-destructive" :
+                          isFlag ? "text-amber-600 dark:text-amber-400" :
+                          isUnflag ? "text-muted-foreground" :
+                          isArchive ? "text-blue-600 dark:text-blue-400" :
+                          "text-foreground"
+                        }`}>
+                          {formatGovernanceAction(entry.action)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{formatGovernanceEntityType(entry.entityType)}</td>
+                      <td className="px-3 py-2 text-muted-foreground font-mono hidden sm:table-cell truncate max-w-[120px]">
+                        {entry.entityId.slice(0, 8)}…
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">{entry.actorName}</td>
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap" title={entry.createdAt ?? ""}>
+                        {formatRelativeTime(entry.createdAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
