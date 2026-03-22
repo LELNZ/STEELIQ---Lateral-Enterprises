@@ -1,0 +1,205 @@
+STEELIQ ESTIMATOR HOTFIX — ENTRANCE DOOR SIDELIGHT WIDTH AUTO-CALC FROM TOTAL OPENING AND MAIN DOOR WIDTH
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a narrow estimator workflow improvement for entrance doors with sidelights.
+
+Non-negotiable rules:
+- Do not redesign the estimator architecture.
+- Do not redesign the drawing engine broadly.
+- Do not change unrelated item types.
+- Do not change pricing logic except where required to correctly use the calculated dimensions already shown in the estimator.
+- Do not introduce schema creep unless absolutely required and you stop to explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond entrance door + sidelight width entry workflow.
+
+CURRENT LIVE ISSUE
+
+In the live estimator, when creating an entrance door with a sidelight, the user currently has to manually calculate and enter the sidelight width.
+
+This is the wrong workflow.
+
+Desired real-world workflow:
+1. enter total overall width and height
+2. choose sidelight position (left or right)
+3. enter main door width
+4. system auto-calculates the remaining sidelight width
+
+Example:
+- overall width = 1470
+- overall height = 2000
+- sidelight position = left
+- main door width = 800
+- calculated sidelight width = 670
+
+PRIMARY OBJECTIVE
+
+Make the estimator support the natural entrance-door workflow where sidelight width is derived automatically from the total width and the entered main door width.
+
+PHASE A — AUDIT CURRENT CONFIG TRUTH
+
+1. Review the current entrance door + sidelight configuration in code.
+2. Identify exactly:
+- how total width is currently used
+- how door width is currently represented
+- how sidelight width is currently represented
+- whether FIX / Auto controls already imply a split-calculation model
+- which values drive the drawing preview and quote schedule dimensions
+
+3. Report the narrowest implementation path that preserves current architecture.
+
+PHASE B — IMPLEMENT MAIN-DOOR-FIRST SIDELIGHT CALCULATION
+
+Required behavior for entrance door with sidelight enabled:
+1. User enters total width and height as normal.
+2. User selects sidelight position (left or right).
+3. User can enter the main door width directly.
+4. The system auto-calculates sidelight width as:
+
+sidelight width = total width - main door width
+
+5. The calculated sidelight width must update the drawing preview and any relevant schedule/config values.
+6. This must work for both left and right sidelight positions.
+
+PHASE C — INPUT / MODE CLARITY
+
+The UI must make the calculation logic clear.
+
+Required behavior:
+1. The main door width input should be the primary editable field in this workflow.
+2. The sidelight width should either:
+- display as calculated/read-only, or
+- clearly display as auto-calculated unless the user intentionally switches to manual override mode
+
+3. If current architecture already supports FIX / Auto modes, reuse that truthfully rather than inventing a new model.
+4. Do not leave the user guessing which value is authoritative.
+
+PHASE D — VALIDATION
+
+1. Prevent impossible values:
+- main door width cannot be greater than or equal to total width if sidelight is enabled
+- sidelight width must remain positive and meaningful
+2. Show clear validation if the user enters invalid widths.
+3. Preserve existing width/height/unit behavior.
+
+PHASE E — PREVIEW / OUTPUT CONSISTENCY
+
+1. Drawing preview must reflect the calculated split correctly.
+2. Quote schedule / item dimensions must remain consistent with the actual configured item.
+3. Do not break non-sidelight entrance door behavior.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign all estimator inputs
+- redesign all split-panel logic across unrelated products
+- change unrelated window/door families
+- change quote lifecycle, governance, invoicing, or Xero logic
+- add speculative configurators
+- add schema unless absolutely necessary
+
+REQUIRED TEST CASES
+
+TC-SIDE-001
+Create an entrance door with sidelight enabled.
+Enter:
+- total width 1470
+- height 2000
+- sidelight position left
+- main door width 800
+Expected:
+- sidelight auto-calculates to 670
+- preview updates correctly
+
+TC-SIDE-002
+Repeat with sidelight position right.
+Expected:
+- same calculated sidelight width
+- preview flips correctly to the correct side
+
+TC-SIDE-003
+Change total width after entering main door width.
+Expected:
+- sidelight width recalculates correctly
+
+TC-SIDE-004
+Change main door width after total width is set.
+Expected:
+- sidelight width recalculates correctly
+
+TC-SIDE-005
+Enter invalid main door width that leaves zero or negative sidelight width.
+Expected:
+- clear validation error
+- invalid config not accepted
+
+TC-SIDE-006
+Disable sidelight.
+Expected:
+- normal entrance door workflow remains intact
+- no regression
+
+TC-SIDE-007
+Verify quote schedule / item detail output remains consistent with the configured preview.
+Expected:
+- no mismatch between previewed dimensions and stored/calculated configuration
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact old workflow behavior
+3. exact new workflow behavior
+4. exact calculation rule implemented
+5. exact input/validation behavior
+6. exact preview/output consistency behavior
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. OLD VS NEW WORKFLOW
+- old entrance door + sidelight workflow
+- new workflow
+- why the new workflow is more truthful
+
+4. CALCULATION RULE
+- exact formula used
+- how side selection affects the preview
+- whether manual override still exists and how
+
+5. VALIDATION / INPUT BEHAVIOR
+- what the user can edit
+- what auto-calculates
+- what validation was added
+
+6. TEST RESULTS
+- TC-SIDE-001 result
+- TC-SIDE-002 result
+- TC-SIDE-003 result
+- TC-SIDE-004 result
+- TC-SIDE-005 result
+- TC-SIDE-006 result
+- TC-SIDE-007 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Fix the entrance door + sidelight estimator workflow so it follows the natural real-world sizing process.
+Report truthfully and exactly.

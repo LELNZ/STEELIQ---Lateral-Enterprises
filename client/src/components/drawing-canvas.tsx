@@ -593,18 +593,21 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const pRows: EntranceDoorRow[][] = config.panelRows || [];
     const elements: JSX.Element[] = [];
 
+    const STACKER_DEFAULT_ROW: EntranceDoorRow = { height: 0, type: "sliding", slideDirection: "right" };
     for (let i = 0; i < panelCount; i++) {
-      const panelRowDefs = pRows[i] || [{ ...DEFAULT_DOOR_ROW }];
+      const panelRowDefs = pRows[i] || [{ ...STACKER_DEFAULT_ROW }];
       const rowHeights = distributeSpaces(H, panelRowDefs.map(r => r.height || 0));
       const px = i * pw;
 
       let yOff = 0;
       let hasSlidingRow = false;
+      let allFixed = true;
       for (let ri = 0; ri < panelRowDefs.length; ri++) {
         const rowDef = panelRowDefs[ri];
         const rh = rowHeights[ri];
         const pType = rowDef.type === "awning" ? "awning" as const : rowDef.type === "sliding" ? "sliding" as const : "fixed" as const;
         if (pType === "sliding") hasSlidingRow = true;
+        if (pType !== "fixed") allFixed = false;
         elements.push(
           <Pane key={`st-${i}-${ri}`} x={px} y={yOff} w={pw} h={rh}
             frameSize={frameSize} type={pType} slideDirection={rowDef.slideDirection ?? "right"}
@@ -613,9 +616,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
         yOff += rh;
       }
 
-      // Only draw the generic panel slide arrow if no row is already typed as sliding
-      // (sliding Pane rows draw their own directional arrows)
-      if (!hasSlidingRow) {
+      if (!hasSlidingRow && !allFixed) {
         const inset = frameSize * 0.7;
         const gy = inset;
         const gw = pw - inset * 2;

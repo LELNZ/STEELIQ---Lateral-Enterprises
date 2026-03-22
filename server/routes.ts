@@ -3886,6 +3886,11 @@ export async function registerRoutes(
           storage.getInvoicesByQuote(q.id),
         ]);
         const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+        const hasNonDemoInvoice = linkedInvoices.some(i => !i.isDemoRecord);
+        const allInvoicesArchivedOrNone = linkedInvoices.length === 0 || linkedInvoices.every(i => !!i.archivedAt);
+        const canChainDelete = !hasNonDemoInvoice
+          && xeroLinkedInvoices.length === 0
+          && (!linkedOpJob || linkedOpJob.isDemoRecord);
         return {
           ...q,
           _chain: {
@@ -3893,6 +3898,18 @@ export async function registerRoutes(
             invoiceCount: linkedInvoices.length,
             xeroLinkedInvoiceCount: xeroLinkedInvoices.length,
             xeroLinkedNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean),
+            invoices: linkedInvoices.map(i => ({
+              id: i.id,
+              number: i.number,
+              type: i.type,
+              status: i.status,
+              isDemoRecord: i.isDemoRecord,
+              xeroInvoiceId: i.xeroInvoiceId,
+              xeroInvoiceNumber: i.xeroInvoiceNumber,
+              archivedAt: i.archivedAt,
+            })),
+            hasNonDemoInvoice,
+            canChainDelete,
           },
         };
       }));
@@ -4357,17 +4374,22 @@ export async function registerRoutes(
         const q = await storage.getQuote(entityId);
         if (!q) return res.status(404).json({ error: "Quote not found" });
         if (!q.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
-        // Check downstream: any Xero-linked invoices?
         const linkedInvoices = await storage.getInvoicesByQuote(entityId);
         const xeroLinked = linkedInvoices.filter(i => i.xeroInvoiceId);
         if (xeroLinked.length > 0) {
           return res.status(400).json({
-            error: `This quote has ${xeroLinked.length} Xero-linked invoice(s). Delete or void them in Xero first, then remove the invoice(s) from SteelIQ before deleting the quote.`,
+            error: `This quote has ${xeroLinked.length} Xero-linked invoice(s). Clear the Xero link first, then archive/delete the invoice(s) before deleting the quote.`,
             code: "XERO_LINKED_DOWNSTREAM",
             xeroNumbers: xeroLinked.map(i => i.xeroInvoiceNumber),
           });
         }
-        // Delete downstream non-xero invoices first
+        const nonDemoInvoices = linkedInvoices.filter(i => !i.isDemoRecord);
+        if (nonDemoInvoices.length > 0) {
+          return res.status(400).json({
+            error: `This quote has ${nonDemoInvoices.length} non-demo invoice(s) (${nonDemoInvoices.map(i => i.number).join(", ")}). Live records cannot be swept into demo chain cleanup. Flag them as demo first if appropriate.`,
+            code: "NON_DEMO_DOWNSTREAM",
+          });
+        }
         for (const inv of linkedInvoices) {
           await storage.deleteInvoice(inv.id);
         }
