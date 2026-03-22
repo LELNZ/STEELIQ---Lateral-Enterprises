@@ -28,7 +28,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Invoice Allocation Control**: Prevents over-invoicing with deposit caps and invoiceable ceiling caps.
 **Variations Commercial Model**: Manages project-level variations with a defined lifecycle (draft → sent → approved → invoiced).
 **Retention Commercial Model**: Supports optional percentage-based retention withheld from the base contract.
-**UI/UX**: Features responsive tables, polished spec row formatting in PDFs, project dashboard guidance, and customer relink safeguards. The enterprise app shell organizes navigation into workflow-domain groups.
+**UI/UX**: Features responsive tables, polished spec row formatting in PDFs, project dashboard guidance, and customer relink safeguards. The enterprise app shell organizes navigation into workflow-domain groups. The estimate executive summary includes a read-only lifecycle visibility card showing workflow position and next-step guidance (pre-quote planning state or linked quote lifecycle preview).
 **Governance and Data Integrity**: Includes robust features for environment clarity, test data governance, and shielding of demo/test records from standard users. This includes mechanisms for archiving, clearing Xero links for demo invoices, ensuring data integrity during quote deletions, and chain-aware linked-record cleanup for demo/test quotes (inline invoice actions, guided next-step messaging, non-demo downstream blocking).
 
 ## External Dependencies

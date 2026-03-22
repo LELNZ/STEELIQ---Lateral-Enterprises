@@ -1,0 +1,175 @@
+STEELIQ PHASE — ESTIMATE EXECUTIVE SUMMARY LIFECYCLE VISIBILITY PARITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase targets a verified workflow visibility gap: the estimate executive summary still lacks a lifecycle card/surface.
+
+Non-negotiable rules:
+- Do not redesign the lifecycle architecture.
+- Do not change the quote lifecycle business rules.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not change Phase 7B M&D enforcement.
+- Do not redesign the governance architecture.
+- Do not alter Xero protections, archive/delete safety, or Settings > System governance behavior.
+- Do not introduce schema creep.
+- Do not add unapproved endpoints unless repo truth proves a minimal read-only lifecycle endpoint is required.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden this into a dashboard redesign.
+
+CURRENT VERIFIED TRUTH
+
+- Lifecycle visibility work has already been added on quote and op-job surfaces.
+- Quote detail has lifecycle visibility and next-step workflow guidance.
+- Op-job detail has lifecycle visibility plus M&D readiness messaging.
+- The estimate executive summary still does not have an appropriate lifecycle card/surface.
+- This creates uneven workflow visibility at the estimate stage.
+
+PRIMARY OBJECTIVE
+
+Add truthful lifecycle visibility to the estimate executive summary so users can understand the estimate’s current workflow position and next-step context without redesigning the lifecycle system.
+
+This phase is about visibility parity, not lifecycle redesign.
+
+PHASE A — AUDIT CURRENT ESTIMATE SURFACE TRUTH
+
+1. Review the current estimate executive summary surface and determine:
+- which page/component is the true estimate executive summary
+- whether any lifecycle data is already available there
+- whether estimate-stage lifecycle data is already computable from current architecture
+- whether an existing quote/preview lifecycle component can be reused safely
+
+2. Report the narrowest architecture-preserving way to add lifecycle visibility there.
+
+PHASE B — ADD ESTIMATE LIFECYCLE CARD / SURFACE
+
+Required behavior:
+1. Add a lifecycle card/surface to the estimate executive summary.
+2. It must be truthful to the estimate stage and current architecture.
+3. It should help users understand:
+- current workflow stage/status
+- expected next step(s)
+- whether this is still pre-quote / planning / preview state if applicable
+
+4. Reuse existing lifecycle visual language where appropriate.
+5. Do not imply editable/live lifecycle progression if the estimate surface is still read-only or preview-oriented.
+
+PHASE C — TRUTHFUL PREVIEW / READ-ONLY BEHAVIOR
+
+1. Preserve the distinction between:
+- preview/read-only lifecycle visibility
+- active/editable lifecycle progression
+
+2. If the estimate stage should only show preview/planned lifecycle information, make that explicit in the UI.
+3. Do not add misleading interactive controls if the estimate surface is not the correct place for them.
+
+PHASE D — NEXT-STEP CLARITY
+
+1. The lifecycle card should help the user understand what comes next from the estimate stage.
+2. This can include:
+- progression toward quote creation
+- quote-stage workflow context
+- any truthful current next-action guidance already available in the architecture
+
+3. Do not invent workflow stages that do not exist.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the lifecycle engine
+- redesign estimate pages broadly
+- add speculative workflow automation
+- add stage-editing controls where they do not belong
+- change quote or op-job lifecycle behavior
+- alter governance or Xero behavior
+- start chain-aware demo/test propagation in this phase
+
+REQUIRED TEST CASES
+
+TC-PHASE-001
+Open the estimate executive summary.
+Expected:
+- a lifecycle card/surface is present
+
+TC-PHASE-002
+Verify the lifecycle card is truthful to the estimate stage.
+Expected:
+- it reflects preview/planned/read-only status appropriately if that is current architecture truth
+
+TC-PHASE-003
+Verify the lifecycle card provides next-step clarity.
+Expected:
+- users can understand what the estimate leads to next
+
+TC-PHASE-004
+Verify no misleading interactive lifecycle controls were introduced on the estimate surface.
+Expected:
+- visibility parity only, unless repo truth clearly supports interaction
+
+TC-PHASE-005
+Verify quote lifecycle and op-job lifecycle surfaces are unchanged.
+Expected:
+- no regression
+
+TC-PHASE-006
+Verify governance surfaces and Xero-related behavior are unchanged.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact lifecycle data source used
+3. exact estimate lifecycle card behavior implemented
+4. exact preview/read-only truth preserved
+5. exact next-step guidance added
+6. results of all required test cases
+7. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. LIFECYCLE DATA SOURCE
+- where the estimate lifecycle data comes from
+- whether existing architecture was reused
+- whether any endpoint was added or reused
+
+4. ESTIMATE LIFECYCLE SURFACE
+- exact location added
+- what it shows
+- whether it is preview/read-only or interactive
+
+5. NEXT-STEP GUIDANCE
+- what guidance is shown
+- why it is truthful
+
+6. TEST RESULTS
+- TC-PHASE-001 result
+- TC-PHASE-002 result
+- TC-PHASE-003 result
+- TC-PHASE-004 result
+- TC-PHASE-005 result
+- TC-PHASE-006 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Preserve lifecycle truth.
+Add estimate lifecycle visibility parity without introducing misleading workflow behavior.
+Report truthfully and exactly.

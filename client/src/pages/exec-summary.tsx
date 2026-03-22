@@ -24,10 +24,11 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image } from "lucide-react";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
+import LifecyclePanel from "@/components/lifecycle-panel";
 
 function calcSqm(width: number, height: number, quantity: number): number {
   return (width * height * quantity) / 1_000_000;
@@ -857,6 +858,58 @@ export default function ExecSummary() {
         <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={allCollapsed ? expandAll : collapseAll} data-testid="button-toggle-all-sections">
           {allCollapsed ? "Expand All" : "Collapse All"}
         </Button>
+      </div>
+
+      <div className="order-1 rounded-lg border bg-card p-4 print:hidden" data-testid="section-lifecycle-estimate">
+        {existingQuotes.length > 0 ? (() => {
+          const activeQuote = existingQuotes.find((q: any) => q.status === "accepted")
+            || existingQuotes.find((q: any) => q.status === "sent")
+            || existingQuotes.find((q: any) => q.status === "review")
+            || existingQuotes.find((q: any) => q.status === "draft")
+            || existingQuotes[0];
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">Workflow Position</span>
+                </div>
+                <Badge variant="outline" className="text-xs" data-testid="badge-lifecycle-quote-ref">
+                  Quote {activeQuote.number || activeQuote.id?.slice(0, 8)}
+                  {activeQuote.status ? ` · ${activeQuote.status.charAt(0).toUpperCase() + activeQuote.status.slice(1)}` : ""}
+                </Badge>
+              </div>
+              <div className="flex items-start gap-2 rounded-md bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-3 py-2" data-testid="banner-estimate-lifecycle-context">
+                <ClipboardList className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  This estimate has {existingQuotes.length === 1 ? "a linked quote" : `${existingQuotes.length} linked quotes`}. The lifecycle below tracks the most relevant quote's workflow progression.
+                </p>
+              </div>
+              <LifecyclePanel quoteId={activeQuote.id} previewOnly />
+            </div>
+          );
+        })() : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Workflow Position</span>
+            </div>
+            <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-3" data-testid="banner-estimate-pre-quote">
+              <Badge variant="outline" className="shrink-0 text-xs border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
+                Planning
+              </Badge>
+              <p className="text-sm text-muted-foreground">
+                This estimate is in the planning and costing stage. No quote has been generated yet.
+              </p>
+            </div>
+            <div className="flex items-start gap-2 rounded-md bg-muted/30 px-3 py-2" data-testid="banner-estimate-next-step">
+              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Next step:</span> Review the financial summary and item breakdown below, then use <span className="font-medium">Generate Quote</span> above to create the first quote from this estimate. The lifecycle will begin tracking once the quote is created.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="order-5 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
