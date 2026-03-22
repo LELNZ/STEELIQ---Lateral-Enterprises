@@ -2325,7 +2325,8 @@ function GovernanceSection() {
         <div className="flex items-start gap-1.5">
           <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p><strong className="text-foreground">Flagging does not change the infrastructure environment.</strong> Demo/test flags are per-record labels that identify data created during testing or demonstrations.</p>
+            <p><strong className="text-foreground">Flagging does not change the infrastructure environment.</strong> Demo/test flags are per-record labels that identify data created during testing or demonstrations. Governance controls (flagging, archiving, deleting) are restricted to Owner and Admin roles.</p>
+            <p><strong className="text-foreground">Flagged records remain visible to all users until archived.</strong> Flagging a record marks it for governance review but does not hide it from standard users' operational views. To remove flagged records from day-to-day lists, archive them using the controls below or via Bulk Archive.</p>
             <p><strong className="text-foreground">Archive is the preferred action.</strong> Archiving hides records from normal operational views while preserving them historically. Deletion is permanent and only allowed for explicitly flagged demo/test records.</p>
             <p><strong className="text-foreground">Xero-linked invoices are protected.</strong> Deleting a record in SteelIQ does not remove it from Xero. Records with Xero invoice links cannot be deleted until voided in Xero first.</p>
           </div>
