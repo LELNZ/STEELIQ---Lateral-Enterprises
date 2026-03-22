@@ -12,8 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield, Hash, ExternalLink, CheckCircle2, XCircle } from "lucide-react";
-import { useSystemMode, type SystemMode } from "@/hooks/use-system-mode";
+import { Settings as SettingsIcon, Save, Loader2, Upload, X, Palette, Eye, EyeOff, RotateCcw, FileText, Wrench, Lock, AlertTriangle, Shield, Hash, ExternalLink, CheckCircle2, XCircle, Archive, Trash2, Flag, Server, Database, RefreshCw, Info, ChevronDown, ChevronRight } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useSettings, type QuoteListPosition } from "@/lib/settings-context";
 import { useToast } from "@/hooks/use-toast";
@@ -1535,16 +1534,21 @@ function TemplateBuilderTab() {
   );
 }
 
-const MODE_LABELS: Record<string, string> = {
-  development: "Development",
-  demo: "Demo",
-  production: "Production",
+type GovernanceSummary = {
+  estimates: Array<{ id: string; name: string; isDemoRecord: boolean; archivedAt: string | null; createdAt: string }>;
+  quotes: Array<{ id: string; number: string; customer: string; status: string; isDemoRecord: boolean; archivedAt: string | null; _chain: { opJob: { id: string; jobNumber: string; isDemoRecord: boolean; archivedAt: string | null } | null; invoiceCount: number; xeroLinkedInvoiceCount: number; xeroLinkedNumbers: string[] } }>;
+  opJobs: Array<{ id: string; jobNumber: string; title: string; isDemoRecord: boolean; archivedAt: string | null; _chain: { sourceQuote: { id: string; number: string; isDemoRecord: boolean } | null } }>;
+  projects: Array<{ id: string; name: string; isDemoRecord: boolean; archivedAt: string | null; createdAt: string }>;
+  invoices: Array<{ id: string; number: string; type: string; status: string; amountInclGst: number | null; isDemoRecord: boolean; _xeroLinked: boolean; _xeroNumber: string | null }>;
+  counts: { estimates: number; quotes: number; opJobs: number; projects: number; invoices: number };
 };
 
-const MODE_DESCRIPTIONS: Record<string, string> = {
-  development: "Internal build and testing environment. All demo/reset tools are available.",
-  demo: "Sales, demo, and training environment. Demo and reset tools are available. Destructive actions require confirmation.",
-  production: "Live operational use. Demo/reset tools are hidden and all destructive admin routes are disabled.",
+type EnvInfo = {
+  nodeEnv: string;
+  instanceLabel: string;
+  isReplitDeployment: boolean;
+  isReplitWorkspace: boolean;
+  databaseConnected: boolean;
 };
 
 function NumberingTab() {
@@ -1785,104 +1789,472 @@ function NumberingTab() {
   );
 }
 
-function SystemModeTab() {
+function EnvironmentInfoSection() {
+  const { data: envInfo, isLoading } = useQuery<EnvInfo>({
+    queryKey: ["/api/admin/environment-info"],
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  return (
+    <Card data-testid="card-environment-info">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Server className="h-4 w-4" /> Environment Information
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          Read-only runtime truth. This reflects actual infrastructure state — it is not a configurable switch.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : envInfo ? (
+          <>
+            <div className="rounded-lg border divide-y text-sm">
+              <div className="flex items-center justify-between px-3 py-2.5 gap-2" data-testid="row-env-instance">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Server className="h-3.5 w-3.5" />
+                  <span>Instance</span>
+                </div>
+                <span className="font-medium text-right">{envInfo.instanceLabel}</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2.5 gap-2" data-testid="row-env-node">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Wrench className="h-3.5 w-3.5" />
+                  <span>Node Environment</span>
+                </div>
+                <Badge variant={envInfo.nodeEnv === "production" ? "default" : "secondary"} className="text-xs">
+                  {envInfo.nodeEnv}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2.5 gap-2" data-testid="row-env-database">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Database className="h-3.5 w-3.5" />
+                  <span>Database</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                  <span className="text-sm font-medium">Connected</span>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg bg-muted/40 border p-3 text-xs text-muted-foreground space-y-1">
+              <div className="flex items-start gap-1.5">
+                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <p>
+                  <strong className="text-foreground">Environment vs. record governance are separate concerns.</strong>{" "}
+                  The infrastructure environment this app runs in cannot be changed from the UI. Record governance — flagging, archiving, and deleting test/demo data — is managed below and does not switch the environment.
+                </p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Unable to load environment information.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type GovernanceEntityType = "estimate" | "quote" | "opJob" | "project" | "invoice";
+
+function GovernanceEntitySection({
+  title,
+  entityType,
+  items,
+  onRefresh,
+}: {
+  title: string;
+  entityType: GovernanceEntityType;
+  items: any[];
+  onRefresh: () => void;
+}) {
   const { toast } = useToast();
-  const { resolvedMode: mode, isLoading } = useSystemMode();
-  const [selected, setSelected] = useState<SystemMode | "">("");
+  const [expanded, setExpanded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const effective = (selected || mode) as SystemMode;
-
-  const modeMutation = useMutation({
-    mutationFn: async (newMode: SystemMode) => {
-      const res = await apiRequest("PATCH", "/api/settings/system-mode", { systemMode: newMode });
+  const archiveMutation = useMutation({
+    mutationFn: async (entityId: string) => {
+      const res = await apiRequest("POST", "/api/admin/governance/archive", { entityType, entityId });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Failed to save mode");
+        throw new Error(body.error ?? "Archive failed");
       }
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/system-mode"] });
-      toast({ title: "System mode saved" });
-      setSelected("");
+      toast({ title: "Record archived", description: "Removed from active operational lists. Historical record preserved." });
+      onRefresh();
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Archive failed", description: e.message, variant: "destructive" }),
   });
 
-  const handleSave = () => {
-    if (!selected) return;
-    modeMutation.mutate(selected as SystemMode);
-  };
+  const deleteMutation = useMutation({
+    mutationFn: async (entityId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/governance/record/${entityType}/${entityId}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Record deleted", description: "Permanently removed from the system." });
+      setConfirmDelete(null);
+      onRefresh();
+    },
+    onError: (e: any) => {
+      toast({ title: "Delete blocked", description: e.message, variant: "destructive" });
+      setConfirmDelete(null);
+    },
+  });
+
+  if (items.length === 0) {
+    return (
+      <div className="rounded-lg border px-4 py-3 flex items-center justify-between text-sm" data-testid={`governance-section-${entityType}-empty`}>
+        <span className="font-medium text-muted-foreground">{title}</span>
+        <Badge variant="outline" className="text-xs">None flagged</Badge>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Shield className="h-4 w-4" /> System Mode
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Current mode:</span>
-                <span
-                  className={`font-semibold ${mode === "production" ? "text-destructive" : mode === "demo" ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"}`}
-                  data-testid="text-current-system-mode"
-                >
-                  {MODE_LABELS[mode]}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">{MODE_DESCRIPTIONS[mode]}</p>
+    <div className="rounded-lg border overflow-hidden" data-testid={`governance-section-${entityType}`}>
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors text-left"
+        onClick={() => setExpanded(!expanded)}
+        data-testid={`button-expand-${entityType}`}
+      >
+        <div className="flex items-center gap-2">
+          <Flag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          <span>{title}</span>
+          <Badge variant="secondary" className="text-xs">{items.length} flagged</Badge>
+        </div>
+        {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+      </button>
 
-              <Separator />
+      {expanded && (
+        <div className="border-t divide-y">
+          {items.map((item: any) => {
+            const id = item.id;
+            const label = item.number || item.jobNumber || item.name || item.title || id;
+            const sub = item.customer || item.status || "";
+            const isArchived = !!item.archivedAt;
+            const chain = item._chain;
+            const xeroLinked = item._xeroLinked || (chain?.xeroLinkedInvoiceCount > 0);
 
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Change system mode</Label>
-                <Select
-                  value={selected || mode}
-                  onValueChange={(v) => setSelected(v as SystemMode)}
-                >
-                  <SelectTrigger className="w-48" data-testid="select-system-mode">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="development">Development</SelectItem>
-                    <SelectItem value="demo">Demo</SelectItem>
-                    <SelectItem value="production">Production</SelectItem>
-                  </SelectContent>
-                </Select>
+            return (
+              <div key={id} className="px-4 py-3 space-y-2" data-testid={`governance-row-${entityType}-${id}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-0.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">{label}</span>
+                      {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
+                      {isArchived && <Badge variant="outline" className="text-xs">Archived</Badge>}
+                      {xeroLinked && (
+                        <Badge variant="destructive" className="text-xs">Xero-linked</Badge>
+                      )}
+                    </div>
+                    {chain && (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        {chain.opJob && (
+                          <div>→ Op-Job: {chain.opJob.jobNumber}{chain.opJob.isDemoRecord ? " (demo flagged)" : " ⚠ not demo-flagged"}</div>
+                        )}
+                        {chain.invoiceCount > 0 && (
+                          <div>
+                            → {chain.invoiceCount} invoice(s)
+                            {chain.xeroLinkedInvoiceCount > 0 && (
+                              <span className="ml-1 text-destructive font-medium">({chain.xeroLinkedInvoiceCount} linked to Xero: {chain.xeroLinkedNumbers.join(", ")})</span>
+                            )}
+                          </div>
+                        )}
+                        {chain.sourceQuote && (
+                          <div>← Source quote: {chain.sourceQuote.number}{!chain.sourceQuote.isDemoRecord ? " ⚠ not demo-flagged" : ""}</div>
+                        )}
+                      </div>
+                    )}
+                    {item._xeroLinked && (
+                      <div className="text-xs text-destructive">
+                        Xero invoice: {item._xeroNumber || "linked"} — cannot delete without voiding in Xero first
+                      </div>
+                    )}
+                  </div>
 
-                {effective !== mode && (
-                  <p className="text-xs text-muted-foreground">{MODE_DESCRIPTIONS[effective]}</p>
-                )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!isArchived && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={archiveMutation.isPending}
+                        onClick={() => archiveMutation.mutate(id)}
+                        data-testid={`button-archive-${entityType}-${id}`}
+                      >
+                        <Archive className="h-3 w-3 mr-1" />
+                        Archive
+                      </Button>
+                    )}
+                    {confirmDelete === id ? (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-7 text-xs"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(id)}
+                          data-testid={`button-confirm-delete-${entityType}-${id}`}
+                        >
+                          {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm Delete"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          onClick={() => setConfirmDelete(null)}
+                          data-testid={`button-cancel-delete-${entityType}-${id}`}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => setConfirmDelete(id)}
+                        data-testid={`button-delete-${entityType}-${id}`}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                </div>
 
-                {(selected === "production" || (selected === "" && mode === "production")) && effective === "production" && selected === "production" && (
-                  <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                    <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                    <p className="text-xs text-destructive">
-                      Switching to Production will disable and hide all demo, test, and reset tools — in both the UI and backend. These tools will be inaccessible until you switch back to Development or Demo.
-                    </p>
+                {confirmDelete === id && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive space-y-1">
+                    <div className="flex items-start gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-medium">Permanent deletion — this cannot be undone.</p>
+                        {xeroLinked && <p>⚠ This record or its downstream chain has Xero-linked invoices. The server will block deletion to protect accounting integrity.</p>}
+                        {chain?.invoiceCount > 0 && <p>Downstream invoices in this chain will also be reviewed before deletion is allowed.</p>}
+                        <p>Archive is the safer option and preserves historical records.</p>
+                      </div>
+                    </div>
                   </div>
                 )}
-
-                <Button
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!selected || selected === mode || modeMutation.isPending}
-                  data-testid="button-save-system-mode"
-                >
-                  {modeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
-                  Save Mode
-                </Button>
               </div>
-            </>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GovernanceSection() {
+  const { toast } = useToast();
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+
+  const { data: summary, isLoading, refetch, isFetching } = useQuery<GovernanceSummary>({
+    queryKey: ["/api/admin/governance/summary"],
+    staleTime: 10_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/cleanup-demo", {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Cleanup failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Archive complete", description: `${data.quotesArchived} quote(s), ${data.jobsArchived} op-job(s) archived.` });
+      setBulkConfirm(false);
+      refetch();
+    },
+    onError: (e: any) => {
+      toast({ title: "Archive failed", description: e.message, variant: "destructive" });
+      setBulkConfirm(false);
+    },
+  });
+
+  const totalFlagged = summary ? (summary.counts.estimates + summary.counts.quotes + summary.counts.opJobs + summary.counts.projects + summary.counts.invoices) : 0;
+
+  return (
+    <div className="space-y-4" data-testid="governance-section">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold">Test / Demo Data Governance</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Review, archive, and manage records flagged as test or demo data. These flags are set per-record and do not affect the infrastructure environment.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          data-testid="button-refresh-governance"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {/* Explanation banner */}
+      <div className="rounded-lg bg-muted/40 border p-3 text-xs text-muted-foreground space-y-1.5" data-testid="governance-explanation">
+        <div className="flex items-start gap-1.5">
+          <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p><strong className="text-foreground">Flagging does not change the infrastructure environment.</strong> Demo/test flags are per-record labels that identify data created during testing or demonstrations.</p>
+            <p><strong className="text-foreground">Archive is the preferred action.</strong> Archiving hides records from normal operational views while preserving them historically. Deletion is permanent and only allowed for explicitly flagged demo/test records.</p>
+            <p><strong className="text-foreground">Xero-linked invoices are protected.</strong> Deleting a record in SteelIQ does not remove it from Xero. Records with Xero invoice links cannot be deleted until voided in Xero first.</p>
+          </div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading flagged records…
+        </div>
+      ) : summary ? (
+        <>
+          {totalFlagged === 0 ? (
+            <div className="rounded-lg border bg-muted/20 px-4 py-6 text-center space-y-2" data-testid="governance-no-flagged">
+              <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400 mx-auto" />
+              <p className="text-sm font-medium">No records are currently flagged as demo or test data.</p>
+              <p className="text-xs text-muted-foreground">To flag a record, open it in its detail view and use the Demo/Test governance controls there.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <GovernanceEntitySection
+                title="Estimates"
+                entityType="estimate"
+                items={summary.estimates}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Quotes"
+                entityType="quote"
+                items={summary.quotes}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Op-Jobs / Production Jobs"
+                entityType="opJob"
+                items={summary.opJobs}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Projects"
+                entityType="project"
+                items={summary.projects}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Invoices"
+                entityType="invoice"
+                items={summary.invoices}
+                onRefresh={() => refetch()}
+              />
+            </div>
           )}
-        </CardContent>
-      </Card>
+
+          {/* Bulk archive section */}
+          {(summary.counts.quotes > 0 || summary.counts.opJobs > 0) && (
+            <Card className="border-amber-200 dark:border-amber-800">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Archive className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  Bulk Archive Flagged Records
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Archive all currently active demo-flagged quotes and op-jobs in one action. Records are removed from operational views but preserved historically. This action cannot be undone without individually unarchiving records.
+                </p>
+                {!bulkConfirm ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 dark:border-amber-700"
+                    onClick={() => setBulkConfirm(true)}
+                    data-testid="button-bulk-archive-start"
+                  >
+                    <Archive className="h-3.5 w-3.5 mr-1.5" />
+                    Bulk Archive All Active Demo Records
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <p>This will archive all active demo-flagged quotes and op-jobs. Customer/contact records will not be affected.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        disabled={cleanupMutation.isPending}
+                        onClick={() => cleanupMutation.mutate()}
+                        data-testid="button-bulk-archive-confirm"
+                      >
+                        {cleanupMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Archive className="h-3.5 w-3.5 mr-1.5" />}
+                        Confirm Bulk Archive
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setBulkConfirm(false)} data-testid="button-bulk-archive-cancel">
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">Unable to load governance summary.</p>
+      )}
+    </div>
+  );
+}
+
+function SystemTab() {
+  const { user } = useAuth();
+  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
+
+  return (
+    <div className="space-y-6" data-testid="system-tab">
+      {/* Section 1: Environment Information (always visible, read-only) */}
+      <EnvironmentInfoSection />
+
+      <Separator />
+
+      {/* Section 2: Test / Demo Data Governance (Owner/Admin only) */}
+      {isOwnerOrAdmin ? (
+        <GovernanceSection />
+      ) : (
+        <Card data-testid="governance-restricted">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lock className="h-4 w-4" /> Test / Demo Data Governance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg bg-muted/30 border px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
+              <Shield className="h-4 w-4 shrink-0" />
+              <span>Governance controls are restricted to Owner and Admin roles only.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -2390,7 +2762,7 @@ export default function Settings() {
             </TabsContent>
 
             <TabsContent value="system">
-              <SystemModeTab />
+              <SystemTab />
             </TabsContent>
 
             <TabsContent value="xero">

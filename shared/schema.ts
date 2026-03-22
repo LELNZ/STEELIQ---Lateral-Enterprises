@@ -95,6 +95,7 @@ export const projects = pgTable("projects", {
   description: text("description"),
   divisionCode: text("division_code"),
   archivedAt: timestamp("archived_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -213,6 +214,7 @@ export const jobs = pgTable("jobs", {
   customerId: varchar("customer_id"),
   contactId: varchar("contact_id"),
   archivedAt: timestamp("archived_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -521,6 +523,7 @@ export const invoices = pgTable("invoices", {
   xeroInvoiceId: text("xero_invoice_id"),
   xeroInvoiceNumber: text("xero_invoice_number"),
   xeroStatus: text("xero_status"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdByUserId: varchar("created_by_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

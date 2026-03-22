@@ -28,8 +28,6 @@ import {
   Plus, Pencil, KeyRound, UserCheck, UserX, ShieldAlert, Users as UsersIcon,
   AlertTriangle, Copy, CheckCircle2, Info, Archive, RefreshCw,
 } from "lucide-react";
-import { useSystemMode } from "@/hooks/use-system-mode";
-
 type SafeUser = Omit<User, "password">;
 
 const ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer"] as const;
@@ -441,9 +439,6 @@ export default function Users() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const { mode: systemMode, isLoading: modeLoading } = useSystemMode();
-  const isProduction = !modeLoading && systemMode === "production";
-
   const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [demoStatsEnabled, setDemoStatsEnabled] = useState(false);
@@ -660,15 +655,7 @@ export default function Users() {
 
       <Separator />
 
-      {isProduction ? (
-        <div className="rounded-lg bg-muted/30 border px-4 py-3 text-xs text-muted-foreground space-y-1" data-testid="section-demo-disabled-production">
-          <p className="font-medium text-foreground/70 flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> Demo tools disabled in Production mode
-          </p>
-          <p>Demo cleanup and environment reset tools are not available when the system is set to Production mode. Change the system mode in Settings → System to re-enable them.</p>
-        </div>
-      ) : (
-        <>
+      <>
           <div className="rounded-lg border border-dashed p-4 space-y-3" data-testid="section-demo-cleanup">
             <div className="flex items-center gap-2">
               <Archive className="h-4 w-4 text-muted-foreground" />
@@ -745,8 +732,7 @@ export default function Users() {
               Reset Demo Environment…
             </Button>
           </div>
-        </>
-      )}
+      </>
 
       <div className="rounded-lg bg-muted/30 border px-4 py-3 text-xs text-muted-foreground space-y-1">
         <p className="font-medium text-foreground/70">Bootstrap admin</p>

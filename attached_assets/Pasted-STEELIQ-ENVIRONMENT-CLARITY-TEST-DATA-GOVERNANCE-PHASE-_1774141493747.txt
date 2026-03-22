@@ -1,0 +1,321 @@
+STEELIQ ENVIRONMENT CLARITY + TEST DATA GOVERNANCE — PHASE 1
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not treat the current system-mode selector as a real environment switch unless the code explicitly proves that it is.
+- Do not implement production-unsafe deletion of business records.
+- If a structural change is required, stop and explain before making it.
+- Do not declare this phase complete unless the required admin/user-facing UI surfaces are operationally usable.
+- Do not claim completion from backend changes alone.
+- Preserve the current live Xero integration and do not weaken accounting safeguards.
+- Treat the current repository code and runtime truth as the source of implementation truth.
+- Use existing repo context such as `replit.md`, current routes, current schema, and current UI/admin patterns where present.
+- If older prompt language conflicts with the actual repo, follow current code truth and report the mismatch.
+
+CURRENT CONTEXT
+
+- SteelIQ is live and Xero push works.
+- Production contains both real business records and historical testing records.
+- Estimates and quotes can already be marked demo in some form.
+- Jobs, projects, invoices, and the full downstream chain do not yet have equivalent safe governance tooling.
+- The current Settings > System area is misleading because “Development / Demo / Production” reads like an environment switch.
+- This is now a governance and clarity problem, not a feature-nice-to-have.
+
+CURRENT REALITY TO PRESERVE
+
+- Production is live and in active use.
+- Xero invoice push is operational.
+- Some production records are genuine business records; others are historical end-to-end testing records.
+- Production is no longer safe to treat as a disposable demo environment.
+- The current Settings “System Mode” concept is not trustworthy as a real environment switch unless code proves otherwise.
+- Environment truth and record-governance truth must be treated as separate concerns.
+
+PRIMARY OBJECTIVE
+
+Replace the misleading system-mode concept with a truthful, role-gated environment + test-data governance model.
+
+REQUIRED OUTCOME
+
+High-level admin users must be able to safely identify, review, flag, archive, and manage selected test/demo records across the live production environment without corrupting real operational data.
+
+Owner/Admin only:
+- can see governance controls
+- can flag records or linked chains as test/demo where appropriate
+- can review linked downstream records
+- can archive flagged test/demo data
+- can delete flagged test/demo data only where it is explicitly classified as test/demo and passes all safety rules
+
+Non-high-level users must not see misleading environment controls or destructive governance tools.
+
+PHASE A — SYSTEM PAGE REBUILD
+
+1. Review the current Settings > System tab and identify exactly what the current mode selector actually does in code.
+2. Report truthfully whether it:
+   - switches a real runtime environment
+   - switches a database target
+   - changes local UI state only
+   - changes stored settings only
+   - or is otherwise misleading
+3. If it does not truly switch environment/database/runtime target, remove or rebuild it so the UI stops implying that it does.
+4. Replace the current System surface with two clearly separated concepts:
+   - Environment Information
+   - Test / Demo Data Governance
+
+Environment Information must be read-only and truthful.
+It must show only runtime truth that the code can actually support, such as:
+- this app instance / environment label as actually known
+- whether this is dev workspace or published production, if runtime/code can prove it
+- Xero connection state or mode if already available from current system truth
+- explanatory text stating that environment is infrastructure/runtime, not a normal user switch
+
+Do NOT provide a fake environment selector.
+
+PHASE B — ROLE GATING
+
+1. Restrict governance surfaces so only Owner/Admin can access governance controls.
+2. Non-high-level users should either:
+   - not see the governance controls at all
+   - or see a restricted read-only message
+3. Do not expose archive/delete/governance actions broadly.
+4. Do not expose environment-switching language broadly.
+5. Owner/Admin are the only high-level roles for this phase.
+
+PHASE C — TEST/DEMO GOVERNANCE PARITY
+
+Extend the governance model so it can safely cover the linked live chain where appropriate:
+- estimates
+- quotes
+- projects
+- jobs
+- invoices
+
+Required behavior:
+- allow records to be flagged as test/demo
+- support linked/downstream awareness
+- surface the flag clearly in governance views
+- preserve live operational data integrity
+- do not require immediate hard deletion
+- do not auto-classify unrelated live records
+
+Best-practice implementation is allowed, but keep architecture preservation first.
+If minimal schema additions are required for parity, keep them tightly scoped and explain them.
+Do not build a speculative governance engine beyond what this phase requires.
+
+PHASE D — SAFE CLEANUP / ARCHIVE / DELETE RULES
+
+Implement Owner/Admin-only governance actions for flagged test/demo data.
+
+Preferred actions:
+- review flagged records
+- review linked downstream records in the same test/demo chain
+- archive flagged records from normal operational surfaces
+- bulk archive selected flagged records where safe
+- delete flagged test/demo records only when explicitly allowed by the rules below
+
+Hard safety requirements:
+- archive must remain the preferred/default cleanup action
+- delete must only apply to records that are clearly flagged/classified as test/demo
+- delete must never behave like a broad production cleanup tool
+- do not allow unsafe deletion of Xero-linked invoices
+- do not provide unsafe cleanup for historically meaningful records without explicit safeguards
+- clearly warn when a record has downstream relationships or external accounting identity
+- clearly distinguish archive/hide from delete
+- cleanup in SteelIQ must not imply cleanup in Xero
+
+Important production rule:
+Deletion may remain available for demo/testing data in the live production site, but only when:
+- the record is clearly classified as test/demo
+- downstream linked items are reviewed
+- safeguards pass
+- the UI warns clearly
+- accounting/Xero protections are enforced
+
+PHASE E — LINKED CHAIN GOVERNANCE
+
+This phase must support safe governance awareness across the linked chain, including:
+- estimate
+- quote
+- project
+- job
+- invoice
+
+Required behavior:
+- when reviewing a flagged test/demo record, Owner/Admin should be able to see linked downstream records where the current architecture already supports those relationships
+- governance actions should make downstream implications clear
+- do not silently delete partial chains in a way that leaves misleading orphaned live-looking data
+- preserve live records if a shared relationship makes full cleanup unsafe
+- if chain-wide delete is not safely achievable for some relationship type in this phase, archive it instead and report that limitation truthfully
+
+PHASE F — CUSTOMER / CONTACT CLEANUP SAFETY
+
+Use best-practice safety here.
+
+If customer/contact cleanup is already practical within current architecture without redesign:
+- allow cleanup only where the customer/contact is genuinely test/demo and isolated from live records
+- do not archive or delete customers/contacts that are shared with live records
+- if shared with live records, preserve them and only clean up the transactional test/demo records
+
+If this cannot be safely completed in this phase without structural drift:
+- do not force it
+- preserve live CRM integrity
+- report the limitation clearly
+
+PHASE G — GOVERNANCE UX CLARITY
+
+The rebuilt surface must clearly explain:
+- environment truth vs record governance truth
+- demo/test flagging does not mean infrastructure environment switched
+- archive is preferred over deletion
+- deletion is limited to flagged test/demo data only
+- accounting-linked records require extra caution
+- only Owner/Admin users can access governance controls
+
+UI QUALITY BAR
+
+This must feel like serious enterprise admin UX, not a temporary dev tool.
+Clear labels, warnings, information hierarchy, and role boundaries are required.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the app architecture
+- change the quote lifecycle
+- replace or bypass QuoteDocument/QuoteRenderModel/PDF flow
+- merge live editable state into immutable snapshot history
+- implement fake environment switching
+- add speculative admin tooling beyond this governance scope
+- add broad destructive delete tools
+- claim completion without usable Owner/Admin UI surfaces
+
+REQUIRED TEST CASES
+
+TC-001
+Verify what the current system mode selector does in code and report truthfully.
+
+TC-002
+As Owner/Admin, open Settings > System and confirm:
+- no fake environment selector remains
+- environment info is read-only and truthful
+- governance controls are visible
+
+TC-003
+As non-high-level user, confirm governance controls are restricted or hidden.
+
+TC-004
+Flag selected test/demo records across at least:
+- estimate
+- quote
+- project
+- job
+- invoice
+and confirm they appear in governance review surfaces.
+
+TC-005
+Archive selected flagged test/demo records and confirm they are removed from normal active operational lists while preserved historically.
+
+TC-006
+Attempt delete of flagged test/demo records with downstream linked items and confirm:
+- the system shows the relationship impact clearly
+- unsafe deletion is blocked
+- safe deletion is only allowed where rules pass
+
+TC-007
+Attempt cleanup of an accounting-linked/Xero-linked invoice and confirm:
+- the system warns clearly
+- the system does not imply SteelIQ cleanup removes it from Xero
+- unsafe destructive behavior is prevented
+
+TC-008
+If customer/contact cleanup is implemented:
+- confirm isolated test/demo customer/contact records can be safely handled
+- confirm shared live CRM records are protected
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact meaning of old system mode in code
+3. exact replacement behavior implemented
+4. role-gating behavior by role
+5. entities now covered by demo/test governance
+6. archive vs delete safety rules implemented
+7. Xero/accounting-linked protection rules implemented
+8. results of all required test cases
+9. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. OLD SYSTEM MODE TRUTH
+- exact files inspected
+- exact code behavior found
+- whether it actually switched environment/runtime/database or not
+
+3. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+4. REPLACEMENT BEHAVIOR IMPLEMENTED
+- Environment Information behavior
+- Test / Demo Governance behavior
+- how the misleading selector was removed/rebuilt
+
+5. ROLE GATING
+- Owner capabilities
+- Admin capabilities
+- Non-high-level behavior
+
+6. GOVERNANCE ENTITY COVERAGE
+- estimates
+- quotes
+- projects
+- jobs
+- invoices
+- any linked downstream coverage added
+- note any partial parity or limitations
+
+7. SAFETY RULES IMPLEMENTED
+- archive vs delete
+- downstream relationship handling
+- Xero/accounting-linked invoice protection
+- customer/contact protection if implemented
+- any prevented actions
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+- TC-008 result if applicable
+
+9. KNOWN GAPS
+- exact remaining issues
+- follow-up phase recommended
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Prefer archive over delete by default.
+Allow delete only for explicit test/demo data with safeguards.
+Report truthfully.

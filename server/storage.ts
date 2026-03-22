@@ -180,6 +180,17 @@ export interface IStorage {
   getOpJobByQuoteId(quoteId: string): Promise<OpJob | undefined>;
   getDemoQuotes(): Promise<Quote[]>;
   getDemoOpJobs(): Promise<OpJob[]>;
+  getDemoJobs(): Promise<Job[]>;
+  getDemoProjects(): Promise<Project[]>;
+  getDemoInvoices(): Promise<Invoice[]>;
+  updateJobDemoFlag(id: string, isDemoRecord: boolean): Promise<Job | undefined>;
+  updateProjectDemoFlag(id: string, isDemoRecord: boolean): Promise<Project | undefined>;
+  updateInvoiceDemoFlag(id: string, isDemoRecord: boolean): Promise<Invoice | undefined>;
+  deleteInvoice(id: string): Promise<void>;
+  deleteJob(id: string): Promise<void>;
+  deleteOpJob(id: string): Promise<void>;
+  deleteQuote(id: string): Promise<void>;
+  deleteProject(id: string): Promise<void>;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   getActiveLifecycleTemplate(divisionCode: string): Promise<LifecycleTemplate | undefined>;
@@ -846,6 +857,7 @@ export class DatabaseStorage implements IStorage {
       xeroInvoiceId: row.xero_invoice_id,
       xeroInvoiceNumber: row.xero_invoice_number,
       xeroStatus: row.xero_status,
+      isDemoRecord: row.is_demo_record ?? false,
       createdByUserId: row.created_by_user_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -940,6 +952,50 @@ export class DatabaseStorage implements IStorage {
 
   async getDemoOpJobs(): Promise<OpJob[]> {
     return db.select().from(opJobs).where(eq(opJobs.isDemoRecord, true));
+  }
+
+  async getDemoJobs(): Promise<Job[]> {
+    return db.select().from(jobs).where(and(eq(jobs.isDemoRecord, true), isNull(jobs.archivedAt)));
+  }
+
+  async getDemoProjects(): Promise<Project[]> {
+    return db.select().from(projects).where(and(eq(projects.isDemoRecord, true), isNull(projects.archivedAt)));
+  }
+
+  async getDemoInvoices(): Promise<Invoice[]> {
+    return db.select().from(invoices).where(eq(invoices.isDemoRecord, true));
+  }
+
+  async updateJobDemoFlag(id: string, isDemoRecord: boolean): Promise<Job | undefined> {
+    const [updated] = await db.update(jobs).set({ isDemoRecord } as any).where(eq(jobs.id, id)).returning();
+    return updated;
+  }
+
+  async updateProjectDemoFlag(id: string, isDemoRecord: boolean): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set({ isDemoRecord } as any).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+
+  async updateInvoiceDemoFlag(id: string, isDemoRecord: boolean): Promise<Invoice | undefined> {
+    const [updated] = await db.update(invoices).set({ isDemoRecord } as any).where(eq(invoices.id, id)).returning();
+    return updated;
+  }
+
+  async deleteInvoice(id: string): Promise<void> {
+    await db.delete(invoices).where(eq(invoices.id, id));
+  }
+
+  async deleteOpJob(id: string): Promise<void> {
+    await db.delete(opJobs).where(eq(opJobs.id, id));
+  }
+
+  async deleteQuote(id: string): Promise<void> {
+    await db.delete(quoteRevisions).where(eq(quoteRevisions.quoteId, id));
+    await db.delete(quotes).where(eq(quotes.id, id));
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await db.delete(projects).where(eq(projects.id, id));
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────

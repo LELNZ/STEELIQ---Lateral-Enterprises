@@ -1634,6 +1634,31 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Environment Information (read-only, truthful) ───────────────────────
+  app.get("/api/admin/environment-info", async (_req, res) => {
+    try {
+      const nodeEnv = process.env.NODE_ENV ?? "unknown";
+      const isReplitDeployment = !!process.env.REPLIT_DEPLOYMENT;
+      const isReplitWorkspace = !!process.env.REPL_ID;
+      const instanceLabel = isReplitDeployment
+        ? "Published Production (Replit Deployment)"
+        : isReplitWorkspace
+        ? "Development Workspace (Replit IDE)"
+        : nodeEnv === "production"
+        ? "Production Server"
+        : "Development Server";
+      res.json({
+        nodeEnv,
+        instanceLabel,
+        isReplitDeployment,
+        isReplitWorkspace,
+        databaseConnected: true,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ─── Xero OAuth 2.0 — Connect ─────────────────────────────────────────────
   // Initiates the Authorization Code flow. Redirects the browser to Xero's
   // authorization endpoint. A random state parameter is stored server-side for
@@ -3654,12 +3679,17 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
       const updated = await storage.updateQuote(req.params.id, { isDemoRecord } as any);
+      await storage.createAuditLog({
+        entityType: "quote",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord },
+      });
       res.json(updated);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -3672,13 +3702,289 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
       const updated = await storage.updateOpJob(req.params.id, { isDemoRecord } as any);
+      await storage.createAuditLog({
+        entityType: "op_job",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord },
+      });
       res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ─── Governance: Demo-flag estimates (jobs) ────────────────────────────────
+  app.patch("/api/jobs/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateJobDemoFlag(req.params.id, isDemoRecord);
+      if (!updated) return res.status(404).json({ error: "Estimate not found" });
+      await storage.createAuditLog({
+        entityType: "job",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ─── Governance: Demo-flag projects ───────────────────────────────────────
+  app.patch("/api/projects/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateProjectDemoFlag(req.params.id, isDemoRecord);
+      if (!updated) return res.status(404).json({ error: "Project not found" });
+      await storage.createAuditLog({
+        entityType: "project",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ─── Governance: Demo-flag invoices ───────────────────────────────────────
+  app.patch("/api/invoices/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateInvoiceDemoFlag(req.params.id, isDemoRecord);
+      await storage.createAuditLog({
+        entityType: "invoice",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord, xeroInvoiceId: invoice.xeroInvoiceId },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ─── Governance: Summary of all flagged records ────────────────────────────
+  app.get("/api/admin/governance/summary", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices] = await Promise.all([
+        storage.getDemoQuotes(),
+        storage.getDemoOpJobs(),
+        storage.getDemoJobs(),
+        storage.getDemoProjects(),
+        storage.getDemoInvoices(),
+      ]);
+
+      // For each flagged record, resolve linked chain context
+      const quotesWithChain = await Promise.all(demoQuotes.map(async (q) => {
+        const [linkedOpJob, linkedInvoices] = await Promise.all([
+          storage.getOpJobByQuoteId(q.id),
+          storage.getInvoicesByQuote(q.id),
+        ]);
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+        return {
+          ...q,
+          _chain: {
+            opJob: linkedOpJob ? { id: linkedOpJob.id, jobNumber: linkedOpJob.jobNumber, isDemoRecord: linkedOpJob.isDemoRecord, archivedAt: linkedOpJob.archivedAt } : null,
+            invoiceCount: linkedInvoices.length,
+            xeroLinkedInvoiceCount: xeroLinkedInvoices.length,
+            xeroLinkedNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean),
+          },
+        };
+      }));
+
+      const opJobsWithChain = await Promise.all(demoOpJobs.map(async (j) => {
+        const linkedQuote = j.sourceQuoteId ? await storage.getQuote(j.sourceQuoteId) : null;
+        return {
+          ...j,
+          _chain: {
+            sourceQuote: linkedQuote ? { id: linkedQuote.id, number: linkedQuote.number, isDemoRecord: linkedQuote.isDemoRecord } : null,
+          },
+        };
+      }));
+
+      res.json({
+        estimates: demoJobs,
+        quotes: quotesWithChain,
+        opJobs: opJobsWithChain,
+        projects: demoProjects,
+        invoices: demoInvoices.map(inv => ({
+          ...inv,
+          _xeroLinked: !!inv.xeroInvoiceId,
+          _xeroNumber: inv.xeroInvoiceNumber,
+        })),
+        counts: {
+          estimates: demoJobs.length,
+          quotes: demoQuotes.length,
+          opJobs: demoOpJobs.length,
+          projects: demoProjects.length,
+          invoices: demoInvoices.length,
+        },
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ─── Governance: Archive a single flagged record ──────────────────────────
+  app.post("/api/admin/governance/archive", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { entityType, entityId } = z.object({
+        entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice"]),
+        entityId: z.string(),
+      }).parse(req.body);
+
+      let result: string;
+      if (entityType === "estimate") {
+        const rec = await storage.archiveJob(entityId);
+        if (!rec) return res.status(404).json({ error: "Estimate not found" });
+        result = "archived";
+      } else if (entityType === "quote") {
+        const q = await storage.getQuote(entityId);
+        if (!q) return res.status(404).json({ error: "Quote not found" });
+        if (!q.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        await archiveQuote(entityId);
+        result = "archived";
+      } else if (entityType === "opJob") {
+        const j = await storage.getOpJob(entityId);
+        if (!j) return res.status(404).json({ error: "Op-Job not found" });
+        if (!j.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        await storage.archiveOpJob(entityId);
+        result = "archived";
+      } else if (entityType === "project") {
+        const p = await storage.getProject(entityId);
+        if (!p) return res.status(404).json({ error: "Project not found" });
+        if (!p.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        await storage.archiveProject(entityId);
+        result = "archived";
+      } else if (entityType === "invoice") {
+        const inv = await storage.getInvoice(entityId);
+        if (!inv) return res.status(404).json({ error: "Invoice not found" });
+        if (!inv.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        // Invoices use status for archival — set to archived state
+        await storage.updateInvoice(entityId, { status: "returned_to_draft" } as any);
+        result = "archived";
+      } else {
+        return res.status(400).json({ error: "Unknown entity type" });
+      }
+
+      await storage.createAuditLog({
+        entityType,
+        entityId,
+        action: "governance_archive",
+        performedByUserId: user.id,
+        metadataJson: { result },
+      });
+      res.json({ ok: true, result });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ─── Governance: Delete a single flagged demo/test record ─────────────────
+  // Hard delete is ONLY allowed when:
+  //   1. The record is explicitly flagged as isDemoRecord=true
+  //   2. No Xero-linked invoices are downstream (or it IS the invoice and has no xeroInvoiceId)
+  //   3. User is Owner/Admin
+  app.delete("/api/admin/governance/record/:entityType/:entityId", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { entityType, entityId } = req.params;
+
+      if (entityType === "invoice") {
+        const inv = await storage.getInvoice(entityId);
+        if (!inv) return res.status(404).json({ error: "Invoice not found" });
+        if (!inv.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        if (inv.xeroInvoiceId) {
+          return res.status(400).json({
+            error: "This invoice is linked to Xero and cannot be deleted from SteelIQ alone. Deleting it here would leave a dangling record in Xero. Archive instead, or void the invoice in Xero first.",
+            code: "XERO_LINKED",
+            xeroInvoiceNumber: inv.xeroInvoiceNumber,
+          });
+        }
+        await storage.deleteInvoice(entityId);
+      } else if (entityType === "quote") {
+        const q = await storage.getQuote(entityId);
+        if (!q) return res.status(404).json({ error: "Quote not found" });
+        if (!q.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Check downstream: any Xero-linked invoices?
+        const linkedInvoices = await storage.getInvoicesByQuote(entityId);
+        const xeroLinked = linkedInvoices.filter(i => i.xeroInvoiceId);
+        if (xeroLinked.length > 0) {
+          return res.status(400).json({
+            error: `This quote has ${xeroLinked.length} Xero-linked invoice(s). Delete or void them in Xero first, then remove the invoice(s) from SteelIQ before deleting the quote.`,
+            code: "XERO_LINKED_DOWNSTREAM",
+            xeroNumbers: xeroLinked.map(i => i.xeroInvoiceNumber),
+          });
+        }
+        // Delete downstream non-xero invoices first
+        for (const inv of linkedInvoices) {
+          await storage.deleteInvoice(inv.id);
+        }
+        await storage.deleteQuote(entityId);
+      } else if (entityType === "opJob") {
+        const j = await storage.getOpJob(entityId);
+        if (!j) return res.status(404).json({ error: "Op-Job not found" });
+        if (!j.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        await storage.deleteOpJob(entityId);
+      } else if (entityType === "estimate") {
+        const j = await storage.getJob(entityId);
+        if (!j) return res.status(404).json({ error: "Estimate not found" });
+        if (!j.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        await storage.deleteJob(entityId);
+      } else if (entityType === "project") {
+        const p = await storage.getProject(entityId);
+        if (!p) return res.status(404).json({ error: "Project not found" });
+        if (!p.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        await storage.deleteProject(entityId);
+      } else {
+        return res.status(400).json({ error: "Unknown entity type" });
+      }
+
+      await storage.createAuditLog({
+        entityType,
+        entityId,
+        action: "governance_delete",
+        performedByUserId: user.id,
+        metadataJson: { entityType, entityId },
+      });
+      res.json({ ok: true });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
