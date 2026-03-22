@@ -1,0 +1,334 @@
+STEELIQ TEST DATA GOVERNANCE — PHASE 3
+CHAIN INTEGRITY HARDENING + CRM TEST-DATA SAFETY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not broaden deletion capability.
+- Do not mark this phase complete unless the required admin/user-facing governance surfaces and rules are operationally usable.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If older prompt language conflicts with the actual repo, follow current code truth and report the mismatch.
+- Preserve the existing Settings > System Environment Information and role-gated Governance structure from Phases 1 and 2.
+- Preserve the invoice archive model introduced in Phase 2.
+- Preserve the current quote archive/history behavior unless explicitly required below.
+- Do not redesign invoice/op-job relationships beyond what this phase explicitly allows.
+
+CURRENT CONTEXT
+
+- SteelIQ is live and Xero push works.
+- Phase 1 delivered:
+  - removal of the misleading System Mode selector from Settings UI
+  - Environment Information + Test / Demo Data Governance split
+  - Owner/Admin-only governance access
+  - test/demo flagging and governance review across estimates, quotes, projects, jobs, and invoices
+- Phase 2 delivered:
+  - true invoice archive via invoices.archivedAt
+  - invoice active-list filtering for archived demo invoices
+  - downstream delete blocking for:
+    - estimates with linked quotes
+    - op-jobs with quote-chain invoices
+    - projects with linked quotes/op-jobs/invoices
+  - stronger governance summary chain context
+
+CURRENT POINTS OF CONCERN TO CLEAN UP NOW
+
+These are the remaining architecture/governance concerns to address carefully:
+
+1. Customer/contact governance remains deferred.
+We need safe handling for test/demo CRM records without risking shared live CRM data.
+
+2. Op-job downstream invoice safety is only as complete as the current quote-linked invoice model.
+We need to harden this path as far as current architecture safely allows, and make any remaining limitation explicit in the UI/governance layer.
+
+3. Governance chain understanding is stronger than Phase 1, but still not a clearly unified “chain integrity” model.
+We need cleaner, safer operator understanding of what is connected and what can/cannot be deleted.
+
+PRIMARY OBJECTIVE
+
+Improve chain integrity and CRM test-data safety without redesigning the platform.
+
+This phase is only about:
+1. safe customer/contact governance for isolated test/demo CRM data
+2. strengthening and clarifying op-job / downstream finance safety within current architecture
+3. making governance chain integrity clearer and more explicit for Owner/Admin users
+4. reporting exact remaining architecture limits truthfully
+
+Do not start a broad admin rebuild.
+Do not redesign the domain model.
+
+PHASE A — CUSTOMER / CONTACT TEST-DATA SAFETY
+
+OBJECTIVE
+
+Allow safe governance handling for test/demo customers and contacts where they are genuinely isolated, while protecting any CRM record that is shared with live operational data.
+
+REQUIRED IMPLEMENTATION
+
+1. Review the current customer and contact model and identify the safest architecture-preserving way to support governance for CRM records.
+
+2. Governance behavior for customers/contacts must follow these rules:
+- only Owner/Admin can perform governance actions
+- only records explicitly classified as test/demo may be eligible
+- if a customer/contact is linked only to test/demo chains and not shared with live records, governance archive/delete may be allowed subject to safeguards
+- if a customer/contact is linked to any live/non-test operational or commercial records, delete must be blocked
+- if shared with live/non-test records, archive must also be blocked unless there is an architecture-safe reason it can be hidden without harming live operations
+- the system must clearly explain why the CRM record is protected when blocked
+
+3. At minimum, implement:
+- governance review visibility for eligible test/demo customers/contacts if safe to add in this phase
+- downstream/shared-usage detection
+- delete blocking for shared live CRM records
+- archive/delete only where isolation rules pass
+
+4. If full CRM governance actions cannot be safely completed without architecture drift:
+- implement detection + visibility + blocking first
+- do not force destructive actions
+- report what remains for a later phase
+
+ACCEPTANCE CRITERIA
+
+- Shared live CRM records are protected
+- Isolated test/demo CRM records are either safely governable or explicitly detected and reported
+- No live customer/contact record can be accidentally deleted because it was touched by test data
+
+PHASE B — OP-JOB DOWNSTREAM FINANCE SAFETY HARDENING
+
+OBJECTIVE
+
+Strengthen governance safety for op-jobs and make current downstream finance limits explicit.
+
+REQUIRED IMPLEMENTATION
+
+1. Review whether current architecture allows any safer detection beyond quote-linked invoices for op-jobs, for example via:
+- project-linked invoices
+- source quote + project combination
+- any other current repository relationship that is already present
+
+2. Improve op-job governance delete/archive safety to the fullest extent safely possible within current architecture.
+
+3. Required behavior:
+- if downstream invoice/commercial risk can be detected via existing relationships, use it
+- prioritize Xero-linked protections
+- do not silently allow deletion where unresolved downstream finance records can be detected
+- if architecture still prevents complete certainty, surface that limitation clearly in governance UI/reporting
+
+4. Do not redesign the invoice model just to solve this.
+Do not add speculative `opJobId` invoice architecture in this phase.
+
+ACCEPTANCE CRITERIA
+
+- Op-job governance safety is as strong as current architecture safely allows
+- Any remaining architecture blind spots are made explicit, not hidden
+
+PHASE C — GOVERNANCE CHAIN INTEGRITY CLARITY
+
+OBJECTIVE
+
+Make it clearer to Owner/Admin users what records form part of a linked governance chain, what is safe to archive, and what is blocked from delete.
+
+REQUIRED IMPLEMENTATION
+
+1. Improve the governance review surface so that chain integrity is easier to understand for:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers/contacts if included in this phase
+
+2. Without redesigning the app, improve clarity around:
+- upstream/downstream linked records
+- archive-safe vs delete-blocked state
+- Xero-sensitive records
+- shared CRM record protection
+- records that are isolated and safe to govern
+
+3. Use explicit enterprise wording such as:
+- “Linked downstream records”
+- “Shared with live operational data”
+- “Delete blocked”
+- “Archive recommended”
+- “Finance-sensitive / Xero-linked”
+- “Isolated test/demo record”
+
+4. Do not present grouped review as more powerful than it really is.
+If full chain orchestration does not exist, make that honest.
+
+ACCEPTANCE CRITERIA
+
+- Governance review is clearer and safer to interpret
+- Operators can see why a record is protected, blockable, or safely governable
+- The UI does not over-promise full chain orchestration
+
+PHASE D — SAFE PHASE BOUNDARY
+
+This phase must NOT expand into:
+- full test-batch architecture
+- full chain delete orchestration across all entities
+- customer/contact lifecycle redesign
+- invoice/op-job relational redesign
+- quote lifecycle changes
+- non-test-data governance features
+- broad admin UX redesign
+
+If something cannot be safely completed inside these boundaries, report it rather than improvising.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign CRM architecture
+- redesign invoice architecture
+- redesign governance architecture broadly
+- introduce speculative data cleanup automation
+- weaken Xero safety
+- broaden destructive deletion
+- claim full chain orchestration if it still does not exist
+
+REQUIRED TEST CASES
+
+TC-001
+Review a test/demo customer linked only to test/demo records.
+Expected:
+- system detects it as isolated or safely governable
+- governance behavior is clear and truthful
+
+TC-002
+Review a customer shared between test/demo and live records.
+Expected:
+- delete is blocked
+- archive is blocked if unsafe
+- clear explanation is shown that the CRM record is shared with live operational data
+
+TC-003
+Review a test/demo contact linked only to test/demo records.
+Expected:
+- system detects it as isolated or safely governable
+- governance behavior is clear and truthful
+
+TC-004
+Review a contact shared between test/demo and live records.
+Expected:
+- delete is blocked
+- archive is blocked if unsafe
+- clear explanation is shown
+
+TC-005
+Attempt governance delete of an op-job where current architecture can detect downstream finance/commercial implications.
+Expected:
+- delete is blocked where unsafe
+- Xero-linked protections remain prioritized
+- warning explains the detected downstream risk
+
+TC-006
+Verify governance review surface now makes chain integrity clearer across:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+Expected:
+- clearer linked/downstream/shared-state messaging
+- no fake implication of full chain orchestration
+
+TC-007
+Verify non-high-level users still cannot access governance controls.
+Expected:
+- no regression in role gating
+
+TC-008
+Verify Settings > System still shows:
+- truthful read-only environment information
+- role-gated governance section
+- no fake environment selector
+Expected:
+- no regression from earlier phases
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact CRM governance behavior implemented for:
+   - customers
+   - contacts
+5. exact shared-live-record protection rules implemented
+6. exact op-job downstream finance safety improvements implemented
+7. exact governance UI/chain-clarity improvements implemented
+8. results of all required test cases
+9. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+
+5. CRM GOVERNANCE BEHAVIOR
+- customers
+- contacts
+- isolation detection rules
+- shared-live-record protection rules
+- archive behavior
+- delete behavior
+
+6. OP-JOB DOWNSTREAM FINANCE SAFETY
+- old behavior
+- new behavior
+- exact detection rules now used
+- remaining architecture limits if any
+
+7. GOVERNANCE CHAIN INTEGRITY UI
+- exact review-surface changes
+- how linked/downstream/shared/live-sensitive state is communicated
+- how blocked actions are explained
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+- TC-008 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Prefer archive over delete.
+Allow delete only for explicit test/demo data where all safeguards pass.
+Protect shared live CRM records.
+Report truthfully and exactly.

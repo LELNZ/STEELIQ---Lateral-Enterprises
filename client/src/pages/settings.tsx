@@ -1859,7 +1859,7 @@ function EnvironmentInfoSection() {
   );
 }
 
-type GovernanceEntityType = "estimate" | "quote" | "opJob" | "project" | "invoice";
+type GovernanceEntityType = "estimate" | "quote" | "opJob" | "project" | "invoice" | "customer" | "contact";
 
 function GovernanceEntitySection({
   title,
@@ -1940,11 +1940,13 @@ function GovernanceEntitySection({
         <div className="border-t divide-y">
           {items.map((item: any) => {
             const id = item.id;
-            const label = item.number || item.jobNumber || item.name || item.title || id;
+            const label = item.number || item.jobNumber || item.name || item.title
+              || (item.firstName || item.lastName ? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() : null)
+              || id;
             const sub = item.customer || item.status || "";
             const isArchived = !!item.archivedAt;
             const chain = item._chain;
-            const xeroLinked = item._xeroLinked || (chain?.xeroLinkedInvoiceCount > 0);
+            const xeroLinked = item._xeroLinked || (chain?.xeroLinkedInvoiceCount > 0) || item._isolation?.xeroLinked;
 
             return (
               <div key={id} className="px-4 py-3 space-y-2" data-testid={`governance-row-${entityType}-${id}`}>
@@ -1960,25 +1962,105 @@ function GovernanceEntitySection({
                     </div>
                     {chain && (
                       <div className="text-xs text-muted-foreground space-y-0.5">
+                        {/* Quote chain: op-job and invoices */}
                         {chain.opJob && (
                           <div>→ Op-Job: {chain.opJob.jobNumber}{chain.opJob.isDemoRecord ? " (demo flagged)" : " ⚠ not demo-flagged"}</div>
                         )}
-                        {chain.invoiceCount > 0 && (
-                          <div>
-                            → {chain.invoiceCount} invoice(s)
-                            {chain.xeroLinkedInvoiceCount > 0 && (
-                              <span className="ml-1 text-destructive font-medium">({chain.xeroLinkedInvoiceCount} linked to Xero: {chain.xeroLinkedNumbers.join(", ")})</span>
-                            )}
+                        {/* Estimate chain: linked quotes */}
+                        {chain.quoteCount > 0 && (
+                          <div className="text-amber-600 dark:text-amber-400">
+                            → {chain.quoteCount} linked quote(s): {chain.quoteNumbers.join(", ")} — delete blocked until resolved
                           </div>
                         )}
+                        {chain.quoteCount === 0 && entityType === "estimate" && (
+                          <div>No linked quotes — safe to delete</div>
+                        )}
+                        {/* Op-job / quote / project: invoices */}
+                        {chain.invoiceCount > 0 && (
+                          <div>
+                            → {chain.invoiceCount} linked invoice(s)
+                            {chain.xeroLinkedInvoiceCount > 0 && (
+                              <span className="ml-1 text-destructive font-medium">({chain.xeroLinkedInvoiceCount} Xero-linked: {chain.xeroLinkedNumbers.join(", ")})</span>
+                            )}
+                            {chain.xeroLinkedInvoiceCount === 0 && <span className="ml-1 text-amber-600 dark:text-amber-400">— delete blocked until resolved</span>}
+                          </div>
+                        )}
+                        {/* Op-job: source quote */}
                         {chain.sourceQuote && (
                           <div>← Source quote: {chain.sourceQuote.number}{!chain.sourceQuote.isDemoRecord ? " ⚠ not demo-flagged" : ""}</div>
+                        )}
+                        {/* Project chain: quote, op-job counts */}
+                        {chain.opJobCount > 0 && (
+                          <div className="text-amber-600 dark:text-amber-400">→ {chain.opJobCount} linked op-job(s) — delete blocked until resolved</div>
+                        )}
+                        {chain.quoteCount > 0 && entityType === "project" && (
+                          <div className="text-amber-600 dark:text-amber-400">→ {chain.quoteCount} linked quote(s) — delete blocked until resolved</div>
                         )}
                       </div>
                     )}
                     {item._xeroLinked && (
                       <div className="text-xs text-destructive">
                         Xero invoice: {item._xeroNumber || "linked"} — cannot delete without voiding in Xero first
+                      </div>
+                    )}
+                    {/* CRM isolation info for customers */}
+                    {item._isolation && (
+                      <div className="text-xs space-y-0.5">
+                        {/* Customer: Xero link warning */}
+                        {item._isolation.xeroLinked && (
+                          <div className="text-destructive">Xero contact linked — archive/delete blocked until Xero link is removed</div>
+                        )}
+                        {/* Contact: parent customer Xero link warning */}
+                        {item._isolation.parentXeroLinked && (
+                          <div className="text-destructive">Parent customer is Xero-linked — governance actions are restricted</div>
+                        )}
+                        {item._isolation.isSharedWithLiveData ? (
+                          <div className="space-y-0.5">
+                            <div className="text-destructive font-medium">
+                              ⚠ Shared with live data — archive and delete blocked
+                            </div>
+                            {/* Customer-level live record counts */}
+                            {item._isolation.liveQuoteCount > 0 && (
+                              <div className="text-destructive">→ {item._isolation.liveQuoteCount} live quote(s)</div>
+                            )}
+                            {item._isolation.liveJobCount > 0 && entityType === "customer" && (
+                              <div className="text-destructive">→ {item._isolation.liveJobCount} live estimate(s)</div>
+                            )}
+                            {item._isolation.liveProjectCount > 0 && (
+                              <div className="text-destructive">→ {item._isolation.liveProjectCount} live project(s)</div>
+                            )}
+                            {item._isolation.liveInvoiceCount > 0 && (
+                              <div className="text-destructive">→ {item._isolation.liveInvoiceCount} live invoice(s)</div>
+                            )}
+                            {/* Contact-level: parent customer live counts */}
+                            {item._isolation.parentCustomerShared && item._isolation.parentLiveCounts && (
+                              <div className="text-destructive">
+                                → Parent customer "{item._isolation.parentCustomerName}" has live records:
+                                {item._isolation.parentLiveCounts.quotes > 0 && ` ${item._isolation.parentLiveCounts.quotes} quote(s)`}
+                                {item._isolation.parentLiveCounts.jobs > 0 && ` ${item._isolation.parentLiveCounts.jobs} estimate(s)`}
+                                {item._isolation.parentLiveCounts.projects > 0 && ` ${item._isolation.parentLiveCounts.projects} project(s)`}
+                                {item._isolation.parentLiveCounts.invoices > 0 && ` ${item._isolation.parentLiveCounts.invoices} invoice(s)`}
+                              </div>
+                            )}
+                            {/* Contact: direct live job linkage */}
+                            {item._isolation.liveJobCount > 0 && entityType === "contact" && (
+                              <div className="text-destructive">→ {item._isolation.liveJobCount} live estimate(s) directly reference this contact</div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-green-700 dark:text-green-400">
+                            Isolated — {item._isolation.safeToDelete ? "safe to archive and delete" : "safe to archive"}
+                            {item._isolation.totalLinkedQuotes > 0 && ` (${item._isolation.totalLinkedQuotes} linked quote(s), all demo-flagged)`}
+                            {item._isolation.totalLinkedJobs > 0 && ` (${item._isolation.totalLinkedJobs} linked job(s), all demo-flagged)`}
+                          </div>
+                        )}
+                        {/* Contact: parent customer context line (always shown) */}
+                        {item._isolation.parentCustomerName && (
+                          <div className="text-muted-foreground">
+                            Parent: {item._isolation.parentCustomerName}
+                            {item._isolation.parentCustomerIsDemoFlagged ? " (demo-flagged)" : " (live customer)"}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2040,8 +2122,11 @@ function GovernanceEntitySection({
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                       <div className="space-y-1">
                         <p className="font-medium">Permanent deletion — this cannot be undone.</p>
-                        {xeroLinked && <p>⚠ This record or its downstream chain has Xero-linked invoices. The server will block deletion to protect accounting integrity.</p>}
-                        {chain?.invoiceCount > 0 && <p>Downstream invoices in this chain will also be reviewed before deletion is allowed.</p>}
+                        {xeroLinked && <p>⚠ This record or its downstream chain has Xero-linked invoices. The server will block deletion to protect accounting integrity. Archiving in SteelIQ does not remove records from Xero.</p>}
+                        {chain?.quoteCount > 0 && entityType === "estimate" && <p>⚠ This estimate has {chain.quoteCount} linked quote(s). The server will block deletion until those quotes are resolved first.</p>}
+                        {chain?.invoiceCount > 0 && entityType !== "estimate" && <p>⚠ {chain.invoiceCount} linked invoice(s) in this chain will be reviewed before deletion is allowed.</p>}
+                        {chain?.opJobCount > 0 && <p>⚠ {chain.opJobCount} linked op-job(s) must be resolved before this project can be deleted.</p>}
+                        {(chain?.quoteCount > 0 || chain?.opJobCount > 0 || chain?.invoiceCount > 0) && entityType === "project" && <p>⚠ This project has linked downstream records. The server will block deletion until they are resolved.</p>}
                         <p>Archive is the safer option and preserves historical records.</p>
                       </div>
                     </div>
@@ -2086,7 +2171,7 @@ function GovernanceSection() {
     },
   });
 
-  const totalFlagged = summary ? (summary.counts.estimates + summary.counts.quotes + summary.counts.opJobs + summary.counts.projects + summary.counts.invoices) : 0;
+  const totalFlagged = summary ? (summary.counts.estimates + summary.counts.quotes + summary.counts.opJobs + summary.counts.projects + summary.counts.invoices + (summary.counts.customers ?? 0) + (summary.counts.contacts ?? 0)) : 0;
 
   return (
     <div className="space-y-4" data-testid="governance-section">
@@ -2163,6 +2248,18 @@ function GovernanceSection() {
                 title="Invoices"
                 entityType="invoice"
                 items={summary.invoices}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Customers (CRM)"
+                entityType="customer"
+                items={summary.customers ?? []}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Contacts (CRM)"
+                entityType="contact"
+                items={summary.contacts ?? []}
                 onRefresh={() => refetch()}
               />
             </div>

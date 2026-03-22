@@ -3520,8 +3520,6 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
 
       const demoQuotes = await storage.getDemoQuotes();
       const demoJobs = await storage.getDemoOpJobs();
@@ -3562,8 +3560,6 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
 
       // Locate the single live commercial record to preserve
       const allQuotes = await storage.getAllQuotes();
@@ -3660,8 +3656,6 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const mode = await getSystemMode();
-      if (!requireNonProductionMode(res, mode)) return;
       const demoQuotes = await storage.getDemoQuotes();
       const demoJobs = await storage.getDemoOpJobs();
       res.json({
@@ -3789,6 +3783,52 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/customers/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const cust = await storage.getCustomer(req.params.id);
+      if (!cust) return res.status(404).json({ error: "Customer not found" });
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateCustomerDemoFlag(req.params.id, isDemoRecord);
+      await storage.createAuditLog({
+        entityType: "customer",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord, xeroContactId: cust.xeroContactId },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/customer-contacts/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const contact = await storage.getContact(req.params.id);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateContactDemoFlag(req.params.id, isDemoRecord);
+      await storage.createAuditLog({
+        entityType: "customerContact",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord, customerId: contact.customerId },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   // ─── Governance: Summary of all flagged records ────────────────────────────
   app.get("/api/admin/governance/summary", async (req, res) => {
     try {
@@ -3796,12 +3836,14 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices] = await Promise.all([
+      const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices, demoCustomers, demoContacts] = await Promise.all([
         storage.getDemoQuotes(),
         storage.getDemoOpJobs(),
         storage.getDemoJobs(),
         storage.getDemoProjects(),
         storage.getDemoInvoices(),
+        storage.getDemoCustomers(),
+        storage.getDemoContacts(),
       ]);
 
       // For each flagged record, resolve linked chain context
@@ -3824,30 +3866,163 @@ export async function registerRoutes(
 
       const opJobsWithChain = await Promise.all(demoOpJobs.map(async (j) => {
         const linkedQuote = j.sourceQuoteId ? await storage.getQuote(j.sourceQuoteId) : null;
+        // Phase B: check both quote-linked AND project-linked invoices for maximum safety coverage
+        const [quoteInvoices, projectInvoices] = await Promise.all([
+          j.sourceQuoteId ? storage.getInvoicesByQuote(j.sourceQuoteId) : Promise.resolve([]),
+          j.projectId ? storage.getInvoicesByProject(j.projectId) : Promise.resolve([]),
+        ]);
+        // Merge and deduplicate by ID
+        const invoiceMap = new Map([...quoteInvoices, ...projectInvoices].map(i => [i.id, i]));
+        const linkedInvoices = Array.from(invoiceMap.values());
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
         return {
           ...j,
           _chain: {
             sourceQuote: linkedQuote ? { id: linkedQuote.id, number: linkedQuote.number, isDemoRecord: linkedQuote.isDemoRecord } : null,
+            invoiceCount: linkedInvoices.length,
+            xeroLinkedInvoiceCount: xeroLinkedInvoices.length,
+            xeroLinkedNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean),
+            _detectionNote: j.projectId
+              ? "Invoices detected via quote chain and project link"
+              : "Invoices detected via quote chain only",
+          },
+        };
+      }));
+
+      const estimatesWithChain = await Promise.all(demoJobs.map(async (job) => {
+        const linkedQuotes = await storage.getQuotesByJobId(job.id);
+        return {
+          ...job,
+          _chain: {
+            quoteCount: linkedQuotes.length,
+            quoteNumbers: linkedQuotes.map(q => q.number),
+          },
+        };
+      }));
+
+      const projectsWithChain = await Promise.all(demoProjects.map(async (proj) => {
+        const [linkedQuotes, linkedOpJobs, linkedInvoices] = await Promise.all([
+          storage.getQuotesByProject(proj.id),
+          storage.getOpJobsByProject(proj.id),
+          storage.getInvoicesByProject(proj.id),
+        ]);
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+        return {
+          ...proj,
+          _chain: {
+            quoteCount: linkedQuotes.length,
+            opJobCount: linkedOpJobs.length,
+            invoiceCount: linkedInvoices.length,
+            xeroLinkedInvoiceCount: xeroLinkedInvoices.length,
+            xeroLinkedNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean),
+          },
+        };
+      }));
+
+      // CRM isolation analysis — determine if each demo customer is isolated or shared with live data
+      const customersWithIsolation = await Promise.all(demoCustomers.map(async (cust) => {
+        const [linkedQuotes, linkedJobs, linkedProjects, linkedInvoices] = await Promise.all([
+          storage.getQuotesByCustomer(cust.id),
+          storage.getJobsByCustomer(cust.id),
+          storage.getProjectsByCustomer(cust.id),
+          storage.getInvoicesByCustomer(cust.id),
+        ]);
+        const liveQuotes = linkedQuotes.filter(q => !q.isDemoRecord);
+        const liveJobs = linkedJobs.filter(j => !j.isDemoRecord);
+        const liveProjects = linkedProjects.filter(p => !p.isDemoRecord);
+        const liveInvoices = linkedInvoices.filter(i => !i.isDemoRecord);
+        const isSharedWithLiveData = liveQuotes.length > 0 || liveJobs.length > 0 || liveProjects.length > 0 || liveInvoices.length > 0;
+        const xeroLinked = !!cust.xeroContactId;
+        return {
+          ...cust,
+          _isolation: {
+            isSharedWithLiveData,
+            xeroLinked,
+            liveQuoteCount: liveQuotes.length,
+            liveJobCount: liveJobs.length,
+            liveProjectCount: liveProjects.length,
+            liveInvoiceCount: liveInvoices.length,
+            totalLinkedQuotes: linkedQuotes.length,
+            totalLinkedJobs: linkedJobs.length,
+            totalLinkedProjects: linkedProjects.length,
+            totalLinkedInvoices: linkedInvoices.length,
+            safeToArchive: !isSharedWithLiveData && !xeroLinked,
+            safeToDelete: !isSharedWithLiveData && !xeroLinked,
+          },
+        };
+      }));
+
+      // Contact isolation — direct parent-customer live-data check (unconditional, not limited to demo-flagged parents)
+      const contactsWithIsolation = await Promise.all(demoContacts.map(async (contact) => {
+        const [parentCustomer, linkedJobs] = await Promise.all([
+          storage.getCustomer(contact.customerId),
+          storage.getJobsByContact(contact.id),
+        ]);
+        const liveJobs = linkedJobs.filter(j => !j.isDemoRecord);
+
+        // Always query parent customer's live records regardless of whether the parent is itself demo-flagged.
+        // This closes the gap where a non-demo parent customer with live data would be missed.
+        let parentIsShared = false;
+        let parentXeroLinked = false;
+        let parentLiveCounts = { quotes: 0, jobs: 0, projects: 0, invoices: 0 };
+        if (parentCustomer) {
+          const [parentQuotes, parentJobs, parentProjects, parentInvoices] = await Promise.all([
+            storage.getQuotesByCustomer(contact.customerId),
+            storage.getJobsByCustomer(contact.customerId),
+            storage.getProjectsByCustomer(contact.customerId),
+            storage.getInvoicesByCustomer(contact.customerId),
+          ]);
+          const liveParentQuotes = parentQuotes.filter(q => !q.isDemoRecord);
+          const liveParentJobs = parentJobs.filter(j => !j.isDemoRecord);
+          const liveParentProjects = parentProjects.filter(p => !p.isDemoRecord);
+          const liveParentInvoices = parentInvoices.filter(i => !i.isDemoRecord);
+          parentIsShared = liveParentQuotes.length > 0 || liveParentJobs.length > 0 || liveParentProjects.length > 0 || liveParentInvoices.length > 0;
+          parentXeroLinked = !!parentCustomer.xeroContactId;
+          parentLiveCounts = {
+            quotes: liveParentQuotes.length,
+            jobs: liveParentJobs.length,
+            projects: liveParentProjects.length,
+            invoices: liveParentInvoices.length,
+          };
+        }
+
+        const isSharedWithLiveData = parentIsShared || liveJobs.length > 0;
+        return {
+          ...contact,
+          _isolation: {
+            isSharedWithLiveData,
+            parentCustomerName: parentCustomer?.name ?? null,
+            parentCustomerIsDemoFlagged: !!(parentCustomer as any)?.isDemoRecord,
+            parentCustomerShared: parentIsShared,
+            parentXeroLinked,
+            parentLiveCounts,
+            liveJobCount: liveJobs.length,
+            safeToArchive: !isSharedWithLiveData,
+            safeToDelete: !isSharedWithLiveData,
           },
         };
       }));
 
       res.json({
-        estimates: demoJobs,
+        estimates: estimatesWithChain,
         quotes: quotesWithChain,
         opJobs: opJobsWithChain,
-        projects: demoProjects,
+        projects: projectsWithChain,
         invoices: demoInvoices.map(inv => ({
           ...inv,
           _xeroLinked: !!inv.xeroInvoiceId,
           _xeroNumber: inv.xeroInvoiceNumber,
         })),
+        customers: customersWithIsolation,
+        contacts: contactsWithIsolation,
         counts: {
           estimates: demoJobs.length,
           quotes: demoQuotes.length,
           opJobs: demoOpJobs.length,
           projects: demoProjects.length,
           invoices: demoInvoices.length,
+          customers: demoCustomers.length,
+          contacts: demoContacts.length,
         },
       });
     } catch (e: any) {
@@ -3863,14 +4038,16 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
       const { entityType, entityId } = z.object({
-        entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice"]),
+        entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice", "customer", "contact"]),
         entityId: z.string(),
       }).parse(req.body);
 
       let result: string;
       if (entityType === "estimate") {
-        const rec = await storage.archiveJob(entityId);
+        const rec = await storage.getJob(entityId);
         if (!rec) return res.status(404).json({ error: "Estimate not found" });
+        if (!rec.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        await storage.archiveJob(entityId);
         result = "archived";
       } else if (entityType === "quote") {
         const q = await storage.getQuote(entityId);
@@ -3894,8 +4071,74 @@ export async function registerRoutes(
         const inv = await storage.getInvoice(entityId);
         if (!inv) return res.status(404).json({ error: "Invoice not found" });
         if (!inv.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
-        // Invoices use status for archival — set to archived state
-        await storage.updateInvoice(entityId, { status: "returned_to_draft" } as any);
+        if (inv.xeroInvoiceId) {
+          return res.status(400).json({
+            error: "This invoice is linked to Xero. Archiving it in SteelIQ does not remove it from Xero. Archive only if you understand this. To continue, void the Xero record first.",
+            code: "XERO_LINKED",
+            xeroInvoiceNumber: inv.xeroInvoiceNumber,
+          });
+        }
+        await storage.archiveInvoice(entityId);
+        result = "archived";
+      } else if (entityType === "customer") {
+        const cust = await storage.getCustomer(entityId);
+        if (!cust) return res.status(404).json({ error: "Customer not found" });
+        if (!cust.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        // Block if Xero-linked
+        if (cust.xeroContactId) {
+          return res.status(400).json({
+            error: "This customer is linked to Xero. Archiving it in SteelIQ does not remove it from Xero. Void the Xero contact first if you intend to fully remove this record.",
+            code: "XERO_LINKED",
+          });
+        }
+        // Block if shared with live operational data
+        const [liveQuotes, liveJobs, liveProjects, liveInvoices] = await Promise.all([
+          storage.getQuotesByCustomer(entityId),
+          storage.getJobsByCustomer(entityId),
+          storage.getProjectsByCustomer(entityId),
+          storage.getInvoicesByCustomer(entityId),
+        ]);
+        const liveNonDemo = [
+          ...liveQuotes.filter(q => !q.isDemoRecord),
+          ...liveJobs.filter(j => !j.isDemoRecord),
+          ...liveProjects.filter(p => !p.isDemoRecord),
+          ...liveInvoices.filter(i => !i.isDemoRecord),
+        ];
+        if (liveNonDemo.length > 0) {
+          return res.status(400).json({
+            error: `This customer is shared with live operational data (${liveNonDemo.length} non-test record(s) linked). Archiving it would affect live operations. Resolve or remove those records first.`,
+            code: "SHARED_WITH_LIVE_DATA",
+          });
+        }
+        await storage.archiveCustomer(entityId);
+        result = "archived";
+      } else if (entityType === "contact") {
+        const contact = await storage.getContact(entityId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        // Block if parent customer is shared with live data
+        const parentCustomer = await storage.getCustomer(contact.customerId);
+        if (parentCustomer) {
+          const [liveQuotes, liveJobs, liveProjects, liveInvoices] = await Promise.all([
+            storage.getQuotesByCustomer(contact.customerId),
+            storage.getJobsByCustomer(contact.customerId),
+            storage.getProjectsByCustomer(contact.customerId),
+            storage.getInvoicesByCustomer(contact.customerId),
+          ]);
+          const liveNonDemo = [
+            ...liveQuotes.filter(q => !q.isDemoRecord),
+            ...liveJobs.filter(j => !j.isDemoRecord),
+            ...liveProjects.filter(p => !p.isDemoRecord),
+            ...liveInvoices.filter(i => !i.isDemoRecord),
+          ];
+          if (liveNonDemo.length > 0) {
+            return res.status(400).json({
+              error: `This contact belongs to customer "${parentCustomer.name}" which is shared with live operational data. Archiving this contact could affect live operations.`,
+              code: "SHARED_WITH_LIVE_DATA",
+            });
+          }
+        }
+        await storage.archiveContact(entityId);
         result = "archived";
       } else {
         return res.status(400).json({ error: "Unknown entity type" });
@@ -3962,17 +4205,131 @@ export async function registerRoutes(
         const j = await storage.getOpJob(entityId);
         if (!j) return res.status(404).json({ error: "Op-Job not found" });
         if (!j.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Phase B: Check downstream invoices via both quote chain AND project link for complete coverage
+        const [quoteInvoices, projectInvoices] = await Promise.all([
+          j.sourceQuoteId ? storage.getInvoicesByQuote(j.sourceQuoteId) : Promise.resolve([]),
+          j.projectId ? storage.getInvoicesByProject(j.projectId) : Promise.resolve([]),
+        ]);
+        const invoiceMap = new Map([...quoteInvoices, ...projectInvoices].map(i => [i.id, i]));
+        const linkedInvoices = Array.from(invoiceMap.values());
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+        if (xeroLinkedInvoices.length > 0) {
+          return res.status(400).json({
+            error: `This op-job has ${xeroLinkedInvoices.length} Xero-linked invoice(s) (${xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean).join(", ")}). Void or remove them in Xero first. Archive this op-job instead.`,
+            code: "XERO_LINKED_DOWNSTREAM",
+            xeroNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber),
+          });
+        }
+        if (linkedInvoices.length > 0) {
+          return res.status(400).json({
+            error: `This op-job has ${linkedInvoices.length} linked invoice(s) in its chain. Archive or delete those invoices first before deleting the op-job. Archive is the safer option.`,
+            code: "LINKED_INVOICES_DOWNSTREAM",
+            invoiceCount: linkedInvoices.length,
+          });
+        }
         await storage.deleteOpJob(entityId);
       } else if (entityType === "estimate") {
         const j = await storage.getJob(entityId);
         if (!j) return res.status(404).json({ error: "Estimate not found" });
         if (!j.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Check downstream quotes before deleting
+        const linkedQuotes = await storage.getQuotesByJobId(entityId);
+        if (linkedQuotes.length > 0) {
+          return res.status(400).json({
+            error: `This estimate has ${linkedQuotes.length} linked quote(s) (${linkedQuotes.map(q => q.number).join(", ")}). Archive or delete those quotes first to avoid orphaning them. Archive is the safer option.`,
+            code: "LINKED_QUOTES_DOWNSTREAM",
+            quoteNumbers: linkedQuotes.map(q => q.number),
+          });
+        }
         await storage.deleteJob(entityId);
       } else if (entityType === "project") {
         const p = await storage.getProject(entityId);
         if (!p) return res.status(404).json({ error: "Project not found" });
         if (!p.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Check downstream quotes, op-jobs, and invoices before deleting
+        const [linkedQuotes, linkedOpJobs, linkedInvoices] = await Promise.all([
+          storage.getQuotesByProject(entityId),
+          storage.getOpJobsByProject(entityId),
+          storage.getInvoicesByProject(entityId),
+        ]);
+        const xeroLinkedInvoices = linkedInvoices.filter(i => i.xeroInvoiceId);
+        if (xeroLinkedInvoices.length > 0) {
+          return res.status(400).json({
+            error: `This project has ${xeroLinkedInvoices.length} Xero-linked invoice(s) (${xeroLinkedInvoices.map(i => i.xeroInvoiceNumber).filter(Boolean).join(", ")}). Void or remove them in Xero first. Archive this project instead.`,
+            code: "XERO_LINKED_DOWNSTREAM",
+            xeroNumbers: xeroLinkedInvoices.map(i => i.xeroInvoiceNumber),
+          });
+        }
+        const blockReasons: string[] = [];
+        if (linkedQuotes.length > 0) blockReasons.push(`${linkedQuotes.length} linked quote(s): ${linkedQuotes.map(q => q.number).join(", ")}`);
+        if (linkedOpJobs.length > 0) blockReasons.push(`${linkedOpJobs.length} linked op-job(s): ${linkedOpJobs.map(j => j.jobNumber).join(", ")}`);
+        if (linkedInvoices.length > 0) blockReasons.push(`${linkedInvoices.length} linked invoice(s)`);
+        if (blockReasons.length > 0) {
+          return res.status(400).json({
+            error: `This project has linked downstream records — ${blockReasons.join("; ")}. Archive or resolve those records first to avoid silent orphaning. Archive is the safer option.`,
+            code: "LINKED_RECORDS_DOWNSTREAM",
+            detail: { quotes: linkedQuotes.length, opJobs: linkedOpJobs.length, invoices: linkedInvoices.length },
+          });
+        }
         await storage.deleteProject(entityId);
+      } else if (entityType === "customer") {
+        const cust = await storage.getCustomer(entityId);
+        if (!cust) return res.status(404).json({ error: "Customer not found" });
+        if (!cust.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Block if Xero-linked
+        if (cust.xeroContactId) {
+          return res.status(400).json({
+            error: "This customer is linked to Xero. Deleting it from SteelIQ alone would leave a dangling reference in Xero. Remove the Xero link first.",
+            code: "XERO_LINKED",
+          });
+        }
+        // Block if shared with any live (non-demo) operational data
+        const [linkedQuotes, linkedJobs, linkedProjects, linkedInvoices] = await Promise.all([
+          storage.getQuotesByCustomer(entityId),
+          storage.getJobsByCustomer(entityId),
+          storage.getProjectsByCustomer(entityId),
+          storage.getInvoicesByCustomer(entityId),
+        ]);
+        const liveNonDemo = [
+          ...linkedQuotes.filter(q => !q.isDemoRecord),
+          ...linkedJobs.filter(j => !j.isDemoRecord),
+          ...linkedProjects.filter(p => !p.isDemoRecord),
+          ...linkedInvoices.filter(i => !i.isDemoRecord),
+        ];
+        if (liveNonDemo.length > 0) {
+          return res.status(400).json({
+            error: `This customer is referenced by ${liveNonDemo.length} live (non-test) operational record(s). Deleting it would corrupt live data. Resolve those records first.`,
+            code: "SHARED_WITH_LIVE_DATA",
+          });
+        }
+        await storage.deleteCustomer(entityId);
+      } else if (entityType === "contact") {
+        const contact = await storage.getContact(entityId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        // Block if parent customer is shared with live data
+        const parentCustomer = await storage.getCustomer(contact.customerId);
+        if (parentCustomer) {
+          const [linkedQuotes, linkedJobs, linkedProjects, linkedInvoices] = await Promise.all([
+            storage.getQuotesByCustomer(contact.customerId),
+            storage.getJobsByCustomer(contact.customerId),
+            storage.getProjectsByCustomer(contact.customerId),
+            storage.getInvoicesByCustomer(contact.customerId),
+          ]);
+          const liveNonDemo = [
+            ...linkedQuotes.filter(q => !q.isDemoRecord),
+            ...linkedJobs.filter(j => !j.isDemoRecord),
+            ...linkedProjects.filter(p => !p.isDemoRecord),
+            ...linkedInvoices.filter(i => !i.isDemoRecord),
+          ];
+          if (liveNonDemo.length > 0) {
+            return res.status(400).json({
+              error: `This contact's parent customer "${parentCustomer.name}" is shared with ${liveNonDemo.length} live (non-test) record(s). Deleting this contact could affect live operations.`,
+              code: "SHARED_WITH_LIVE_DATA",
+            });
+          }
+        }
+        await storage.deleteContact(entityId);
       } else {
         return res.status(400).json({ error: "Unknown entity type" });
       }

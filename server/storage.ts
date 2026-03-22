@@ -140,6 +140,12 @@ export interface IStorage {
   createCustomer(data: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, data: Partial<InsertCustomer>): Promise<Customer | undefined>;
   archiveCustomer(id: string): Promise<Customer | undefined>;
+  deleteCustomer(id: string): Promise<void>;
+  getDemoCustomers(): Promise<Customer[]>;
+  updateCustomerDemoFlag(id: string, isDemoRecord: boolean): Promise<Customer | undefined>;
+  getQuotesByCustomer(customerId: string): Promise<Quote[]>;
+  getJobsByCustomer(customerId: string): Promise<Job[]>;
+  getInvoicesByCustomer(customerId: string): Promise<Invoice[]>;
 
   listContacts(filters?: { customerId?: string; category?: string; search?: string }): Promise<CustomerContact[]>;
   getCustomerContacts(customerId: string): Promise<CustomerContact[]>;
@@ -148,6 +154,10 @@ export interface IStorage {
   updateCustomerContact(id: string, data: Partial<InsertCustomerContact>): Promise<CustomerContact | undefined>;
   archiveContact(id: string): Promise<CustomerContact | undefined>;
   deleteCustomerContact(id: string): Promise<void>;
+  deleteContact(id: string): Promise<void>;
+  getDemoContacts(): Promise<CustomerContact[]>;
+  updateContactDemoFlag(id: string, isDemoRecord: boolean): Promise<CustomerContact | undefined>;
+  getJobsByContact(contactId: string): Promise<Job[]>;
 
   getAllProjects(): Promise<Project[]>;
   getProjectsByCustomer(customerId: string): Promise<Project[]>;
@@ -166,6 +176,7 @@ export interface IStorage {
   getAllInvoices(): Promise<Invoice[]>;
   getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]>;
   updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
+  archiveInvoice(id: string): Promise<void>;
 
   getNextJobNumber(divisionCode?: string): Promise<string>;
   getNumberSequences(): Promise<{ id: string; currentValue: number }[]>;
@@ -696,6 +707,31 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async deleteCustomer(id: string): Promise<void> {
+    await db.delete(customers).where(eq(customers.id, id));
+  }
+
+  async getDemoCustomers(): Promise<Customer[]> {
+    return db.select().from(customers).where(eq(customers.isDemoRecord as any, true)).orderBy(asc(customers.name));
+  }
+
+  async updateCustomerDemoFlag(id: string, isDemoRecord: boolean): Promise<Customer | undefined> {
+    const [updated] = await db.update(customers).set({ isDemoRecord } as any).where(eq(customers.id, id)).returning();
+    return updated;
+  }
+
+  async getQuotesByCustomer(customerId: string): Promise<Quote[]> {
+    return db.select().from(quotes).where(and(eq(quotes.customerId, customerId), isNull(quotes.deletedAt))).orderBy(desc(quotes.createdAt));
+  }
+
+  async getJobsByCustomer(customerId: string): Promise<Job[]> {
+    return db.select().from(jobs).where(and(eq(jobs.customerId, customerId), isNull(jobs.archivedAt))).orderBy(desc(jobs.createdAt));
+  }
+
+  async getInvoicesByCustomer(customerId: string): Promise<Invoice[]> {
+    return db.select().from(invoices).where(and(eq(invoices.customerId, customerId), isNull(invoices.archivedAt))).orderBy(desc(invoices.createdAt));
+  }
+
   async listContacts(filters?: { customerId?: string; category?: string; search?: string }): Promise<CustomerContact[]> {
     const conditions = [isNull(customerContacts.archivedAt)];
     if (filters?.customerId) conditions.push(eq(customerContacts.customerId, filters.customerId));
@@ -750,6 +786,23 @@ export class DatabaseStorage implements IStorage {
 
   async deleteCustomerContact(id: string): Promise<void> {
     await db.delete(customerContacts).where(eq(customerContacts.id, id));
+  }
+
+  async deleteContact(id: string): Promise<void> {
+    await db.delete(customerContacts).where(eq(customerContacts.id, id));
+  }
+
+  async getDemoContacts(): Promise<CustomerContact[]> {
+    return db.select().from(customerContacts).where(eq(customerContacts.isDemoRecord as any, true)).orderBy(asc(customerContacts.firstName), asc(customerContacts.lastName));
+  }
+
+  async updateContactDemoFlag(id: string, isDemoRecord: boolean): Promise<CustomerContact | undefined> {
+    const [updated] = await db.update(customerContacts).set({ isDemoRecord } as any).where(eq(customerContacts.id, id)).returning();
+    return updated;
+  }
+
+  async getJobsByContact(contactId: string): Promise<Job[]> {
+    return db.select().from(jobs).where(and(eq(jobs.contactId, contactId), isNull(jobs.archivedAt))).orderBy(desc(jobs.createdAt));
   }
 
   async getAllProjects(): Promise<Project[]> {
@@ -818,11 +871,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInvoicesByQuote(quoteId: string): Promise<Invoice[]> {
-    return db.select().from(invoices).where(eq(invoices.quoteId, quoteId)).orderBy(desc(invoices.createdAt));
+    return db.select().from(invoices).where(and(eq(invoices.quoteId, quoteId), isNull(invoices.archivedAt))).orderBy(desc(invoices.createdAt));
   }
 
   async getAllInvoices(): Promise<Invoice[]> {
-    return db.select().from(invoices).orderBy(desc(invoices.createdAt));
+    return db.select().from(invoices).where(isNull(invoices.archivedAt)).orderBy(desc(invoices.createdAt));
   }
 
   async getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]> {
@@ -834,6 +887,7 @@ export class DatabaseStorage implements IStorage {
       FROM invoices i
       LEFT JOIN customers c ON c.id = i.customer_id
       LEFT JOIN projects p ON p.id = i.project_id
+      WHERE i.archived_at IS NULL
       ORDER BY i.created_at DESC
     `);
     return result.rows.map((row: any) => ({
@@ -858,6 +912,7 @@ export class DatabaseStorage implements IStorage {
       xeroInvoiceNumber: row.xero_invoice_number,
       xeroStatus: row.xero_status,
       isDemoRecord: row.is_demo_record ?? false,
+      archivedAt: row.archived_at ?? null,
       createdByUserId: row.created_by_user_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -872,6 +927,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoices.id, id))
       .returning();
     return updated;
+  }
+
+  async archiveInvoice(id: string): Promise<void> {
+    await db.update(invoices)
+      .set({ archivedAt: new Date() } as any)
+      .where(eq(invoices.id, id));
   }
 
   async getNextJobNumber(divisionCode?: string): Promise<string> {

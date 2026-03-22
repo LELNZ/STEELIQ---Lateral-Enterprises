@@ -1,0 +1,231 @@
+STEELIQ TEST DATA GOVERNANCE — PHASE 3 FOLLOW-UP REVIEW + FORMAL COMPLETION REPORT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are continuing work on an existing live, production-oriented system. You must preserve the current architecture and verify/report the Phase 3 work exactly.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this follow-up.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not broaden deletion capability.
+- Do not mark this phase complete unless the required admin/user-facing governance surfaces and rules are operationally usable and clearly reported.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If the previous implementation only partially met the brief, report that honestly.
+
+CURRENT CONTEXT
+
+The previous summary claims:
+- op-job invoice detection now checks both quote-chain and project-linked invoices, deduped by ID
+- governance summary now includes CRM isolation analysis for demo customers and contacts
+- governance archive/delete routes now support customers and contacts with Xero/live-sharing protection
+- governance panel now includes Customers and Contacts sections with isolation messaging
+
+This follow-up is to verify, tighten if needed, and provide the exact formal completion report.
+
+PRIMARY OBJECTIVE
+
+Do not start a new phase.
+Do not broaden scope.
+Use this pass to:
+1. verify the CRM governance implementation exactly
+2. verify the op-job downstream finance hardening exactly
+3. verify role gating still holds
+4. produce the full formal completion report in the required structure
+
+REQUIRED FOLLOW-UP WORK
+
+PHASE A — FILE / ROUTE / SCHEMA TRUTH
+
+Provide exact:
+- files changed
+- schema/data model changes
+- routes/endpoints changed
+
+Be exact. No summaries without file names.
+
+PHASE B — CRM GOVERNANCE TRUTH
+
+For customers and contacts, state exactly:
+- how a record is considered test/demo eligible
+- how isolation is determined
+- what linked records are checked
+- what counts as shared live data
+- whether Xero linkage blocks archive
+- whether Xero linkage blocks delete
+- whether shared live data blocks archive
+- whether shared live data blocks delete
+- what actions are allowed for isolated test/demo CRM records
+- what actions are blocked for shared CRM records
+
+Clarify whether archived linked records still count in the safety model.
+
+PHASE C — OP-JOB FINANCE SAFETY TRUTH
+
+State exactly:
+- old behavior
+- new behavior
+- quote-chain detection logic
+- project-linked detection logic
+- dedupe logic
+- exact block conditions
+- Xero priority behavior
+- remaining architecture blind spots, if any
+
+PHASE D — UI / ROLE GATING VERIFICATION
+
+State exactly:
+- what Owner sees
+- what Admin sees
+- what non-high-level users see
+- whether Customers/Contacts governance sections are fully hidden or restricted for non-high-level users
+- how blocked archive/delete actions are communicated in the UI
+- whether archive remains visually primary
+
+PHASE E — REQUIRED TEST CASES
+
+Run and report explicitly:
+
+TC-001
+Review a test/demo customer linked only to test/demo records.
+Expected:
+- system detects it as isolated or safely governable
+- governance behavior is clear and truthful
+
+TC-002
+Review a customer shared between test/demo and live records.
+Expected:
+- delete is blocked
+- archive is blocked if unsafe
+- clear explanation is shown that the CRM record is shared with live operational data
+
+TC-003
+Review a test/demo contact linked only to test/demo records.
+Expected:
+- system detects it as isolated or safely governable
+- governance behavior is clear and truthful
+
+TC-004
+Review a contact shared between test/demo and live records.
+Expected:
+- delete is blocked
+- archive is blocked if unsafe
+- clear explanation is shown
+
+TC-005
+Attempt governance delete of an op-job where current architecture can detect downstream finance/commercial implications.
+Expected:
+- delete is blocked where unsafe
+- Xero-linked protections remain prioritized
+- warning explains the detected downstream risk
+
+TC-006
+Verify governance review surface now makes chain integrity clearer across:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+Expected:
+- clearer linked/downstream/shared-state messaging
+- no fake implication of full chain orchestration
+
+TC-007
+Verify non-high-level users still cannot access governance controls.
+Expected:
+- no regression in role gating
+
+TC-008
+Verify Settings > System still shows:
+- truthful read-only environment information
+- role-gated governance section
+- no fake environment selector
+Expected:
+- no regression from earlier phases
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact CRM governance behavior for customers
+5. exact CRM governance behavior for contacts
+6. exact shared-live-record protection rules
+7. exact Xero protection rules for CRM governance
+8. exact op-job downstream finance safety improvements
+9. exact UI/chain-clarity improvements
+10. results of all required test cases
+11. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+
+5. CRM GOVERNANCE BEHAVIOR
+- customers
+- contacts
+- isolation detection rules
+- shared-live-record protection rules
+- archive behavior
+- delete behavior
+
+6. OP-JOB DOWNSTREAM FINANCE SAFETY
+- old behavior
+- new behavior
+- exact detection rules now used
+- remaining architecture limits if any
+
+7. GOVERNANCE CHAIN INTEGRITY UI
+- exact review-surface changes
+- how linked/downstream/shared/live-sensitive state is communicated
+- how blocked actions are explained
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+- TC-008 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Prefer archive over delete.
+Allow delete only for explicit test/demo data where all safeguards pass.
+Protect shared live CRM records.
+Report truthfully and exactly.

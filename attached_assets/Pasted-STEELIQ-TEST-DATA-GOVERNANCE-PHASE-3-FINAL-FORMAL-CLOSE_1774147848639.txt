@@ -1,0 +1,112 @@
+STEELIQ TEST DATA GOVERNANCE — PHASE 3 FINAL FORMAL CLOSEOUT REPORT
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are continuing work on an existing live, production-oriented system. You must preserve the current architecture and produce the final formal completion report for Phase 3 only.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this closeout response.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not broaden deletion capability.
+- Do not start a new phase.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- Preserve the current governance architecture from Phases 1–3.
+- Do not broaden scope further in this response.
+
+CURRENT CONTEXT
+
+Phase 3 implementation has already been worked on and the latest follow-up summary claims:
+- contact isolation summary truth was fixed by directly querying the parent customer’s linked records
+- Owner/Admin UI now exists for customer demo-flagging
+- Owner/Admin UI now exists for contact demo-flagging
+- governance panel messaging was improved with richer CRM isolation details
+
+This response is NOT for new implementation scope.
+This response is only to provide the final formal completion report for Phase 3 in the exact required structure.
+
+PRIMARY OBJECTIVE
+
+Provide the exact final formal completion report for Phase 3.
+Do not broaden scope.
+Do not start Phase 4.
+Do not add new implementation beyond what is strictly required to verify/report the current state.
+
+REQUIRED VERIFICATION
+
+Before reporting, verify and state clearly:
+1. exact files changed across the full Phase 3 work
+2. exact UI surfaces added/changed for customer/contact demo-flagging
+3. exact contact isolation summary fix behavior
+4. exact role-gating confirmation
+5. exact safety model preservation
+6. exact test results
+7. exact known remaining gaps
+
+STRICT NON-GOALS
+
+Do NOT:
+- add new features
+- redesign customer/contact pages
+- redesign CRM architecture
+- redesign governance architecture
+- open new implementation scope
+- give a summary without the exact formal structure below
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. CONTACT ISOLATION SUMMARY FIX
+- old behavior
+- new behavior
+- how summary/UI now aligns with backend enforcement
+
+4. CUSTOMER / CONTACT FLAGGING UI
+- exact surfaces changed
+- exact Owner/Admin behavior
+- exact non-high-level behavior
+
+5. SAFETY MODEL PRESERVATION
+- customer shared-live blocking
+- contact shared-live blocking
+- Xero protections
+- role gating
+- no regression statement
+
+6. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Prefer archive over delete.
+Allow delete only for explicit test/demo data where all safeguards pass.
+Protect shared live CRM records.
+Report truthfully and exactly.

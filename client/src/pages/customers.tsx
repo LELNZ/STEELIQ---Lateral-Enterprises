@@ -4,6 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact, Project } from "@shared/schema";
 import { CONTACT_CATEGORIES } from "@shared/schema";
 import { contactDisplayName } from "@/lib/contact-utils";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
-  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen, Building2, Search,
+  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen, Building2, Search, Flag, Shield,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -82,6 +83,29 @@ function CustomerRow({ customer }: { customer: Customer }) {
   const [showAddProject, setShowAddProject] = useState(false);
   const [editingContact, setEditingContact] = useState<CustomerContact | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async (isDemoRecord: boolean) => {
+      const res = await apiRequest("PATCH", `/api/customers/${customer.id}/demo-flag`, { isDemoRecord });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to update flag");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, isDemoRecord) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      toast({
+        title: isDemoRecord ? "Flagged as test/demo" : "Demo flag removed",
+        description: isDemoRecord
+          ? `"${customer.name}" is now marked as test/demo data and visible in governance review.`
+          : `"${customer.name}" is no longer marked as test/demo data.`,
+      });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   const { data: contacts = [] } = useQuery<CustomerContact[]>({
     queryKey: ["/api/customers", customer.id, "contacts"],
@@ -217,7 +241,14 @@ function CustomerRow({ customer }: { customer: Customer }) {
             <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 select-none">
               {customer.name[0]?.toUpperCase() ?? "?"}
             </div>
-            <span className="font-medium text-sm">{customer.name}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-sm">{customer.name}</span>
+              {(customer as any).isDemoRecord && (
+                <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400">
+                  <Flag className="h-2.5 w-2.5 mr-1" />Test/Demo
+                </Badge>
+              )}
+            </div>
           </div>
         </TableCell>
         <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-3">{customer.email ?? "—"}</TableCell>
@@ -314,6 +345,38 @@ function CustomerRow({ customer }: { customer: Customer }) {
                   </div>
                 )}
               </div>
+
+              {isOwnerOrAdmin && (
+                <>
+                  <Separator />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Data Governance</p>
+                    </div>
+                    <div className="flex items-center justify-between py-1 px-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                      <div className="flex items-center gap-2 text-xs">
+                        <Flag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <div>
+                          <span className="font-medium text-amber-900 dark:text-amber-200">Test / Demo Record</span>
+                          <p className="text-amber-700 dark:text-amber-400 text-[11px] leading-tight mt-0.5">
+                            {(customer as any).isDemoRecord
+                              ? "This customer is flagged as test/demo data and will appear in governance review."
+                              : "Flag this customer as test/demo data to include it in governance review for cleanup."}
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={!!(customer as any).isDemoRecord}
+                        onCheckedChange={(checked) => demoFlagMutation.mutate(checked)}
+                        disabled={demoFlagMutation.isPending}
+                        data-testid={`switch-customer-demo-flag-${customer.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </TableCell>
         </TableRow>
