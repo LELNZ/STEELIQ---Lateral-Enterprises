@@ -1972,6 +1972,12 @@ function GovernanceEntitySection({
     },
   });
 
+  const activeItems = items.filter((i: any) => !i.archivedAt);
+  const archivedItems = items.filter((i: any) => !!i.archivedAt);
+  const isProtected = (i: any) => i._isolation?.xeroLinked || i._isolation?.isSharedWithLiveData || i._xeroLinked;
+  const protectedItems = activeItems.filter(isProtected);
+  const actionableItems = activeItems.filter((i: any) => !isProtected(i));
+
   if (items.length === 0) {
     return (
       <div className="rounded-lg border px-4 py-3 flex items-center justify-between text-sm" data-testid={`governance-section-${entityType}-empty`}>
@@ -1988,17 +1994,34 @@ function GovernanceEntitySection({
         onClick={() => setExpanded(!expanded)}
         data-testid={`button-expand-${entityType}`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Flag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
           <span>{title}</span>
-          <Badge variant="secondary" className="text-xs">{items.length} flagged</Badge>
+          {actionableItems.length > 0 && (
+            <Badge variant="secondary" className="text-xs">{actionableItems.length} active</Badge>
+          )}
+          {protectedItems.length > 0 && (
+            <Badge variant="outline" className="text-xs border-destructive/40 text-destructive">{protectedItems.length} protected</Badge>
+          )}
+          {archivedItems.length > 0 && (
+            <Badge variant="outline" className="text-xs text-muted-foreground">{archivedItems.length} archived</Badge>
+          )}
+          {actionableItems.length === 0 && protectedItems.length === 0 && archivedItems.length > 0 && (
+            <span className="text-xs text-green-700 dark:text-green-400">✓ all archived</span>
+          )}
         </div>
         {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
       </button>
 
       {expanded && (
-        <div className="border-t divide-y">
-          {items.map((item: any) => {
+        <div className="border-t">
+          {actionableItems.length > 0 && (
+            <div className="px-4 py-2 bg-amber-50/50 dark:bg-amber-950/20 border-b">
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Active — requires action</span>
+            </div>
+          )}
+          <div className="divide-y">
+          {actionableItems.map((item: any) => {
             const id = item.id;
             const label = item.number || item.jobNumber || item.name || item.title
               || (item.firstName || item.lastName ? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() : null)
@@ -2195,6 +2218,59 @@ function GovernanceEntitySection({
               </div>
             );
           })}
+          </div>
+          {protectedItems.length > 0 && (
+            <>
+              <div className="px-4 py-2 bg-red-50/50 dark:bg-red-950/20 border-t border-b">
+                <span className="text-xs font-medium text-red-700 dark:text-red-400">Protected — cannot be bulk-archived (Xero-linked or shared with live data)</span>
+              </div>
+              <div className="divide-y">
+                {protectedItems.map((item: any) => {
+                  const id = item.id;
+                  const label = item.number || item.jobNumber || item.name || item.title
+                    || (item.firstName || item.lastName ? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() : null)
+                    || id;
+                  const sub = item.customer || item.status || "";
+                  const xeroLinked = item._xeroLinked || item._isolation?.xeroLinked;
+                  return (
+                    <div key={id} className="px-4 py-2.5" data-testid={`governance-row-protected-${entityType}-${id}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{label}</span>
+                        {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
+                        {xeroLinked && <Badge variant="destructive" className="text-xs">Xero-linked</Badge>}
+                        <Badge variant="outline" className="text-xs border-destructive/40 text-destructive">Protected</Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {archivedItems.length > 0 && (
+            <>
+              <div className="px-4 py-2 bg-muted/30 border-t border-b">
+                <span className="text-xs font-medium text-muted-foreground">Archived — no action needed (historical record)</span>
+              </div>
+              <div className="divide-y opacity-70">
+                {archivedItems.map((item: any) => {
+                  const id = item.id;
+                  const label = item.number || item.jobNumber || item.name || item.title
+                    || (item.firstName || item.lastName ? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() : null)
+                    || id;
+                  const sub = item.customer || item.status || "";
+                  return (
+                    <div key={id} className="px-4 py-2.5" data-testid={`governance-row-archived-${entityType}-${id}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm text-muted-foreground">{label}</span>
+                        {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
+                        <Badge variant="outline" className="text-xs">Archived</Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -2443,8 +2519,14 @@ function GovernanceSection() {
                   </div>
                 )}
                 {lastBulkResult && (
-                  <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2" data-testid="bulk-archive-result-summary">
-                    <p className="font-medium text-foreground">Bulk archive result: {lastBulkResult.totalArchived} archived, {lastBulkResult.totalSkipped} skipped</p>
+                  <div className={`rounded-md border p-3 text-xs space-y-2 ${lastBulkResult.totalSkipped > 0 ? "border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/20" : "border-green-300 dark:border-green-700 bg-green-50/30 dark:bg-green-950/20"}`} data-testid="bulk-archive-result-summary">
+                    <p className="font-medium text-foreground flex items-center gap-1.5">
+                      {lastBulkResult.totalSkipped > 0 ? <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />}
+                      {lastBulkResult.totalArchived > 0
+                        ? `${lastBulkResult.totalArchived} record(s) archived successfully`
+                        : "No records were archived"}
+                      {lastBulkResult.totalSkipped > 0 && ` · ${lastBulkResult.totalSkipped} protected/skipped`}
+                    </p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-muted-foreground">
                       {Object.entries(lastBulkResult.results).map(([key, val]) => (
                         <div key={key} className="flex items-center gap-1">

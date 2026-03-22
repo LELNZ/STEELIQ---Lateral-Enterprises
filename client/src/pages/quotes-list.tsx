@@ -401,7 +401,7 @@ export default function QuotesList() {
               ) : (
                 <>
                   {isMobile ? (
-                    <MobileQuoteCards quotes={filteredQuotes} />
+                    <MobileQuoteCards quotes={filteredQuotes} isAdmin={isAdmin} demoFlagMutation={demoFlagMutation} />
                   ) : (
                     <DesktopQuoteTable quotes={filteredQuotes} isAdmin={isAdmin} demoFlagMutation={demoFlagMutation} />
                   )}
@@ -514,7 +514,7 @@ function DesktopQuoteTable({ quotes, isAdmin, demoFlagMutation }: { quotes: Enri
   );
 }
 
-function MobileQuoteCards({ quotes }: { quotes: EnrichedQuote[] }) {
+function MobileQuoteCards({ quotes, isAdmin, demoFlagMutation }: { quotes: EnrichedQuote[]; isAdmin: boolean; demoFlagMutation: any }) {
   return (
     <div className="space-y-3">
       {quotes.map((q) => (
@@ -524,9 +524,16 @@ function MobileQuoteCards({ quotes }: { quotes: EnrichedQuote[] }) {
             data-testid={`card-quote-${q.id}`}
           >
             <div className="flex items-start justify-between gap-2 flex-wrap">
-              <span className="font-mono font-medium text-sm" data-testid={`text-quote-number-mobile-${q.id}`}>
-                {q.number}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-medium text-sm" data-testid={`text-quote-number-mobile-${q.id}`}>
+                  {q.number}
+                </span>
+                {isAdmin && q.isDemoRecord && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-quote-mobile-${q.id}`}>
+                    Demo
+                  </Badge>
+                )}
+              </div>
               <QuoteBadges quote={q} />
             </div>
             <p className="mt-2 text-sm" data-testid={`text-quote-customer-mobile-${q.id}`}>

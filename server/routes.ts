@@ -2378,7 +2378,10 @@ export async function registerRoutes(
   // ─── Project Routes ───────────────────────────────────────────────────────
   app.get("/api/projects", async (req, res) => {
     try {
-      let all = await storage.getAllProjects();
+      const scope = req.query.scope as string | undefined;
+      let all = scope === "archived"
+        ? await storage.getArchivedProjects()
+        : await storage.getAllProjects();
       if (!isPrivilegedUser(req)) {
         all = all.filter(p => !p.isDemoRecord);
       }
