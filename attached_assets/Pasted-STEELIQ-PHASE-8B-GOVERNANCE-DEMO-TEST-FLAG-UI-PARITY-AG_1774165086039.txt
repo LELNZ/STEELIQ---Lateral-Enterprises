@@ -1,0 +1,268 @@
+STEELIQ PHASE 8B — GOVERNANCE DEMO/TEST FLAG UI PARITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase targets a verified operational gap in governance UI parity.
+
+Non-negotiable rules:
+- Do not redesign the governance architecture.
+- Do not reintroduce demo/test governance controls into Admin > Users.
+- Do not change the centralized canonical governance surface in Settings > System except where a tiny consistency adjustment is required by this phase.
+- Do not alter Xero protections, delete safety rules, archive behavior, or governance audit behavior.
+- Do not change the lifecycle engine or Phase 7B M&D enforcement.
+- Do not introduce new database columns or tables.
+- Do not add unapproved endpoints unless current repo truth proves one of the required demo-flag routes is actually missing. If a route is missing, report it first and add only the minimal route required.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not weaken any existing protections.
+- Do not report completion from backend support alone. User-facing admin usability is required.
+
+CURRENT CANONICAL TRUTH
+
+Phase 8A is complete.
+Settings > System is now the single canonical place for:
+- Environment Information
+- Test / Demo Data Governance
+- flagged record review
+- governance archive/delete
+- bulk archive of flagged records
+- governance activity / audit visibility
+
+Admin > Users no longer contains demo/test cleanup/reset controls.
+
+Current verified demo/test flagging parity truth:
+- Direct UI flagging already exists on:
+  - quotes
+  - op-jobs
+  - customers
+  - contacts
+- Direct UI flagging is still missing or not operationally available on:
+  - estimates
+  - projects
+  - invoices
+
+Important live truth already observed:
+- In the live app, projects currently cannot be flagged as a demo/test item from the project page.
+
+PRIMARY OBJECTIVE
+
+Add direct, owner/admin-appropriate demo/test flagging UI parity to the entity surfaces that currently lack it:
+1. estimates
+2. projects
+3. invoices
+
+The outcome must allow high-level users to flag and unflag demo/test records directly from those entity pages/lists without needing to go to Settings > System.
+
+PHASE A — VERIFY CURRENT ROUTE + SURFACE TRUTH
+
+1. Re-confirm the current repo truth for each target entity:
+- existing PATCH demo-flag route presence/absence
+- current page/list surface where the toggle should live
+- existing badge/banner/admin-section UI patterns already used elsewhere
+
+2. Follow existing SteelIQ patterns where possible, especially from:
+- quote-detail.tsx
+- op-job-detail.tsx
+- customers.tsx
+- contacts.tsx
+
+3. If any target entity does not actually have a usable demo-flag endpoint, report that mismatch and add only the minimal endpoint required.
+
+PHASE B — ESTIMATES UI PARITY
+
+Target surface:
+- the current estimate page/list in repo truth, currently identified as jobs-list.tsx unless repo truth differs
+
+Required behavior:
+1. Add a demo/test flag toggle action to each estimate row in the existing action area/menu.
+2. Use the existing estimate demo-flag route if present.
+3. When flagged, show a clear visual row-level Demo/Test indicator using the existing amber governance badge language pattern.
+4. Allow unflagging from the same operational surface.
+5. Restrict the control appropriately to high-level users if that is the current governance pattern.
+
+PHASE C — PROJECTS UI PARITY
+
+Target surface:
+- project-detail.tsx or the current project detail surface in repo truth
+
+Required behavior:
+1. Add a direct “Mark as Demo/Test” / “Remove Demo/Test Flag” control on the project page.
+2. Place it in a serious admin/governance-appropriate area consistent with the current architecture.
+3. When flagged, show a clear project-level visual indicator/banner/badge using the existing governance language style.
+4. Persist and reload correctly.
+5. Restrict the control appropriately to high-level users if that is the current governance pattern.
+
+This is the highest-priority gap in this phase and must be operationally solved.
+
+PHASE D — INVOICES UI PARITY
+
+Target surface:
+- invoices.tsx or the current invoice operational surface in repo truth
+
+Required behavior:
+1. Add a demo/test flag toggle control to the invoice list/detail surface.
+2. Use the existing invoice demo-flag route if present.
+3. Show a clear visual Demo/Test indicator when flagged.
+4. Allow unflagging from the same operational surface.
+5. Do not alter any Xero-linked safety or deletion rules.
+
+PHASE E — ROLE + SAFETY PRESERVATION
+
+1. Preserve all current governance protections.
+2. Preserve all Xero-linked protections.
+3. Demo/test flagging must not weaken delete/archive restrictions.
+4. Do not expose unsafe governance controls to broad roles if current repo truth gates them.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the centralized governance panel
+- redesign settings
+- redesign project, estimate, or invoice pages broadly
+- change lifecycle logic
+- change M&D enforcement
+- change quote/job/customer/contact demo flag behavior except for regression-safe consistency
+- add new schema
+- add speculative governance features
+- add bulk actions unless already required by the narrow UI implementation
+- change invoice numbering or allocation logic
+
+REQUIRED TEST CASES
+
+TC-P8B-001
+As an authorized high-level user, flag an estimate as Demo/Test from its own page/list surface.
+Expected:
+- flag persists
+- visible Demo/Test indicator appears
+- reload preserves truth
+
+TC-P8B-002
+As an authorized high-level user, unflag that same estimate from its own page/list surface.
+Expected:
+- indicator disappears
+- reload preserves truth
+
+TC-P8B-003
+As an authorized high-level user, flag a project as Demo/Test from the project page.
+Expected:
+- flag persists
+- clear project-level indicator appears
+- reload preserves truth
+
+TC-P8B-004
+As an authorized high-level user, unflag that same project from the project page.
+Expected:
+- indicator disappears
+- reload preserves truth
+
+TC-P8B-005
+As an authorized high-level user, flag an invoice as Demo/Test from its own operational surface.
+Expected:
+- flag persists
+- visible Demo/Test indicator appears
+- reload preserves truth
+
+TC-P8B-006
+As an authorized high-level user, unflag that same invoice from its own operational surface.
+Expected:
+- indicator disappears
+- reload preserves truth
+
+TC-P8B-007
+Verify existing demo/test flagging still works on:
+- quotes
+- op-jobs
+- customers
+- contacts
+Expected:
+- no regression
+
+TC-P8B-008
+Verify Settings > System still reflects correct flagged-record truth after using the new direct page/list controls.
+Expected:
+- counts and listed items remain correct
+
+TC-P8B-009
+Verify archive/delete safety still behaves correctly for flagged and unflagged records.
+Expected:
+- no unsafe deletion behavior introduced
+
+TC-P8B-010
+Verify Xero-linked invoice safety is unchanged.
+Expected:
+- demo/test flag does not weaken Xero-linked restrictions
+
+TC-P8B-011
+Verify non-high-level users do not receive misleading or unsafe governance controls on these surfaces.
+Expected:
+- controls hidden or appropriately restricted according to current governance pattern
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact routes/endpoints used or added
+3. exact UI surfaces added for estimates, projects, and invoices
+4. exact role-gating behavior on each new control
+5. exact visual indicator behavior implemented
+6. confirmation of whether any new endpoint was required
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. ROUTES / ENDPOINTS USED OR ADDED
+- exact route list
+- whether reused or newly added
+- one-line purpose of each
+
+4. UI SURFACES ADDED
+- estimates surface
+- projects surface
+- invoices surface
+- exact location and behavior of each
+
+5. ROLE GATING / SAFETY
+- who can see/use each new control
+- what protections remain unchanged
+
+6. VISUAL INDICATOR BEHAVIOR
+- estimate indicator
+- project indicator
+- invoice indicator
+
+7. TEST RESULTS
+- TC-P8B-001 result
+- TC-P8B-002 result
+- TC-P8B-003 result
+- TC-P8B-004 result
+- TC-P8B-005 result
+- TC-P8B-006 result
+- TC-P8B-007 result
+- TC-P8B-008 result
+- TC-P8B-009 result
+- TC-P8B-010 result
+- TC-P8B-011 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Preserve governance protections.
+Preserve Xero safety.
+Close the real operational parity gap on estimates, projects, and invoices.
+Report truthfully and exactly.

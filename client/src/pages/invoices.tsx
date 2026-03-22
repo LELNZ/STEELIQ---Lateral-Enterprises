@@ -8,10 +8,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, AlertTriangle, LinkIcon } from "lucide-react";
+import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, AlertTriangle, LinkIcon, FlaskConical } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 
 type EnrichedInvoice = Invoice & { customerName: string | null; projectName: string | null };
 
@@ -263,9 +264,30 @@ function InvoiceActions({ inv, onMutate }: { inv: EnrichedInvoice; onMutate: (id
 
 export default function InvoicesPage() {
   const [search, setSearch] = useState("");
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
 
   const { data: invoices = [], isLoading } = useQuery<EnrichedInvoice[]>({
     queryKey: ["/api/invoices"],
+  });
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async ({ id, isDemoRecord }: { id: string; isDemoRecord: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/invoices/${id}/demo-flag`, { isDemoRecord });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const filtered = invoices.filter((inv) => {
@@ -308,7 +330,14 @@ export default function InvoicesPage() {
           {filtered.map((inv) => (
             <TableRow key={inv.id} className="hover:bg-muted/30" data-testid={`row-invoice-${inv.id}`}>
               <TableCell className="font-mono text-sm font-semibold py-3" data-testid={`text-invoice-number-${inv.id}`}>
-                {inv.number}
+                <div className="flex items-center gap-1.5">
+                  {inv.number}
+                  {inv.isDemoRecord && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-invoice-${inv.id}`}>
+                      <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="hidden md:table-cell py-3">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${INVOICE_TYPE_COLORS[inv.type] ?? "bg-muted text-muted-foreground border-border"}`}>
@@ -384,7 +413,22 @@ export default function InvoicesPage() {
                 )}
               </TableCell>
               <TableCell className="py-3">
-                <InvoiceActions inv={inv} onMutate={() => {}} />
+                <div className="flex items-center gap-1">
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-7 px-2 text-xs ${inv.isDemoRecord ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+                      onClick={() => demoFlagMutation.mutate({ id: inv.id, isDemoRecord: !inv.isDemoRecord })}
+                      disabled={demoFlagMutation.isPending}
+                      data-testid={`button-toggle-demo-invoice-${inv.id}`}
+                      title={inv.isDemoRecord ? "Remove demo/test flag" : "Flag as demo/test"}
+                    >
+                      <FlaskConical className="w-3 h-3" />
+                    </Button>
+                  )}
+                  <InvoiceActions inv={inv} onMutate={() => {}} />
+                </div>
               </TableCell>
             </TableRow>
           ))}

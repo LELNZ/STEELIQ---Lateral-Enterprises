@@ -20,9 +20,10 @@ import {
 import {
   FolderOpen, Building2, MapPin, FileText, HardHat, ReceiptText, GitBranch,
   ArrowLeftCircle, ChevronDown, ChevronUp, ExternalLink, Pencil, Check, X, Plus,
-  Briefcase, Link2,
+  Briefcase, Link2, AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
 
 const VARIATION_STATUS_LABELS: Record<string, string> = {
@@ -407,6 +408,8 @@ export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
   const projectId = params?.id!;
 
   const [editOpen, setEditOpen] = useState(false);
@@ -492,6 +495,25 @@ export default function ProjectDetail() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const demoFlagMutation = useMutation({
+    mutationFn: async (isDemoRecord: boolean) => {
+      const res = await apiRequest("PATCH", `/api/projects/${projectId}/demo-flag`, { isDemoRecord });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return <div className="p-6 text-sm text-muted-foreground">Loading project…</div>;
   }
@@ -551,6 +573,13 @@ export default function ProjectDetail() {
           <Pencil className="h-3 w-3 mr-1" /> Edit
         </Button>
       </div>
+
+      {project.isDemoRecord && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 px-4 py-2 flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300" data-testid="banner-demo-project">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          This project is flagged as a demo/test record and may be bulk-archived by an administrator.
+        </div>
+      )}
 
       {/* Commercial Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -745,6 +774,30 @@ export default function ProjectDetail() {
         projectId={projectId}
         acceptedQuoteId={pQuotes.find((q) => q.status === "accepted")?.id}
       />
+
+      {isAdmin && (
+        <>
+          <Separator />
+          <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-admin-demo-flag-project">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Admin: Demo / Test Record</p>
+            <p className="text-xs text-muted-foreground">Flag this project as a demo/test record so it can be managed from the Governance panel. <strong>Record-level only</strong> — does not automatically propagate to linked quotes, jobs, or invoices. Use the Governance panel in Settings to manage chain-level classification.</p>
+            <div className="flex items-center gap-3">
+              <Button
+                variant={project.isDemoRecord ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => demoFlagMutation.mutate(!project.isDemoRecord)}
+                disabled={demoFlagMutation.isPending}
+                data-testid="button-toggle-demo-flag-project"
+              >
+                {project.isDemoRecord ? "✓ Flagged as Demo/Test" : "Mark as Demo/Test"}
+              </Button>
+              {project.isDemoRecord && (
+                <span className="text-xs text-muted-foreground">This record will be archived by the next demo cleanup.</span>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Edit Project Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
