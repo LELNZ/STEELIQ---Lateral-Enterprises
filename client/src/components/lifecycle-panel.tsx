@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
 import type {
   ComputedLifecycleState,
   ComputedStageState,
@@ -455,6 +456,7 @@ interface LifecyclePanelProps {
 }
 
 export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) {
+  const { toast } = useToast();
   const endpoint = jobId
     ? `/api/op-jobs/${jobId}/lifecycle`
     : quoteId
@@ -529,8 +531,26 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
         queryClient.invalidateQueries({ queryKey: [`/api/op-jobs/${jobId}/lifecycle`] });
       }
     },
-    onError: () => {
+    onError: (e: any) => {
       setPendingKey(null);
+      // Parse structured error from the API (format: "400: {json}")
+      let message = "Failed to update task. Please try again.";
+      try {
+        const match = e?.message?.match(/^\d+:\s*(\{[\s\S]*\})$/);
+        if (match) {
+          const body = JSON.parse(match[1]);
+          if (body?.error) message = body.error;
+        } else if (e?.message) {
+          message = e.message;
+        }
+      } catch {
+        if (e?.message) message = e.message;
+      }
+      toast({
+        title: "Task blocked",
+        description: message,
+        variant: "destructive",
+      });
     },
   });
 

@@ -1,0 +1,331 @@
+STEELIQ PRODUCTION WORKFLOW HARDENING — PHASE 7B
+MEASUREMENT & DIMENSIONS ENFORCEMENT + LIFECYCLE READINESS GATING
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. You must implement exactly what is requested and preserve the current architecture.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle business rules except where explicitly required below for truthful readiness enforcement and lifecycle gating.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not weaken any governance protections introduced in Phases 1–7A.
+- Do not mark this phase complete unless the required user-facing workflow behavior is operationally usable and truthfully enforced.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- If older prompt language conflicts with actual repo code, follow current code truth and report the mismatch.
+- Preserve the Settings > System Environment Information and role-gated Governance architecture from Phases 1–7A.
+- Preserve invoice archive behavior introduced in Phase 2.
+- Preserve CRM governance protections introduced in Phase 3.
+- Preserve governance hardening/audit visibility introduced in Phase 4.
+- Preserve Phase 5 refresh invalidation and invoice numbering work.
+- Preserve Phase 6 lifecycle preview/read-only truth work, post-project Next Actions panel, Measurement & Dimensions guidance, and demo/test record-level wording.
+- Preserve Phase 7A job-aware Next Actions panel, lifecycle preview polish, and readiness banners unless explicitly strengthened below.
+- Do not start a broad dashboard redesign.
+- Do not start a workflow re-architecture.
+- Do not introduce speculative event-bus/state-management rewrites.
+
+CURRENT CONTEXT
+
+SteelIQ is live and Xero push works.
+
+Accepted baseline already in place:
+- truthful environment clarity and role-gated governance
+- invoice archive truth
+- downstream delete safety on key chains
+- CRM governance and shared-live protection
+- governance audit visibility and summary hardening
+- invoice numbering prefix control
+- quote-detail invoice refresh invalidation improvements
+- accepted quote Create Project CTA
+- customer-facing details default open
+- lifecycle panel active-stage default expansion
+- job-page lifecycle moved lower
+- lifecycle preview/read-only truth on quote/job surfaces
+- post-project Next Actions panel
+- Measurement & Dimensions guidance
+- demo/test record-level-only wording
+- job-aware Next Actions panel
+- lifecycle preview polish
+- UI-level Measurement & Dimensions readiness banners
+
+CURRENT REMAINING GAP TO FIX NOW
+
+The most important remaining workflow truth issue is this:
+
+Measurement & Dimensions readiness is still only a UI-level warning.
+A determined user can still progress lifecycle tasks/stages without setting readiness-critical fields.
+
+That means the workflow is still advisory where it should be truthfully enforced.
+
+PRIMARY OBJECTIVE
+
+Move Measurement & Dimensions readiness from:
+- warning-only / guidance-only
+
+to:
+- truthfully enforced lifecycle gating at the correct operational point
+
+without redesigning the lifecycle engine or broadening scope.
+
+This phase is only about:
+1. enforcing Measurement & Dimensions readiness at the correct lifecycle progression point
+2. making the resulting blocked state clear and actionable for users
+3. preserving all current workflow/guidance/UI improvements already in place
+
+Do not broaden scope beyond that.
+
+PHASE A — DETERMINE THE CANONICAL ENFORCEMENT POINT
+
+OBJECTIVE
+
+Identify the correct place in the current architecture to enforce readiness truthfully.
+
+REQUIRED IMPLEMENTATION
+
+1. Review how lifecycle progression/task completion is currently handled for op-jobs.
+2. Determine the smallest and most truthful enforcement point already present in the architecture, such as:
+- task toggle endpoint/handler
+- stage completion endpoint/handler
+- stage advancement logic
+- lifecycle service/state transition logic
+
+3. Choose the narrowest safe enforcement point that:
+- actually prevents invalid progression
+- matches current architecture
+- does not require redesigning the lifecycle engine
+
+4. Report clearly which enforcement point you selected and why it is the canonical place.
+
+ACCEPTANCE CRITERIA
+
+- readiness enforcement happens at a real authoritative progression point, not just in the UI
+- enforcement is architecture-preserving and narrow
+
+PHASE B — ENFORCE M&D READINESS FOR MEASUREMENT-DEPENDENT PROGRESSION
+
+OBJECTIVE
+
+Prevent lifecycle progression where Measurement & Dimensions data is required but missing.
+
+REQUIRED IMPLEMENTATION
+
+1. Enforce readiness when all of the following are true:
+- the lifecycle progression point being attempted is measurement-dependent / survey-measure dependent
+- the job is not archived
+- measurementRequirement is not set to "not_required"
+- and one or both of these are missing:
+  - measurementRequirement
+  - dimensionSource
+
+2. When enforcement triggers:
+- block the progression/action at the canonical lifecycle enforcement point
+- return a clear structured error message
+- ensure the UI surfaces the message clearly and points the user back to Measurement & Dimensions
+
+3. When measurementRequirement === "not_required":
+- do not block progression unnecessarily
+- the workflow should proceed normally
+
+4. When the required values are present:
+- do not block progression
+- lifecycle behavior should continue as before
+
+5. Do not introduce speculative generalized validation systems.
+Keep this targeted and truthful.
+
+ACCEPTANCE CRITERIA
+
+- users can no longer silently progress the relevant lifecycle point with missing required M&D data
+- not_required remains a valid bypass where appropriate
+- valid data allows progression normally
+
+PHASE C — UI ERROR / BLOCKED-STATE CLARITY
+
+OBJECTIVE
+
+Make blocked readiness state operationally clear and easy to resolve.
+
+REQUIRED IMPLEMENTATION
+
+1. Preserve the existing UI-level readiness banners from Phase 7A.
+2. Add/strengthen blocked-state messaging so that when the backend/canonical enforcement blocks progression:
+- the user sees a clear explanation
+- the message names the missing field(s)
+- the message tells the user to use the Edit action in Measurement & Dimensions
+- the message is shown near the lifecycle interaction area and/or through the existing mutation error surface
+
+3. The UI should clearly distinguish:
+- advisory preview/guidance
+- actual blocked progression
+
+4. Do not redesign the page broadly.
+
+ACCEPTANCE CRITERIA
+
+- blocked progression is clearly explained
+- users know exactly what to fix and where
+- the UI and backend enforcement tell the same story
+
+PHASE D — PRESERVE EXISTING BEHAVIOR OUTSIDE THE GUARD
+
+OBJECTIVE
+
+Ensure this enforcement phase does not create workflow regressions.
+
+REQUIRED IMPLEMENTATION
+
+Do not weaken:
+- job-aware Next Actions panel
+- lifecycle preview/read-only distinction
+- accepted quote Create Project CTA and post-project next-step guidance
+- invoice refresh/invalidation fixes
+- invoice numbering controls
+- governance protections
+- Xero protections
+- Measurement & Dimensions helper guidance
+- demo/test wording truth
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the lifecycle engine broadly
+- redesign workflow/business rules beyond the targeted readiness gate
+- redesign the job detail page
+- redesign governance architecture
+- add speculative automation
+- add speculative generic validation frameworks
+- add broad server-side gating for unrelated fields
+- start a new reporting/dashboard phase
+- weaken any safety checks
+
+REQUIRED TEST CASES
+
+TC-001
+Attempt to progress/complete the measurement-dependent lifecycle point with both Measurement Requirement and Dimension Source missing.
+Expected:
+- progression/action is blocked
+- clear error explains both fields are required
+- user is directed to Measurement & Dimensions
+
+TC-002
+Attempt to progress/complete the measurement-dependent lifecycle point with Measurement Requirement missing only.
+Expected:
+- progression/action is blocked
+- clear error explains Measurement Requirement is missing
+- user is directed to Measurement & Dimensions
+
+TC-003
+Attempt to progress/complete the measurement-dependent lifecycle point with Dimension Source missing only.
+Expected:
+- progression/action is blocked
+- clear error explains Dimension Source is missing
+- user is directed to Measurement & Dimensions
+
+TC-004
+Attempt to progress/complete the same lifecycle point when measurementRequirement = "not_required".
+Expected:
+- progression is not blocked
+- no unnecessary readiness enforcement fires
+
+TC-005
+Attempt to progress/complete the same lifecycle point when all required M&D fields are set.
+Expected:
+- progression succeeds normally
+- no regression in lifecycle behavior
+
+TC-006
+Review the lifecycle and M&D UI after enforcement is added.
+Expected:
+- readiness banners still render appropriately
+- blocked-state messaging is clearer than before
+- preview mode and active mode remain truthful
+
+TC-007
+Verify non-targeted systems did not regress.
+Expected:
+- governance protections still intact
+- Xero protections still intact
+- Settings > System still truthful
+- invoice numbering controls still intact
+- no fake environment selector reintroduced
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact canonical enforcement point selected
+5. exact readiness enforcement behavior implemented
+6. exact blocked-state UI/error messaging improvements implemented
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+- or state explicitly that no schema changes were required
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+- or state explicitly that no route changes were required
+
+5. CANONICAL ENFORCEMENT POINT
+- what lifecycle progression point was chosen
+- why it is the correct authoritative enforcement point
+- what was intentionally not changed
+
+6. READINESS ENFORCEMENT BEHAVIOR
+- old behavior
+- new behavior
+- exact conditions that block progression
+- exact conditions that allow progression
+- how not_required is handled
+
+7. BLOCKED-STATE UI / ERROR CLARITY
+- old behavior
+- new behavior
+- exact messages/surfaces improved
+- how the user is guided to resolve the issue
+
+8. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Preserve Xero safety.
+Enforce readiness truth directly and clearly.
+Report truthfully and exactly.

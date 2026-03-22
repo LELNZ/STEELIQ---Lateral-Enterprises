@@ -4558,6 +4558,32 @@ export async function registerRoutes(
         return res.status(400).json({ error: "stageKey, taskKey, and completed are required" });
       }
 
+      // ── M&D Readiness guard ──────────────────────────────────────────────────
+      // When marking a site_measure task as complete, enforce that the linked op-job
+      // has the required Measurement & Dimensions fields set.
+      // This only fires when completing (completed=true) a task in the site_measure stage.
+      if (stageKey === "site_measure" && completed === true) {
+        const instance = await storage.getLifecycleInstanceById(instanceId);
+        if (instance?.opJobId) {
+          const job = await storage.getOpJob(instance.opJobId);
+          if (job && !job.archivedAt && job.measurementRequirement !== "not_required") {
+            const missing: string[] = [];
+            if (!job.measurementRequirement) missing.push("Measurement Requirement");
+            if (!job.dimensionSource) missing.push("Dimension Source");
+            if (missing.length > 0) {
+              const fieldList = missing.join(" and ");
+              const pronoun = missing.length === 1 ? "this field" : "these fields";
+              return res.status(400).json({
+                error: `Cannot complete this task: ${fieldList} ${missing.length === 1 ? "is" : "are"} not set on this job. Use the Edit action in the Measurement & Dimensions section to set ${pronoun} before progressing the Site Measure / Review stage.`,
+                missingFields: missing,
+                resolveIn: "Measurement & Dimensions",
+              });
+            }
+          }
+        }
+      }
+      // ── End M&D readiness guard ──────────────────────────────────────────────
+
       const userId = (req as any).user?.id ?? null;
       const taskState = await storage.upsertLifecycleTaskState({
         lifecycleInstanceId: instanceId,
