@@ -1,0 +1,243 @@
+STEELIQ PRODUCTION WORKFLOW HARDENING — PHASE 5 FOLLOW-UP
+FULL COMPLETION REPORT + GAP CLOSURE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are continuing work on an existing live, production-oriented system. You must preserve the current architecture and either:
+1. provide the full formal completion report for Phase 5, or
+2. complete any still-missing Phase 5 work required by the original prompt.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not change the quote lifecycle business rules unless explicitly required for UI truth/interaction locking already requested in Phase 5.
+- Do not replace or bypass the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not merge immutable snapshot state with live editable state.
+- Do not introduce speculative schema creep outside what is required to complete the listed functionality.
+- Do not add unapproved endpoints outside what is needed for this follow-up.
+- Do not perform hidden refactors.
+- Do not make speculative improvements not requested.
+- Do not weaken any live Xero/accounting safeguards.
+- Do not weaken any governance protections introduced in Phases 1–4.
+- Do not claim Phase 5 complete unless the required user-facing surfaces are operationally usable in live workflow.
+- Do not claim completion from backend changes alone.
+- Treat the current repository code and runtime truth as the implementation source of truth.
+- Preserve all accepted governance work from prior phases.
+- Do not broaden scope into a new phase.
+
+CURRENT ISSUE
+
+The previous response only summarized:
+- Phase 5C invoice workflow clarity
+- Phase 5G invoice numbering
+
+That is not sufficient to accept Phase 5.
+The original prompt required a full report across all workstreams and required tests.
+
+PRIMARY OBJECTIVE
+
+Do one of the following truthfully:
+- if all Phase 5 work is already implemented, provide the complete formal completion report in the exact required structure
+- if any Phase 5 work is still incomplete, finish only the missing Phase 5 items and then provide the complete formal completion report
+
+Do not start Phase 6.
+Do not broaden scope.
+
+REQUIRED VERIFICATION / COMPLETION AREAS
+
+You must explicitly cover and verify all of these:
+
+A. LIVE REFRESH / INVALIDATION HARDENING
+- invoice create visibility across global and project surfaces
+- job create visibility across global and project surfaces
+- invoiced/outstanding totals refresh
+- any mutation invalidation/refetch changes made
+
+B. ACCEPTED QUOTE HANDOFF CLARITY
+- whether Create Project is now visually clearer
+- exact UI changes made
+
+C. INVOICE WORKFLOW CLARITY
+- current billing state clarity
+- returned-to-draft clarity
+- invoice creation clarity
+
+D. LIFECYCLE UX CHANGES
+- estimate
+- quote
+- job
+- default open/closed behavior
+- interaction truth behavior
+
+E. JOB PAGE LIFECYCLE PLACEMENT
+- old placement
+- new placement
+
+F. CUSTOMER-FACING DETAILS DEFAULT OPEN
+- exact surface changed
+- exact default-open behavior
+
+G. INVOICE NUMBERING / REFERENCE CONTROLS
+- invoice numbering control
+- invoice reference/prefix control
+- exact behavior supported
+
+REQUIRED TEST CASES
+
+You must explicitly run/report:
+
+TC-001
+Create an invoice in the live workflow path.
+Expected:
+- invoice appears promptly in global invoices page
+- invoice appears promptly in the relevant project/quote invoice surface
+- invoiced/outstanding totals update promptly
+
+TC-002
+Create a job in the live workflow path.
+Expected:
+- job appears promptly in jobs page
+- job appears promptly in the relevant project surface
+
+TC-003
+Accept a quote and review the accepted quote page.
+Expected:
+- Create Project handoff is visually clear and stronger than before
+- next operational step is obvious
+
+TC-004
+Review invoice creation workflow on the relevant quote/project surface.
+Expected:
+- current billing state is clearer
+- invoice creation entry/action is clearer
+- returned-to-draft state is not confusing
+
+TC-005
+Review lifecycle cards on estimate, quote, and job surfaces.
+Expected:
+- only current stage defaults open
+- other lifecycle cards default closed
+- interaction feels truthful and not broken
+
+TC-006
+Review job detail page layout.
+Expected:
+- lifecycle section is lower and better aligned to workflow order
+
+TC-007
+Review customer-facing details section.
+Expected:
+- defaults open
+- still behaves coherently
+
+TC-008
+Review Settings > Numbering.
+Expected:
+- invoice numbering control exists
+- invoice reference/prefix control exists
+- wording is clear and consistent with existing settings patterns
+
+TC-009
+Verify non-targeted systems did not regress.
+Expected:
+- governance protections still intact
+- Xero protections still intact
+- Settings > System still truthful
+- no fake environment selector reintroduced
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact schema/data model changes
+3. exact routes/endpoints changed
+4. exact refresh/invalidation fixes implemented
+5. exact accepted-quote handoff improvements implemented
+6. exact invoice workflow clarity improvements implemented
+7. exact lifecycle UX changes implemented
+8. exact job page placement change implemented
+9. exact customer-facing-details default-open change implemented
+10. exact invoice numbering/reference controls implemented
+11. results of all required test cases
+12. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. SCHEMA / DATA MODEL CHANGES
+- exact fields added/changed
+- migration summary if applicable
+- or state explicitly that no schema changes were required
+
+4. ROUTES / ENDPOINTS CHANGED
+- exact route list
+- one-line purpose of each change
+- or state explicitly that no route changes were required
+
+5. LIVE REFRESH / INVALIDATION HARDENING
+- old behavior
+- new behavior
+- exact query invalidation/refetch fixes made
+- exact surfaces now refreshed promptly
+
+6. ACCEPTED QUOTE HANDOFF CLARITY
+- old behavior
+- new behavior
+- exact UI changes made
+
+7. INVOICE WORKFLOW CLARITY
+- exact surface changes
+- how billing state / next action / returned-to-draft clarity improved
+
+8. LIFECYCLE UX CHANGES
+- estimate
+- quote
+- job
+- default open/closed rules
+- interaction truth changes
+
+9. JOB PAGE LIFECYCLE PLACEMENT
+- old placement
+- new placement
+- why it better matches workflow
+
+10. CUSTOMER-FACING DETAILS DEFAULT OPEN
+- exact surface changed
+- exact behavior changed
+
+11. INVOICE NUMBERING / REFERENCE CONTROLS
+- exact settings changes
+- exact behavior supported
+- any remaining limits
+
+12. TEST RESULTS
+- TC-001 result
+- TC-002 result
+- TC-003 result
+- TC-004 result
+- TC-005 result
+- TC-006 result
+- TC-007 result
+- TC-008 result
+- TC-009 result
+
+13. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase rather than being forced here
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve the architecture.
+Preserve the governance model.
+Preserve Xero safety.
+Fix the production workflow truth issues directly and clearly.
+Report truthfully and exactly.
