@@ -2868,8 +2868,10 @@ export async function registerRoutes(
               });
             }
 
-            // Deposit-specific cap (50% of base contract only, not variations)
-            if (invoiceType === "deposit") {
+            // Deposit-specific cap (percentage mode only — 50% of base contract)
+            // Fixed amount mode bypasses the percentage cap but is still subject to
+            // the standard contract value ceiling enforced above (OVER_CONTRACT_VALUE).
+            if (invoiceType === "deposit" && parsed.data.depositType !== "fixed") {
               const depositAllowanceExcl = contractValue * (MAX_DEPOSIT_PCT / 100);
               const depositInvoicedExcl = activeInvoices
                 .filter((i) => i.type === "deposit")
@@ -2878,7 +2880,7 @@ export async function registerRoutes(
 
               if (depositRemainingExcl <= 0.005) {
                 return res.status(422).json({
-                  error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full.`,
+                  error: `Deposit allocation already fully used for this quote. The ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositAllowanceExcl.toFixed(2)} excl. GST) has been invoiced in full. Use Fixed Amount mode to enter a specific deposit amount.`,
                   code: "DEPOSIT_ALLOWANCE_EXHAUSTED",
                   depositAllowanceExcl,
                   depositInvoicedExcl,
@@ -2888,7 +2890,7 @@ export async function registerRoutes(
 
               if (newAmountExcl > depositRemainingExcl + 0.005) {
                 return res.status(422).json({
-                  error: `Deposit amount exceeds remaining deposit allowance. Only $${depositRemainingExcl.toFixed(2)} excl. GST remains of the ${MAX_DEPOSIT_PCT}% deposit allowance.`,
+                  error: `Deposit amount exceeds remaining ${MAX_DEPOSIT_PCT}% deposit allowance ($${depositRemainingExcl.toFixed(2)} excl. GST remaining). Use Fixed Amount mode to enter the actual deposit received.`,
                   code: "OVER_DEPOSIT_ALLOWANCE",
                   depositAllowanceExcl,
                   depositInvoicedExcl,
