@@ -1,0 +1,162 @@
+STEELIQ ESTIMATOR HOTFIX — STACKER DOOR FIXED PANEL TRUTH (NO SLIDING ARROW ON FIXED PANE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a narrow estimator workflow/preview truth phase for stacker doors with fixed panels.
+
+Non-negotiable rules:
+- Do not redesign the estimator architecture.
+- Do not redesign the drawing engine broadly.
+- Do not change unrelated door/window families.
+- Do not change pricing logic except where required to correctly reflect the configured panel layout already chosen by the user.
+- Do not introduce schema creep unless absolutely required and you stop to explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond truthful fixed-panel behavior for stacker doors.
+
+CURRENT LIVE ISSUE
+
+In the live estimator, when configuring a stacker door with multiple panels, one or more panels may be marked FIX.
+
+However, the current workflow/preview does not truthfully represent a fixed panel strongly enough. A fixed panel should behave visually and configurationally as a fixed glazed pane, not as a sliding leaf.
+
+PRIMARY OBJECTIVE
+
+Make stacker-door fixed panels truthfully represented in the estimator so that:
+- a panel marked FIX is clearly a fixed pane
+- fixed panels do not show sliding arrow behavior
+- preview and schedule/layout stay consistent with the actual panel configuration
+
+PHASE A — AUDIT CURRENT PANEL CONFIG TRUTH
+
+1. Review the current stacker door panel configuration logic.
+2. Identify exactly:
+- how panel count is represented
+- how per-panel FIX / Auto / sliding state is represented
+- how arrows are currently drawn in the preview
+- how layout/schedule text is currently derived
+
+3. Report the narrowest implementation path that preserves current architecture.
+
+PHASE B — FIXED PANEL PREVIEW TRUTH
+
+Required behavior:
+1. If a panel is marked FIX, that panel must render as a fixed pane in the preview.
+2. A fixed panel must not show a sliding arrow.
+3. Sliding arrows should only appear on panels that are actually sliding leaves.
+4. This must work in multi-panel stacker layouts without breaking current overall width/panel split logic.
+
+PHASE C — CONFIGURATION TRUTH
+
+Required behavior:
+1. The FIX control must clearly correspond to the actual panel being fixed.
+2. The preview must update immediately when a panel is changed to FIX or back to sliding/auto behavior.
+3. Do not leave ambiguous mixed states where FIX is selected but the preview still implies sliding.
+
+PHASE D — SCHEDULE / LAYOUT CONSISTENCY
+
+Required behavior:
+1. Quote schedule/layout output must remain consistent with the configured stacker panel truth.
+2. If the layout label currently implies all panels slide, correct that.
+3. Do not break existing schedule rows or pricing outputs.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign all stacker door UX
+- redesign all panel layout systems
+- change unrelated estimator families
+- change governance, lifecycle, invoices, or Xero behavior
+- add speculative configurator features
+- add schema unless absolutely necessary
+
+REQUIRED TEST CASES
+
+TC-FIX-001
+Create a 3-panel stacker door with all sliding panels.
+Expected:
+- current sliding preview behavior remains intact
+
+TC-FIX-002
+Mark one panel as FIX.
+Expected:
+- that panel renders as a fixed pane
+- no sliding arrow appears on that panel
+
+TC-FIX-003
+Move the fixed panel assignment to a different panel.
+Expected:
+- preview updates correctly
+- fixed/sliding indication follows the selected panel
+
+TC-FIX-004
+Return the fixed panel back to sliding/auto.
+Expected:
+- preview updates back correctly
+- no regression
+
+TC-FIX-005
+Verify quote schedule/layout remains consistent with the configured panel truth.
+Expected:
+- no mismatch between preview and schedule/layout output
+
+TC-FIX-006
+Verify no regression to other door families and no regression to the recent entrance-door sidelight workflow.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact old fixed-panel behavior
+3. exact new fixed-panel behavior
+4. exact preview/rendering logic changed
+5. exact schedule/layout consistency behavior
+6. results of all required test cases
+7. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. OLD VS NEW FIXED-PANEL BEHAVIOR
+- old behavior
+- new behavior
+- why the new behavior is more truthful
+
+4. PREVIEW / RENDERING LOGIC
+- what changed
+- how fixed panels are now distinguished from sliding panels
+
+5. SCHEDULE / LAYOUT CONSISTENCY
+- what output remains the same
+- what output was corrected, if any
+
+6. TEST RESULTS
+- TC-FIX-001 result
+- TC-FIX-002 result
+- TC-FIX-003 result
+- TC-FIX-004 result
+- TC-FIX-005 result
+- TC-FIX-006 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Make fixed stacker panels truthfully represented in the estimator.
+Do not leave the preview implying that a fixed pane slides.
+Report truthfully and exactly.
