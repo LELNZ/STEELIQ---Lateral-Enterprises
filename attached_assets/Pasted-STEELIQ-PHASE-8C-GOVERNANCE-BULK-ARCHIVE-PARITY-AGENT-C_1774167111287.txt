@@ -1,0 +1,296 @@
+STEELIQ PHASE 8C — GOVERNANCE BULK ARCHIVE PARITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase targets a verified governance gap in bulk archive parity for demo/test data management.
+
+Non-negotiable rules:
+- Do not redesign the governance architecture.
+- Do not reintroduce demo/test governance controls into Admin > Users.
+- Do not change the canonical governance home in Settings > System except where this phase explicitly requires narrow enhancement.
+- Do not alter Xero protections, delete safety rules, governance audit behavior, or archive-vs-delete separation except where required to extend archive coverage safely.
+- Do not change the lifecycle engine or Phase 7B M&D enforcement.
+- Do not introduce new database columns or tables unless absolutely required and you stop to explain first.
+- Do not add unapproved endpoints unless current repo truth proves a minimal endpoint is required for this phase.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not weaken any existing protections.
+- Do not implement hard deletion as part of this phase.
+- Do not report completion from backend changes alone. Operational admin usability in Settings > System is required.
+
+CURRENT CANONICAL TRUTH
+
+Phase 8A is complete.
+Settings > System is the single canonical place for:
+- Environment Information
+- Test / Demo Data Governance
+- flagged record review
+- governance archive/delete
+- bulk archive of flagged records
+- governance activity / audit visibility
+
+Phase 8B is complete.
+Direct demo/test flagging UI now exists for:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+Current verified gap:
+- bulk archive currently only covers demo-flagged quotes and op-jobs
+- demo-flagged estimates, projects, invoices, customers, and contacts still require individual governance actions
+- the live platform contains mixed real and historical test/demo records, so safe bulk governance across all supported entity types is now the next operational need
+
+PRIMARY OBJECTIVE
+
+Extend the canonical Settings > System governance workflow so that bulk archive can safely cover all eligible demo/test records across the supported entity types, while preserving all existing protections and historical integrity.
+
+The preferred outcome is:
+- owner/admin can bulk archive eligible flagged records across all covered entity types from Settings > System
+- unsafe records remain blocked or excluded with clear explanation
+- archive remains clearly distinct from delete
+- Xero-linked and downstream-sensitive records remain protected
+
+PHASE A — AUDIT CURRENT BULK ARCHIVE TRUTH
+
+1. Review the current bulk archive implementation in code.
+2. Report exactly:
+- which endpoint(s) it uses
+- which entity types it currently archives
+- which entity types it ignores
+- what safety filters it currently applies
+- what audit logging it currently creates
+
+3. Determine the narrowest architecture-preserving way to extend this behavior to the remaining supported entity types.
+
+PHASE B — DEFINE ELIGIBILITY RULES BY ENTITY
+
+Supported entity types to assess:
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+
+For each entity type, determine whether flagged records are:
+- always eligible for bulk archive when active
+- eligible only if certain safety conditions are met
+- not eligible for bulk archive and must remain individual-action only
+
+Required safety principles:
+1. Only flagged demo/test records are candidates.
+2. Archive only — no deletion.
+3. Xero-linked invoices must remain protected from unsafe treatment.
+4. Records with downstream/live relationship risk must be handled safely and truthfully.
+5. If a record should be excluded from bulk archive, the governance UI must make that understandable.
+
+PHASE C — IMPLEMENT BULK ARCHIVE PARITY IN SETTINGS > SYSTEM
+
+1. Extend the canonical bulk archive action so it safely handles all eligible flagged entity types.
+2. Keep this in Settings > System as the single canonical bulk-governance surface.
+3. The action must:
+- archive only eligible flagged records
+- skip blocked/ineligible records safely
+- return a clear summary by entity type
+- preserve historical records rather than delete anything
+
+4. The Settings > System UI must clearly communicate:
+- what the bulk archive action now covers
+- what may be skipped and why
+- that Xero/downstream protections still apply
+
+5. Preserve or improve governance audit visibility for the bulk action.
+
+PHASE D — UX / SUMMARY HARDENING
+
+1. Update the bulk archive text so it truthfully reflects the new scope.
+2. After running bulk archive, show an admin-usable result summary such as:
+- how many records were archived by entity type
+- how many were skipped
+- why they were skipped if applicable
+
+3. Do not add noisy or temporary dev-style messaging.
+4. Keep the UX serious and enterprise-admin appropriate.
+
+PHASE E — PROTECTION PRESERVATION
+
+1. Preserve existing individual archive/delete actions.
+2. Preserve Xero-linked invoice protection.
+3. Preserve downstream chain safety.
+4. Preserve audit logging.
+5. Preserve Settings > System as the canonical governance surface.
+6. Do not change entity-page demo/test flag controls added in Phase 8B except for regression-safe integration.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the governance panel broadly
+- redesign settings tabs
+- redesign entity pages
+- add hard delete behavior
+- broaden to non-flagged records
+- alter lifecycle logic
+- alter M&D enforcement
+- alter invoice numbering or allocation logic
+- add speculative reporting/dashboard features
+- add speculative bulk-unarchive unless already required by current architecture
+- weaken any protected-record rules for the sake of parity
+
+REQUIRED TEST CASES
+
+TC-P8C-001
+Flag eligible demo/test estimates, quotes, projects, op-jobs, invoices, customers, and contacts.
+Run bulk archive from Settings > System.
+Expected:
+- all eligible flagged records are archived
+- active lists no longer show them in normal active views
+- no deletion occurs
+
+TC-P8C-002
+Include at least one flagged record that is intentionally ineligible because of existing protection rules.
+Run bulk archive.
+Expected:
+- protected/ineligible record is skipped safely
+- result summary clearly explains skip reason
+
+TC-P8C-003
+Include a Xero-linked flagged invoice.
+Run bulk archive.
+Expected:
+- Xero-linked protections remain unchanged
+- no unsafe behavior occurs
+- summary/reporting truthfully reflects treatment or exclusion
+
+TC-P8C-004
+Verify the bulk archive result summary in Settings > System.
+Expected:
+- summary shows archived counts by entity type
+- skipped counts/reasons are understandable
+
+TC-P8C-005
+Verify governance activity/audit visibility after bulk archive.
+Expected:
+- bulk archive action is traceable
+- resulting archived records remain historically visible through governance/admin surfaces as currently designed
+
+TC-P8C-006
+Verify individual direct demo/test flagging added in Phase 8B still works on:
+- estimates
+- projects
+- invoices
+Expected:
+- no regression
+
+TC-P8C-007
+Verify existing direct demo/test flagging still works on:
+- quotes
+- op-jobs
+- customers
+- contacts
+Expected:
+- no regression
+
+TC-P8C-008
+Verify non-high-level users do not gain unsafe bulk-governance access.
+Expected:
+- bulk archive remains properly restricted
+
+TC-P8C-009
+Verify Admin > Users still contains no duplicate governance controls.
+Expected:
+- no regression from Phase 8A
+
+TC-P8C-010
+Verify archive vs delete distinction remains clear in Settings > System.
+Expected:
+- bulk action archives only
+- delete remains separate and more restricted
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact routes/endpoints used or added
+3. exact old bulk archive behavior
+4. exact new bulk archive behavior
+5. entity-by-entity eligibility rules implemented
+6. exact Settings > System wording/summary changes
+7. exact audit/result summary behavior
+8. results of all required test cases
+9. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. ROUTES / ENDPOINTS USED OR ADDED
+- exact route list
+- whether reused or newly added
+- one-line purpose of each
+
+4. OLD VS NEW BULK ARCHIVE BEHAVIOR
+- old scope
+- old safety behavior
+- new scope
+- new safety behavior
+
+5. ENTITY ELIGIBILITY RULES
+- estimates
+- quotes
+- projects
+- op-jobs
+- invoices
+- customers
+- contacts
+For each:
+- eligible / conditionally eligible / excluded
+- exact rule applied
+- why
+
+6. SETTINGS > SYSTEM CHANGES
+- exact wording updated
+- exact result summary behavior added
+- how skip reasons are surfaced
+
+7. AUDIT / HISTORY BEHAVIOR
+- what bulk archive actions now log
+- how admins can review outcomes afterward
+
+8. TEST RESULTS
+- TC-P8C-001 result
+- TC-P8C-002 result
+- TC-P8C-003 result
+- TC-P8C-004 result
+- TC-P8C-005 result
+- TC-P8C-006 result
+- TC-P8C-007 result
+- TC-P8C-008 result
+- TC-P8C-009 result
+- TC-P8C-010 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Preserve governance protections.
+Preserve Xero safety.
+Keep Settings > System as the single canonical governance surface.
+Extend bulk archive truthfully and safely across eligible demo/test records.
+Report truthfully and exactly.

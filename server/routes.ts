@@ -3514,34 +3514,144 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
 
+      const results = {
+        estimates: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        quotes: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        opJobs: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        projects: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        invoices: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        customers: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        contacts: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+      };
+
+      const demoEstimates = await storage.getDemoJobs();
+      for (const e of demoEstimates) {
+        if (!e.archivedAt) {
+          await storage.archiveJob(e.id);
+          results.estimates.archived++;
+        }
+      }
+
       const demoQuotes = await storage.getDemoQuotes();
-      const demoJobs = await storage.getDemoOpJobs();
-
-      let quotesArchived = 0;
-      let jobsArchived = 0;
-
       for (const q of demoQuotes) {
         if (!q.archivedAt && !q.deletedAt) {
           await archiveQuote(q.id);
-          quotesArchived++;
+          results.quotes.archived++;
         }
       }
-      for (const j of demoJobs) {
+
+      const demoOpJobs = await storage.getDemoOpJobs();
+      for (const j of demoOpJobs) {
         if (!j.archivedAt) {
           await storage.archiveOpJob(j.id);
-          jobsArchived++;
+          results.opJobs.archived++;
         }
       }
+
+      const demoProjects = await storage.getDemoProjects();
+      for (const p of demoProjects) {
+        if (!p.archivedAt) {
+          await storage.archiveProject(p.id);
+          results.projects.archived++;
+        }
+      }
+
+      const demoInvoices = await storage.getDemoInvoices();
+      for (const inv of demoInvoices) {
+        if (inv.archivedAt) continue;
+        if (inv.xeroInvoiceId) {
+          results.invoices.skipped++;
+          if (!results.invoices.skipReasons.includes("Xero-linked")) {
+            results.invoices.skipReasons.push("Xero-linked");
+          }
+          continue;
+        }
+        await storage.archiveInvoice(inv.id);
+        results.invoices.archived++;
+      }
+
+      const demoCustomers = await storage.getDemoCustomers();
+      for (const c of demoCustomers) {
+        if (c.archivedAt) continue;
+        if (c.xeroContactId) {
+          results.customers.skipped++;
+          if (!results.customers.skipReasons.includes("Xero-linked")) {
+            results.customers.skipReasons.push("Xero-linked");
+          }
+          continue;
+        }
+        const [liveQuotes, liveJobs, liveProjects, liveInvoices] = await Promise.all([
+          storage.getQuotesByCustomer(c.id),
+          storage.getJobsByCustomer(c.id),
+          storage.getProjectsByCustomer(c.id),
+          storage.getInvoicesByCustomer(c.id),
+        ]);
+        const liveNonDemo = [
+          ...liveQuotes.filter(q => !q.isDemoRecord),
+          ...liveJobs.filter(j => !j.isDemoRecord),
+          ...liveProjects.filter(p => !p.isDemoRecord),
+          ...liveInvoices.filter(i => !i.isDemoRecord),
+        ];
+        if (liveNonDemo.length > 0) {
+          results.customers.skipped++;
+          if (!results.customers.skipReasons.includes("shared with live data")) {
+            results.customers.skipReasons.push("shared with live data");
+          }
+          continue;
+        }
+        await storage.archiveCustomer(c.id);
+        results.customers.archived++;
+      }
+
+      const demoContacts = await storage.getDemoContacts();
+      for (const ct of demoContacts) {
+        if (ct.archivedAt) continue;
+        const parentCustomer = await storage.getCustomer(ct.customerId);
+        if (parentCustomer) {
+          const [liveQuotes, liveJobs, liveProjects, liveInvoices] = await Promise.all([
+            storage.getQuotesByCustomer(ct.customerId),
+            storage.getJobsByCustomer(ct.customerId),
+            storage.getProjectsByCustomer(ct.customerId),
+            storage.getInvoicesByCustomer(ct.customerId),
+          ]);
+          const liveNonDemo = [
+            ...liveQuotes.filter(q => !q.isDemoRecord),
+            ...liveJobs.filter(j => !j.isDemoRecord),
+            ...liveProjects.filter(p => !p.isDemoRecord),
+            ...liveInvoices.filter(i => !i.isDemoRecord),
+          ];
+          if (liveNonDemo.length > 0) {
+            results.contacts.skipped++;
+            if (!results.contacts.skipReasons.includes("parent customer shared with live data")) {
+              results.contacts.skipReasons.push("parent customer shared with live data");
+            }
+            continue;
+          }
+        }
+        await storage.archiveContact(ct.id);
+        results.contacts.archived++;
+      }
+
+      const totalArchived = results.estimates.archived + results.quotes.archived + results.opJobs.archived +
+        results.projects.archived + results.invoices.archived + results.customers.archived + results.contacts.archived;
+      const totalSkipped = Object.values(results).reduce((sum, r) => sum + r.skipped, 0);
 
       await storage.createAuditLog({
         entityType: "system",
         entityId: "admin-cleanup",
         action: "demo_cleanup",
         performedByUserId: user.id,
-        metadataJson: { quotesArchived, jobsArchived },
+        metadataJson: { totalArchived, totalSkipped, results },
       });
 
-      res.json({ ok: true, quotesArchived, jobsArchived });
+      res.json({
+        ok: true,
+        totalArchived,
+        totalSkipped,
+        results,
+        quotesArchived: results.quotes.archived,
+        jobsArchived: results.opJobs.archived,
+      });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

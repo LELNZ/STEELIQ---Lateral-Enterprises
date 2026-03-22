@@ -2267,6 +2267,13 @@ function GovernanceSection() {
     refetchOnWindowFocus: false,
   });
 
+  type BulkArchiveResult = {
+    totalArchived: number;
+    totalSkipped: number;
+    results: Record<string, { archived: number; skipped: number; skipReasons: string[] }>;
+  };
+  const [lastBulkResult, setLastBulkResult] = useState<BulkArchiveResult | null>(null);
+
   const cleanupMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/cleanup-demo", {});
@@ -2277,9 +2284,12 @@ function GovernanceSection() {
       return res.json();
     },
     onSuccess: (data: any) => {
-      toast({ title: "Archive complete", description: `${data.quotesArchived} quote(s), ${data.jobsArchived} op-job(s) archived.` });
+      const total = data.totalArchived ?? (data.quotesArchived + data.jobsArchived);
+      toast({ title: "Archive complete", description: `${total} record(s) archived across all entity types.` });
       setBulkConfirm(false);
+      setLastBulkResult(data.results ? { totalArchived: data.totalArchived, totalSkipped: data.totalSkipped, results: data.results } : null);
       refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/governance/audit-history"] });
     },
     onError: (e: any) => {
       toast({ title: "Archive failed", description: e.message, variant: "destructive" });
@@ -2382,7 +2392,7 @@ function GovernanceSection() {
           )}
 
           {/* Bulk archive section */}
-          {(summary.counts.quotes > 0 || summary.counts.opJobs > 0) && (
+          {totalFlagged > 0 && (
             <Card className="border-amber-200 dark:border-amber-800">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -2392,14 +2402,14 @@ function GovernanceSection() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Archive all currently active demo-flagged quotes and op-jobs in one action. Records are removed from operational views but preserved historically. This action cannot be undone without individually unarchiving records.
+                  Archive all currently active demo-flagged records across all entity types — estimates, quotes, op-jobs, projects, invoices, customers, and contacts. Records are removed from operational views but preserved historically. Xero-linked invoices are automatically skipped. This action cannot be undone without individually unarchiving records.
                 </p>
                 {!bulkConfirm ? (
                   <Button
                     size="sm"
                     variant="outline"
                     className="border-amber-300 dark:border-amber-700"
-                    onClick={() => setBulkConfirm(true)}
+                    onClick={() => { setBulkConfirm(true); setLastBulkResult(null); }}
                     data-testid="button-bulk-archive-start"
                   >
                     <Archive className="h-3.5 w-3.5 mr-1.5" />
@@ -2409,7 +2419,10 @@ function GovernanceSection() {
                   <div className="space-y-2">
                     <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                      <p>This will archive all active demo-flagged quotes and op-jobs. Customer/contact records will not be affected.</p>
+                      <div>
+                        <p>This will archive all active demo-flagged records across: estimates, quotes, op-jobs, projects, invoices, customers, and contacts.</p>
+                        <p className="mt-1"><strong>Protected:</strong> Xero-linked invoices will be skipped automatically.</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -2426,6 +2439,37 @@ function GovernanceSection() {
                         Cancel
                       </Button>
                     </div>
+                  </div>
+                )}
+                {lastBulkResult && (
+                  <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-2" data-testid="bulk-archive-result-summary">
+                    <p className="font-medium text-foreground">Bulk archive result: {lastBulkResult.totalArchived} archived, {lastBulkResult.totalSkipped} skipped</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-muted-foreground">
+                      {Object.entries(lastBulkResult.results).map(([key, val]) => (
+                        <div key={key} className="flex items-center gap-1">
+                          <span className="capitalize">{key === "opJobs" ? "Op-Jobs" : key}:</span>
+                          <span className="font-mono font-medium text-foreground">{val.archived}</span>
+                          {val.skipped > 0 && (
+                            <span className="text-amber-600 dark:text-amber-400" title={val.skipReasons.join(", ")}>
+                              ({val.skipped} skipped)
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {lastBulkResult.totalSkipped > 0 && (
+                      <div className="text-amber-700 dark:text-amber-400 space-y-0.5">
+                        {Object.entries(lastBulkResult.results)
+                          .filter(([, val]) => val.skipped > 0)
+                          .map(([key, val]) => (
+                            <p key={key} className="flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              {val.skipped} {key === "opJobs" ? "op-job" : key}(s) skipped: {val.skipReasons.join(", ")}. Use individual governance actions.
+                            </p>
+                          ))
+                        }
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
