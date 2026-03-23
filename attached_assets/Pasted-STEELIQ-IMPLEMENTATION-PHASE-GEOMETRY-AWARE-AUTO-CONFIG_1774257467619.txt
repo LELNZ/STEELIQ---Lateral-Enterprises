@@ -1,0 +1,321 @@
+STEELIQ IMPLEMENTATION PHASE — GEOMETRY-AWARE AUTO CONFIG FOR UNEQUAL PANE SIZES + WORKFLOW EMPHASIS TUNE FOR JOB STEP
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase contains two tightly related improvements:
+1. geometry-aware auto configuration detection/pricing for unequal pane sizes in the quote builder
+2. a narrow workflow emphasis improvement so the Create Job step and required job-gating fields are easier to see and act on
+
+This is NOT a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote/project/job/invoice data models broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline; extend it narrowly.
+- Do not break existing quote builder item configurations.
+- Do not break existing preview/PDF pipeline.
+- Do not weaken accepted-quote protections, governance, lifecycle, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not perform hidden refactors.
+- Do not introduce speculative builder redesign outside the explicit scope below.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Preserve backward compatibility for existing quote items and existing configuration matching.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- unequal pane sizes in grouped/custom layouts materially affect auto configuration detection
+- unequal pane sizes materially affect manufacturing-cost derivation inputs
+- the system can auto-create a distinct reusable configuration when pane-size geometry differs materially
+- existing standard/grouped items still work correctly
+- the accepted-quote / job workflow still works correctly
+- the Create Job step is visually stronger and more obvious
+- Measurement Requirement and Dimension Source are easier to find and understand at the job level
+- the handover clearly states what was changed and what remains intentionally unchanged
+
+CURRENT PROBLEM TO FIX
+
+PART 1 — BUILDER / AUTO CONFIG / PRICING
+Current repo truth:
+- grouped/custom layouts can now draw unequal pane heights
+- but config detection still mainly uses panel-type counts and simple grouping traits
+- pricing still mainly uses coarse geometry inputs and not enough real grouped geometry truth
+
+This is not commercially sufficient.
+
+Example:
+A grouped window with:
+- overall width 1950
+- overall height 1320
+- left pane height 1010
+- centre pane height 1320
+- right pane height 1010
+
+must not be treated as the same manufacturing/commercial configuration as a flat-top three-pane version with equal heights, because it changes:
+- profile lengths
+- cuts
+- joints
+- glue points
+- labour
+- likely accessory/cost behavior
+
+PART 2 — WORKFLOW EMPHASIS
+Current UI truth:
+- duplicate job CTA noise has been reduced
+- but the Create Job step no longer feels as visually strong as the old Create Project treatment
+- the job page is word-heavy
+- Measurement Requirement and Dimension Source are operationally important but too easy to miss
+
+PRIMARY OBJECTIVE
+
+Implement the minimum additive enhancement required so:
+1. grouped/custom geometry with unequal pane sizes changes auto config detection and manufacturing-cost inputs truthfully and automatically
+2. the Create Job step regains strong workflow emphasis
+3. Measurement Requirement and Dimension Source become easier to locate and act on as required operational inputs
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT CURRENT REPO TRUTH
+Review and report:
+- how deriveConfigSignature() currently works
+- how findMatchingConfiguration() currently matches
+- how auto configuration generation currently works
+- what calculatePricing() currently consumes
+- where grouped/custom geometry is available now
+- where the accepted-quote workflow card currently renders
+- where the job page currently renders Measurement Requirement and Dimension Source
+- the minimum additive change required for both geometry-aware config detection and workflow emphasis
+
+Do not assume. Use repo truth.
+
+PHASE B — GEOMETRY-DERIVED METRICS FOR GROUPED/CUSTOM ITEMS
+Add a minimum additive geometry-metrics layer for grouped/custom items.
+
+At minimum derive:
+- outer frame perimeter length
+- pane count
+- mullion count
+- mullion total length
+- transom count
+- transom total length
+- joint/member-end count
+- cut-cycle count
+- glue-point count
+- per-pane dimensions or equivalent normalized pane geometry
+- any other small derived metric clearly needed for current pricing/config logic
+
+Rules:
+- do not redesign stored quote item structure beyond minimum additive needs
+- prefer derived runtime metrics from existing item config
+- unequal pane heights must materially change these derived metrics
+
+PHASE C — GEOMETRY-AWARE CONFIG SIGNATURE
+Upgrade config signature logic so materially different grouped/custom geometries become distinct reusable configurations where appropriate.
+
+Requirements:
+- current simple labels like “2 Awning + 1 Fixed” are not enough on their own for unequal-height grouped items
+- grouped/custom signatures must reflect meaningful geometry differences
+- do not create excessive noise from tiny numeric drift
+- use a practical normalization strategy if needed
+- but the 1010 / 1320 / 1010 case must NOT collapse into the same signature as 1320 / 1320 / 1320 if all else is equal
+
+Provide:
+- a machine-stable signature
+- a readable human label
+
+PHASE D — AUTO CONFIGURATION GENERATION
+Upgrade auto configuration creation so when no geometry-aware match exists, SteelIQ creates a distinct reusable configuration automatically.
+
+Requirements:
+- auto-created config must be aware of the real grouped geometry class
+- do not just shallow-clone a generic base config with no geometry distinction
+- preserve inheritance from existing base configuration logic where sensible
+- remain narrow and additive, not a broad manufacturing-engine rewrite
+
+Important:
+- if full exact profile-role derivation is too large for this phase, implement the most truthful minimum version and state limits clearly
+- but unequal pane-height geometry must no longer be commercially/configuration-blind
+
+PHASE E — PRICING ENGINE UPGRADE
+Upgrade pricing inputs and usage so manufacturing cost responds more truthfully to grouped geometry.
+
+Requirements:
+- pricing must consume richer geometry-derived metrics
+- labour drivers like cuts / ends / glue points / panes / pane-area bands should respond to real grouped geometry
+- profile-length-driven cost should respond to real grouped member lengths as far as the current architecture reasonably allows
+- preserve current sale-price-per-sqm / override behavior
+- this phase improves production-cost truth, not sales-policy redesign
+
+PHASE F — BUILDER INTEGRATION
+Ensure quote builder uses the improved geometry-aware logic automatically.
+
+When user creates an unusual grouped item:
+- builder derives richer geometry metrics
+- builder detects a matching config if one exists
+- otherwise builder auto-creates one
+- builder feeds more accurate metrics into pricing
+- no extra admin/manual library step should be required
+
+PHASE G — CREATE JOB STEP EMPHASIS
+Improve the accepted-quote workflow presentation so the Create Job step has stronger visual emphasis again.
+
+Requirements:
+- when Project exists and Job does not, the top Delivery Workflow card should visually feel like the active required step
+- use stronger emphasis comparable in spirit to the earlier Create Project experience
+- do not add duplicate lower CTAs again
+- one clear primary job action at the top
+
+This is a visual/workflow emphasis tune, not a business-logic change.
+
+PHASE H — MAKE JOB GATING FIELDS EASIER TO FIND
+Measurement Requirement and Dimension Source are important operational inputs and should not feel buried.
+
+Implement a narrow usability improvement such as:
+- stronger card emphasis around Measurement & Dimensions
+- better inline cue on the job page
+- clearer required-state highlight
+- improved placement/visibility of Edit action and/or entry controls
+
+Rules:
+- do not redesign the whole job page
+- do not duplicate large forms unnecessarily
+- do make these fields clearly discoverable and actionable
+- explain what changed and why
+
+PHASE I — PRESERVE EXISTING LOGIC
+Do not break:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved quote items
+- preview/PDF pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero flows
+
+NON-GOALS
+
+Do NOT:
+- redesign the full library system
+- build a full CAD/CAM engine
+- rebuild manufacturing BOM architecture end to end
+- redesign quote summary/PDF pipeline
+- redesign project/job/invoice/Xero workflows broadly
+- broaden into dashboard propagation in this phase
+- redesign the full job page
+- change sale-price governance beyond using better cost truth
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirm geometry-aware config detection now exists
+- confirm geometry-aware pricing inputs now exist
+- confirm Create Job workflow emphasis was improved
+- confirm Measurement Requirement / Dimension Source discoverability was improved
+- confirm backward compatibility was preserved
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT VS NEW LOGIC RESULT
+- how config detection worked before
+- how it works now
+- how pricing inputs worked before
+- how they work now
+- how Create Job emphasis worked before
+- how it works now
+
+4. GEOMETRY METRICS RESULT
+- exact derived metrics added
+- where they are computed
+- how unequal pane heights affect them
+- how 1010 / 1320 / 1010 differs from 1320 / 1320 / 1320
+
+5. AUTO CONFIG GENERATION RESULT
+- how new grouped configs are now detected/created
+- what signature/label is generated
+- what reusable config data is created
+- what still remains simplified, if anything
+
+6. PRICING RESULT
+- what manufacturing-cost drivers now respond to real grouped geometry
+- what remained sale-price-per-m² based
+- what is more accurate now
+- what is still not yet fully exact
+
+7. WORKFLOW / JOB UI RESULT
+- what changed on accepted quote page for Create Job emphasis
+- what changed on job page for Measurement Requirement / Dimension Source discoverability
+- what remained unchanged
+- how the workflow now feels clearer
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any manufacturing logic still approximated
+- whether config generation still uses partial inheritance
+- whether any accessory derivation remains generic
+- whether any grouped-layout edge cases still remain
+- any remaining job-page workflow caveat
+- no broad system rewrite was done
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining quote-builder geometry/pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. CURRENT VS NEW LOGIC RESULT
+
+4. GEOMETRY METRICS RESULT
+
+5. AUTO CONFIG GENERATION RESULT
+
+6. PRICING RESULT
+
+7. WORKFLOW / JOB UI RESULT
+
+8. COMPATIBILITY RESULT
+
+9. KNOWN LIMITS AFTER THIS PHASE
+
+10. RECOMMENDED NEXT PHASE
+
+11. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the minimum additive enhancement required to make grouped/custom geometry affect configuration detection and manufacturing-cost derivation truthfully and automatically, while also making the Create Job step and job-gating fields easier to find and act on.
+Be exact, conservative, and truthful.
