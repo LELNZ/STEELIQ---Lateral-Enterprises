@@ -6,6 +6,7 @@ import { sessionMiddleware } from "./auth";
 import { pool } from "./storage";
 import { runRefDataMigration } from "./ref-data-migration";
 import { runDedupMigration } from "./dedup-migration";
+import { runInvoiceLinesBackfill } from "./invoice-lines-backfill";
 
 const PUBLIC_API_PATHS = new Set([
   "/api/auth/login",
@@ -124,6 +125,7 @@ app.use((req, res, next) => {
       setImmediate(() => {
         runRefDataMigration(pool)
           .then(() => runDedupMigration(pool))
+          .then(() => runInvoiceLinesBackfill(pool))
           .catch((err) =>
             console.error("[startup-migrations] Failed:", err)
           );

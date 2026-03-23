@@ -1,0 +1,285 @@
+STEELIQ IMPLEMENTATION PHASE — INVOICE LINES FOUNDATION (ADDITIVE ONLY, NO MULTI-LINE UI OR XERO PAYLOAD CHANGE YET)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow foundation phase for future invoice evolution. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model.
+- Do not implement a full multi-line invoice system in this phase.
+- Do not implement multi-line invoice editing UI in this phase.
+- Do not change customer quote PDF generation.
+- Do not change current Xero payload structure in this phase.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not perform hidden refactors.
+- Do not introduce speculative improvements outside the explicit scope below.
+- Do not introduce schema creep beyond the minimum additive invoice-lines foundation.
+- Do not change existing invoice creation business rules unless strictly required for additive dual-write.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not describe standalone admin/manual invoice creation as already implemented unless you identify an actual current route/UI for quote-independent invoice creation.
+- Do not forget the reported live app freeze after inactivity; it is out of scope for this phase unless directly encountered, but it must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- the schema foundation exists
+- storage support exists
+- current invoice creation flows dual-write a single invoice-line record
+- existing invoices remain compatible
+- no current invoice UI workflow is broken
+- no Xero push behavior is changed
+- no invoice allocation safeguards are weakened
+- the handover clearly states what was implemented and what was intentionally not implemented
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+SteelIQ currently has:
+- accepted quote -> project -> job -> invoice workflow foundations
+- invoice list and invoice detail surfaces
+- Xero push integration
+- Xero payment visibility readback
+- invoice reference field
+- improved quote/project/job linkage visibility
+- governance and demo/test shielding materially implemented
+
+Current invoice architecture truth:
+- invoice persistence is header-only and effectively single-line
+- there is no invoice_lines table yet
+- invoice detail UI renders a pseudo line-item body from header fields
+- invoice list/detail still behave as single-line invoices
+- Xero push currently assumes a single invoice line item
+- current flows create one invoice record with one amount/description
+- invoice detail/payment visibility/body surface exists, but this is not a true multi-line model
+
+BUSINESS INTENT
+
+The business wants SteelIQ to evolve toward a stronger invoice document model over time:
+- invoice as a first-class billing document
+- header + line items
+- stronger commercial traceability
+- safer future support for deposit, progress, variation, retention release, and manual/admin lines
+- future draft editing without collapsing quote and invoice into one model
+
+However, this phase is NOT the full implementation of that model.
+
+PRIMARY OBJECTIVE
+
+Implement only the additive data foundation for future invoice lines, while preserving current invoice behavior.
+
+This phase should establish:
+1. a new invoice_lines table
+2. storage methods for invoice lines
+3. dual-write so current invoice creation also creates one matching invoice-line row
+4. read support for invoice lines
+5. a safe backfill strategy or migration path for historical invoices
+6. zero change to current invoice UI behavior unless a tiny read-only enhancement is strictly needed
+7. zero change to current Xero payload generation in this phase
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — ADDITIVE SCHEMA FOUNDATION
+1. Add an invoice_lines table with only the minimum fields required for future staged evolution.
+2. Keep it additive-only. Do not remove or repurpose current invoice header fields.
+3. Header amounts remain the current source of truth in this phase.
+
+Recommended minimum invoice_lines structure:
+- id
+- invoiceId
+- sortOrder
+- lineType
+- description
+- quantity
+- unitAmount
+- lineAmountExclGst
+- variationId (nullable)
+- sourceContextJson or equivalent lightweight source metadata (nullable)
+- createdAt
+- updatedAt
+
+Implementation guidance:
+- quantity should default to 1 for current compatibility
+- unitAmount should support current single-line equivalence
+- lineAmountExclGst should equal quantity × unitAmount for current dual-write behavior
+- keep this minimal; do not add speculative tax/accounting complexity unless already required by current repo conventions
+
+PHASE B — STORAGE / SERVER SUPPORT
+1. Add storage interface methods for:
+- createInvoiceLine
+- getInvoiceLines(invoiceId)
+- getInvoiceLine(id) if needed
+- updateInvoiceLine only if truly needed for this phase
+- deleteInvoiceLine only if truly needed for this phase
+
+2. Add the minimum route/read support needed to fetch lines for an invoice.
+3. Do not build line editing workflows yet.
+4. Do not migrate allocation logic to line-based calculation yet.
+5. Do not migrate invoice header totals to derived-from-lines yet.
+
+PHASE C — DUAL-WRITE CURRENT CREATION FLOWS
+Modify current invoice creation so that all existing supported creation flows still create the invoice header exactly as they do today, and also create one matching invoice_lines record.
+
+This must apply to current flows such as:
+- deposit invoice creation
+- progress invoice creation
+- variation invoice creation
+- final invoice creation
+- retention release invoice creation
+
+Dual-write requirements:
+- each created invoice should get exactly one initial invoice_lines row in this phase
+- line description should match current invoice description behavior
+- line amount should match current amountExclGst behavior
+- variation invoices should preserve variation linkage on the line where relevant
+- no existing business caps/guards should be weakened
+
+PHASE D — HISTORICAL BACKFILL / MIGRATION SAFETY
+Provide a safe path for historical invoices so old invoices are not stranded without lines.
+
+Deliver one of these:
+- a migration/backfill script, or
+- a startup-safe one-time migration path, or
+- a clearly separated migration utility
+
+Rules:
+- do not place heavy or unsafe migration work on the critical startup path if it risks blocking the server
+- do not delete or rewrite existing invoice header data
+- historical backfill should create exactly one line per existing invoice using current description/amountExclGst semantics
+- if some invoices have blank descriptions, use the same fallback logic the current system effectively relies on
+
+PHASE E — READ-ONLY COMPATIBILITY ONLY
+You may add read-only compatibility support to help future phases, but do not convert the UI into a multi-line editor.
+
+Allowed:
+- a read endpoint for invoice lines
+- optional read-only wiring for invoice detail if extremely low-risk and clearly compatible
+
+Not allowed in this phase:
+- add/remove/reorder line editing UI
+- invoice line draft authoring UI
+- new admin invoice composition UI
+- line-based total recalculation as the primary source of truth
+- line-based allocation enforcement migration
+- multi-line Xero push
+
+PHASE F — PRESERVE CURRENT XERO MODEL
+Do not change current Xero push structure in this phase.
+
+Specifically:
+- keep current payload assumptions intact
+- keep current single-line push behavior intact
+- keep current locks and payment sync behavior intact
+- do not switch Xero payload generation to iterate over invoice_lines yet
+
+PHASE G — PRESERVE CURRENT SAFEGUARDS
+Do not break or weaken:
+- invoice status lifecycle
+- ready-for-Xero protections
+- returned-to-draft protections
+- Xero pushed lock behavior
+- demo/test governance
+- division protections
+- archive behavior
+- quote/project/job linkage visibility
+- variation allocation protections
+- retention controls
+- payment sync readback
+
+NON-GOALS
+
+Do NOT:
+- implement full multi-line invoice authoring
+- redesign invoice detail into an editor
+- redesign invoice totals as line-derived truth in this phase
+- redesign quote architecture
+- redesign Xero integration
+- build standalone manual/admin quote-independent invoice creation
+- add line-level tax/account-code policy unless already required for current compatibility
+- implement reporting/back-costing enhancements yet
+- touch unrelated modules
+- claim the platform now has full multi-line invoicing
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirmation that this phase is additive only
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each change
+
+3. SCHEMA RESULT
+- exact invoice_lines shape implemented
+- any constraints/defaults used
+- why it was kept minimal
+
+4. SERVER / STORAGE RESULT
+- storage methods added
+- routes/endpoints added
+- how dual-write works
+
+5. BACKFILL / MIGRATION RESULT
+- how historical invoices are handled
+- how safety was preserved
+- whether startup path was affected
+
+6. COMPATIBILITY RESULT
+- what stayed unchanged
+- why existing invoice list/detail still work
+- why existing Xero push still works
+- why allocation/retention/variation safeguards still work
+
+7. KNOWN LIMITS AFTER THIS PHASE
+- explicit statement that invoices are still operationally single-line in UI
+- explicit statement that Xero is still pushed as single-line
+- explicit statement that line editing is not yet implemented
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next step only
+- should logically follow this foundation phase
+
+9. OPEN RISKS / WATCH ITEMS
+Must include, even if untouched:
+- reported live-app freeze after inactivity
+- subcontractor PDF export visual branding/polish still potentially incomplete
+- any migration caveats discovered in this phase
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. SCHEMA RESULT
+
+4. SERVER / STORAGE RESULT
+
+5. BACKFILL / MIGRATION RESULT
+
+6. COMPATIBILITY RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the additive invoice-lines foundation required for the next safe stage.
+Be exact, conservative, and truthful.
+Do not claim multi-line invoicing exists when this phase only lays the foundation.

@@ -2953,6 +2953,23 @@ export async function registerRoutes(
         createdByUserId: userId ?? undefined,
       } as any);
       logActivity("invoice_created", "invoice", invoice.id, userId, { number, type: parsed.data.type });
+
+      try {
+        await storage.createInvoiceLine({
+          invoiceId: invoice.id,
+          sortOrder: 0,
+          lineType: parsed.data.type ?? "deposit",
+          description: invoice.description ?? null,
+          quantity: 1,
+          unitAmount: invoice.amountExclGst ?? null,
+          lineAmountExclGst: invoice.amountExclGst ?? null,
+          variationId: parsed.data.variationId ?? null,
+          sourceContext: JSON.stringify({ origin: "auto_creation", invoiceType: parsed.data.type }),
+        });
+      } catch (lineErr: any) {
+        console.error("[invoice-lines] dual-write failed for invoice", invoice.id, lineErr.message);
+      }
+
       // Auto-sync variation status when a variation invoice is created
       if (parsed.data.type === "variation" && parsed.data.variationId) {
         await storage.syncVariationStatus(parsed.data.variationId);
@@ -3000,6 +3017,19 @@ export async function registerRoutes(
       variationTitle = variation?.title ?? null;
     }
     return res.json({ ...invoice, customerName, projectName, jobName, jobId, variationTitle });
+  });
+
+  app.get("/api/invoices/:id/lines", async (req, res) => {
+    const invoice = await storage.getInvoice(req.params.id);
+    if (!invoice) return res.status(404).json({ error: "Not found" });
+    if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
+    const userDivision = req.user?.divisionCode;
+    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+      return res.status(403).json({ error: "Access denied: different division" });
+    }
+    const lines = await storage.getInvoiceLines(req.params.id);
+    return res.json(lines);
   });
 
   app.patch("/api/invoices/:id", async (req, res) => {

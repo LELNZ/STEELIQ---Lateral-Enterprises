@@ -541,6 +541,33 @@ export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true,
 export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
 export type Invoice = typeof invoices.$inferSelect;
 
+// ─── Invoice Lines ───────────────────────────────────────────────────────────
+
+export const INVOICE_LINE_TYPES = [
+  "deposit", "progress", "variation", "final",
+  "retention_release", "standard", "manual", "adjustment",
+] as const;
+export type InvoiceLineType = typeof INVOICE_LINE_TYPES[number];
+
+export const invoiceLines = pgTable("invoice_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  lineType: text("line_type").notNull().default("standard"),
+  description: text("description"),
+  quantity: real("quantity").notNull().default(1),
+  unitAmount: real("unit_amount"),
+  lineAmountExclGst: real("line_amount_excl_gst"),
+  variationId: varchar("variation_id"),
+  sourceContext: text("source_context"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInvoiceLine = z.infer<typeof insertInvoiceLineSchema>;
+export type InvoiceLine = typeof invoiceLines.$inferSelect;
+
 // ─── Variations ──────────────────────────────────────────────────────────────
 
 export const VARIATION_STATUSES = [

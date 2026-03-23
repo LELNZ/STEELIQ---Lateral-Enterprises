@@ -19,6 +19,7 @@ import {
   type CustomerContact, type InsertCustomerContact,
   type Project, type InsertProject,
   type Invoice, type InsertInvoice,
+  type InvoiceLine, type InsertInvoiceLine,
   type OpJob, type InsertOpJob,
   type LifecycleTemplate, type LifecycleInstance, type LifecycleTaskState,
   type XeroConnection,
@@ -28,7 +29,7 @@ import {
   numberSequences, quotes, quoteRevisions, auditLogs,
   orgSettings, divisionSettings, specDictionary,
   itemPhotos,
-  userSessions, customers, customerContacts, projects, invoices, opJobs,
+  userSessions, customers, customerContacts, projects, invoices, invoiceLines, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
   xeroConnections, variations,
 } from "@shared/schema";
@@ -179,6 +180,9 @@ export interface IStorage {
   getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]>;
   updateInvoice(id: string, data: Partial<InsertInvoice>): Promise<Invoice | undefined>;
   archiveInvoice(id: string): Promise<void>;
+
+  createInvoiceLine(data: InsertInvoiceLine): Promise<InvoiceLine>;
+  getInvoiceLines(invoiceId: string): Promise<InvoiceLine[]>;
 
   getNextJobNumber(divisionCode?: string): Promise<string>;
   getNumberSequences(): Promise<{ id: string; currentValue: number }[]>;
@@ -969,6 +973,17 @@ export class DatabaseStorage implements IStorage {
     await db.update(invoices)
       .set({ archivedAt: new Date() } as any)
       .where(eq(invoices.id, id));
+  }
+
+  async createInvoiceLine(data: InsertInvoiceLine): Promise<InvoiceLine> {
+    const [created] = await db.insert(invoiceLines).values(data as any).returning();
+    return created;
+  }
+
+  async getInvoiceLines(invoiceId: string): Promise<InvoiceLine[]> {
+    return db.select().from(invoiceLines)
+      .where(eq(invoiceLines.invoiceId, invoiceId))
+      .orderBy(asc(invoiceLines.sortOrder));
   }
 
   async getNextJobNumber(divisionCode?: string): Promise<string> {
