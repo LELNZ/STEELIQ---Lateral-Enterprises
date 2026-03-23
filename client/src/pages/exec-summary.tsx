@@ -1075,7 +1075,7 @@ export default function ExecSummary() {
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Making Good</Label>
+                  <Label className="text-xs text-muted-foreground">Repairs to Finishes</Label>
                   <Select value={subconScopeFields.makingGood} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, makingGood: v as any }))}>
                     <SelectTrigger className="h-8 text-xs" data-testid="select-making-good"><SelectValue /></SelectTrigger>
                     <SelectContent>
