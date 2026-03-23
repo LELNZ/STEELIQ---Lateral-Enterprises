@@ -1,0 +1,219 @@
+STEELIQ PHASE — INVOICE DOCUMENT BODY + LINE-ITEM WORKING SURFACE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow but critical completion phase for invoice usability.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign invoicing broadly.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, or archive/delete behavior.
+- Do not change customer quote PDF generation.
+- Do not introduce schema creep unless absolutely required and you stop and explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond making the invoice detail page a real working invoice surface with line-item/body visibility and draft-stage editability where current architecture supports it.
+
+CURRENT TRUTH
+
+The invoice detail page now exists and is improved, but it is still primarily a metadata/status page rather than a true invoice working surface.
+
+Current problem:
+- users can open an invoice
+- users can see status, linkage, and summary amounts
+- but users cannot properly see and work with the actual invoice body in a serious way
+- the page does not yet present a clear invoice line-item table / document-body surface
+
+PRIMARY OBJECTIVE
+
+Make the invoice detail page feel like a real invoice workspace by exposing the invoice document body and line items clearly, with truthful editability rules.
+
+PHASE A — AUDIT INVOICE BODY / DATA TRUTH
+
+1. Review the current invoice architecture and determine:
+- how invoice amounts are currently constructed
+- whether invoice lines already exist explicitly in the data model or are derived from type/context
+- what can be truthfully shown on the invoice detail page today
+- what is editable in draft/ready states under current architecture
+- whether a narrow schema addition is required to support line-item visibility/editability
+
+2. Report the narrowest architecture-preserving implementation path.
+
+PHASE B — ADD INVOICE BODY / LINE-ITEM TABLE
+
+Required behavior:
+1. The invoice detail page must display a clear invoice body section.
+2. This section must show the actual invoice content in a table or structured document block, such as:
+- description
+- quantity
+- unit/rate if available
+- line amount
+- subtotal / GST / total summary
+
+3. If current architecture does not store full granular line rows, show the most truthful reconstructed invoice body possible from existing data.
+4. Do not fake editable rows if the underlying architecture cannot support that truthfully.
+
+PHASE C — DRAFT / READY EDITABILITY RULES
+
+Required behavior:
+1. If invoice body rows can be edited safely in draft/ready states under current architecture, allow that.
+2. If not, clearly keep them read-only and explain why through the UI structure rather than pretending editability exists.
+3. Once pushed to Xero / approved, line-item body should be read-only.
+4. Preserve existing status/edit guards.
+
+PHASE D — INVOICE HEADER / COMMERCIAL SUMMARY COMPLETION
+
+Required behavior:
+1. Keep the improved invoice detail layout.
+2. Strengthen it by making the invoice feel like a commercial document:
+- invoice number
+- status
+- type
+- payment state
+- subtotal
+- GST
+- total
+- amount paid
+- amount due
+- reference
+- project/job/quote linkage
+
+3. This should be visually denser and more coherent, not broad redesign.
+
+PHASE E — RELATIONSHIP CLARITY
+
+Required behavior:
+1. Invoice detail must clearly show:
+- quote link
+- project link
+- estimate/job link
+- variation link if applicable
+
+2. These must feel secondary to the invoice body, not the whole page.
+
+PHASE F — LIST / DETAIL CONSISTENCY
+
+Required behavior:
+1. Invoice list should remain compatible with the new detail surface.
+2. If line-item/body detail affects list summaries, ensure totals remain consistent.
+3. Do not regress Xero payment visibility.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the full accounting module
+- redesign Xero integration broadly
+- add webhook sync
+- add invoice PDF generation in this phase
+- redesign quote/project/job architecture
+- add speculative back-costing modules
+- add schema unless absolutely necessary
+
+REQUIRED TEST CASES
+
+TC-BODY-001
+Open an invoice detail page.
+Expected:
+- invoice body section is present and clearly structured
+
+TC-BODY-002
+Review a deposit/progress/variation/retention invoice if available.
+Expected:
+- invoice body truthfully reflects the invoice type/content
+
+TC-BODY-003
+Review draft/ready invoice.
+Expected:
+- body editability is either safely supported or truthfully read-only depending on architecture
+
+TC-BODY-004
+Review pushed/approved invoice.
+Expected:
+- body is read-only
+- no unsafe editing allowed
+
+TC-BODY-005
+Verify totals shown in invoice body align with summary totals.
+Expected:
+- no mismatch between line/body and totals
+
+TC-BODY-006
+Verify relationship links (quote/project/estimate/variation) remain visible and clearer in the page hierarchy.
+Expected:
+- no regression
+
+TC-BODY-007
+Verify invoice list, Xero state, and payment visibility still work.
+Expected:
+- no regression
+
+TC-BODY-008
+Verify division/demo/security protections remain intact.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact invoice-body truth discovered
+3. exact line-item/body surface implemented
+4. exact draft vs pushed editability behavior
+5. exact totals/body consistency behavior
+6. exact relationship visibility behavior
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. INVOICE BODY TRUTH
+- what data model exists today
+- whether true line items exist or are reconstructed
+- what the page now shows
+
+4. BODY / LINE-ITEM SURFACE
+- what table/section was added
+- what fields are shown
+- what remains read-only vs editable
+
+5. EDITABILITY RULES
+- draft/ready behavior
+- pushed/approved behavior
+- what is intentionally locked
+
+6. TOTALS / RELATIONSHIP CONSISTENCY
+- how totals align
+- how quote/project/job/variation links are shown
+
+7. TEST RESULTS
+- TC-BODY-001 result
+- TC-BODY-002 result
+- TC-BODY-003 result
+- TC-BODY-004 result
+- TC-BODY-005 result
+- TC-BODY-006 result
+- TC-BODY-007 result
+- TC-BODY-008 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Make the invoice detail page feel like a real invoice working surface.
+Do not stop at metadata if the invoice body is still missing.
+Report truthfully and exactly.
