@@ -1,0 +1,210 @@
+STEELIQ HOTFIX — EXECUTIVE SUMMARY COMMERCIAL LOGIC HARDENING (MARKUP RECALC + PER-LINE ENABLE/DISABLE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a narrow commercial/costing hotfix for the estimate executive summary.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the executive summary page broadly.
+- Do not change unrelated estimator workflows.
+- Do not change lifecycle architecture.
+- Do not change governance, archive/delete, Xero, or invoicing logic.
+- Do not introduce schema creep unless absolutely required and you stop to explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond executive summary commercial recalculation truth and per-line enable/disable controls.
+
+CURRENT LIVE ISSUES
+
+On the live executive summary page:
+
+1. Changing markup (%) does not update the Sell amount correctly on commercial cost cards.
+2. Adding an override amount does update correctly.
+3. There is no practical way to enable/disable individual line items inside cards such as:
+- Installation Labour
+- Old Window / Door Removal
+- and similar commercial summary cards where job-specific line-level inclusion matters
+
+This is causing the commercial summary to be operationally unreliable.
+
+PRIMARY OBJECTIVE
+
+Make the executive summary commercial cards behave truthfully and operationally:
+- Sell must recalculate correctly when markup changes
+- line items must be individually toggleable on/off where appropriate
+- totals must reflect the enabled/disabled line items correctly
+
+PHASE A — AUDIT CURRENT COMMERCIAL CALCULATION TRUTH
+
+1. Review the executive summary costing logic in code.
+2. Determine exactly:
+- how Cost is calculated
+- how Sell is calculated
+- how Markup (%) is applied
+- how Override ($) is applied
+- why Override currently updates Sell but Markup does not
+- whether the issue is:
+  - stale derived state
+  - incorrect dependency tracking
+  - incorrect memoization
+  - UI not dispatching recalculation
+  - another narrow cause
+
+3. Report the exact current truth.
+
+PHASE B — FIX MARKUP RECALCULATION
+
+Required behavior:
+1. When markup (%) changes on a commercial card, Sell must update immediately and truthfully.
+2. Cost must remain correct.
+3. Override behavior must remain correct.
+4. If Override is present and is supposed to supersede markup-derived sell, that relationship must be explicit and truthful in the UI and calculations.
+5. Do not allow markup and override to produce ambiguous totals.
+
+PHASE C — PER-LINE ENABLE / DISABLE
+
+Required behavior:
+1. For appropriate commercial cards (at minimum Installation Labour and Old Window / Door Removal), allow individual line items to be toggled on or off.
+2. Disabled line items must not contribute to Cost or Sell totals.
+3. Enabled line items must contribute normally.
+4. The card summary totals must update immediately when a line is toggled.
+5. Keep the interaction clear and lightweight for live operational use.
+
+PHASE D — CARD / TOTAL CONSISTENCY
+
+Required behavior:
+1. Card totals must always reflect:
+- currently enabled rows
+- current markup
+- current override rules
+
+2. Overall executive summary totals must also stay consistent.
+3. Do not leave stale numbers on screen after editing line toggles, markup, or overrides.
+
+PHASE E — UI / UX TRUTH
+
+Required behavior:
+1. Make the relationship between Cost, Markup, Sell, and Override clear.
+2. If Override supersedes markup, state that clearly or present it unambiguously.
+3. Do not redesign the whole page; only make the narrow improvements needed for truthful commercial behavior.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the entire executive summary
+- redesign pricing architecture broadly
+- alter unrelated item pricing logic
+- change quote lifecycle, governance, invoicing, or Xero behavior
+- add speculative margin dashboards
+- add schema unless absolutely necessary
+
+REQUIRED TEST CASES
+
+TC-COST-001
+Open Installation Labour card with enabled items.
+Change markup %.
+Expected:
+- Sell total updates immediately and correctly
+- Cost remains correct
+
+TC-COST-002
+Apply an override amount.
+Expected:
+- override behavior remains correct
+- relationship to markup is truthful and consistent
+
+TC-COST-003
+Toggle one Installation Labour line item off.
+Expected:
+- that row no longer contributes to Cost/Sell totals
+- card totals update immediately
+
+TC-COST-004
+Toggle the same line back on.
+Expected:
+- totals restore correctly
+
+TC-COST-005
+Repeat enable/disable on Old Window / Door Removal line items.
+Expected:
+- same correct behavior
+
+TC-COST-006
+Verify overall executive summary totals update correctly after:
+- markup change
+- override change
+- line enable/disable
+
+TC-COST-007
+Verify no regression to print/export/summary integrity where current architecture expects these totals.
+Expected:
+- outputs remain consistent with visible totals
+
+TC-COST-008
+Verify unrelated executive summary sections and estimator logic remain unchanged.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact old markup behavior
+3. exact new markup behavior
+4. exact override vs markup rule
+5. exact line enable/disable behavior implemented
+6. exact total recalculation behavior
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. OLD VS NEW COMMERCIAL CALCULATION BEHAVIOR
+- old markup behavior
+- new markup behavior
+- old override behavior
+- new override behavior
+- exact rule between markup and override
+
+4. LINE ENABLE / DISABLE BEHAVIOR
+- where toggles were added
+- how disabled rows are treated
+- how totals respond
+
+5. TOTAL / RECALCULATION CONSISTENCY
+- card-level totals
+- overall executive summary totals
+- how stale state was prevented
+
+6. TEST RESULTS
+- TC-COST-001 result
+- TC-COST-002 result
+- TC-COST-003 result
+- TC-COST-004 result
+- TC-COST-005 result
+- TC-COST-006 result
+- TC-COST-007 result
+- TC-COST-008 result
+
+7. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Make the executive summary commercial logic truthful and operationally usable.
+Do not leave markup, override, and line-item totals out of sync.
+Report truthfully and exactly.

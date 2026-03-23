@@ -1,0 +1,277 @@
+STEELIQ REFINEMENT PHASE — SUBCONTRACTOR INSTALL SCOPE PDF LEAN FORMAT + DUPLICATION REMOVAL
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a refinement pass on the newly added subcontractor install scope PDF export.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the estimate/quote pipeline broadly.
+- Do not change customer quote PDF generation.
+- Do not change governance, lifecycle, invoicing, Xero, archive/delete, or demo/test behavior.
+- Do not introduce schema creep.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond improving the subcontractor PDF format, clarity, and size.
+
+CURRENT LIVE / REVIEW TRUTH
+
+The subcontractor install scope PDF is conceptually good, but the current output is too heavy and too repetitive for real subcontractor use.
+
+Current problems identified from live review:
+1. Cover page is unnecessary as a standalone page and should be merged into page one.
+2. “Making Good” is ambiguous and may be poorly interpreted.
+3. There are effectively multiple schedule layers / duplicated schedule content.
+4. Detailed item pages are too heavy because they are currently one item per page.
+5. Site access / variation notes section does not clearly say who is filling it out or how it is used.
+6. Pricing Return section B overlaps with the site/access/variation section.
+7. Pricing Return section C duplicates the item schedule instead of reusing it.
+8. Overall document is too long/heavy and should be reduced substantially.
+
+PRIMARY OBJECTIVE
+
+Refine the subcontractor PDF into a leaner, clearer, more professional issue pack that:
+- is easier for subcontractors to read and price from
+- avoids duplicated schedules/sections
+- uses fewer pages
+- retains project-specific value
+- keeps the export operationally useful without exposing internal commercial data
+
+PHASE A — MERGE / SIMPLIFY THE FRONT OF DOCUMENT
+
+1. Remove the standalone cover page format.
+2. Merge the useful cover-page content into page one together with the most important scope summary information.
+3. Page one should include, in a compact and branded layout:
+- project / estimate name
+- address
+- date issued
+- prepared by
+- scope type (Renovation / New Build)
+- work package (Install only / Removal + disposal + install)
+- item count
+- short issue-purpose statement
+- concise scope matrix / summary
+
+4. Add SteelIQ / company branding appropriately so page one looks like a professional issue document.
+
+PHASE B — CLARIFY WORDING
+
+1. Replace or improve ambiguous wording like “Making Good”.
+2. Use clearer construction wording such as:
+- “Making good to plaster / trims / cladding / finishes”
+- or equivalent repo-consistent wording that clearly indicates repair/finishing responsibility
+
+3. Review the PDF wording for:
+- inclusions
+- exclusions
+- assumptions
+- potential variations
+
+Make sure it reads clearly for subcontractors and avoids ambiguous trade-language where possible.
+
+PHASE C — REMOVE DUPLICATE SCHEDULE STRUCTURES
+
+1. Consolidate the multiple schedule-like sections.
+2. The PDF should have one primary item schedule that serves as the main issue schedule.
+3. Do not repeat essentially the same item list again later unless there is a strong reason.
+
+Preferred structure:
+- one main schedule table early in the document
+- one final pricing return summary page
+- no redundant second/third schedule if the first one can be designed properly
+
+PHASE D — REWORK DETAILED ITEM PAGES INTO COMPACT GRID FORMAT
+
+1. Replace the one-item-per-page detailed drawing layout with a compact multi-item page layout.
+2. Target a practical density such as:
+- approximately 6 to 10 items per page, depending on readability
+- not one item per page
+
+3. Each grid cell / block should include at minimum:
+- item ID
+- small drawing
+- dimensions
+- qty
+- optionally location / layout if space allows
+
+4. Keep the drawings readable, but prioritize reducing total page count and PDF weight.
+
+5. If item photos or site photos are included, group them sensibly rather than bloating every item page.
+
+PHASE E — SITE ACCESS / VARIATION NOTES CLARITY
+
+1. Clarify who this section is for and how it should be used.
+2. Reframe it so it reads as one of:
+- pricing assumptions for subcontractor review
+- subcontractor notes / confirmations
+- variation-prone site conditions to review before pricing
+
+3. Remove the ambiguity around who is filling out the checklist.
+4. If necessary, merge this content into the pricing return / assumptions section instead of keeping it as a separate standalone page.
+
+PHASE F — MERGE PRICING RETURN WITH MASTER SCHEDULE LOGIC
+
+1. Remove unnecessary duplication between:
+- site/access/variation notes
+- pricing return assumptions/exclusions/variation section
+- item-by-item pricing table
+
+2. Preferred outcome:
+- one main master schedule that can be referenced for pricing
+- one final pricing return section with:
+  - total price
+  - GST
+  - lead time
+  - assumptions
+  - exclusions
+  - variation notes
+  - optional item-by-item pricing columns only if they are not duplicating the schedule wastefully
+
+3. If practical, the main item schedule should be usable as the pricing schedule too.
+4. Reduce total duplication substantially.
+
+PHASE G — REDUCE PDF WEIGHT / PAGE COUNT
+
+1. Optimize the document so it is materially leaner than the current version.
+2. Reduce unnecessary page count.
+3. Keep image quality sufficient for subcontractor reading/printing, but avoid over-heavy output.
+4. Report approximate before/after page count and any file-size improvement if measurable.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the whole export architecture
+- redesign customer quote exports
+- redesign the estimate workflow broadly
+- add spreadsheet export in this phase
+- change quote generation logic
+- change lifecycle/governance/Xero behavior
+- add schema
+- add speculative procurement workflows
+
+REQUIRED TEST CASES
+
+TC-REFINE-001
+Generate a Renovation subcontractor PDF.
+Expected:
+- no standalone cover page
+- page one combines project summary and scope summary cleanly
+
+TC-REFINE-002
+Review wording for scope responsibility items.
+Expected:
+- “Making Good” or equivalent ambiguous wording is clarified
+
+TC-REFINE-003
+Review schedule structure.
+Expected:
+- duplicate schedule sections are reduced/eliminated
+- one primary schedule is clearly the main issue schedule
+
+TC-REFINE-004
+Generate a job with multiple items and detailed drawings enabled.
+Expected:
+- drawings are grouped in compact multi-item pages
+- not one item per page
+
+TC-REFINE-005
+Review site/access/variation content.
+Expected:
+- purpose and authorship are clear
+- overlap with pricing return is reduced
+
+TC-REFINE-006
+Review final pricing return section.
+Expected:
+- usable for subcontractor response
+- not unnecessarily duplicating the main schedule
+
+TC-REFINE-007
+Compare overall output to prior version.
+Expected:
+- materially leaner PDF
+- clearer structure
+- fewer pages
+
+TC-REFINE-008
+Verify no internal pricing, margin, customer commercial terms, or governance language leaks into the PDF.
+Expected:
+- no regression
+
+TC-REFINE-009
+Verify existing download/export options still work.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact structural changes to the PDF
+3. exact wording clarifications made
+4. exact schedule duplication removed or consolidated
+5. exact drawing page compaction approach implemented
+6. exact pricing return consolidation behavior
+7. approximate before/after page count (and file size if practical)
+8. results of all required test cases
+9. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was refined
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. PDF STRUCTURE CHANGES
+- what was removed
+- what was merged
+- what was consolidated
+- what page one now contains
+
+4. WORDING CLARIFICATIONS
+- exact ambiguous wording improved
+- exact revised wording approach used
+
+5. SCHEDULE / PRICING STRUCTURE
+- what schedule duplication existed before
+- what was removed or merged
+- how the pricing return now relates to the main schedule
+
+6. DRAWING PAGE COMPACTION
+- old item-page approach
+- new compact layout approach
+- readability tradeoffs if any
+
+7. OUTPUT SIZE / WEIGHT IMPROVEMENT
+- approximate before/after page count
+- approximate file-size impact if measured
+- what was done to reduce heaviness
+
+8. TEST RESULTS
+- TC-REFINE-001 result
+- TC-REFINE-002 result
+- TC-REFINE-003 result
+- TC-REFINE-004 result
+- TC-REFINE-005 result
+- TC-REFINE-006 result
+- TC-REFINE-007 result
+- TC-REFINE-008 result
+- TC-REFINE-009 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Make the subcontractor PDF leaner, clearer, and more professional.
+Reduce duplication and page weight materially.
+Report truthfully and exactly.

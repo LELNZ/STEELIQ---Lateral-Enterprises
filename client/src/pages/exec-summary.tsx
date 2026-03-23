@@ -24,10 +24,20 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
+import LifecyclePanel from "@/components/lifecycle-panel";
+import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions, type ScopeFields } from "@/lib/subcontractor-pdf";
+import { svgToPngBlob } from "@/lib/export-png";
 
 function calcSqm(width: number, height: number, quantity: number): number {
   return (width * height * quantity) / 1_000_000;
@@ -106,6 +116,25 @@ export default function ExecSummary() {
   const [rubbishEnabled, setRubbishEnabled] = useState(false);
   const [rubbishTonnage, setRubbishTonnage] = useState<string>("");
   const [initialized, setInitialized] = useState(false);
+  const [disabledInstallLines, setDisabledInstallLines] = useState<Set<number>>(new Set());
+  const [disabledRemovalLines, setDisabledRemovalLines] = useState<Set<number>>(new Set());
+
+  const [subconDialogOpen, setSubconDialogOpen] = useState(false);
+  const [subconScopeMode, setSubconScopeMode] = useState<"renovation" | "new_build">("renovation");
+  const [subconWorkPackage, setSubconWorkPackage] = useState<"install_only" | "removal_disposal_install">("removal_disposal_install");
+  const [subconIncludeDrawings, setSubconIncludeDrawings] = useState(true);
+  const [subconIncludeSitePhotos, setSubconIncludeSitePhotos] = useState(true);
+  const [subconIncludePricingReturn, setSubconIncludePricingReturn] = useState(true);
+  const [subconGenerating, setSubconGenerating] = useState(false);
+  const [subconScopeFields, setSubconScopeFields] = useState<ScopeFields>({
+    sealant: "included",
+    flashings: "included",
+    wanzBars: "excluded",
+    siteCleanup: "included",
+    makingGood: "by_others",
+    accessCondition: "standard",
+    includeVariationChecklist: true,
+  });
 
   const SECTION_KEYS = ["financial", "installation", "delivery", "removal", "rubbish", "history", "items"] as const;
   type SectionKey = typeof SECTION_KEYS[number];
@@ -411,10 +440,10 @@ export default function ExecSummary() {
       const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
       return { cost, sell, isOverride: true };
     }
-    const cost = installationItems.reduce((acc, i) => acc + i.costTotal, 0);
-    const sell = installationItems.reduce((acc, i) => acc + i.sellTotal, 0);
+    const cost = installationItems.reduce((acc, i, idx) => acc + (disabledInstallLines.has(idx) ? 0 : i.costTotal), 0);
+    const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
     return { cost, sell, isOverride: false };
-  }, [installEnabled, installOverride, installMarkup, installationItems]);
+  }, [installEnabled, installOverride, installMarkup, installationItems, disabledInstallLines]);
 
   const deliveryTotals = useMemo(() => {
     if (!deliveryEnabled) return { cost: 0, sell: 0, isCustom: false };
@@ -482,10 +511,10 @@ export default function ExecSummary() {
       const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
       return { cost, sell, isOverride: true };
     }
-    const cost = removalItems.reduce((acc, i) => acc + i.costTotal, 0);
-    const sell = removalItems.reduce((acc, i) => acc + i.sellTotal, 0);
+    const cost = removalItems.reduce((acc, i, idx) => acc + (disabledRemovalLines.has(idx) ? 0 : i.costTotal), 0);
+    const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
     return { cost, sell, isOverride: false };
-  }, [removalEnabled, removalOverride, removalMarkup, removalItems]);
+  }, [removalEnabled, removalOverride, removalMarkup, removalItems, disabledRemovalLines]);
 
   const rubbishTotals = useMemo(() => {
     if (!rubbishEnabled) return { cost: 0, sell: 0, rateEntry: null as any };
@@ -765,6 +794,109 @@ export default function ExecSummary() {
     });
   };
 
+  const handleSubcontractorPdf = async () => {
+    if (!job || itemPricings.length === 0) return;
+    setSubconGenerating(true);
+    toast({ title: `Generating Subcontractor Install Scope PDF...` });
+    try {
+      const pdfItems: SubcontractorPdfItem[] = [];
+      for (let i = 0; i < itemPricings.length; i++) {
+        const ip = itemPricings[i];
+        let drawingDataUrl: string | null = null;
+        if (subconIncludeDrawings) {
+          try {
+            const wrapper = document.querySelector(`[data-testid="drawing-svg-${i}"]`);
+            const svgEl = wrapper?.querySelector("svg") as SVGSVGElement | null;
+            if (svgEl) {
+              const blob = await svgToPngBlob(svgEl, 2);
+              const bmp = await createImageBitmap(blob);
+              const maxEdge = 1200;
+              let cw = bmp.width;
+              let ch = bmp.height;
+              if (Math.max(cw, ch) > maxEdge) {
+                const scale = maxEdge / Math.max(cw, ch);
+                cw = Math.round(cw * scale);
+                ch = Math.round(ch * scale);
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = cw;
+              canvas.height = ch;
+              const ctx = canvas.getContext("2d")!;
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, cw, ch);
+              ctx.drawImage(bmp, 0, 0, cw, ch);
+              drawingDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            }
+          } catch { /* skip */ }
+        }
+
+        let photoDataUrls: string[] = [];
+        if (subconIncludeSitePhotos && ip.photos.length > 0) {
+          for (const photo of ip.photos) {
+            try {
+              const res = await fetch(`/api/item-photos/${photo.key}`);
+              if (res.ok) {
+                const blob = await res.blob();
+                const dataUrl = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(blob);
+                });
+                photoDataUrls.push(dataUrl);
+              }
+            } catch { /* skip */ }
+          }
+        }
+
+        const panels = ip.item.panels;
+        let layout = "";
+        if (panels && Array.isArray(panels) && panels.length > 0) {
+          layout = panels.map((p: any) => p.openingDirection || p.type || "").filter(Boolean).join(", ");
+        }
+
+        pdfItems.push({
+          name: ip.item.name || `Item ${i + 1}`,
+          category: ip.item.category || "",
+          location: ip.item.location || undefined,
+          width: ip.item.width || 0,
+          height: ip.item.height || 0,
+          quantity: ip.item.quantity || 1,
+          layout: layout || undefined,
+          notes: ip.item.notes || undefined,
+          drawingDataUrl,
+          photoDataUrls: photoDataUrls.length > 0 ? photoDataUrls : undefined,
+        });
+      }
+
+      const opts: SubcontractorPdfOptions = {
+        scopeMode: subconScopeMode,
+        workPackage: subconWorkPackage,
+        scopeFields: subconScopeFields,
+        projectName: job.name || "Untitled Project",
+        siteAddress: job.address || undefined,
+        clientName: (job as any).clientName || undefined,
+        dateIssued: new Date().toLocaleDateString("en-NZ"),
+        preparedBy: undefined,
+        items: pdfItems,
+        includeDrawings: subconIncludeDrawings,
+        includeSitePhotos: subconIncludeSitePhotos,
+        includePricingReturn: subconIncludePricingReturn,
+      };
+
+      const pdf = await generateSubcontractorPdf(opts);
+      const scopeLabel = subconScopeMode === "renovation" ? "Renovation" : "NewBuild";
+      const filename = `${(job.name || "Job").replace(/[^a-zA-Z0-9_-]/g, "_")}_SubconScope_${scopeLabel}.pdf`;
+      pdf.save(filename);
+      toast({ title: "Subcontractor PDF downloaded successfully" });
+      setSubconDialogOpen(false);
+    } catch (e) {
+      console.error("Subcontractor PDF generation error:", e);
+      toast({ title: "Failed to generate Subcontractor PDF", variant: "destructive" });
+    } finally {
+      setSubconGenerating(false);
+    }
+  };
+
   if (jobLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -837,8 +969,166 @@ export default function ExecSummary() {
               <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates the first quote for this estimate</span>
             </div>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-download-menu">
+                <Download className="w-4 h-4 mr-1.5" /> Download <ChevronDown className="w-3 h-3 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setSubconDialogOpen(true)} disabled={itemPricings.length === 0} data-testid="menu-subcontractor-pdf">
+                <HardHat className="w-4 h-4 mr-2" />
+                Subcontractor Install Scope (PDF)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <Dialog open={subconDialogOpen} onOpenChange={setSubconDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" data-testid="dialog-subcontractor-config">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HardHat className="h-5 w-5" />
+              Subcontractor Install Scope PDF
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Scope Type</Label>
+              <RadioGroup value={subconScopeMode} onValueChange={(v) => setSubconScopeMode(v as "renovation" | "new_build")} className="flex gap-4">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="renovation" id="scope-renovation" data-testid="radio-scope-renovation" />
+                  <Label htmlFor="scope-renovation" className="cursor-pointer">Renovation</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="new_build" id="scope-new-build" data-testid="radio-scope-new-build" />
+                  <Label htmlFor="scope-new-build" className="cursor-pointer">New Build</Label>
+                </div>
+              </RadioGroup>
+              <p className="text-xs text-muted-foreground">
+                {subconScopeMode === "renovation"
+                  ? "Includes removal, disposal, and installation scope"
+                  : "Includes installation to prepared openings only"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Work Package</Label>
+              <RadioGroup value={subconWorkPackage} onValueChange={(v) => setSubconWorkPackage(v as "install_only" | "removal_disposal_install")} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="removal_disposal_install" id="wp-rdi" data-testid="radio-wp-removal" />
+                  <Label htmlFor="wp-rdi" className="cursor-pointer text-sm">Removal + disposal + install</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="install_only" id="wp-io" data-testid="radio-wp-install-only" />
+                  <Label htmlFor="wp-io" className="cursor-pointer text-sm">Install only</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Scope Definition</Label>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Sealant</Label>
+                  <Select value={subconScopeFields.sealant} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, sealant: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-sealant"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                      <SelectItem value="price_separately">Price separately</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Flashings</Label>
+                  <Select value={subconScopeFields.flashings} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, flashings: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-flashings"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                      <SelectItem value="supplied_by_others">Supplied by others</SelectItem>
+                      <SelectItem value="price_separately">Price separately</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">WANZ Bars / Support</Label>
+                  <Select value={subconScopeFields.wanzBars} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, wanzBars: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-wanz"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                      <SelectItem value="price_separately">Price separately</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Site Clean-up</Label>
+                  <Select value={subconScopeFields.siteCleanup} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, siteCleanup: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-cleanup"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Repairs to Finishes</Label>
+                  <Select value={subconScopeFields.makingGood} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, makingGood: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-making-good"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="by_others">By others</SelectItem>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Access Condition</Label>
+                  <Select value={subconScopeFields.accessCondition} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, accessCondition: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-access"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="restricted">Restricted</SelectItem>
+                      <SelectItem value="upper_level">Upper level / height</SelectItem>
+                      <SelectItem value="scaffold_required">Scaffold likely / required</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Include in PDF</Label>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-drawings" checked={subconIncludeDrawings} onCheckedChange={(v) => setSubconIncludeDrawings(!!v)} data-testid="checkbox-include-drawings" />
+                <Label htmlFor="subcon-drawings" className="cursor-pointer text-sm">Detailed item drawings</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-photos" checked={subconIncludeSitePhotos} onCheckedChange={(v) => setSubconIncludeSitePhotos(!!v)} data-testid="checkbox-include-photos" />
+                <Label htmlFor="subcon-photos" className="cursor-pointer text-sm">Item photos (where available)</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-pricing" checked={subconIncludePricingReturn} onCheckedChange={(v) => setSubconIncludePricingReturn(!!v)} data-testid="checkbox-include-pricing" />
+                <Label htmlFor="subcon-pricing" className="cursor-pointer text-sm">Pricing return section</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-variations" checked={subconScopeFields.includeVariationChecklist} onCheckedChange={(v) => setSubconScopeFields(p => ({ ...p, includeVariationChecklist: !!v }))} data-testid="checkbox-include-variations" />
+                <Label htmlFor="subcon-variations" className="cursor-pointer text-sm">Variation checklist</Label>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSubconDialogOpen(false)} data-testid="button-subcon-cancel">Cancel</Button>
+            <Button size="sm" onClick={handleSubcontractorPdf} disabled={subconGenerating} data-testid="button-subcon-generate">
+              <Download className="w-4 h-4 mr-1.5" />
+              {subconGenerating ? "Generating..." : "Generate PDF"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="print:block hidden mb-4">
         <h1 className="text-xl font-bold">{job.name || "Untitled Job"} — Executive Summary</h1>
@@ -857,6 +1147,58 @@ export default function ExecSummary() {
         <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={allCollapsed ? expandAll : collapseAll} data-testid="button-toggle-all-sections">
           {allCollapsed ? "Expand All" : "Collapse All"}
         </Button>
+      </div>
+
+      <div className="order-1 rounded-lg border bg-card p-4 print:hidden" data-testid="section-lifecycle-estimate">
+        {existingQuotes.length > 0 ? (() => {
+          const activeQuote = existingQuotes.find((q: any) => q.status === "accepted")
+            || existingQuotes.find((q: any) => q.status === "sent")
+            || existingQuotes.find((q: any) => q.status === "review")
+            || existingQuotes.find((q: any) => q.status === "draft")
+            || existingQuotes[0];
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">Workflow Position</span>
+                </div>
+                <Badge variant="outline" className="text-xs" data-testid="badge-lifecycle-quote-ref">
+                  Quote {activeQuote.number || activeQuote.id?.slice(0, 8)}
+                  {activeQuote.status ? ` · ${activeQuote.status.charAt(0).toUpperCase() + activeQuote.status.slice(1)}` : ""}
+                </Badge>
+              </div>
+              <div className="flex items-start gap-2 rounded-md bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-3 py-2" data-testid="banner-estimate-lifecycle-context">
+                <ClipboardList className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  This estimate has {existingQuotes.length === 1 ? "a linked quote" : `${existingQuotes.length} linked quotes`}. The lifecycle below tracks the most relevant quote's workflow progression.
+                </p>
+              </div>
+              <LifecyclePanel quoteId={activeQuote.id} previewOnly />
+            </div>
+          );
+        })() : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Workflow Position</span>
+            </div>
+            <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-3" data-testid="banner-estimate-pre-quote">
+              <Badge variant="outline" className="shrink-0 text-xs border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
+                Planning
+              </Badge>
+              <p className="text-sm text-muted-foreground">
+                This estimate is in the planning and costing stage. No quote has been generated yet.
+              </p>
+            </div>
+            <div className="flex items-start gap-2 rounded-md bg-muted/30 px-3 py-2" data-testid="banner-estimate-next-step">
+              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Next step:</span> Review the financial summary and item breakdown below, then use <span className="font-medium">Generate Quote</span> above to create the first quote from this estimate. The lifecycle will begin tracking once the quote is created.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="order-5 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
@@ -1088,31 +1430,44 @@ export default function ExecSummary() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8 print:hidden"></TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Unit m²</TableHead>
                   <TableHead>Tier</TableHead>
                   <TableHead className="text-right">Cost/Unit</TableHead>
-                  <TableHead className="text-right">Sell/Unit</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Cost Total</TableHead>
-                  <TableHead className="text-right">Sell Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {installationItems.map((ii, idx) => (
-                  <TableRow key={idx} data-testid={`row-install-${idx}`}>
+                {installationItems.map((ii, idx) => {
+                  const isOff = disabledInstallLines.has(idx);
+                  return (
+                  <TableRow key={idx} data-testid={`row-install-${idx}`} className={isOff ? "opacity-40" : ""}>
+                    <TableCell className="print:hidden">
+                      <Checkbox
+                        checked={!isOff}
+                        onCheckedChange={() => {
+                          setDisabledInstallLines(prev => {
+                            const next = new Set(prev);
+                            next.has(idx) ? next.delete(idx) : next.add(idx);
+                            return next;
+                          });
+                        }}
+                        data-testid={`checkbox-install-${idx}`}
+                      />
+                    </TableCell>
                     <TableCell className="text-sm">{ii.name}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ii.category] || ii.category}</Badge></TableCell>
                     <TableCell className="text-right">{ii.unitSqm.toFixed(2)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-xs">{ii.tierName}</Badge></TableCell>
                     <TableCell className="text-right">${fmt(ii.costPerUnit)}</TableCell>
-                    <TableCell className="text-right">${fmt(ii.sellPerUnit)}</TableCell>
                     <TableCell className="text-right">{ii.qty}</TableCell>
-                    <TableCell className="text-right font-medium">${fmt(ii.costTotal)}</TableCell>
-                    <TableCell className="text-right font-medium">${fmt(ii.sellTotal)}</TableCell>
+                    <TableCell className="text-right font-medium">{isOff ? "—" : `$${fmt(ii.costTotal)}`}</TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
             <Separator />
@@ -1149,10 +1504,11 @@ export default function ExecSummary() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-4 font-bold text-sm">
+            <div className="flex items-center justify-end gap-4 font-bold text-sm" data-testid="text-installation-total">
               <span>Cost: ${fmt(installationTotals.cost)}</span>
               <span>Sell: ${fmt(installationTotals.sell)}</span>
               {installationTotals.isOverride && <Badge variant="outline">Override</Badge>}
+              {!installationTotals.isOverride && <span className="text-xs font-normal text-muted-foreground">(Cost + {installMarkup || "15"}%)</span>}
             </div>
           </>
         )}
@@ -1274,31 +1630,44 @@ export default function ExecSummary() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8 print:hidden"></TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Unit m²</TableHead>
                   <TableHead>Tier</TableHead>
                   <TableHead className="text-right">Cost/Unit</TableHead>
-                  <TableHead className="text-right">Sell/Unit</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Cost Total</TableHead>
-                  <TableHead className="text-right">Sell Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {removalItems.map((ri, idx) => (
-                  <TableRow key={idx} data-testid={`row-removal-${idx}`}>
+                {removalItems.map((ri, idx) => {
+                  const isOff = disabledRemovalLines.has(idx);
+                  return (
+                  <TableRow key={idx} data-testid={`row-removal-${idx}`} className={isOff ? "opacity-40" : ""}>
+                    <TableCell className="print:hidden">
+                      <Checkbox
+                        checked={!isOff}
+                        onCheckedChange={() => {
+                          setDisabledRemovalLines(prev => {
+                            const next = new Set(prev);
+                            next.has(idx) ? next.delete(idx) : next.add(idx);
+                            return next;
+                          });
+                        }}
+                        data-testid={`checkbox-removal-${idx}`}
+                      />
+                    </TableCell>
                     <TableCell className="text-sm font-medium">{ri.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground capitalize">{ri.category}</TableCell>
                     <TableCell className="text-right text-sm">{ri.unitSqm.toFixed(2)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{ri.tierName}</TableCell>
                     <TableCell className="text-right text-sm">${fmt(ri.costPerUnit)}</TableCell>
-                    <TableCell className="text-right text-sm">${fmt(ri.sellPerUnit)}</TableCell>
                     <TableCell className="text-right text-sm">{ri.qty}</TableCell>
-                    <TableCell className="text-right text-sm">${fmt(ri.costTotal)}</TableCell>
-                    <TableCell className="text-right text-sm">${fmt(ri.sellTotal)}</TableCell>
+                    <TableCell className="text-right text-sm">{isOff ? "—" : `$${fmt(ri.costTotal)}`}</TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4 print:hidden">
@@ -1334,6 +1703,7 @@ export default function ExecSummary() {
               <span>Cost: ${fmt(removalTotals.cost)}</span>
               <span>Sell: ${fmt(removalTotals.sell)}</span>
               {removalTotals.isOverride && <Badge variant="outline">Override</Badge>}
+              {!removalTotals.isOverride && <span className="text-xs font-normal text-muted-foreground">(Cost + {removalMarkup || "15"}%)</span>}
             </div>
           </>
         )}

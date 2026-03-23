@@ -453,9 +453,10 @@ function OverallStatusBadge({ status }: { status: ComputedLifecycleState["overal
 interface LifecyclePanelProps {
   quoteId?: string;
   jobId?: string;
+  previewOnly?: boolean;
 }
 
-export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) {
+export default function LifecyclePanel({ quoteId, jobId, previewOnly = false }: LifecyclePanelProps) {
   const { toast } = useToast();
   const endpoint = jobId
     ? `/api/op-jobs/${jobId}/lifecycle`
@@ -555,6 +556,7 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
   });
 
   const handleToggleTask = (stageKey: string, taskKey: string, completed: boolean) => {
+    if (previewOnly) return;
     if (!lifecycle?.instanceId) return;
     toggleTaskMutation.mutate({
       instanceId: lifecycle.instanceId,
@@ -655,7 +657,7 @@ export default function LifecyclePanel({ quoteId, jobId }: LifecyclePanelProps) 
             instanceId={lifecycle.instanceId}
             pendingKey={pendingKey}
             onToggleTask={handleToggleTask}
-            previewMode={!lifecycle.instanceId}
+            previewMode={previewOnly || !lifecycle.instanceId}
           />
         ))}
       </div>
