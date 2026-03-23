@@ -8,15 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   ArrowLeft, ReceiptText, CheckCircle2, Send, RotateCcw, FileCheck,
   RefreshCw, DollarSign, CreditCard, Save, X, Pencil,
   Building2, FolderOpen, FileText, Briefcase, Hash, Layers,
-  Clock, CircleDot, Lock, Info,
+  Clock, CircleDot,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -95,19 +92,6 @@ function PaymentBadge({ invoice }: { invoice: EnrichedInvoice }) {
     );
   }
   return null;
-}
-
-function buildTypeContext(invoice: EnrichedInvoice): string {
-  if (invoice.type === "deposit") {
-    if (invoice.depositType === "percentage") return `${invoice.depositPercentage ?? 0}% deposit on accepted quotation`;
-    return "Fixed deposit amount";
-  }
-  if (invoice.type === "progress") return "Progress claim";
-  if (invoice.type === "variation") return invoice.variationTitle ? `Variation: ${invoice.variationTitle}` : "Variation invoice";
-  if (invoice.type === "final") return "Final invoice";
-  if (invoice.type === "retention_release") return "Retention release";
-  if (invoice.type === "credit_note") return "Credit note";
-  return TYPE_LABELS[invoice.type] || invoice.type;
 }
 
 export default function InvoiceDetailPage() {
@@ -239,14 +223,7 @@ export default function InvoiceDetailPage() {
   const isDraft = invoice?.status === "draft";
   const isReadyForXero = invoice?.status === "ready_for_xero";
   const isReturnedToDraft = invoice?.status === "returned_to_draft";
-  const isEditable = isDraft || isReadyForXero || isReturnedToDraft;
   const isPending = patchMutation.isPending || statusMutation.isPending || pushToXeroMutation.isPending || returnToDraftMutation.isPending;
-
-  useEffect(() => {
-    if (editingField && !isEditable) {
-      setEditingField(null);
-    }
-  }, [isEditable, editingField]);
 
   if (isLoading) {
     return (
@@ -293,7 +270,6 @@ export default function InvoiceDetailPage() {
   function cancelEdit() { setEditingField(null); }
 
   function saveEdit(field: string) {
-    if (!isEditable) return;
     if (field === "description") patchMutation.mutate({ description: editDescription || null });
     if (field === "notes") patchMutation.mutate({ notes: editNotes || null });
     if (field === "reference") patchMutation.mutate({ reference: editReference || null });
@@ -302,7 +278,6 @@ export default function InvoiceDetailPage() {
   const xPaid = (invoice as any).xeroAmountPaid;
   const xDue = (invoice as any).xeroAmountDue;
   const xSynced = (invoice as any).xeroLastSyncedAt;
-  const lineDescription = invoice.description || buildTypeContext(invoice);
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -391,289 +366,263 @@ export default function InvoiceDetailPage() {
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="max-w-5xl mx-auto space-y-4">
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-3 space-y-1">
-              <div className="flex items-center gap-2 px-1 mb-1">
-                <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium" data-testid="text-detail-customer">
-                  {invoice.customerName || <span className="text-muted-foreground italic">No customer linked</span>}
-                </span>
-              </div>
-              {invoice.projectName && (
-                <div className="flex items-center gap-2 px-1">
-                  <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground" data-testid="text-detail-project">{invoice.projectName}</span>
-                </div>
-              )}
-            </div>
-            <div className="lg:col-span-2">
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Reference</span>
-                {editingField !== "reference" && isEditable && (
-                  <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-0.5 text-muted-foreground hover:text-foreground" onClick={() => startEdit("reference")} data-testid="button-edit-reference">
-                    <Pencil className="h-2.5 w-2.5" /> Edit
-                  </Button>
-                )}
-                {isPushed && (
-                  <Lock className="h-3 w-3 text-muted-foreground/50" />
-                )}
-              </div>
-              {editingField === "reference" ? (
-                <div className="flex items-center gap-1.5">
-                  <Input value={editReference} onChange={(e) => setEditReference(e.target.value)}
-                    placeholder="PO number, job ref..." className="h-7 text-sm flex-1" data-testid="input-edit-reference" />
-                  <Button size="sm" className="h-7 px-2" disabled={patchMutation.isPending} onClick={() => saveEdit("reference")} data-testid="button-save-reference">
-                    <Save className="h-3 w-3" />
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={cancelEdit} data-testid="button-cancel-reference">
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm font-mono" data-testid="text-reference">
-                  {(invoice as any).reference || <span className="text-muted-foreground italic font-sans text-xs">No reference set</span>}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <Card data-testid="card-invoice-body">
-            <CardContent className="p-0">
-              <div className="rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Description</TableHead>
-                      <TableHead className="w-[60px] text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Qty</TableHead>
-                      <TableHead className="w-[120px] text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Unit Amount</TableHead>
-                      <TableHead className="w-[120px] text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Line Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow data-testid="row-line-item">
-                      <TableCell className="py-3">
-                        {editingField === "description" ? (
-                          <div className="space-y-1.5">
-                            <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
-                              placeholder="Invoice line description…" className="text-sm min-h-[60px]" data-testid="input-edit-description" />
-                            <div className="flex items-center gap-1.5">
-                              <Button size="sm" className="h-7 text-xs" disabled={patchMutation.isPending} onClick={() => saveEdit("description")} data-testid="button-save-description">
-                                <Save className="h-3 w-3 mr-1" /> Save
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit} data-testid="button-cancel-description">Cancel</Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm whitespace-pre-wrap" data-testid="text-description">
-                                {lineDescription}
-                              </p>
-                              {invoice.type === "deposit" && invoice.depositType && (
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  <CircleDot className="h-2.5 w-2.5 inline mr-0.5" />
-                                  {invoice.depositType === "percentage"
-                                    ? `${invoice.depositPercentage}% deposit of accepted quote`
-                                    : "Fixed deposit amount"}
-                                </p>
-                              )}
-                              {invoice.type === "variation" && invoice.variationTitle && (
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  <Layers className="h-2.5 w-2.5 inline mr-0.5" />
-                                  Variation: {invoice.variationTitle}
-                                </p>
-                              )}
-                            </div>
-                            {isEditable && (
-                              <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[10px] gap-0.5 text-muted-foreground hover:text-foreground shrink-0"
-                                onClick={() => startEdit("description")} data-testid="button-edit-description">
-                                <Pencil className="h-2.5 w-2.5" /> Edit
-                              </Button>
-                            )}
-                            {isPushed && (
-                              <Lock className="h-3 w-3 text-muted-foreground/40 shrink-0 mt-1" />
-                            )}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center py-3">
-                        <span className="font-mono text-sm tabular-nums" data-testid="text-line-qty">1</span>
-                      </TableCell>
-                      <TableCell className="text-right py-3">
-                        <span className="font-mono text-sm tabular-nums" data-testid="text-line-unit">{fmtMoney(invoice.amountExclGst)}</span>
-                      </TableCell>
-                      <TableCell className="text-right py-3">
-                        <span className="font-mono text-sm font-semibold tabular-nums" data-testid="text-line-total">{fmtMoney(invoice.amountExclGst)}</span>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-
-                <div className="border-t bg-muted/30">
-                  <div className="max-w-xs ml-auto px-4 py-3 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Subtotal</span>
-                      <span className="font-mono text-sm tabular-nums" data-testid="text-amount-excl">{fmtMoney(invoice.amountExclGst)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">GST (15%)</span>
-                      <span className="font-mono text-sm tabular-nums text-muted-foreground" data-testid="text-amount-gst">{fmtMoney(invoice.gstAmount)}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold">Total</span>
-                      <span className="font-mono text-base font-bold tabular-nums" data-testid="text-amount-incl">{fmtMoney(invoice.amountInclGst)}</span>
-                    </div>
-                    {xPaid != null && (
-                      <>
-                        <Separator />
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Amount Paid</span>
-                          <span className="font-mono text-sm tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold" data-testid="text-xero-paid">{fmtMoney(xPaid)}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium">Amount Due</span>
-                          <span className="font-mono text-sm tabular-nums font-bold" data-testid="text-xero-due">{fmtMoney(xDue)}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {isPushed && (
-            <div className="flex items-center gap-2 px-1 text-[10px] text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              <span>Invoice body is locked — pushed to Xero. Return to draft to make changes.</span>
-            </div>
-          )}
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card className="md:col-span-1">
-              <CardContent className="pt-4 pb-4">
-                <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Linkage</h3>
-                <div className="space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
-                    {invoice.quoteId ? (
-                      <Link href={`/quote/${invoice.quoteId}`} className="text-xs text-primary hover:underline truncate" data-testid="link-detail-quote">
-                        View quote
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-muted-foreground italic" data-testid="link-detail-quote">No quote</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="h-3 w-3 text-muted-foreground shrink-0" />
-                    {invoice.projectId ? (
-                      <span className="text-xs truncate" data-testid="text-link-project">{invoice.projectName || "Linked project"}</span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground italic">No project</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="h-3 w-3 text-muted-foreground shrink-0" />
-                    {invoice.jobName ? (
-                      <Link href={`/job/${invoice.jobId}`} className="text-xs text-primary hover:underline truncate" data-testid="link-detail-job">
-                        {invoice.jobName}
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-muted-foreground italic" data-testid="link-detail-job">No estimate</span>
-                    )}
-                  </div>
-                  {(invoice.type === "variation" || invoice.variationTitle) && (
-                    <div className="flex items-center gap-2">
-                      <Layers className="h-3 w-3 text-muted-foreground shrink-0" />
-                      {invoice.variationTitle ? (
-                        <span className="text-xs" data-testid="text-variation-title">{invoice.variationTitle}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">No variation</span>
-                      )}
-                    </div>
-                  )}
-                  {invoice.divisionCode && (
-                    <div className="flex items-center gap-2">
-                      <Hash className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <span className="text-xs font-mono">{invoice.divisionCode}</span>
-                    </div>
-                  )}
+              <CardContent className="pt-4 pb-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg font-bold font-mono tabular-nums" data-testid="text-amount-incl">
+                    {fmtMoney(invoice.amountInclGst)}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Incl GST</span>
                 </div>
+                <Separator />
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Excl GST</p>
+                    <p className="font-mono text-sm font-semibold tabular-nums" data-testid="text-amount-excl">{fmtMoney(invoice.amountExclGst)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">GST</p>
+                    <p className="font-mono text-sm tabular-nums text-muted-foreground" data-testid="text-amount-gst">{fmtMoney(invoice.gstAmount)}</p>
+                  </div>
+                </div>
+                {invoice.depositType && (
+                  <>
+                    <Separator />
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <CircleDot className="h-3 w-3" />
+                      {invoice.depositType === "percentage"
+                        ? `${invoice.depositPercentage}% deposit of quote`
+                        : "Fixed deposit amount"}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
-            <Card className="md:col-span-1">
+            <Card className="md:col-span-2">
+              <CardContent className="pt-4 pb-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Building2 className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Customer</span>
+                    </div>
+                    <p className="text-sm font-medium truncate" data-testid="text-detail-customer">
+                      {invoice.customerName || <span className="text-muted-foreground italic">Not linked</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <FolderOpen className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Project</span>
+                    </div>
+                    <p className="text-sm font-medium truncate" data-testid="text-detail-project">
+                      {invoice.projectName || <span className="text-muted-foreground italic">No project</span>}
+                    </p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Briefcase className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Estimate</span>
+                    </div>
+                    {invoice.jobName ? (
+                      <Link href={`/job/${invoice.jobId}`} className="text-sm font-medium text-primary hover:underline truncate block" data-testid="link-detail-job">
+                        {invoice.jobName}
+                      </Link>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No estimate</p>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <FileText className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Quote</span>
+                    </div>
+                    {invoice.quoteId ? (
+                      <Link href={`/quote/${invoice.quoteId}`} className="text-sm font-medium text-primary hover:underline truncate block" data-testid="link-detail-quote">
+                        View quote
+                      </Link>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No quote</p>
+                    )}
+                  </div>
+                </div>
+
+                {(invoice.type === "variation" && invoice.variationTitle) && (
+                  <>
+                    <Separator className="my-3" />
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider mr-2">Variation</span>
+                      <span className="text-sm font-medium" data-testid="text-variation-title">{invoice.variationTitle}</span>
+                    </div>
+                  </>
+                )}
+
+                {invoice.divisionCode && (
+                  <>
+                    <Separator className="my-3" />
+                    <div className="flex items-center gap-1.5">
+                      <Hash className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider mr-2">Division</span>
+                      <span className="text-sm font-mono">{invoice.divisionCode}</span>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Xero</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Xero Integration</h3>
                   {invoice.xeroInvoiceId && (
-                    <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1"
+                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1"
                       disabled={syncFromXeroMutation.isPending}
                       onClick={() => syncFromXeroMutation.mutate()}
                       data-testid="button-sync-xero">
                       <RefreshCw className={`h-3 w-3 ${syncFromXeroMutation.isPending ? "animate-spin" : ""}`} />
-                      Sync
+                      Sync from Xero
                     </Button>
                   )}
                 </div>
                 {invoice.xeroInvoiceId ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">Invoice</span>
-                      <span className="font-mono text-xs font-medium" data-testid="text-xero-number">{invoice.xeroInvoiceNumber}</span>
+                      <span className="text-xs text-muted-foreground">Xero Invoice</span>
+                      <span className="font-mono text-sm font-medium" data-testid="text-xero-number">{invoice.xeroInvoiceNumber}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">Status</span>
-                      <span className="font-mono text-[10px] font-medium" data-testid="text-xero-status">{invoice.xeroStatus}</span>
+                      <span className="text-xs text-muted-foreground">Xero Status</span>
+                      <span className="font-mono text-xs font-medium" data-testid="text-xero-status">{invoice.xeroStatus}</span>
                     </div>
+                    {xPaid != null && (
+                      <>
+                        <Separator />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/20 px-3 py-2 text-center">
+                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Paid</p>
+                            <p className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums" data-testid="text-xero-paid">{fmtMoney(xPaid)}</p>
+                          </div>
+                          <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-center">
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-0.5">Due</p>
+                            <p className="font-mono text-sm font-bold tabular-nums" data-testid="text-xero-due">{fmtMoney(xDue)}</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
                     {xSynced && (
-                      <p className="text-[9px] text-muted-foreground">
-                        Synced: {new Date(xSynced).toLocaleString("en-NZ")}
+                      <p className="text-[10px] text-muted-foreground pt-1">
+                        Last synced: {new Date(xSynced).toLocaleString("en-NZ")}
                       </p>
                     )}
-                    <p className="text-[8px] font-mono text-muted-foreground/50 truncate">{invoice.xeroInvoiceId}</p>
+                    <p className="text-[9px] font-mono text-muted-foreground/60 truncate">ID: {invoice.xeroInvoiceId}</p>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <div className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-                    Not pushed to Xero
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                    Not yet pushed to Xero
                   </div>
                 )}
               </CardContent>
             </Card>
 
-            <Card className="md:col-span-1">
-              <CardContent className="pt-4 pb-4">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Internal Notes</h3>
-                  {editingField !== "notes" && isEditable && (
-                    <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-0.5 text-muted-foreground hover:text-foreground" onClick={() => startEdit("notes")} data-testid="button-edit-notes">
-                      <Pencil className="h-2.5 w-2.5" /> Edit
-                    </Button>
+            <Card>
+              <CardContent className="pt-4 pb-4 space-y-3">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Reference & Details</h3>
+
+                <div>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Reference</span>
+                    {editingField !== "reference" && !isPushed && (
+                      <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-0.5 text-muted-foreground hover:text-foreground" onClick={() => startEdit("reference")} data-testid="button-edit-reference">
+                        <Pencil className="h-2.5 w-2.5" /> Edit
+                      </Button>
+                    )}
+                  </div>
+                  {editingField === "reference" ? (
+                    <div className="flex items-center gap-1.5">
+                      <Input value={editReference} onChange={(e) => setEditReference(e.target.value)}
+                        placeholder="PO number, job ref..." className="h-7 text-sm flex-1" data-testid="input-edit-reference" />
+                      <Button size="sm" className="h-7 px-2" disabled={patchMutation.isPending} onClick={() => saveEdit("reference")} data-testid="button-save-reference">
+                        <Save className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={cancelEdit} data-testid="button-cancel-reference">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium" data-testid="text-reference">
+                      {(invoice as any).reference || <span className="text-muted-foreground italic font-normal">No reference — maps to Xero Reference field</span>}
+                    </p>
                   )}
                 </div>
-                {editingField === "notes" ? (
-                  <div className="space-y-1.5">
-                    <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)}
-                      placeholder="Internal notes…" className="text-sm min-h-[50px]" data-testid="input-edit-notes" />
-                    <div className="flex items-center gap-1.5">
-                      <Button size="sm" className="h-7 text-xs" disabled={patchMutation.isPending} onClick={() => saveEdit("notes")} data-testid="button-save-notes">
-                        <Save className="h-3 w-3 mr-1" /> Save
+
+                <Separator />
+
+                <div>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Description</span>
+                    {editingField !== "description" && !isPushed && (
+                      <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-0.5 text-muted-foreground hover:text-foreground" onClick={() => startEdit("description")} data-testid="button-edit-description">
+                        <Pencil className="h-2.5 w-2.5" /> Edit
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit} data-testid="button-cancel-notes">Cancel</Button>
-                    </div>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-xs whitespace-pre-wrap" data-testid="text-notes">
-                    {invoice.notes || <span className="text-muted-foreground italic">No notes</span>}
-                  </p>
-                )}
+                  {editingField === "description" ? (
+                    <div className="space-y-1.5">
+                      <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
+                        placeholder="Invoice description…" className="text-sm min-h-[50px]" data-testid="input-edit-description" />
+                      <div className="flex items-center gap-1.5">
+                        <Button size="sm" className="h-7 text-xs" disabled={patchMutation.isPending} onClick={() => saveEdit("description")} data-testid="button-save-description">
+                          <Save className="h-3 w-3 mr-1" /> Save
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit} data-testid="button-cancel-description">Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap" data-testid="text-description">
+                      {invoice.description || <span className="text-muted-foreground italic">No description</span>}
+                    </p>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Internal Notes</span>
+                    {editingField !== "notes" && !isPushed && (
+                      <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-0.5 text-muted-foreground hover:text-foreground" onClick={() => startEdit("notes")} data-testid="button-edit-notes">
+                        <Pencil className="h-2.5 w-2.5" /> Edit
+                      </Button>
+                    )}
+                  </div>
+                  {editingField === "notes" ? (
+                    <div className="space-y-1.5">
+                      <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)}
+                        placeholder="Internal notes…" className="text-sm min-h-[50px]" data-testid="input-edit-notes" />
+                      <div className="flex items-center gap-1.5">
+                        <Button size="sm" className="h-7 text-xs" disabled={patchMutation.isPending} onClick={() => saveEdit("notes")} data-testid="button-save-notes">
+                          <Save className="h-3 w-3 mr-1" /> Save
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit} data-testid="button-cancel-notes">Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap" data-testid="text-notes">
+                      {invoice.notes || <span className="text-muted-foreground italic">No notes</span>}
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
 
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 px-1">
             <div className="flex items-center gap-4">
               <span>Created: {invoice.createdAt ? new Date(invoice.createdAt).toLocaleString("en-NZ") : "—"}</span>
               <span>Updated: {invoice.updatedAt ? new Date(invoice.updatedAt).toLocaleString("en-NZ") : "—"}</span>
