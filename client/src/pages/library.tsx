@@ -28,7 +28,7 @@ import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
   ConfigurationAccessory, ConfigurationLabor,
 } from "@shared/schema";
-import { IGU_INFO } from "@shared/glass-library";
+import { IGU_INFO, getThicknessColumnsForFamily } from "@shared/glass-library";
 import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
 
 const CATEGORY_OPTIONS = [
@@ -262,12 +262,13 @@ export default function Library() {
 
 function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
   iguType: string;
-  info: { label: string; rValue: number } | undefined;
+  info: { label: string; rValue: number | null } | undefined;
   items: LibraryEntry[];
   onEdit: (e: LibraryEntry) => void;
   onDelete: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const thicknessCols = getThicknessColumnsForFamily(iguType);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card>
@@ -277,7 +278,7 @@ function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
               {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
               {info?.label || iguType}
               <Badge variant="outline" className="text-[10px]">{items.length} combos</Badge>
-              {info && (
+              {info && info.rValue != null && (
                 <Badge variant="outline">R={info.rValue}</Badge>
               )}
             </CardTitle>
@@ -290,12 +291,9 @@ function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Glass Combination</TableHead>
-                    <TableHead className="text-right">4/4</TableHead>
-                    <TableHead className="text-right">5/4</TableHead>
-                    <TableHead className="text-right">5/5</TableHead>
-                    <TableHead className="text-right">6/5</TableHead>
-                    <TableHead className="text-right">6/6</TableHead>
-                    <TableHead className="text-right">8/8</TableHead>
+                    {thicknessCols.map((t) => (
+                      <TableHead key={t} className="text-right">{t}</TableHead>
+                    ))}
                     <TableHead>Scope</TableHead>
                     <TableHead className="w-20"></TableHead>
                   </TableRow>
@@ -306,7 +304,7 @@ function GlassTypeCollapsible({ iguType, info, items, onEdit, onDelete }: {
                     return (
                       <TableRow key={entry.id} data-testid={`row-glass-${entry.id}`}>
                         <TableCell className="font-medium text-sm">{d.combo}</TableCell>
-                        {["4/4", "5/4", "5/5", "6/5", "6/6", "8/8"].map((t) => (
+                        {thicknessCols.map((t) => (
                           <TableCell key={t} className="text-right font-mono text-sm">
                             {d.prices[t] != null ? `$${d.prices[t].toFixed(2)}` : "—"}
                           </TableCell>
@@ -405,14 +403,22 @@ function GlassDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | n
   const [iguType, setIguType] = useState(d.iguType || "EnergySaver");
   const [combo, setCombo] = useState(d.combo || "");
   const [scopeValue, setScopeValue] = useState(entry?.divisionScope || divisionCode || "__shared__");
-  const [prices, setPrices] = useState<Record<string, string>>({
-    "4/4": d.prices?.["4/4"]?.toString() || "",
-    "5/4": d.prices?.["5/4"]?.toString() || "",
-    "5/5": d.prices?.["5/5"]?.toString() || "",
-    "6/5": d.prices?.["6/5"]?.toString() || "",
-    "6/6": d.prices?.["6/6"]?.toString() || "",
-    "8/8": d.prices?.["8/8"]?.toString() || "",
-  });
+
+  const buildPriceState = (igu: string, existingPrices?: Record<string, number>) => {
+    const cols = getThicknessColumnsForFamily(igu);
+    const result: Record<string, string> = {};
+    for (const c of cols) {
+      result[c] = existingPrices?.[c]?.toString() || "";
+    }
+    return result;
+  };
+
+  const [prices, setPrices] = useState<Record<string, string>>(() => buildPriceState(d.iguType || "EnergySaver", d.prices));
+
+  const handleIguTypeChange = (newType: string) => {
+    setIguType(newType);
+    setPrices(buildPriceState(newType, d.iguType === newType ? d.prices : undefined));
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -435,6 +441,8 @@ function GlassDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | n
     },
   });
 
+  const thicknessCols = getThicknessColumnsForFamily(iguType);
+
   return (
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="max-w-lg" data-testid="dialog-glass">
@@ -445,13 +453,14 @@ function GlassDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | n
         <div className="space-y-4">
           <div>
             <Label>IGU Type</Label>
-            <Select value={iguType} onValueChange={setIguType}>
+            <Select value={iguType} onValueChange={handleIguTypeChange}>
               <SelectTrigger data-testid="select-dialog-igu">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="EnergySaver">EnergySaver™</SelectItem>
                 <SelectItem value="LightBridge">LightBridge™</SelectItem>
+                <SelectItem value="VLamThermotech">VLam Thermotech</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -467,16 +476,16 @@ function GlassDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | n
           <div>
             <Label className="mb-2 block">Prices per Thickness ($/m²)</Label>
             <div className="grid grid-cols-3 gap-3">
-              {["4/4", "5/4", "5/5", "6/5", "6/6", "8/8"].map((t) => (
+              {thicknessCols.map((t) => (
                 <div key={t}>
                   <Label className="text-xs text-muted-foreground">{t}</Label>
                   <Input
                     type="number"
                     step="0.01"
-                    value={prices[t]}
+                    value={prices[t] || ""}
                     onChange={(e) => setPrices({ ...prices, [t]: e.target.value })}
                     placeholder="0.00"
-                    data-testid={`input-price-${t.replace("/", "-")}`}
+                    data-testid={`input-price-${t.replace(/\./g, "p").replace("/", "-")}`}
                   />
                 </div>
               ))}

@@ -2994,6 +2994,7 @@ export default function QuoteBuilder() {
                         <SelectContent>
                           <SelectItem value="EnergySaver">EnergySaver™ IGU (Entry-level Low-E)</SelectItem>
                           <SelectItem value="LightBridge">LightBridge™ IGU (High Performance Low-E)</SelectItem>
+                          <SelectItem value="VLamThermotech">VLam Thermotech IGU (Laminated Safety)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

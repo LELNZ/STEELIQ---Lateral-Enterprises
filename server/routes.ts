@@ -195,6 +195,18 @@ export async function registerRoutes(
         }
       }
     }
+
+    const hasVLamGlass = existingEntries.some((e) => e.type === "glass" && (e.data as any).iguType === "VLamThermotech");
+    if (!hasVLamGlass) {
+      console.log("Seeding VLam Thermotech glass defaults...");
+      const glassEntries = existingEntries.filter((e) => e.type === "glass");
+      let maxSort = glassEntries.reduce((m, e) => Math.max(m, e.sortOrder ?? 0), -1);
+      const vlamEntries = GLASS_LIBRARY.filter((g) => g.iguType === "VLamThermotech");
+      for (const g of vlamEntries) {
+        await storage.createLibraryEntry({ type: "glass", data: { iguType: g.iguType, combo: g.combo, prices: g.prices }, sortOrder: ++maxSort });
+      }
+      console.log(`Seeded ${vlamEntries.length} VLam Thermotech glass entries`);
+    }
   }
 
   const hasDirectProfiles = existingEntries.some((e) => e.type === "direct_profile");

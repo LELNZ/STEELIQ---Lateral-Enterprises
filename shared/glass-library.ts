@@ -1,5 +1,5 @@
 export interface GlassEntry {
-  iguType: "EnergySaver" | "LightBridge";
+  iguType: "EnergySaver" | "LightBridge" | "VLamThermotech";
   combo: string;
   prices: Record<string, number>;
 }
@@ -36,12 +36,30 @@ export const GLASS_LIBRARY: GlassEntry[] = [
   { iguType: "LightBridge", combo: "Etchlite Toughened // LightBridge", prices: { "4/4": 230.39, "5/4": 236.43, "5/5": 247.42, "6/5": 260.61, "6/6": 269.03 } },
   { iguType: "LightBridge", combo: "Etchlite // LightBridge Toughened", prices: { "4/4": 228.50, "5/4": 232.52, "5/5": 243.88, "6/5": 256.39, "6/6": 265.10 } },
   { iguType: "LightBridge", combo: "Etchlite Toughened // LightBridge Toughened", prices: { "4/4": 281.28, "5/4": 285.31, "5/5": 296.30, "6/5": 308.80, "6/6": 317.22 } },
+
+  { iguType: "VLamThermotech", combo: "Clear // Clear Laminate", prices: { "4/6.38": 148.07, "5/6.38": 154.11, "6/6.38": 167.31 } },
+  { iguType: "VLamThermotech", combo: "Clear Laminate // Clear Laminate", prices: { "6.38/6.38": 209.86 } },
+  { iguType: "VLamThermotech", combo: "Clear Toughened // Clear Laminate", prices: { "4/6.38": 198.96, "5/6.38": 202.99, "6/6.38": 215.50 } },
+  { iguType: "VLamThermotech", combo: "Tint // Clear Laminate", prices: { "4/6.38": 164.84, "5/6.38": 166.78, "6/6.38": 190.24 } },
+  { iguType: "VLamThermotech", combo: "Tint Laminate // Clear Laminate", prices: { "6.38/6.38": 223.11 } },
+  { iguType: "VLamThermotech", combo: "Tint Toughened // Clear Laminate", prices: { "4/6.38": 211.99, "5/6.38": 218.60, "6/6.38": 235.20 } },
 ];
 
-export const IGU_INFO = {
+export const IGU_INFO: Record<string, { label: string; rValue: number | null }> = {
   EnergySaver: { label: "EnergySaver™ IGU (Entry-level Low-E)", rValue: 0.37 },
   LightBridge: { label: "LightBridge™ IGU (High Performance Low-E)", rValue: 0.46 },
-} as const;
+  VLamThermotech: { label: "VLam Thermotech IGU (Laminated Safety)", rValue: null },
+};
+
+export const IGU_THICKNESS_COLUMNS: Record<string, string[]> = {
+  EnergySaver: ["4/4", "5/4", "5/5", "6/5", "6/6"],
+  LightBridge: ["4/4", "5/4", "5/5", "6/5", "6/6", "8/8"],
+  VLamThermotech: ["4/6.38", "5/6.38", "6/6.38", "6.38/6.38"],
+};
+
+export function getThicknessColumnsForFamily(iguType: string): string[] {
+  return IGU_THICKNESS_COLUMNS[iguType] || ["4/4", "5/4", "5/5", "6/5", "6/6", "8/8"];
+}
 
 export function getGlassCombos(iguType: string): string[] {
   return GLASS_LIBRARY
