@@ -156,6 +156,9 @@ export interface GridMetrics {
   colMmWidths: number[];
   colRowHeights: number[][];
   colRowMmHeights: number[][];
+  colEffectiveHeights: number[];
+  colMmHeights: number[];
+  maxColHeight: number;
 }
 
 function distributeMmLabels(total: number, specs: number[]): number[] {
@@ -175,17 +178,22 @@ function computeGridMetrics(
   const colWidths = distributeSpaces(W, widthSpecs);
   const colMmWidths = distributeMmLabels(W, widthSpecs);
 
+  const colEffectiveHeights: number[] = customColumns.map(c => (c.heightOverride && c.heightOverride > 0) ? Math.min(c.heightOverride, H) : H);
+  const colMmHeights: number[] = colEffectiveHeights.map(h => Math.round(h));
+  const maxColHeight = H;
+
   const colRowHeights: number[][] = [];
   const colRowMmHeights: number[][] = [];
 
   for (let ci = 0; ci < customColumns.length; ci++) {
     const colRows = customColumns[ci].rows || [{ height: 0, type: "fixed" as const }];
     const heightSpecs = colRows.map(r => r.height || 0);
-    colRowHeights.push(distributeSpaces(H, heightSpecs));
-    colRowMmHeights.push(distributeMmLabels(H, heightSpecs));
+    const colH = colEffectiveHeights[ci];
+    colRowHeights.push(distributeSpaces(colH, heightSpecs));
+    colRowMmHeights.push(distributeMmLabels(colH, heightSpecs));
   }
 
-  return { colWidths, colMmWidths, colRowHeights, colRowMmHeights };
+  return { colWidths, colMmWidths, colRowHeights, colRowMmHeights, colEffectiveHeights, colMmHeights, maxColHeight };
 }
 
 function renderCustomGrid(
@@ -196,7 +204,8 @@ function renderCustomGrid(
     return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
   }
 
-  const { colWidths, colRowHeights } = computeGridMetrics(W, H, customColumns);
+  const metrics = computeGridMetrics(W, H, customColumns);
+  const { colWidths, colRowHeights, colEffectiveHeights } = metrics;
 
   const elements: JSX.Element[] = [];
   let xOffset = 0;
@@ -206,8 +215,10 @@ function renderCustomGrid(
     const colW = colWidths[ci];
     const colRows = col.rows || [{ height: 0, type: "fixed" as const }];
     const rowHeights = colRowHeights[ci];
+    const colH = colEffectiveHeights[ci];
+    const yStart = H - colH;
 
-    let yOffset = 0;
+    let yOffset = yStart;
     for (let ri = 0; ri < colRows.length; ri++) {
       const row = colRows[ri];
       const rowH = rowHeights[ri];
@@ -665,8 +676,18 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
 const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ config }, ref) => {
   const { width: W, height: H, name, quantity, category, layout, customColumns } = config;
   const frameSize = getFrameSize(category);
-  const maxDim = Math.max(W, H);
 
+  const noCustomCatsSet = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"];
+  const isCustom = layout === "custom" && !noCustomCatsSet.includes(category) && customColumns && customColumns.length > 0;
+
+  let gridMetrics: GridMetrics | null = null;
+  if (isCustom) {
+    gridMetrics = computeGridMetrics(W, H, customColumns!);
+  }
+
+  const hasColHeightOverrides = isCustom && customColumns!.some(c => c.heightOverride && c.heightOverride > 0 && c.heightOverride < H);
+
+  const maxDim = Math.max(W, H);
   const ss = maxDim / 1500;
 
   const dimGap = maxDim * 0.06;
@@ -682,17 +703,10 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
   const dimStroke = 1.2 * ss;
   const extStroke = 0.6 * ss;
 
-  const noCustomCatsSet = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"];
-  const isCustom = layout === "custom" && !noCustomCatsSet.includes(category) && customColumns && customColumns.length > 0;
   const hasMultipleSections = isCustom && (
     customColumns!.length > 1 ||
     customColumns!.some(c => (c.rows || []).length > 1)
   );
-
-  let gridMetrics: GridMetrics | null = null;
-  if (isCustom) {
-    gridMetrics = computeGridMetrics(W, H, customColumns!);
-  }
 
   const isEntrance = category === "entrance-door";
   let entranceMetrics: EntranceDoorMetrics | null = null;
@@ -788,6 +802,39 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
         </text>
       </g>
 
+      {hasColHeightOverrides && gridMetrics && (
+        <g data-testid="dimension-col-heights">
+          {(() => {
+            const elements: JSX.Element[] = [];
+            let xPos = 0;
+            const baseX = W + dimGap;
+            for (let ci = 0; ci < gridMetrics.colWidths.length; ci++) {
+              const colW = gridMetrics.colWidths[ci];
+              const colH = gridMetrics.colEffectiveHeights[ci];
+              const mmH = gridMetrics.colMmHeights[ci];
+              const yTop = H - colH;
+              const yBot = H;
+              const labelX = xPos + colW / 2;
+              elements.push(
+                <g key={`ch-${ci}`}>
+                  <line x1={xPos + colW + 2} y1={yTop} x2={baseX + tickLen} y2={yTop}
+                    stroke="#888" strokeWidth={sectionExtStroke} />
+                  <line x1={xPos + colW + 2} y1={yBot} x2={baseX + tickLen} y2={yBot}
+                    stroke="#888" strokeWidth={sectionExtStroke} />
+                  <text x={labelX} y={yTop + (yBot - yTop) / 2 + sectionFontSize * 0.35}
+                    textAnchor="middle" fontSize={sectionFontSize}
+                    fontWeight="500" fill="#1a6fbf" fontFamily="sans-serif">
+                    {mmH}
+                  </text>
+                </g>
+              );
+              xPos += colW;
+            }
+            return elements;
+          })()}
+        </g>
+      )}
+
       {hasMultipleSections && gridMetrics && gridMetrics.colWidths.length > 1 && (
         <g data-testid="dimension-section-widths">
           {(() => {
@@ -841,7 +888,9 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
                 continue;
               }
               const secX = xPos + colW / 2;
-              let yPos = 0;
+              const colH = gridMetrics.colEffectiveHeights[ci];
+              const yStart = H - colH;
+              let yPos = yStart;
               for (let ri = 0; ri < rowHeights.length; ri++) {
                 const rh = rowHeights[ri];
                 const mmH = mmHeights[ri];

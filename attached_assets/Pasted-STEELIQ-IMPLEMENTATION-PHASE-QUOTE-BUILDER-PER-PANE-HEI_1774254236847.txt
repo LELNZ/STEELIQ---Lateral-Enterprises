@@ -1,0 +1,239 @@
+STEELIQ IMPLEMENTATION PHASE — QUOTE BUILDER PER-PANE HEIGHT OVERRIDES FOR GROUPED WINDOW LAYOUTS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow quote-builder enhancement for unusual grouped window geometry. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly beyond the minimum additive shape needed for pane-specific geometry.
+- Do not break existing quote builder item configurations.
+- Do not break existing preview/PDF pipeline.
+- Do not weaken accepted-quote protections, governance, lifecycle, division security, archive/delete behavior, or existing invoice/Xero safeguards.
+- Do not perform hidden refactors.
+- Do not introduce speculative builder redesign outside the explicit scope below.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Preserve backward compatibility for existing grouped/custom layouts that do not use pane height overrides.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- grouped/custom window layouts can support per-pane height overrides
+- the builder UI exposes pane-specific height input in an operationally usable way
+- the drawing/preview reflects different pane heights correctly
+- existing grouped window configurations still work unchanged when no override is entered
+- quote rendering / preview / PDF pipeline remains compatible
+- the handover clearly states what was changed and what remains intentionally unchanged
+
+CURRENT PROBLEM TO FIX
+
+Current grouped/custom quote-builder logic effectively assumes one shared height across all panes/segments in the grouped layout.
+
+This fails for real-world designs such as:
+- a three-pane grouped window where the center pane is taller than the two side panes
+
+Example target case:
+- overall width: 1950
+- overall height: 1320
+- left pane height: 1010
+- centre pane height: 1320
+- right pane height: 1010
+
+The builder must support individual pane heights, not just one common height for all panes.
+
+PRIMARY OBJECTIVE
+
+Add per-pane height override capability to the grouped/custom window builder so users can define unusual grouped window layouts where each pane may have its own height.
+
+This phase should establish:
+1. additive pane-specific height overrides
+2. builder UI for entering pane-level heights
+3. correct geometry in builder drawing/preview
+4. compatibility with quote summary / preview / PDF rendering
+5. backward compatibility for existing layouts that do not use overrides
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — AUDIT CURRENT GROUPED/CUSTOM LAYOUT MODEL
+Review current repo truth and report:
+- how grouped/custom panes/columns are currently represented
+- where pane widths are stored
+- where row heights are stored
+- what drawing/rendering logic currently assumes shared height
+- what preview/PDF path consumes this geometry
+- the minimum additive schema/config change required for per-pane heights
+
+Do not assume. Use repo truth.
+
+PHASE B — ADD MINIMAL ADDITIVE DATA SUPPORT
+Add only the minimum new configuration needed to support per-pane heights.
+
+Preferred model:
+- keep overall item width and overall item height at item level
+- each pane/column in the grouped/custom layout may optionally store its own height override
+- if no override is set, pane defaults to existing behavior / overall item height / current shared logic
+
+Likely expected shape:
+- each custom column/pane gets optional `height` or `heightOverride`
+- do not redesign the whole custom layout structure if a small additive field is enough
+
+Rules:
+- preserve backward compatibility with older saved layouts
+- existing items without pane height overrides must render exactly as before
+
+PHASE C — BUILDER UI
+Add operational UI controls so the user can edit pane-specific heights.
+
+Requirements:
+- in the grouped/custom layout editor, each pane/column should expose:
+  - width
+  - type
+  - pane-specific height override
+- if height override is blank/not set, current shared-height behavior remains
+- input should be simple and understandable
+- do not add a complicated new designer mode unless clearly necessary
+
+The user should be able to build the example case:
+- left pane 1010
+- centre pane 1320
+- right pane 1010
+
+PHASE D — DRAWING / PREVIEW GEOMETRY
+Update builder drawing/rendering so pane geometry reflects the override values.
+
+Requirements:
+- the grouped window sketch must visibly show the taller centre pane and shorter side panes
+- geometry should remain bounded within the overall item dimensions
+- dimensions and pane proportions should remain legible
+- do not break existing standard grouped layouts
+
+PHASE E — QUOTE PREVIEW / PDF COMPATIBILITY
+Ensure the same geometry is respected downstream where relevant.
+
+Requirements:
+- quote preview should not ignore pane-specific heights
+- quote/PDF rendering should remain compatible with the existing locked pipeline
+- do not redesign the QuoteDocument -> QuoteRenderModel -> Preview/PDF architecture
+- only extend what is needed so grouped item visuals/specs remain truthful
+
+PHASE F — EXAMPLE CASE VERIFICATION
+Specifically verify the target case can be created:
+
+Example:
+- overall width 1950
+- overall height 1320
+- left pane height 1010
+- centre pane height 1320
+- right pane height 1010
+
+If current builder conventions require approximate internal normalization rather than literal absolute drawing scale, explain clearly — but the resulting visual/configuration must represent the intended design accurately.
+
+PHASE G — PRESERVE EXISTING LOGIC
+Do not break:
+- existing grouped window items
+- existing standard window/door layouts
+- item save/load behavior
+- quote calculations unrelated to pane geometry
+- quote preview/PDF locking
+- accepted quote protections
+- downstream invoice/Xero systems
+
+NON-GOALS
+
+Do NOT:
+- redesign the entire builder
+- introduce a broad CAD system
+- redesign all custom layout logic
+- add speculative parametric geometry systems outside this need
+- widen into full per-pane manufacturing logic unless already naturally required
+- change unrelated quote/invoice/project/job/Xero workflows
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirm grouped layouts now support per-pane height overrides
+- confirm backward compatibility was preserved
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. DATA MODEL / CONFIG RESULT
+- exact additive config change made
+- where pane-specific height is stored
+- default/fallback behavior when no override exists
+- backward-compatibility handling
+
+4. BUILDER UI RESULT
+- where the new pane-height inputs appear
+- how the user edits them
+- how the example 1010 / 1320 / 1010 case is entered
+
+5. DRAWING / PREVIEW RESULT
+- how the grouped layout drawing changed
+- whether preview/PDF path was updated
+- what remained unchanged
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- item save/load
+- quote preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any remaining grouped-layout constraints
+- whether pane-specific width/height editing is limited to certain layout modes
+- whether downstream manufacturing logic still treats some dimensions generically
+- no broad builder redesign was done
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-layout UX caveat
+- any rendering caveat discovered
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. DATA MODEL / CONFIG RESULT
+
+4. BUILDER UI RESULT
+
+5. DRAWING / PREVIEW RESULT
+
+6. COMPATIBILITY RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the minimum additive quote-builder enhancement required to support grouped window layouts with pane-specific heights.
+Be exact, conservative, and truthful.

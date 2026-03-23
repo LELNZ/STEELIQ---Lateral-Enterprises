@@ -962,6 +962,12 @@ export default function QuoteBuilder() {
     form.setValue("customColumns", cols);
   }
 
+  function setColumnHeightOverride(colIdx: number, heightOverride: number) {
+    const cols = [...(w.customColumns || [])];
+    cols[colIdx] = { ...cols[colIdx], heightOverride };
+    form.setValue("customColumns", cols);
+  }
+
   function setColumnRowCount(colIdx: number, rowCount: number) {
     const cols = [...(w.customColumns || [])];
     const currentRows = cols[colIdx].rows || [];
@@ -2603,6 +2609,19 @@ export default function QuoteBuilder() {
                                     placeholder="Auto (even split)"
                                     onChange={(e) => setColumnWidth(ci, parseFloat(e.target.value) || 0)}
                                     data-testid={`input-col-width-${ci}`}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label className="text-xs">Height Override (mm)</Label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={col.heightOverride || ""}
+                                    placeholder={`Overall (${w.height || 0})`}
+                                    onChange={(e) => setColumnHeightOverride(ci, parseFloat(e.target.value) || 0)}
+                                    data-testid={`input-col-height-${ci}`}
                                     className="h-8 text-xs"
                                   />
                                 </div>

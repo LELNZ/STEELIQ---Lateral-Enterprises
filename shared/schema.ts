@@ -115,6 +115,7 @@ export const customColumnRowSchema = z.object({
 
 export const customColumnSchema = z.object({
   width: z.number().min(0).default(0),
+  heightOverride: z.number().min(0).default(0),
   rows: z.array(customColumnRowSchema).default([{ height: 0, type: "fixed" }]),
 });
 
