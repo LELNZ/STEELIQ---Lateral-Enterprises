@@ -1026,22 +1026,40 @@ function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string;
       {isLoading ? (
         <p className="text-xs text-muted-foreground" data-testid="text-workflow-loading">Checking workflow status…</p>
       ) : nextStep ? (
-        <div className="flex items-center justify-between gap-3" data-testid="text-workflow-next-step">
+        <div data-testid="text-workflow-next-step">
           {nextStep.blocked ? (
             <p className="text-xs text-amber-600 dark:text-amber-400">{nextStep.blockedMsg}</p>
+          ) : nextStep.label === "Job" ? (
+            <div className="rounded-md border-2 border-blue-400 dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                    Ready to create job
+                  </p>
+                  <p className="text-xs text-blue-600/80 dark:text-blue-400/70">
+                    Project is linked. Create the operational job to begin scheduling and production.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => window.dispatchEvent(new Event("steeliq:open-job-dialog"))}
+                  data-testid="button-workflow-next-action"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Create Job
+                </Button>
+              </div>
+            </div>
           ) : (
-            <>
+            <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                Next: <strong>{nextStep.label === "Project" ? "Create Project" : nextStep.label === "Job" ? "Create Job" : invoices.length === 0 ? "Raise first invoice" : "Continue invoicing"}</strong>
+                Next: <strong>{nextStep.label === "Project" ? "Create Project" : invoices.length === 0 ? "Raise first invoice" : "Continue invoicing"}</strong>
               </p>
               <Button
                 size="sm"
                 className="h-7 text-xs shrink-0"
                 onClick={() => {
-                  if (nextStep.label === "Job") {
-                    window.dispatchEvent(new Event("steeliq:open-job-dialog"));
-                    return;
-                  }
                   const selectors: Record<string, string> = {
                     Project: '[data-testid="button-create-project-cta"], [data-testid="button-create-project-from-quote"]',
                     Invoice: '[data-testid="button-create-invoice"]',
@@ -1058,9 +1076,9 @@ function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string;
                 data-testid="button-workflow-next-action"
               >
                 <Plus className="h-3 w-3 mr-1" />
-                {nextStep.label === "Project" ? "Create Project" : nextStep.label === "Job" ? "Create Job" : invoices.length === 0 ? "Create First Invoice" : "Create Invoice"}
+                {nextStep.label === "Project" ? "Create Project" : invoices.length === 0 ? "Create First Invoice" : "Create Invoice"}
               </Button>
-            </>
+            </div>
           )}
         </div>
       ) : (

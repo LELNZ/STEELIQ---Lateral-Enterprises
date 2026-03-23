@@ -480,26 +480,34 @@ export default function OpJobDetail() {
 
       <Separator />
 
-      <div className="space-y-3" data-testid="section-measurement-job">
+      <div className={[
+        "space-y-3 rounded-lg border-2 p-4",
+        (!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" && !job.archivedAt
+          ? "border-amber-400 dark:border-amber-600 bg-amber-50/30 dark:bg-amber-950/20"
+          : "border-transparent bg-transparent"
+      ].join(" ")} data-testid="section-measurement-job">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Ruler className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Measurement & Dimensions</h2>
+            {(!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" && !job.archivedAt && (
+              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">ACTION REQUIRED</span>
+            )}
           </div>
           {!editing && !job.archivedAt && (
-            <button
-              className="text-xs text-muted-foreground hover:text-foreground"
+            <Button
+              variant={(!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" ? "default" : "ghost"}
+              size="sm"
+              className={(!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" ? "h-7 text-xs" : "h-7 text-xs text-muted-foreground"}
               onClick={startEdit}
               data-testid="button-edit-measurement"
             >
-              Edit
-            </button>
+              {(!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" ? "Set Now" : "Edit"}
+            </Button>
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Specifies whether a physical site measure is needed and where production dimensions originate.
-          Set <span className="font-medium">Measurement Requirement</span> before the Survey/Measure lifecycle stage begins, and update <span className="font-medium">Dimension Source</span> once dimensions are confirmed — this drives lifecycle tracking and production readiness.
-          Use the <span className="font-medium">Edit</span> button to update these fields.
+          These fields drive lifecycle tracking and production readiness. Set them before progressing to the Survey/Measure stage.
         </p>
 
         {/* Readiness guard — fires when measurement is required but fields are incomplete */}

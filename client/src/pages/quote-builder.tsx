@@ -7,7 +7,7 @@ import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES,
 import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
 import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
 import { calculatePricing, type PricingBreakdown, type ItemGeometry, type GlazingBandEntry } from "@/lib/pricing";
-import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
+import { deriveConfigSignature, findMatchingConfiguration, deriveGroupedGeometryMetrics, type ConfigSignature } from "@/lib/config-signature";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
@@ -737,12 +737,23 @@ export default function QuoteBuilder() {
       configSignature.awningCount + configSignature.fixedCount +
       configSignature.hingeCount + configSignature.slidingCount
     );
+    const isCustomLayout = w.layout === "custom" && w.customColumns && w.customColumns.length > 0;
+    const geoMetrics = isCustomLayout
+      ? deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns!)
+      : null;
     const itemGeometry: ItemGeometry = {
       mullionCount: configSignature.mullionCount,
       transomCount: configSignature.transomCount,
-      paneCount: derivedPaneCount,
+      paneCount: geoMetrics ? geoMetrics.paneCount : derivedPaneCount,
       widthMm: w.width || 0,
       heightMm: w.height || 0,
+      mullionTotalLengthMm: geoMetrics?.mullionTotalLengthMm,
+      transomTotalLengthMm: geoMetrics?.transomTotalLengthMm,
+      cutCycleCount: geoMetrics?.cutCycleCount,
+      jointEndCount: geoMetrics?.jointEndCount,
+      gluePointCount: geoMetrics?.gluePointCount,
+      perPaneDimensions: geoMetrics?.perPaneDimensions,
+      totalGlassAreaSqm: geoMetrics?.totalGlassAreaSqm,
     };
     return calculatePricing(
       w.width || 0, w.height || 0, w.quantity || 1,
@@ -753,7 +764,7 @@ export default function QuoteBuilder() {
       itemGeometry,
       glazingBands
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount]);
+  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -1165,22 +1176,24 @@ export default function QuoteBuilder() {
     if (findMatchingConfiguration(sig, configurations)) return null;
     const baseConfig = configurations[0];
     try {
-      // Fetch base config data in parallel (3 requests → 1 round-trip)
       const [baseProfiles, baseAccessories, baseLabor] = await Promise.all([
         fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []),
         fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []),
         fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []),
       ]);
+
+      const geoDesc = sig.geometryClass !== "uniform"
+        ? ` (unequal heights: ${sig.geometryClass.replace("h:", "")})`
+        : "";
       const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
         frameTypeId: currentFrameTypeLibId,
         name: sig.label,
-        description: `Auto-generated: ${sig.label}`,
+        description: `Auto-generated: ${sig.label}${geoDesc}`,
         defaultSalePricePerSqm: baseConfig.defaultSalePricePerSqm || 550,
         sortOrder: configurations.length,
       });
       const newConfig = await newConfigRes.json();
 
-      // Build all profile post calls, including optional mullion, then fire in parallel
       const profilePosts = baseProfiles.map((p: any) => {
         let qty = p.quantityPerSet || 1;
         if (p.role === "sash-frame") qty = Math.max(1, sig.awningCount + sig.hingeCount + sig.slidingCount);
@@ -1197,8 +1210,14 @@ export default function QuoteBuilder() {
           quantityPerSet: sig.mullionCount, lengthFormula: "height", sortOrder: 99,
         }));
       }
+      if (sig.transomCount > 0 && !baseProfiles.some((p: any) => p.role === "transom")) {
+        profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+          configurationId: newConfig.id, mouldNumber: "2020250", role: "transom",
+          kgPerMetre: "0.78", pricePerKgUsd: "5.60",
+          quantityPerSet: sig.transomCount, lengthFormula: "width", sortOrder: 100,
+        }));
+      }
 
-      // Fire profiles, accessories and labor all in parallel (N+M+L → 1 round-trip)
       await Promise.all([
         ...profilePosts,
         ...baseAccessories.map((a: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {

@@ -51,6 +51,13 @@ export interface ItemGeometry {
   paneCount: number;
   widthMm: number;
   heightMm: number;
+  mullionTotalLengthMm?: number;
+  transomTotalLengthMm?: number;
+  cutCycleCount?: number;
+  jointEndCount?: number;
+  gluePointCount?: number;
+  perPaneDimensions?: { widthMm: number; heightMm: number }[];
+  totalGlassAreaSqm?: number;
 }
 
 export interface GlazingBandEntry {
@@ -70,9 +77,6 @@ export interface LabourLineBreakdown {
   isAutoInjected?: boolean;
 }
 
-// Fallback glazing bands — aligned with installation rate bands (0–1 / 1–2 / 2–3 / 3+).
-// These are used only when no glazing_band library entries exist in the DB.
-// Staff can override these thresholds in Library → Manufacturing Labour → Glazing Time Bands.
 const DEFAULT_GLAZING_BANDS: GlazingBandEntry[] = [
   { label: "small",       maxAreaSqm: 1.0,     minutesPerPane: 10 },
   { label: "medium",      maxAreaSqm: 2.0,     minutesPerPane: 15 },
@@ -95,8 +99,8 @@ function computeDriverResult(
   geo: ItemGeometry,
   glazingBands: GlazingBandEntry[]
 ): { driverQuantity: number; driverMinutes: number } {
-  const allEnds = geo.mullionCount * 2 + geo.transomCount * 2;
-  const memberCount = 4 + geo.mullionCount + geo.transomCount;
+  const allEnds = geo.jointEndCount ?? (geo.mullionCount * 2 + geo.transomCount * 2);
+  const memberCount = geo.cutCycleCount ?? (4 + geo.mullionCount + geo.transomCount);
   const panes = geo.paneCount > 0 ? geo.paneCount : 1;
 
   switch (driverType) {
@@ -119,12 +123,23 @@ function computeDriverResult(
     case "per_joint":
       return { driverQuantity: allEnds, driverMinutes: allEnds * minutesPerDriver };
     case "per_glue_point": {
-      const gluePoints = 4 + allEnds;
+      const gluePoints = geo.gluePointCount ?? (4 + allEnds);
       return { driverQuantity: gluePoints, driverMinutes: gluePoints * minutesPerDriver };
     }
     case "per_pane":
       return { driverQuantity: panes, driverMinutes: panes * minutesPerDriver };
     case "per_pane_area_band": {
+      if (geo.perPaneDimensions && geo.perPaneDimensions.length > 0) {
+        let totalMins = 0;
+        for (const pd of geo.perPaneDimensions) {
+          const paneArea = (pd.widthMm * pd.heightMm) / 1_000_000;
+          const minsForPane = glazingBands.length > 0
+            ? resolveGlazingMinutesPerPane(paneArea, glazingBands)
+            : minutesPerDriver;
+          totalMins += minsForPane;
+        }
+        return { driverQuantity: geo.perPaneDimensions.length, driverMinutes: totalMins };
+      }
       const paneAreaSqm = geo.widthMm > 0 && geo.heightMm > 0
         ? (geo.widthMm * geo.heightMm) / (panes * 1_000_000)
         : 0;
@@ -201,14 +216,30 @@ export function calculatePricing(
   let profilesCostUsd = 0;
   let totalWeightKg = 0;
 
+  const hasMullionLength = geometry?.mullionTotalLengthMm != null && geometry.mullionTotalLengthMm > 0;
+  const hasTransomLength = geometry?.transomTotalLengthMm != null && geometry.transomTotalLengthMm > 0;
+
   for (const p of profiles) {
     const master = masterProfileMap.get(p.mouldNumber);
     const kgPerM = parseFloat(master?.kgPerMetre ?? p.kgPerMetre) || 0;
     const pricePerKg = parseFloat(master?.pricePerKgUsd ?? p.pricePerKgUsd) || 0;
     const formula = master?.lengthFormula ?? p.lengthFormula ?? "perimeter";
-    const length = calcProfileLength(widthMm, heightMm, formula);
-    const qty = (p.quantityPerSet || 1) * quantity;
-    const weight = length * qty * kgPerM;
+    const role = p.role || "";
+
+    let length: number;
+    if (role === "mullion" && hasMullionLength) {
+      length = geometry!.mullionTotalLengthMm! / 1000;
+    } else if (role === "transom" && hasTransomLength) {
+      length = geometry!.transomTotalLengthMm! / 1000;
+    } else {
+      length = calcProfileLength(widthMm, heightMm, formula);
+    }
+
+    const qtyPerSet = p.quantityPerSet || 1;
+    const isMullionWithGeo = role === "mullion" && hasMullionLength;
+    const isTransomWithGeo = role === "transom" && hasTransomLength;
+    const effectiveQty = (isMullionWithGeo || isTransomWithGeo) ? quantity : qtyPerSet * quantity;
+    const weight = length * effectiveQty * kgPerM;
     totalWeightKg += weight;
     profilesCostUsd += weight * pricePerKg;
   }
@@ -301,10 +332,6 @@ export function calculatePricing(
     }
   }
 
-  // ── Auto-inject glue ──────────────────────────────────────────────────────
-  // Glue is applied to all outer frame corners and mullion/transom joints.
-  // If the configuration already has an explicit "glue" labour row, skip
-  // auto-injection to avoid double-counting.
   const hasExplicitGlue = laborTasks.some((l) => l.taskName === "glue");
   const glueMaster = masterLabourMap.get("glue");
   if (!hasExplicitGlue && glueMaster && glueMaster.driverType === "per_glue_point") {
@@ -331,7 +358,10 @@ export function calculatePricing(
   }
 
   const glassPricePerSqm = extras?.glassPricePerSqm ?? null;
-  const glassCostNzd = glassPricePerSqm != null ? glassPricePerSqm * sqm : 0;
+  const effectiveGlassArea = geo.totalGlassAreaSqm != null && geo.totalGlassAreaSqm > 0
+    ? geo.totalGlassAreaSqm * quantity
+    : sqm;
+  const glassCostNzd = glassPricePerSqm != null ? glassPricePerSqm * effectiveGlassArea : 0;
 
   const linerPricePerM = extras?.linerPricePerM ?? null;
   const linerCostNzd = linerPricePerM != null ? linerPricePerM * perimeterM * quantity : 0;
