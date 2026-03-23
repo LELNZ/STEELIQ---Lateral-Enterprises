@@ -717,11 +717,40 @@ export async function registerRoutes(
   app.patch("/api/library/:id", async (req, res) => {
     try {
       const parsed = insertLibraryEntrySchema.partial().parse(req.body);
+      const d = parsed.data as any;
+      if (d && d.isDefaultAssembly === true && d.isActive === false) {
+        return res.status(400).json({ error: "Cannot set inactive operation as default assembly method" });
+      }
       const entry = await storage.updateLibraryEntry(req.params.id, parsed);
       if (!entry) return res.status(404).json({ error: "Library entry not found" });
       res.json(entry);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/library/set-default-assembly/:id", async (req, res) => {
+    try {
+      const targetId = req.params.id;
+      const allLabour = await storage.getLibraryEntries("labour_operation");
+      const target = allLabour.find((e) => e.id === targetId);
+      if (!target) return res.status(404).json({ error: "Labour operation not found" });
+      const td = target.data as any;
+      if (!td.name?.startsWith("assembly-")) {
+        return res.status(400).json({ error: "Only assembly operations can be set as default" });
+      }
+      const assemblyOps = allLabour.filter((e) => (e.data as any).name?.startsWith("assembly-"));
+      for (const op of assemblyOps) {
+        const d = op.data as any;
+        if (op.id === targetId) {
+          await storage.updateLibraryEntry(op.id, { data: { ...d, isActive: true, isDefaultAssembly: true } });
+        } else if (d.isDefaultAssembly) {
+          await storage.updateLibraryEntry(op.id, { data: { ...d, isDefaultAssembly: false } });
+        }
+      }
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -5492,8 +5521,8 @@ const DEFAULT_LABOUR_OPERATIONS_V2: Array<Record<string, unknown>> = [
   { name: "drilling",         category: "manual", setupMinutes: 0,  driverType: "per_hole",            minutesPerDriver: 1,   ratePerHour: 45, description: "Outer frame corner drilling — 4 holes per corner × 4 corners = 16 holes", isActive: true },
   { name: "slotting",         category: "manual", setupMinutes: 0,  driverType: "per_slot",            minutesPerDriver: 5,   ratePerHour: 45, description: "Slotting — 5 min per slot, minimum 2 slots per operation", isActive: true },
   { name: "milling",          category: "manual", setupMinutes: 0,  driverType: "per_end",             minutesPerDriver: 5,   ratePerHour: 45, description: "Milling — 5 min per mullion/transom end (2 ends per member)", isActive: true },
-  { name: "assembly-screwed", category: "manual", setupMinutes: 0,  driverType: "per_screw",           minutesPerDriver: 0.5, ratePerHour: 45, description: "Assembly screwing — 0.5 min per screw: 16 outer frame screws + 2 per mullion/transom end", isActive: true },
-  { name: "assembly-crimped", category: "manual", setupMinutes: 0,  driverType: "per_item",            minutesPerDriver: 20,  ratePerHour: 45, description: "Assembly crimping — flat 20 min per item", isActive: false },
+  { name: "assembly-screwed", category: "manual", setupMinutes: 0,  driverType: "per_screw",           minutesPerDriver: 0.5, ratePerHour: 45, description: "Assembly screwing — 0.5 min per screw: 16 outer frame screws + 2 per mullion/transom end", isActive: true, isDefaultAssembly: true },
+  { name: "assembly-crimped", category: "manual", setupMinutes: 0,  driverType: "per_item",            minutesPerDriver: 20,  ratePerHour: 45, description: "Assembly crimping — flat 20 min per item", isActive: false, isDefaultAssembly: false },
   { name: "glue",             category: "manual", setupMinutes: 0,  driverType: "per_glue_point",      minutesPerDriver: 1,   ratePerHour: 45, description: "Gluing — 1 min per glue point: 4 outer corners + 2 per mullion/transom end", isActive: true },
   { name: "glazing",          category: "manual", setupMinutes: 0,  driverType: "per_pane_area_band",  minutesPerDriver: 10,  ratePerHour: 45, description: "Glazing — time per pane scales with pane area band (configurable in Glazing Bands library)", isActive: true },
 ];
@@ -5532,6 +5561,13 @@ async function seedLabourOperations() {
   if (crimpedEntry && (crimpedEntry.data as any).isActive !== false) {
     await storage.updateLibraryEntry(crimpedEntry.id, {
       data: { ...(crimpedEntry.data as any), isActive: false },
+    });
+  }
+
+  const screwedEntry = byName.get("assembly-screwed");
+  if (screwedEntry && (screwedEntry.data as any).isDefaultAssembly === undefined) {
+    await storage.updateLibraryEntry(screwedEntry.id, {
+      data: { ...(screwedEntry.data as any), isDefaultAssembly: true },
     });
   }
 }

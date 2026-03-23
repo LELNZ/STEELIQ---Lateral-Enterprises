@@ -22,7 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
@@ -2618,6 +2618,16 @@ function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | 
     },
   });
 
+  const setDefaultAssemblyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/library/set-default-assembly/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
+      toast({ title: "Default assembly method updated" });
+    },
+  });
+
   const manual = operations.filter((o) => (o.data as any).category === "manual");
   const cnc = operations.filter((o) => (o.data as any).category === "cnc");
 
@@ -2638,11 +2648,11 @@ function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | 
         <p className="text-amber-600 dark:text-amber-400"><strong>Glue is automatically applied</strong> to all items based on geometry (4 outer corners + mullion/transom joints). Do not add a separate glue row to frame configurations — it will be counted twice.</p>
       </div>
 
-      <LabourCategoryGroup title="Manual Processes" operations={manual} onEdit={setEditOp} onDelete={setDeleteId} />
-      <LabourCategoryGroup title="CNC Processes" operations={cnc} onEdit={setEditOp} onDelete={setDeleteId} />
+      <LabourCategoryGroup title="Manual Processes" operations={manual} allOperations={operations} onEdit={setEditOp} onDelete={setDeleteId} onSetDefaultAssembly={(id) => setDefaultAssemblyMutation.mutate(id)} />
+      <LabourCategoryGroup title="CNC Processes" operations={cnc} allOperations={operations} onEdit={setEditOp} onDelete={setDeleteId} onSetDefaultAssembly={(id) => setDefaultAssemblyMutation.mutate(id)} />
 
       {(editOp || adding) && (
-        <LabourOperationDialog entry={editOp} divisionCode={divisionCode} onClose={() => { setEditOp(null); setAdding(false); }} />
+        <LabourOperationDialog entry={editOp} allOperations={operations} divisionCode={divisionCode} onClose={() => { setEditOp(null); setAdding(false); }} />
       )}
       <DeleteConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} isPending={deleteMutation.isPending} />
 
@@ -2651,12 +2661,23 @@ function ManufacturingLabourSection({ divisionCode }: { divisionCode?: string | 
   );
 }
 
-function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
+function isAssemblyOp(name: string): boolean {
+  return name?.startsWith("assembly-") ?? false;
+}
+
+function LabourCategoryGroup({ title, operations, allOperations, onEdit, onDelete, onSetDefaultAssembly }: {
   title: string;
   operations: LibraryEntry[];
+  allOperations: LibraryEntry[];
   onEdit: (e: LibraryEntry) => void;
   onDelete: (id: string) => void;
+  onSetDefaultAssembly: (id: string) => void;
 }) {
+  const defaultAssemblyId = allOperations.find((o) => {
+    const d = o.data as any;
+    return isAssemblyOp(d.name) && d.isDefaultAssembly === true;
+  })?.id;
+
   const [open, setOpen] = useState(true);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -2677,6 +2698,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
               <TableHeader>
                 <TableRow>
                   <TableHead>Operation</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Setup (min)</TableHead>
                   <TableHead>Driver Type</TableHead>
                   <TableHead>Min/Driver</TableHead>
@@ -2690,13 +2712,44 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
                   const d = o.data as any;
                   const isLegacy = !d.driverType;
                   const isInactive = d.isActive === false;
+                  const isAssembly = isAssemblyOp(d.name);
+                  const isDefault = isAssembly && o.id === defaultAssemblyId;
                   const driverLabel = DRIVER_TYPE_OPTIONS.find((x) => x.value === d.driverType)?.label ?? d.driverType ?? "—";
                   return (
-                    <TableRow key={o.id} data-testid={`row-labour-${o.id}`} className={isInactive ? "opacity-40" : undefined}>
+                    <TableRow key={o.id} data-testid={`row-labour-${o.id}`} className={isInactive ? "opacity-50" : undefined}>
                       <TableCell className="font-medium">
-                        {d.name}
-                        {isLegacy && <Badge variant="outline" className="ml-2 text-[10px]">legacy</Badge>}
-                        {isInactive && <Badge variant="outline" className="ml-2 text-[10px] text-muted-foreground">inactive</Badge>}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {d.name}
+                          {isLegacy && <Badge variant="outline" className="text-[10px]">legacy</Badge>}
+                          {isDefault && (
+                            <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-300 dark:border-amber-700" variant="outline" data-testid={`badge-default-assembly-${o.id}`}>
+                              <Star className="w-3 h-3 mr-0.5 fill-current" /> default
+                            </Badge>
+                          )}
+                          {isAssembly && !isDefault && !isInactive && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-amber-600"
+                              onClick={(e) => { e.stopPropagation(); onSetDefaultAssembly(o.id); }}
+                              data-testid={`button-set-default-${o.id}`}
+                              title="Set as default assembly method"
+                            >
+                              <Star className="w-3 h-3 mr-0.5" /> set default
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {isInactive ? (
+                          <Badge variant="outline" className="text-[10px] text-red-500 border-red-200 dark:border-red-800" data-testid={`badge-status-inactive-${o.id}`}>
+                            <Circle className="w-2.5 h-2.5 mr-1 fill-red-400 text-red-400" /> Inactive
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-green-600 border-green-200 dark:border-green-800" data-testid={`badge-status-active-${o.id}`}>
+                            <CircleCheck className="w-2.5 h-2.5 mr-1" /> Active
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>{isLegacy ? d.timeMinutes : (d.setupMinutes ?? 0)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[180px] truncate" title={driverLabel}>
@@ -2719,7 +2772,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
                   );
                 })}
                 {operations.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No operations</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-4">No operations</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -2730,7 +2783,7 @@ function LabourCategoryGroup({ title, operations, onEdit, onDelete }: {
   );
 }
 
-function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry | null; divisionCode?: string | null; onClose: () => void }) {
+function LabourOperationDialog({ entry, allOperations, divisionCode, onClose }: { entry: LibraryEntry | null; allOperations: LibraryEntry[]; divisionCode?: string | null; onClose: () => void }) {
   const { toast } = useToast();
   const isEdit = !!entry;
   const d = entry ? (entry.data as any) : {};
@@ -2745,16 +2798,32 @@ function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: Librar
     ratePerHour: d.ratePerHour || 45,
     description: d.description || "",
     isActive: d.isActive !== false,
+    isDefaultAssembly: d.isDefaultAssembly === true,
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const ds = scopeValue === "__shared__" ? null : scopeValue;
       const payload = { ...values };
+      if (!isAssemblyOp(payload.name)) {
+        delete (payload as any).isDefaultAssembly;
+      }
+      if (!payload.isActive && isAssemblyOp(payload.name)) {
+        payload.isDefaultAssembly = false;
+      }
       if (isEdit) {
         await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: payload, divisionScope: ds });
+        if (payload.isDefaultAssembly && isAssemblyOp(payload.name)) {
+          await apiRequest("POST", `/api/library/set-default-assembly/${entry!.id}`);
+        }
       } else {
-        await apiRequest("POST", "/api/library", { type: "labour_operation", data: payload, sortOrder: 0, divisionScope: ds });
+        const resp = await apiRequest("POST", "/api/library", { type: "labour_operation", data: payload, sortOrder: 0, divisionScope: ds });
+        if (payload.isDefaultAssembly && isAssemblyOp(payload.name)) {
+          const created = await resp.json();
+          if (created?.id) {
+            await apiRequest("POST", `/api/library/set-default-assembly/${created.id}`);
+          }
+        }
       }
     },
     onSuccess: () => {
@@ -2832,6 +2901,40 @@ function LabourOperationDialog({ entry, divisionCode, onClose }: { entry: Librar
           </div>
           <div className="col-span-2">
             <DivisionScopeField value={scopeValue} onChange={setScopeValue} />
+          </div>
+          <div className="col-span-2 border rounded-md p-3 space-y-3 bg-muted/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Status</Label>
+                <p className="text-xs text-muted-foreground">Inactive operations are preserved for history but excluded from live costing</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${values.isActive ? "text-green-600" : "text-red-500"}`}>
+                  {values.isActive ? "Active" : "Inactive"}
+                </span>
+                <Checkbox
+                  checked={values.isActive}
+                  onCheckedChange={(checked) => setValues({ ...values, isActive: !!checked })}
+                  data-testid="checkbox-labour-active"
+                />
+              </div>
+            </div>
+            {isAssemblyOp(values.name) && values.isActive && (
+              <div className="flex items-center justify-between border-t pt-3">
+                <div>
+                  <Label className="text-sm font-medium">Default Assembly Method</Label>
+                  <p className="text-xs text-muted-foreground">Only one assembly method can be the default at a time</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {values.isDefaultAssembly && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
+                  <Checkbox
+                    checked={values.isDefaultAssembly}
+                    onCheckedChange={(checked) => setValues({ ...values, isDefaultAssembly: !!checked })}
+                    data-testid="checkbox-default-assembly"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <DialogFooter>

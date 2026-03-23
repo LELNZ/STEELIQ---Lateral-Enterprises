@@ -1,0 +1,216 @@
+STEELIQ UI/ADMIN PHASE — ADD EXPLICIT LABOUR STATUS + DEFAULT CONTROLS IN MANUFACTURING LABOUR LIBRARY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow UI/admin control phase for labour-operation status/default management. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline.
+- Do not perform hidden refactors.
+- Do not widen scope into pricing-engine redesign.
+- Do not change accepted-quote protections, governance, lifecycle, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Treat current repo/runtime truth as the source of truth, not assumptions from prior reports.
+- Preserve backward compatibility for existing labour records and historical references.
+- Keep this phase admin-operational, not cosmetic only.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- Manufacturing Labour Library has explicit admin-visible status controls for labour operations
+- admins can clearly see whether an operation is Active or Inactive
+- admins can clearly see and manage which assembly method is the current default
+- inactive operations remain preserved for history/reference
+- inactive operations remain excluded from active/live costing
+- the UI/admin behavior is operationally usable, not just visually implied
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+Current live behavior shows:
+- assembly-crimped remains in the Manufacturing Labour Library
+- it is greyed out and marked inactive
+- assembly-screwed is the current active costing method
+- inactive labour is excluded from active/live costing
+- historical references are preserved
+
+However, the current admin UX gap is:
+- there is no explicit control for Active / Inactive status in the labour operation UI
+- there is no explicit control for current default assembly method
+- current status truth is implied by styling rather than properly managed through operational controls
+
+PRIMARY OBJECTIVE
+
+Add explicit labour-library admin controls so status and default method can be managed safely and clearly in the live app, without changing the underlying costing architecture.
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT CURRENT LABOUR LIBRARY TRUTH
+Review and report:
+- how labour operations are currently stored
+- how isActive is currently represented in repo/runtime truth
+- whether there is already a default/current-method field or whether default is currently implicit
+- how the library UI currently renders active vs inactive rows
+- what the minimum safe UI/admin change is
+
+Do not assume. Use actual repo truth.
+
+PHASE B — ADD EXPLICIT ACTIVE / INACTIVE ADMIN CONTROL
+Implement a clear admin control for labour-operation status.
+
+Requirements:
+- admin can view current status explicitly
+- admin can change status explicitly
+- inactive items remain visible in the library
+- inactive items are clearly labelled, not only greyed out
+- historical records are preserved
+- no destructive delete is required to retire a labour operation
+
+Expected implementation shape may include:
+- status field in edit modal and/or create modal
+- row badge/chip showing Active or Inactive
+- safe persistence through the existing data model
+
+Do not redesign the whole library UI.
+
+PHASE C — ADD EXPLICIT DEFAULT ASSEMBLY METHOD CONTROL
+Implement a narrow, safe way to identify the current default assembly labour method.
+
+Requirements:
+- admins can clearly see which assembly method is the default/current one
+- only one assembly method should be default/current at a time, if repo truth supports this safely
+- default must be limited narrowly to relevant assembly operations, not all labour operations globally
+- preserve inactive historical methods like assembly-crimped
+- assembly-screwed should be the current default after this phase unless repo truth blocks that safely
+
+Important:
+- do not invent a broad new master-policy system
+- do not redesign the pricing engine
+- keep this narrowly targeted to operational admin truth
+
+If repo truth does not yet support a persisted “default” flag safely, implement the narrowest safe persisted mechanism and report it explicitly.
+
+PHASE D — PRESERVE COSTING BEHAVIOR
+Do not break current costing behavior.
+
+Requirements:
+- inactive labour remains excluded from active/live costing
+- assembly-crimped remains preserved but non-current
+- assembly-screwed remains active/current unless explicitly changed by admin
+- historical references remain intact
+- no broad repricing redesign
+
+PHASE E — RUNTIME USABILITY VERIFICATION
+Do not report complete unless you verify:
+
+1. In Manufacturing Labour Library:
+- active rows are visibly marked active
+- inactive rows are visibly marked inactive
+- admin can edit status explicitly
+- current default assembly method is clearly visible
+
+2. In edit/create behaviour:
+- admin can set active/inactive safely
+- admin can set or move default assembly method safely
+- invalid/default conflicts are prevented or resolved safely
+
+3. In costing behavior:
+- inactive labour still does not contribute to active/live costing
+- default/current assembly method aligns with live costing behavior
+
+PHASE F — DO NOT WIDEN INTO OTHER PHASES
+Do not broaden this into:
+- accessory scaling
+- labour derivation redesign
+- grouped/custom pricing redesign
+- BOM rewrite
+- multi-line Xero push
+- PDF redesign
+- lifecycle redesign
+
+This phase is specifically about:
+- explicit labour status controls
+- explicit default assembly-method control
+- operationally usable admin UI
+
+NON-GOALS
+
+Do NOT:
+- redesign the full library system
+- redesign all master-data governance
+- build a new permissions framework
+- rewrite manufacturing costing logic
+- broaden into dashboard or reporting changes
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+- confirm labour status is now explicitly manageable
+- confirm default assembly method is now explicitly manageable
+- confirm inactive labour remains excluded from active/live costing
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT VS NEW ADMIN BEHAVIOR
+- how labour status/default worked before
+- how it works now
+- what admins can now do explicitly that they could not do before
+
+4. DATA / PERSISTENCE RESULT
+- what fields now store status/default truth
+- whether any schema or data-shape change was needed
+- how backward compatibility was preserved
+
+5. COSTING / RUNTIME RESULT
+- how inactive labour exclusion still works
+- how default assembly method aligns with costing
+- what historical references were preserved
+
+6. RUNTIME VERIFICATION RESULT
+- library row behavior
+- edit modal behavior
+- default-method behavior
+- costing behavior
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any labour approximation still remaining
+- any remaining master-data UX caveat
+- no broad system rewrite was done
+
+9. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Add explicit operational controls for labour status and default assembly method so admin truth is clear and manageable in the live app.
+Keep it narrow, safe, and truthful.
