@@ -1,0 +1,254 @@
+STEELIQ PHASE — INSTALL / REMOVAL LIBRARY PRICING BASIS SUPPORT (PER ITEM / PER M² / PER L/M)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase hardens the commercial/install library so it can support real subcontractor pricing methods.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the estimator broadly.
+- Do not redesign the executive summary broadly.
+- Do not change customer quote PDF generation.
+- Do not change lifecycle, governance, invoicing, Xero, archive/delete, or demo/test behavior.
+- Do not introduce speculative procurement systems.
+- Do not introduce schema creep unless absolutely required and you stop and explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond install/removal library pricing basis support and the required executive summary calculation wiring.
+
+CURRENT BUSINESS NEED
+
+Subcontractor pricing methods differ. The current system needs to support real pricing styles such as:
+
+- Timber window / door removal: priced per m²
+- Sealant & weatherproofing: priced per linear metre
+- Flashing / finish work: often priced per linear metre
+- Aluminium window installation: priced per m²
+- Aluminium façade install: distinct install class with its own inclusions/exclusions and likely per m² pricing
+
+The system should not force all install/removal pricing into one method.
+
+PRIMARY OBJECTIVE
+
+Add pricing basis support to the install/removal library and executive summary calculation flow so labour/scope components can be priced using:
+- per item
+- per m²
+- per l/m
+
+with automatic quantity derivation where possible, especially for l/m-based rows.
+
+PHASE A — AUDIT CURRENT LIBRARY / COMMERCIAL TRUTH
+
+1. Review the current install/removal library structure and executive summary commercial calculation flow.
+2. Determine exactly:
+- how current install/removal rows are stored
+- where rate type/category is defined
+- how quantity is currently derived
+- how cost/sell are currently calculated
+- where to add pricing basis support with the narrowest architecture-preserving change
+
+3. Report the current truth and the narrowest implementation path.
+
+PHASE B — ADD PRICING BASIS SUPPORT TO THE LIBRARY
+
+Implement pricing basis support for install/removal/commercial labour rows.
+
+Required supported bases:
+- per_item
+- per_m2
+- per_lm
+
+Each applicable library row should be able to declare:
+- pricing basis
+- rate
+- optional notes / inclusions / exclusions fields only if already structurally feasible in the current architecture
+- measurement rule for per_lm rows if needed
+
+Do not redesign the entire library UI beyond what is needed to support this cleanly.
+
+PHASE C — MEASUREMENT RULES
+
+Implement automatic quantity derivation for each basis.
+
+Required behavior:
+1. per_item
+- quantity derived from item count / row quantity as current architecture truth dictates
+
+2. per_m2
+- quantity derived from item area in m²
+
+3. per_lm
+- quantity derived automatically from item dimensions using a clear default rule:
+  perimeter lineal metres = 2 × (width + height) / 1000
+
+This default rule must be stated clearly in the UI and/or code/report.
+
+Do not require users to manually calculate l/m in the normal path.
+
+PHASE D — EXECUTIVE SUMMARY CALCULATION INTEGRATION
+
+Wire the new pricing bases into the executive summary commercial cards so totals are truthful.
+
+Required behavior:
+1. Library rows using per_item, per_m2, or per_lm must calculate cost correctly.
+2. Sell should continue to follow the existing markup/override model already hardened in prior phases.
+3. Card totals and overall summary totals must remain consistent.
+4. Per-line display should show enough information for a user to understand:
+- basis used
+- quantity used
+- rate used
+- resulting line total
+
+Do not break existing enable/disable row behavior.
+
+PHASE E — COMMERCIAL CATEGORIES / C5-STYLE USE CASES
+
+At minimum, ensure the system can cleanly represent these kinds of rows:
+
+- Timber window / door removal — per_m2
+- Sealant & weatherproofing — per_lm
+- Flashing & finish work — per_lm
+- Aluminium window installation — per_m2
+- Aluminium façade install — separate category/class, not silently merged into normal window install
+
+You do not need to redesign the whole taxonomy, but the structure must be able to support these use cases truthfully.
+
+PHASE F — UI CLARITY
+
+Where these rows are visible in the executive summary / commercial cards, make the basis understandable.
+
+Examples of acceptable display:
+- 2.94 m² × $180.00
+- 6.94 l/m × $35.00
+- 1 item × $450.00
+
+Users must not have to guess how the line total was calculated.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the whole commercial library UX
+- redesign delivery/rubbish logic unless directly required
+- change quote generation logic
+- redesign subcontractor PDF export in this phase
+- add contractor-specific pricing profiles unless already trivial and explicitly reported
+- add spreadsheet export
+- add schema unless absolutely necessary
+
+REQUIRED TEST CASES
+
+TC-BASIS-001
+Create/use a library row priced per_item.
+Expected:
+- quantity and line total calculate correctly
+- no regression
+
+TC-BASIS-002
+Create/use a library row priced per_m2.
+Expected:
+- m² quantity is derived correctly
+- line total calculates correctly
+
+TC-BASIS-003
+Create/use a library row priced per_lm on an item with known dimensions.
+Expected:
+- l/m quantity is derived from perimeter correctly
+- line total calculates correctly
+
+TC-BASIS-004
+Use a sealant/weatherproofing style row priced per_lm.
+Expected:
+- executive summary displays basis, quantity, rate, and total truthfully
+
+TC-BASIS-005
+Use an aluminium installation style row priced per_m2.
+Expected:
+- executive summary displays basis, quantity, rate, and total truthfully
+
+TC-BASIS-006
+Change markup / override on cards that include mixed basis rows.
+Expected:
+- totals remain correct
+- no regression to the previously fixed commercial logic
+
+TC-BASIS-007
+Toggle individual rows on/off on cards that include mixed basis rows.
+Expected:
+- disabled rows drop out of totals correctly
+- no regression
+
+TC-BASIS-008
+Verify no regression to subcontractor PDF export, existing executive summary sections, and estimate workflow.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact old pricing-basis behavior
+3. exact new pricing-basis behavior
+4. exact measurement rule for per_lm
+5. exact executive summary calculation/display behavior
+6. exact category/class support added for C5-style use cases
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. OLD VS NEW PRICING BASIS BEHAVIOR
+- old behavior
+- new behavior
+- supported bases now available
+
+4. MEASUREMENT RULES
+- per_item rule
+- per_m2 rule
+- per_lm rule
+- exact formula used for l/m
+
+5. EXECUTIVE SUMMARY INTEGRATION
+- how basis/quantity/rate/total are now shown
+- how totals remain consistent with markup/override logic
+
+6. C5-STYLE USE CASE SUPPORT
+- timber removal
+- sealant / weatherproofing
+- flashing / finish work
+- aluminium install
+- aluminium façade install
+
+For each:
+- how the system now supports it
+
+7. TEST RESULTS
+- TC-BASIS-001 result
+- TC-BASIS-002 result
+- TC-BASIS-003 result
+- TC-BASIS-004 result
+- TC-BASIS-005 result
+- TC-BASIS-006 result
+- TC-BASIS-007 result
+- TC-BASIS-008 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Make the install/removal library support real subcontractor pricing methods truthfully.
+Do not force all labour pricing into one basis.
+Report truthfully and exactly.

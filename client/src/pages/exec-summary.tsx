@@ -396,40 +396,81 @@ export default function ExecSummary() {
     });
   }, [job, configData, configNameMap, usdToNzdRate, libGlass, libLiners, libWindowHandles, libDoorHandles, libAwningHandles, libSlidingWindowHandles, libEntranceDoorHandles, libHingeDoorHandles, libSlidingDoorHandles, libBifoldDoorHandles, libStackerDoorHandles, libEntranceDoorLocks, libHingeDoorLocks, libSlidingDoorLocks, libBifoldDoorLocks, libStackerDoorLocks, libFrenchDoorLocks, libWanzBars, masterProfiles, masterAccessories, masterLabour]);
 
-  const getInstallationTier = useCallback((category: string, sqm: number): { name: string; cost: number; sell: number } | null => {
+  const getMatchingRates = useCallback((rates: typeof installationRates, category: string, sqm: number) => {
     const isDoor = DOOR_CATEGORIES.includes(category);
-    const cat = isDoor ? "door" : "window";
-    const tiers = installationRates.filter((r) => (r.data as any).category === cat);
-    for (const t of tiers) {
-      const d = t.data as any;
-      if (sqm >= d.minSqm && sqm < d.maxSqm) return { name: d.name, cost: d.costPerUnit ?? d.pricePerUnit * 0.75, sell: d.sellPerUnit ?? d.pricePerUnit };
+    const itemCat = isDoor ? "door" : "window";
+    const matched: Array<{ name: string; cost: number; sell: number; pricingBasis: string }> = [];
+    const catGroups = new Map<string, typeof rates>();
+    for (const r of rates) {
+      const d = r.data as any;
+      const rc = d.category || "window";
+      if (rc !== itemCat && rc !== "all") continue;
+      if (!catGroups.has(rc)) catGroups.set(rc, []);
+      catGroups.get(rc)!.push(r);
     }
-    if (tiers.length > 0) {
-      const last = tiers[tiers.length - 1].data as any;
-      return { name: last.name, cost: last.costPerUnit ?? last.pricePerUnit * 0.75, sell: last.sellPerUnit ?? last.pricePerUnit };
+    for (const [, group] of catGroups) {
+      let found = false;
+      for (const t of group) {
+        const d = t.data as any;
+        if (sqm >= d.minSqm && sqm < d.maxSqm) {
+          matched.push({ name: d.name, cost: d.costPerUnit ?? (d.pricePerUnit ? d.pricePerUnit * 0.75 : 0), sell: d.sellPerUnit ?? d.pricePerUnit ?? 0, pricingBasis: d.pricingBasis || "per_item" });
+          found = true;
+          break;
+        }
+      }
+      if (!found && group.length > 0) {
+        const last = group[group.length - 1].data as any;
+        matched.push({ name: last.name, cost: last.costPerUnit ?? (last.pricePerUnit ? last.pricePerUnit * 0.75 : 0), sell: last.sellPerUnit ?? last.pricePerUnit ?? 0, pricingBasis: last.pricingBasis || "per_item" });
+      }
     }
-    return null;
-  }, [installationRates]);
+    return matched;
+  }, []);
+
+  const deriveBasisQty = useCallback((basis: string, item: { width: number; height: number; quantity: number }) => {
+    const qty = item.quantity || 1;
+    if (basis === "per_m2") {
+      const areaSqm = (item.width * item.height) / 1_000_000;
+      return { basisQty: areaSqm, totalMultiplier: areaSqm * qty, label: `${areaSqm.toFixed(2)} m²` };
+    }
+    if (basis === "per_lm") {
+      const perimeterLm = 2 * (item.width + item.height) / 1000;
+      return { basisQty: perimeterLm, totalMultiplier: perimeterLm * qty, label: `${perimeterLm.toFixed(2)} l/m` };
+    }
+    return { basisQty: 1, totalMultiplier: qty, label: `${qty} item${qty !== 1 ? "s" : ""}` };
+  }, []);
 
   const installationItems = useMemo(() => {
     if (!installEnabled) return [];
-    return itemPricings.map((ip) => {
+    const lines: Array<{
+      name: string; category: string; unitSqm: number; qty: number;
+      tierName: string; costPerUnit: number; sellPerUnit: number;
+      costTotal: number; sellTotal: number;
+      pricingBasis: string; basisQtyLabel: string; basisQty: number;
+    }> = [];
+    for (const ip of itemPricings) {
       const unitSqm = (ip.item.width * ip.item.height) / 1_000_000;
-      const tier = getInstallationTier(ip.item.category, unitSqm);
       const qty = ip.item.quantity || 1;
-      return {
-        name: ip.item.name,
-        category: ip.item.category,
-        unitSqm,
-        qty,
-        tierName: tier?.name || "—",
-        costPerUnit: tier?.cost || 0,
-        sellPerUnit: tier?.sell || 0,
-        costTotal: (tier?.cost || 0) * qty,
-        sellTotal: (tier?.sell || 0) * qty,
-      };
-    });
-  }, [installEnabled, itemPricings, getInstallationTier]);
+      const matched = getMatchingRates(installationRates, ip.item.category, unitSqm);
+      if (matched.length === 0) {
+        lines.push({
+          name: ip.item.name, category: ip.item.category, unitSqm, qty,
+          tierName: "—", costPerUnit: 0, sellPerUnit: 0, costTotal: 0, sellTotal: 0,
+          pricingBasis: "per_item", basisQtyLabel: `${qty} item${qty !== 1 ? "s" : ""}`, basisQty: qty,
+        });
+      } else {
+        for (const rate of matched) {
+          const bq = deriveBasisQty(rate.pricingBasis, ip.item);
+          lines.push({
+            name: ip.item.name, category: ip.item.category, unitSqm, qty,
+            tierName: rate.name, costPerUnit: rate.cost, sellPerUnit: rate.sell,
+            costTotal: rate.cost * bq.totalMultiplier, sellTotal: rate.sell * bq.totalMultiplier,
+            pricingBasis: rate.pricingBasis, basisQtyLabel: bq.label, basisQty: bq.basisQty,
+          });
+        }
+      }
+    }
+    return lines;
+  }, [installEnabled, itemPricings, installationRates, getMatchingRates, deriveBasisQty]);
 
   const installationTotals = useMemo(() => {
     const overrideVal = parseFloat(installOverride);
@@ -467,40 +508,38 @@ export default function ExecSummary() {
     return { cost: 0, sell: 0, isCustom: false };
   }, [deliveryEnabled, deliveryMethodId, deliveryCustom, deliveryMarkup, deliveryRates]);
 
-  const getRemovalTier = useCallback((category: string, sqm: number): { name: string; cost: number; sell: number } | null => {
-    const isDoor = DOOR_CATEGORIES.includes(category);
-    const cat = isDoor ? "door" : "window";
-    const tiers = removalRates.filter((r) => (r.data as any).category === cat);
-    for (const t of tiers) {
-      const d = t.data as any;
-      if (sqm >= d.minSqm && sqm < d.maxSqm) return { name: d.name, cost: d.costPerUnit, sell: d.sellPerUnit };
-    }
-    if (tiers.length > 0) {
-      const last = tiers[tiers.length - 1].data as any;
-      return { name: last.name, cost: last.costPerUnit, sell: last.sellPerUnit };
-    }
-    return null;
-  }, [removalRates]);
-
   const removalItems = useMemo(() => {
     if (!removalEnabled) return [];
-    return itemPricings.map((ip) => {
+    const lines: Array<{
+      name: string; category: string; unitSqm: number; qty: number;
+      tierName: string; costPerUnit: number; sellPerUnit: number;
+      costTotal: number; sellTotal: number;
+      pricingBasis: string; basisQtyLabel: string; basisQty: number;
+    }> = [];
+    for (const ip of itemPricings) {
       const unitSqm = (ip.item.width * ip.item.height) / 1_000_000;
-      const tier = getRemovalTier(ip.item.category, unitSqm);
       const qty = ip.item.quantity || 1;
-      return {
-        name: ip.item.name,
-        category: ip.item.category,
-        unitSqm,
-        qty,
-        tierName: tier?.name || "—",
-        costPerUnit: tier?.cost || 0,
-        sellPerUnit: tier?.sell || 0,
-        costTotal: (tier?.cost || 0) * qty,
-        sellTotal: (tier?.sell || 0) * qty,
-      };
-    });
-  }, [removalEnabled, itemPricings, getRemovalTier]);
+      const matched = getMatchingRates(removalRates, ip.item.category, unitSqm);
+      if (matched.length === 0) {
+        lines.push({
+          name: ip.item.name, category: ip.item.category, unitSqm, qty,
+          tierName: "—", costPerUnit: 0, sellPerUnit: 0, costTotal: 0, sellTotal: 0,
+          pricingBasis: "per_item", basisQtyLabel: `${qty} item${qty !== 1 ? "s" : ""}`, basisQty: qty,
+        });
+      } else {
+        for (const rate of matched) {
+          const bq = deriveBasisQty(rate.pricingBasis, ip.item);
+          lines.push({
+            name: ip.item.name, category: ip.item.category, unitSqm, qty,
+            tierName: rate.name, costPerUnit: rate.cost, sellPerUnit: rate.sell,
+            costTotal: rate.cost * bq.totalMultiplier, sellTotal: rate.sell * bq.totalMultiplier,
+            pricingBasis: rate.pricingBasis, basisQtyLabel: bq.label, basisQty: bq.basisQty,
+          });
+        }
+      }
+    }
+    return lines;
+  }, [removalEnabled, itemPricings, removalRates, getMatchingRates, deriveBasisQty]);
 
   const removalTotals = useMemo(() => {
     const overrideVal = parseFloat(removalOverride);
@@ -1433,10 +1472,9 @@ export default function ExecSummary() {
                   <TableHead className="w-8 print:hidden"></TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Unit m²</TableHead>
-                  <TableHead>Tier</TableHead>
+                  <TableHead>Rate</TableHead>
+                  <TableHead>Basis</TableHead>
                   <TableHead className="text-right">Cost/Unit</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Cost Total</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1460,10 +1498,9 @@ export default function ExecSummary() {
                     </TableCell>
                     <TableCell className="text-sm">{ii.name}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ii.category] || ii.category}</Badge></TableCell>
-                    <TableCell className="text-right">{ii.unitSqm.toFixed(2)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-xs">{ii.tierName}</Badge></TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{ii.basisQtyLabel} × ${fmt(ii.costPerUnit)}</TableCell>
                     <TableCell className="text-right">${fmt(ii.costPerUnit)}</TableCell>
-                    <TableCell className="text-right">{ii.qty}</TableCell>
                     <TableCell className="text-right font-medium">{isOff ? "—" : `$${fmt(ii.costTotal)}`}</TableCell>
                   </TableRow>
                   );
@@ -1633,10 +1670,9 @@ export default function ExecSummary() {
                   <TableHead className="w-8 print:hidden"></TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Unit m²</TableHead>
-                  <TableHead>Tier</TableHead>
+                  <TableHead>Rate</TableHead>
+                  <TableHead>Basis</TableHead>
                   <TableHead className="text-right">Cost/Unit</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Cost Total</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1660,10 +1696,9 @@ export default function ExecSummary() {
                     </TableCell>
                     <TableCell className="text-sm font-medium">{ri.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground capitalize">{ri.category}</TableCell>
-                    <TableCell className="text-right text-sm">{ri.unitSqm.toFixed(2)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{ri.tierName}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{ri.basisQtyLabel} × ${fmt(ri.costPerUnit)}</TableCell>
                     <TableCell className="text-right text-sm">${fmt(ri.costPerUnit)}</TableCell>
-                    <TableCell className="text-right text-sm">{ri.qty}</TableCell>
                     <TableCell className="text-right text-sm">{isOff ? "—" : `$${fmt(ri.costTotal)}`}</TableCell>
                   </TableRow>
                   );

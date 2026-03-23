@@ -143,18 +143,31 @@ export default function QuoteSummary() {
     for (const item of items) {
       const unitSqm = (item.width * item.height) / 1_000_000;
       const isDoor = DOOR_CATEGORIES.includes(item.category);
-      const cat = isDoor ? "door" : "window";
-      const tiers = installationRates.filter((r) => (r.data as any).category === cat);
-      let sell = 0;
-      for (const t of tiers) {
-        const d = t.data as any;
-        if (unitSqm >= d.minSqm && unitSqm < d.maxSqm) { sell = d.sellPerUnit ?? d.pricePerUnit ?? 0; break; }
+      const itemCat = isDoor ? "door" : "window";
+      const catGroups = new Map<string, typeof installationRates>();
+      for (const r of installationRates) {
+        const d = r.data as any;
+        const rc = d.category || "window";
+        if (rc !== itemCat && rc !== "all") continue;
+        if (!catGroups.has(rc)) catGroups.set(rc, []);
+        catGroups.get(rc)!.push(r);
       }
-      if (sell === 0 && tiers.length > 0) {
-        const last = tiers[tiers.length - 1].data as any;
-        sell = last.sellPerUnit ?? last.pricePerUnit ?? 0;
+      for (const [, group] of catGroups) {
+        let matchedRate: any = null;
+        for (const t of group) {
+          const d = t.data as any;
+          if (unitSqm >= d.minSqm && unitSqm < d.maxSqm) { matchedRate = d; break; }
+        }
+        if (!matchedRate && group.length > 0) matchedRate = group[group.length - 1].data as any;
+        if (matchedRate) {
+          const sell = matchedRate.sellPerUnit ?? matchedRate.pricePerUnit ?? 0;
+          const basis = matchedRate.pricingBasis || "per_item";
+          const qty = item.quantity || 1;
+          if (basis === "per_m2") total += sell * unitSqm * qty;
+          else if (basis === "per_lm") total += sell * (2 * (item.width + item.height) / 1000) * qty;
+          else total += sell * qty;
+        }
       }
-      total += sell * (item.quantity || 1);
     }
     return total;
   }, [job, installationRates]);

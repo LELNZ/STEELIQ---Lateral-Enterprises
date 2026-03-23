@@ -5222,12 +5222,12 @@ async function seedGlazingBands() {
 }
 
 const DEFAULT_INSTALLATION_RATES = [
-  { name: "Small Window", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 187.5, sellPerUnit: 250, description: "" },
-  { name: "Medium Window", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 225, sellPerUnit: 300, description: "" },
-  { name: "Large Window", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 262.5, sellPerUnit: 350, description: "" },
-  { name: "Extra Large Window", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 300, sellPerUnit: 400, description: "" },
-  { name: "Standard Door", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 262.5, sellPerUnit: 350, description: "" },
-  { name: "Large Door", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 337.5, sellPerUnit: 450, description: "" },
+  { name: "Small Window", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 187.5, sellPerUnit: 250, pricingBasis: "per_item", description: "" },
+  { name: "Medium Window", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 225, sellPerUnit: 300, pricingBasis: "per_item", description: "" },
+  { name: "Large Window", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 262.5, sellPerUnit: 350, pricingBasis: "per_item", description: "" },
+  { name: "Extra Large Window", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 300, sellPerUnit: 400, pricingBasis: "per_item", description: "" },
+  { name: "Standard Door", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 262.5, sellPerUnit: 350, pricingBasis: "per_item", description: "" },
+  { name: "Large Door", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 337.5, sellPerUnit: 450, pricingBasis: "per_item", description: "" },
 ];
 
 async function seedInstallationRates() {
@@ -5235,11 +5235,21 @@ async function seedInstallationRates() {
   if (existing.length > 0) {
     for (const entry of existing) {
       const d = entry.data as any;
+      let updated = false;
+      let patch = { ...d };
       if (d.pricePerUnit !== undefined && d.costPerUnit === undefined) {
         const sell = d.pricePerUnit;
         const cost = Math.round(sell * 0.75 * 100) / 100;
-        const { pricePerUnit, ...rest } = d;
-        await storage.updateLibraryEntry(entry.id, { data: { ...rest, costPerUnit: cost, sellPerUnit: sell } });
+        const { pricePerUnit, ...rest } = patch;
+        patch = { ...rest, costPerUnit: cost, sellPerUnit: sell };
+        updated = true;
+      }
+      if (!patch.pricingBasis) {
+        patch.pricingBasis = "per_item";
+        updated = true;
+      }
+      if (updated) {
+        await storage.updateLibraryEntry(entry.id, { data: patch });
       }
     }
     return;
@@ -5284,17 +5294,38 @@ async function seedDeliveryRates() {
 }
 
 const DEFAULT_REMOVAL_RATES = [
-  { name: "Small Window Removal", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 75, sellPerUnit: 100, description: "" },
-  { name: "Medium Window Removal", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 112.5, sellPerUnit: 150, description: "" },
-  { name: "Large Window Removal", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 150, sellPerUnit: 200, description: "" },
-  { name: "Extra Large Window Removal", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 187.5, sellPerUnit: 250, description: "" },
-  { name: "Standard Door Removal", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 112.5, sellPerUnit: 150, description: "" },
-  { name: "Large Door Removal", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 150, sellPerUnit: 200, description: "" },
+  { name: "Small Window Removal", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 75, sellPerUnit: 100, pricingBasis: "per_item", description: "" },
+  { name: "Medium Window Removal", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 112.5, sellPerUnit: 150, pricingBasis: "per_item", description: "" },
+  { name: "Large Window Removal", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 150, sellPerUnit: 200, pricingBasis: "per_item", description: "" },
+  { name: "Extra Large Window Removal", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 187.5, sellPerUnit: 250, pricingBasis: "per_item", description: "" },
+  { name: "Standard Door Removal", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 112.5, sellPerUnit: 150, pricingBasis: "per_item", description: "" },
+  { name: "Large Door Removal", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 150, sellPerUnit: 200, pricingBasis: "per_item", description: "" },
 ];
 
 async function seedRemovalRates() {
   const existing = await storage.getLibraryEntries("removal_rate");
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    for (const entry of existing) {
+      const d = entry.data as any;
+      let updated = false;
+      let patch = { ...d };
+      if (d.pricePerUnit !== undefined && d.costPerUnit === undefined) {
+        const sell = d.pricePerUnit;
+        const cost = Math.round(sell * 0.75 * 100) / 100;
+        const { pricePerUnit, ...rest } = patch;
+        patch = { ...rest, costPerUnit: cost, sellPerUnit: sell };
+        updated = true;
+      }
+      if (!patch.pricingBasis) {
+        patch.pricingBasis = "per_item";
+        updated = true;
+      }
+      if (updated) {
+        await storage.updateLibraryEntry(entry.id, { data: patch });
+      }
+    }
+    return;
+  }
   for (let i = 0; i < DEFAULT_REMOVAL_RATES.length; i++) {
     await storage.createLibraryEntry({
       type: "removal_rate",

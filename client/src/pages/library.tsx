@@ -3002,8 +3002,19 @@ function InstallationSection({ divisionCode }: { divisionCode?: string | null })
     },
   });
 
-  const windowRates = rates.filter((r) => (r.data as any).category === "window");
-  const doorRates = rates.filter((r) => (r.data as any).category === "door");
+  const INSTALL_CAT_LABELS: Record<string, string> = { window: "Window Installation", door: "Door Installation", facade: "Facade Installation", all: "All Items" };
+  const grouped = rates.reduce<Record<string, typeof rates>>((acc, r) => {
+    const cat = (r.data as any).category || "window";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(r);
+    return acc;
+  }, {});
+  const catOrder = ["window", "door", "facade", "all"];
+  const sections = catOrder.filter((c) => grouped[c]?.length).map((c) => ({ title: INSTALL_CAT_LABELS[c] || c, items: grouped[c] }));
+  const extraCats = Object.keys(grouped).filter((c) => !catOrder.includes(c));
+  for (const c of extraCats) sections.push({ title: INSTALL_CAT_LABELS[c] || c, items: grouped[c] });
+
+  const BASIS_LABELS: Record<string, string> = { per_item: "Per Item", per_m2: "Per m²", per_lm: "Per l/m" };
 
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
 
@@ -3016,7 +3027,7 @@ function InstallationSection({ divisionCode }: { divisionCode?: string | null })
         </Button>
       </div>
 
-      {[{ title: "Window Installation", items: windowRates }, { title: "Door Installation", items: doorRates }].map(({ title, items }) => (
+      {sections.map(({ title, items }) => (
         <Card key={title}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">{title}</CardTitle>
@@ -3026,6 +3037,7 @@ function InstallationSection({ divisionCode }: { divisionCode?: string | null })
               <TableHeader>
                 <TableRow>
                   <TableHead>Size Name</TableHead>
+                  <TableHead>Basis</TableHead>
                   <TableHead>Min m²</TableHead>
                   <TableHead>Max m²</TableHead>
                   <TableHead>Cost/Unit ($)</TableHead>
@@ -3040,6 +3052,7 @@ function InstallationSection({ divisionCode }: { divisionCode?: string | null })
                   return (
                     <TableRow key={r.id} data-testid={`row-installation-${r.id}`}>
                       <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{BASIS_LABELS[d.pricingBasis] || "Per Item"}</Badge></TableCell>
                       <TableCell>{d.minSqm}</TableCell>
                       <TableCell>{d.maxSqm >= 999 ? "∞" : d.maxSqm}</TableCell>
                       <TableCell className="font-medium">${d.costPerUnit ?? d.pricePerUnit}</TableCell>
@@ -3080,6 +3093,7 @@ function InstallationRateDialog({ entry, divisionCode, onClose }: { entry: Libra
   const [values, setValues] = useState({
     name: d.name || "",
     category: d.category || "window",
+    pricingBasis: d.pricingBasis || "per_item",
     minSqm: d.minSqm ?? 0,
     maxSqm: d.maxSqm ?? 1,
     costPerUnit: d.costPerUnit ?? (d.pricePerUnit ? Math.round(d.pricePerUnit * 0.75 * 100) / 100 : 187.5),
@@ -3122,8 +3136,27 @@ function InstallationRateDialog({ entry, divisionCode, onClose }: { entry: Libra
               <SelectContent>
                 <SelectItem value="window">Window</SelectItem>
                 <SelectItem value="door">Door</SelectItem>
+                <SelectItem value="facade">Facade</SelectItem>
+                <SelectItem value="all">All Items</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="col-span-2">
+            <Label>Pricing Basis</Label>
+            <Select value={values.pricingBasis} onValueChange={(v) => setValues({ ...values, pricingBasis: v })}>
+              <SelectTrigger data-testid="select-installation-basis"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="per_item">Per Item</SelectItem>
+                <SelectItem value="per_m2">Per m²</SelectItem>
+                <SelectItem value="per_lm">Per l/m (perimeter)</SelectItem>
+              </SelectContent>
+            </Select>
+            {values.pricingBasis === "per_lm" && (
+              <p className="text-xs text-muted-foreground mt-1">Quantity = 2 × (width + height) / 1000 per item</p>
+            )}
+            {values.pricingBasis === "per_m2" && (
+              <p className="text-xs text-muted-foreground mt-1">Quantity = width × height / 1,000,000 per item</p>
+            )}
           </div>
           <div>
             <Label>Min m²</Label>
@@ -3345,8 +3378,19 @@ function RemovalSection({ divisionCode }: { divisionCode?: string | null }) {
     },
   });
 
-  const windowRates = rates.filter((r) => (r.data as any).category === "window");
-  const doorRates = rates.filter((r) => (r.data as any).category === "door");
+  const REMOVAL_CAT_LABELS: Record<string, string> = { window: "Window Removal", door: "Door Removal", facade: "Facade Removal", all: "All Items" };
+  const grouped = rates.reduce<Record<string, typeof rates>>((acc, r) => {
+    const cat = (r.data as any).category || "window";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(r);
+    return acc;
+  }, {});
+  const catOrder = ["window", "door", "facade", "all"];
+  const sections = catOrder.filter((c) => grouped[c]?.length).map((c) => ({ title: REMOVAL_CAT_LABELS[c] || c, items: grouped[c] }));
+  const extraCats = Object.keys(grouped).filter((c) => !catOrder.includes(c));
+  for (const c of extraCats) sections.push({ title: REMOVAL_CAT_LABELS[c] || c, items: grouped[c] });
+
+  const BASIS_LABELS: Record<string, string> = { per_item: "Per Item", per_m2: "Per m²", per_lm: "Per l/m" };
 
   if (isLoading) return <div className="p-4 text-muted-foreground">Loading...</div>;
 
@@ -3359,7 +3403,7 @@ function RemovalSection({ divisionCode }: { divisionCode?: string | null }) {
         </Button>
       </div>
 
-      {[{ title: "Window Removal", items: windowRates }, { title: "Door Removal", items: doorRates }].map(({ title, items }) => (
+      {sections.map(({ title, items }) => (
         <Card key={title}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">{title}</CardTitle>
@@ -3369,6 +3413,7 @@ function RemovalSection({ divisionCode }: { divisionCode?: string | null }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Size Name</TableHead>
+                  <TableHead>Basis</TableHead>
                   <TableHead>Min m²</TableHead>
                   <TableHead>Max m²</TableHead>
                   <TableHead>Cost/Unit ($)</TableHead>
@@ -3379,12 +3424,13 @@ function RemovalSection({ divisionCode }: { divisionCode?: string | null }) {
               </TableHeader>
               <TableBody>
                 {items.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-4">No rates</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-4">No rates</TableCell></TableRow>
                 ) : items.map((r) => {
                   const d = r.data as any;
                   return (
                     <TableRow key={r.id} data-testid={`row-removal-${r.id}`}>
                       <TableCell className="font-medium">{d.name}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{BASIS_LABELS[d.pricingBasis] || "Per Item"}</Badge></TableCell>
                       <TableCell>{d.minSqm}</TableCell>
                       <TableCell>{d.maxSqm >= 999 ? "∞" : d.maxSqm}</TableCell>
                       <TableCell className="font-medium">${d.costPerUnit}</TableCell>
@@ -3440,21 +3486,22 @@ function RemovalRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEnt
   const [values, setValues] = useState({
     name: d.name ?? "",
     category: d.category ?? "window",
+    pricingBasis: d.pricingBasis ?? "per_item",
     minSqm: d.minSqm ?? 0,
     maxSqm: d.maxSqm ?? 1,
     costPerUnit: d.costPerUnit ?? 0,
     sellPerUnit: d.sellPerUnit ?? 0,
     description: d.description ?? "",
   });
-  const ds = divisionCode ?? null;
-  const [scopeValue, setScopeValue] = useState<string>(entry?.divisionScope ?? ds ?? "all");
+  const [scopeValue, setScopeValue] = useState<string>(entry?.divisionScope || divisionCode || "__shared__");
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const ds = scopeValue === "__shared__" ? null : scopeValue;
       if (isEdit) {
-        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: scopeValue === "all" ? null : scopeValue });
+        await apiRequest("PATCH", `/api/library/${entry!.id}`, { data: values, divisionScope: ds });
       } else {
-        await apiRequest("POST", "/api/library", { type: "removal_rate", data: values, sortOrder: 0, divisionScope: scopeValue === "all" ? null : scopeValue });
+        await apiRequest("POST", "/api/library", { type: "removal_rate", data: values, sortOrder: 0, divisionScope: ds });
       }
     },
     onSuccess: () => {
@@ -3483,8 +3530,27 @@ function RemovalRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEnt
               <SelectContent>
                 <SelectItem value="window">Window</SelectItem>
                 <SelectItem value="door">Door</SelectItem>
+                <SelectItem value="facade">Facade</SelectItem>
+                <SelectItem value="all">All Items</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="col-span-2">
+            <Label>Pricing Basis</Label>
+            <Select value={values.pricingBasis} onValueChange={(v) => setValues({ ...values, pricingBasis: v })}>
+              <SelectTrigger data-testid="select-removal-basis"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="per_item">Per Item</SelectItem>
+                <SelectItem value="per_m2">Per m²</SelectItem>
+                <SelectItem value="per_lm">Per l/m (perimeter)</SelectItem>
+              </SelectContent>
+            </Select>
+            {values.pricingBasis === "per_lm" && (
+              <p className="text-xs text-muted-foreground mt-1">Quantity = 2 × (width + height) / 1000 per item</p>
+            )}
+            {values.pricingBasis === "per_m2" && (
+              <p className="text-xs text-muted-foreground mt-1">Quantity = width × height / 1,000,000 per item</p>
+            )}
           </div>
           <div>
             <Label>Min m²</Label>
