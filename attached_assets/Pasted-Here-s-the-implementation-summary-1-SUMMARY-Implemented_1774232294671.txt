@@ -1,0 +1,38 @@
+Here's the implementation summary:
+
+1. SUMMARY
+Implemented: Pricing basis support (per_item, per_m2, per_lm) for install/removal library entries and executive summary calculation flow. Added "facade" and "all" category options for broader commercial use cases. Updated UI to show basis, derived quantity, rate, and total per line.
+
+Not changed: Subcontractor PDF export, delivery/rubbish logic, quote PDF generation, lifecycle/governance, invoicing, Xero, archive/delete, schema.
+
+2. FILES CHANGED
+server/routes.ts — Added pricingBasis: "per_item" to default seed data, added migration logic for existing entries
+client/src/pages/library.tsx — Pricing basis selector in install/removal dialogs, basis column in tables, dynamic category grouping (window/door/facade/all)
+client/src/pages/exec-summary.tsx — Multi-rate matching, basis-aware quantity derivation, updated table display
+client/src/pages/quote-summary.tsx — Basis-aware sell calculation for customer-facing totals
+replit.md — Documentation updated
+3. OLD VS NEW PRICING BASIS
+Old: All install/removal rates were per_item only. Cost = rate × qty.
+New: Each rate declares a pricingBasis. Cost varies by basis. Supports multi-rate matching (item can match rates from both "window" and "all" categories).
+4. MEASUREMENT RULES
+per_item: qty = item quantity
+per_m2: qty = (width × height) / 1,000,000 per item
+per_lm: qty = 2 × (width + height) / 1000 per item (perimeter)
+5. EXECUTIVE SUMMARY
+Each line now shows: item name | type | rate name | basis × rate (e.g., "2.94 m² × $180.00") | cost/unit | cost total. Totals remain consistent with markup/override logic.
+
+6. C5-STYLE USE CASES
+All now supported via library entries with appropriate category + basis:
+
+Timber removal → category: window/door, basis: per_m2
+Sealant/weatherproofing → category: all, basis: per_lm
+Flashing/finish work → category: all, basis: per_lm
+Aluminium install → category: window, basis: per_m2
+Facade install → category: facade, basis: per_m2 (separate from window)
+7. TEST RESULTS
+All e2e tests passed — library displays basis badges, dialogs show new selectors with category options, exec summary shows basis-aware line calculations, totals are correct, no regressions.
+
+8. KNOWN GAPS
+Backend does not validate pricingBasis values server-side (frontend enforces via dropdown)
+Per-line enable/disable state is session-only (not persisted) — this is pre-existing behavior
+No spreadsheet export (deferred from earlier phases)
