@@ -16,7 +16,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **State Management**: React state manages UI components, while TanStack Query handles API data fetching and caching.
 **Global Settings**: Managed via React Context and persisted in localStorage.
 **Routing**: Client-side navigation is handled by Wouter.
-**Export Capabilities**: Supports SVG to PNG conversion and multi-page, vector-text selectable PDF generation using jsPDF.
+**Export Capabilities**: Supports SVG to PNG conversion and multi-page, vector-text selectable PDF generation using jsPDF. Includes a dedicated Subcontractor Install Scope PDF export from the executive summary (client/src/lib/subcontractor-pdf.ts) supporting Renovation and New Build scope modes, configurable drawings/photos/pricing return sections, professional scope wording, item schedule, and fillable pricing return — no internal pricing data exposed.
 **Storage**: Item photos are stored in PostgreSQL (`bytea`) with an in-memory cache, drawing PNGs on the filesystem, and division logos as base64 data URLs in PostgreSQL.
 **Multi-Division Architecture**: The system supports organizational and division-specific settings, including `division_scope` for library entries.
 **Spec Dictionary System**: Configurable `spec_dictionary` entries allow for dynamic display and override of specifications.

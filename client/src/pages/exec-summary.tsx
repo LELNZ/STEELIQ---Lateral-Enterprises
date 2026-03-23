@@ -24,11 +24,20 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
 import LifecyclePanel from "@/components/lifecycle-panel";
+import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions } from "@/lib/subcontractor-pdf";
+import { svgToPngBlob } from "@/lib/export-png";
 
 function calcSqm(width: number, height: number, quantity: number): number {
   return (width * height * quantity) / 1_000_000;
@@ -109,6 +118,13 @@ export default function ExecSummary() {
   const [initialized, setInitialized] = useState(false);
   const [disabledInstallLines, setDisabledInstallLines] = useState<Set<number>>(new Set());
   const [disabledRemovalLines, setDisabledRemovalLines] = useState<Set<number>>(new Set());
+
+  const [subconDialogOpen, setSubconDialogOpen] = useState(false);
+  const [subconScopeMode, setSubconScopeMode] = useState<"renovation" | "new_build">("renovation");
+  const [subconIncludeDrawings, setSubconIncludeDrawings] = useState(true);
+  const [subconIncludeSitePhotos, setSubconIncludeSitePhotos] = useState(true);
+  const [subconIncludePricingReturn, setSubconIncludePricingReturn] = useState(true);
+  const [subconGenerating, setSubconGenerating] = useState(false);
 
   const SECTION_KEYS = ["financial", "installation", "delivery", "removal", "rubbish", "history", "items"] as const;
   type SectionKey = typeof SECTION_KEYS[number];
@@ -768,6 +784,107 @@ export default function ExecSummary() {
     });
   };
 
+  const handleSubcontractorPdf = async () => {
+    if (!job || itemPricings.length === 0) return;
+    setSubconGenerating(true);
+    toast({ title: `Generating Subcontractor Install Scope PDF...` });
+    try {
+      const pdfItems: SubcontractorPdfItem[] = [];
+      for (let i = 0; i < itemPricings.length; i++) {
+        const ip = itemPricings[i];
+        let drawingDataUrl: string | null = null;
+        if (subconIncludeDrawings) {
+          try {
+            const wrapper = document.querySelector(`[data-testid="drawing-svg-${i}"]`);
+            const svgEl = wrapper?.querySelector("svg") as SVGSVGElement | null;
+            if (svgEl) {
+              const blob = await svgToPngBlob(svgEl, 2);
+              const bmp = await createImageBitmap(blob);
+              const maxEdge = 1200;
+              let cw = bmp.width;
+              let ch = bmp.height;
+              if (Math.max(cw, ch) > maxEdge) {
+                const scale = maxEdge / Math.max(cw, ch);
+                cw = Math.round(cw * scale);
+                ch = Math.round(ch * scale);
+              }
+              const canvas = document.createElement("canvas");
+              canvas.width = cw;
+              canvas.height = ch;
+              const ctx = canvas.getContext("2d")!;
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, cw, ch);
+              ctx.drawImage(bmp, 0, 0, cw, ch);
+              drawingDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            }
+          } catch { /* skip */ }
+        }
+
+        let photoDataUrls: string[] = [];
+        if (subconIncludeSitePhotos && ip.photos.length > 0) {
+          for (const photo of ip.photos) {
+            try {
+              const res = await fetch(`/api/item-photos/${photo.key}`);
+              if (res.ok) {
+                const blob = await res.blob();
+                const dataUrl = await new Promise<string>((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(blob);
+                });
+                photoDataUrls.push(dataUrl);
+              }
+            } catch { /* skip */ }
+          }
+        }
+
+        const panels = ip.item.panels;
+        let layout = "";
+        if (panels && Array.isArray(panels) && panels.length > 0) {
+          layout = panels.map((p: any) => p.openingDirection || p.type || "").filter(Boolean).join(", ");
+        }
+
+        pdfItems.push({
+          name: ip.item.name || `Item ${i + 1}`,
+          category: ip.item.category || "",
+          location: ip.item.location || undefined,
+          width: ip.item.width || 0,
+          height: ip.item.height || 0,
+          quantity: ip.item.quantity || 1,
+          layout: layout || undefined,
+          notes: ip.item.notes || undefined,
+          drawingDataUrl,
+          photoDataUrls: photoDataUrls.length > 0 ? photoDataUrls : undefined,
+        });
+      }
+
+      const opts: SubcontractorPdfOptions = {
+        scopeMode: subconScopeMode,
+        projectName: job.name || "Untitled Project",
+        siteAddress: job.address || undefined,
+        clientName: undefined,
+        dateIssued: new Date().toLocaleDateString("en-NZ"),
+        preparedBy: undefined,
+        items: pdfItems,
+        includeDrawings: subconIncludeDrawings,
+        includeSitePhotos: subconIncludeSitePhotos,
+        includePricingReturn: subconIncludePricingReturn,
+      };
+
+      const pdf = await generateSubcontractorPdf(opts);
+      const scopeLabel = subconScopeMode === "renovation" ? "Renovation" : "NewBuild";
+      const filename = `${(job.name || "Job").replace(/[^a-zA-Z0-9_-]/g, "_")}_SubconScope_${scopeLabel}.pdf`;
+      pdf.save(filename);
+      toast({ title: "Subcontractor PDF downloaded successfully" });
+      setSubconDialogOpen(false);
+    } catch (e) {
+      console.error("Subcontractor PDF generation error:", e);
+      toast({ title: "Failed to generate Subcontractor PDF", variant: "destructive" });
+    } finally {
+      setSubconGenerating(false);
+    }
+  };
+
   if (jobLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -840,8 +957,75 @@ export default function ExecSummary() {
               <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates the first quote for this estimate</span>
             </div>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-download-menu">
+                <Download className="w-4 h-4 mr-1.5" /> Download <ChevronDown className="w-3 h-3 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setSubconDialogOpen(true)} disabled={itemPricings.length === 0} data-testid="menu-subcontractor-pdf">
+                <HardHat className="w-4 h-4 mr-2" />
+                Subcontractor Install Scope (PDF)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <Dialog open={subconDialogOpen} onOpenChange={setSubconDialogOpen}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-subcontractor-config">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HardHat className="h-5 w-5" />
+              Subcontractor Install Scope PDF
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Scope Type</Label>
+              <RadioGroup value={subconScopeMode} onValueChange={(v) => setSubconScopeMode(v as "renovation" | "new_build")} className="flex gap-4">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="renovation" id="scope-renovation" data-testid="radio-scope-renovation" />
+                  <Label htmlFor="scope-renovation" className="cursor-pointer">Renovation</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="new_build" id="scope-new-build" data-testid="radio-scope-new-build" />
+                  <Label htmlFor="scope-new-build" className="cursor-pointer">New Build</Label>
+                </div>
+              </RadioGroup>
+              <p className="text-xs text-muted-foreground">
+                {subconScopeMode === "renovation"
+                  ? "Includes removal, disposal, and installation scope"
+                  : "Includes installation to prepared openings only"}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Include in PDF</Label>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-drawings" checked={subconIncludeDrawings} onCheckedChange={(v) => setSubconIncludeDrawings(!!v)} data-testid="checkbox-include-drawings" />
+                <Label htmlFor="subcon-drawings" className="cursor-pointer text-sm">Detailed item drawings</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-photos" checked={subconIncludeSitePhotos} onCheckedChange={(v) => setSubconIncludeSitePhotos(!!v)} data-testid="checkbox-include-photos" />
+                <Label htmlFor="subcon-photos" className="cursor-pointer text-sm">Item photos (where available)</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-pricing" checked={subconIncludePricingReturn} onCheckedChange={(v) => setSubconIncludePricingReturn(!!v)} data-testid="checkbox-include-pricing" />
+                <Label htmlFor="subcon-pricing" className="cursor-pointer text-sm">Pricing return section</Label>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSubconDialogOpen(false)} data-testid="button-subcon-cancel">Cancel</Button>
+            <Button size="sm" onClick={handleSubcontractorPdf} disabled={subconGenerating} data-testid="button-subcon-generate">
+              <Download className="w-4 h-4 mr-1.5" />
+              {subconGenerating ? "Generating..." : "Generate PDF"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="print:block hidden mb-4">
         <h1 className="text-xl font-bold">{job.name || "Untitled Job"} — Executive Summary</h1>
