@@ -1,7 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Invoice } from "@shared/schema";
-import { Badge } from "@/components/ui/badge";
+import type { Invoice, InvoiceLine } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,7 +13,7 @@ import {
   ArrowLeft, ReceiptText, CheckCircle2, Send, RotateCcw, FileCheck,
   RefreshCw, DollarSign, CreditCard, Save, X, Pencil,
   Building2, FolderOpen, FileText, Briefcase, Hash, Layers,
-  Clock, CircleDot, Lock, Info,
+  Clock, CircleDot, Lock, Plus, Trash2, AlertCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
@@ -97,18 +96,30 @@ function PaymentBadge({ invoice }: { invoice: EnrichedInvoice }) {
   return null;
 }
 
-function buildTypeContext(invoice: EnrichedInvoice): string {
-  if (invoice.type === "deposit") {
-    if (invoice.depositType === "percentage") return `${invoice.depositPercentage ?? 0}% deposit on accepted quotation`;
-    return "Fixed deposit amount";
-  }
-  if (invoice.type === "progress") return "Progress claim";
-  if (invoice.type === "variation") return invoice.variationTitle ? `Variation: ${invoice.variationTitle}` : "Variation invoice";
-  if (invoice.type === "final") return "Final invoice";
-  if (invoice.type === "retention_release") return "Retention release";
-  if (invoice.type === "credit_note") return "Credit note";
-  return TYPE_LABELS[invoice.type] || invoice.type;
-}
+const XERO_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  SUBMITTED: "Submitted",
+  AUTHORISED: "Authorised",
+  PAID: "Paid",
+  VOIDED: "Voided",
+  DELETED: "Deleted",
+};
+
+const XERO_STATUS_COLORS: Record<string, string> = {
+  DRAFT: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  SUBMITTED: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  AUTHORISED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  PAID: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  VOIDED: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  DELETED: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+};
+
+type EditingLine = {
+  id: string;
+  description: string;
+  quantity: string;
+  unitAmount: string;
+};
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -117,15 +128,27 @@ export default function InvoiceDetailPage() {
   const { user } = useAuth();
 
   const [editingField, setEditingField] = useState<string | null>(null);
-  const [editDescription, setEditDescription] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editReference, setEditReference] = useState("");
+  const [editingLine, setEditingLine] = useState<EditingLine | null>(null);
+  const [addingLine, setAddingLine] = useState(false);
+  const [newLine, setNewLine] = useState({ description: "", quantity: "1", unitAmount: "" });
 
   const { data: invoice, isLoading } = useQuery<EnrichedInvoice>({
     queryKey: ["/api/invoices", id],
     queryFn: async () => {
       const res = await fetch(`/api/invoices/${id}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load invoice");
+      return res.json();
+    },
+    enabled: !!id,
+  });
+
+  const { data: lines = [] } = useQuery<InvoiceLine[]>({
+    queryKey: ["/api/invoices", id, "lines"],
+    queryFn: async () => {
+      const res = await fetch(`/api/invoices/${id}/lines`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load lines");
       return res.json();
     },
     enabled: !!id,
@@ -225,13 +248,89 @@ export default function InvoiceDetailPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      const xStatus = data.xeroPayment?.status;
+      const xLabel = XERO_STATUS_LABELS[xStatus] ?? xStatus ?? "Unknown";
       toast({
         title: "Synced from Xero",
-        description: `Status: ${data.xeroPayment?.status} — Paid: ${fmtMoney(data.xeroPayment?.amountPaid)} / Due: ${fmtMoney(data.xeroPayment?.amountDue)}`,
+        description: `Xero status: ${xLabel} — Paid: ${fmtMoney(data.xeroPayment?.amountPaid)} / Due: ${fmtMoney(data.xeroPayment?.amountDue)}`,
       });
     },
     onError: (err: Error) => {
       toast({ title: "Xero sync failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function handleDemotionToast(data: any, action: string) {
+    if (data?._demotedToDraft) {
+      toast({
+        title: `${action} — status returned to Draft`,
+        description: "The invoice was in 'Ready for Xero' and has been returned to Draft because line items were changed. Mark it ready again when editing is complete.",
+      });
+    } else {
+      toast({ title: action });
+    }
+  }
+
+  const addLineMutation = useMutation({
+    mutationFn: async (data: { description: string; quantity: number; unitAmount: number | null }) => {
+      const res = await apiRequest("POST", `/api/invoices/${id}/lines`, data);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to add line");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", id, "lines"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      setAddingLine(false);
+      setNewLine({ description: "", quantity: "1", unitAmount: "" });
+      handleDemotionToast(data, "Line added");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to add line", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateLineMutation = useMutation({
+    mutationFn: async ({ lineId, data }: { lineId: string; data: Record<string, any> }) => {
+      const res = await apiRequest("PATCH", `/api/invoice-lines/${lineId}`, data);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to update line");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", id, "lines"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      setEditingLine(null);
+      handleDemotionToast(data, "Line updated");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update line", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteLineMutation = useMutation({
+    mutationFn: async (lineId: string) => {
+      const res = await apiRequest("DELETE", `/api/invoice-lines/${lineId}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to delete line");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", id, "lines"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      handleDemotionToast(data, "Line removed");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to remove line", description: err.message, variant: "destructive" });
     },
   });
 
@@ -241,10 +340,15 @@ export default function InvoiceDetailPage() {
   const isReturnedToDraft = invoice?.status === "returned_to_draft";
   const isEditable = isDraft || isReadyForXero || isReturnedToDraft;
   const isPending = patchMutation.isPending || statusMutation.isPending || pushToXeroMutation.isPending || returnToDraftMutation.isPending;
+  const isLineBusy = addLineMutation.isPending || updateLineMutation.isPending || deleteLineMutation.isPending;
 
   useEffect(() => {
     if (editingField && !isEditable) {
       setEditingField(null);
+    }
+    if (!isEditable) {
+      setEditingLine(null);
+      setAddingLine(false);
     }
   }, [isEditable, editingField]);
 
@@ -284,7 +388,6 @@ export default function InvoiceDetailPage() {
 
   function startEdit(field: string) {
     if (!invoice) return;
-    if (field === "description") setEditDescription(invoice.description ?? "");
     if (field === "notes") setEditNotes(invoice.notes ?? "");
     if (field === "reference") setEditReference((invoice as any).reference ?? "");
     setEditingField(field);
@@ -294,15 +397,46 @@ export default function InvoiceDetailPage() {
 
   function saveEdit(field: string) {
     if (!isEditable) return;
-    if (field === "description") patchMutation.mutate({ description: editDescription || null });
     if (field === "notes") patchMutation.mutate({ notes: editNotes || null });
     if (field === "reference") patchMutation.mutate({ reference: editReference || null });
+  }
+
+  function startLineEdit(line: InvoiceLine) {
+    setEditingLine({
+      id: line.id,
+      description: line.description ?? "",
+      quantity: String(line.quantity ?? 1),
+      unitAmount: line.unitAmount != null ? String(line.unitAmount) : "",
+    });
+  }
+
+  function saveLineEdit() {
+    if (!editingLine) return;
+    const qty = parseFloat(editingLine.quantity) || 1;
+    const ua = editingLine.unitAmount.trim() ? parseFloat(editingLine.unitAmount) : null;
+    updateLineMutation.mutate({
+      lineId: editingLine.id,
+      data: {
+        description: editingLine.description || null,
+        quantity: qty,
+        unitAmount: ua,
+      },
+    });
+  }
+
+  function submitAddLine() {
+    const qty = parseFloat(newLine.quantity) || 1;
+    const ua = newLine.unitAmount.trim() ? parseFloat(newLine.unitAmount) : null;
+    addLineMutation.mutate({
+      description: newLine.description || "",
+      quantity: qty,
+      unitAmount: ua,
+    });
   }
 
   const xPaid = (invoice as any).xeroAmountPaid;
   const xDue = (invoice as any).xeroAmountDue;
   const xSynced = (invoice as any).xeroLastSyncedAt;
-  const lineDescription = invoice.description || buildTypeContext(invoice);
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -444,70 +578,170 @@ export default function InvoiceDetailPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Description</TableHead>
-                      <TableHead className="w-[60px] text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Qty</TableHead>
+                      <TableHead className="w-[80px] text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Qty</TableHead>
                       <TableHead className="w-[120px] text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Unit Amount</TableHead>
                       <TableHead className="w-[120px] text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Line Total</TableHead>
+                      {isEditable && <TableHead className="w-[70px]" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow data-testid="row-line-item">
-                      <TableCell className="py-3">
-                        {editingField === "description" ? (
-                          <div className="space-y-1.5">
-                            <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
-                              placeholder="Invoice line description…" className="text-sm min-h-[60px]" data-testid="input-edit-description" />
-                            <div className="flex items-center gap-1.5">
-                              <Button size="sm" className="h-7 text-xs" disabled={patchMutation.isPending} onClick={() => saveEdit("description")} data-testid="button-save-description">
-                                <Save className="h-3 w-3 mr-1" /> Save
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelEdit} data-testid="button-cancel-description">Cancel</Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm whitespace-pre-wrap" data-testid="text-description">
-                                {lineDescription}
-                              </p>
-                              {invoice.type === "deposit" && invoice.depositType && (
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  <CircleDot className="h-2.5 w-2.5 inline mr-0.5" />
-                                  {invoice.depositType === "percentage"
-                                    ? `${invoice.depositPercentage}% deposit of accepted quote`
-                                    : "Fixed deposit amount"}
+                    {lines.map((line) => {
+                      const isEditingThis = editingLine?.id === line.id;
+                      const lineTotal = line.lineAmountExclGst ?? ((line.quantity ?? 1) * (line.unitAmount ?? 0));
+                      return (
+                        <TableRow key={line.id} data-testid={`row-line-item-${line.id}`}>
+                          <TableCell className="py-2.5">
+                            {isEditingThis ? (
+                              <Textarea
+                                value={editingLine!.description}
+                                onChange={(e) => setEditingLine({ ...editingLine!, description: e.target.value })}
+                                placeholder="Line description…"
+                                className="text-sm min-h-[50px]"
+                                data-testid="input-edit-line-description"
+                              />
+                            ) : (
+                              <div>
+                                <p className="text-sm whitespace-pre-wrap" data-testid="text-line-description">
+                                  {line.description || <span className="text-muted-foreground italic text-xs">No description</span>}
                                 </p>
-                              )}
-                              {invoice.type === "variation" && invoice.variationTitle && (
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  <Layers className="h-2.5 w-2.5 inline mr-0.5" />
-                                  Variation: {invoice.variationTitle}
-                                </p>
-                              )}
-                            </div>
-                            {isEditable && (
-                              <Button variant="ghost" size="sm" className="h-6 px-1.5 text-[10px] gap-0.5 text-muted-foreground hover:text-foreground shrink-0"
-                                onClick={() => startEdit("description")} data-testid="button-edit-description">
-                                <Pencil className="h-2.5 w-2.5" /> Edit
-                              </Button>
+                                {line.lineType && line.lineType !== "standard" && (
+                                  <span className="text-[10px] text-muted-foreground">{TYPE_LABELS[line.lineType] || line.lineType}</span>
+                                )}
+                              </div>
                             )}
-                            {isPushed && (
-                              <Lock className="h-3 w-3 text-muted-foreground/40 shrink-0 mt-1" />
+                          </TableCell>
+                          <TableCell className="text-center py-2.5">
+                            {isEditingThis ? (
+                              <Input
+                                type="number"
+                                value={editingLine!.quantity}
+                                onChange={(e) => setEditingLine({ ...editingLine!, quantity: e.target.value })}
+                                className="h-8 text-sm text-center w-16 mx-auto"
+                                data-testid="input-edit-line-qty"
+                                step="any"
+                              />
+                            ) : (
+                              <span className="font-mono text-sm tabular-nums" data-testid="text-line-qty">{line.quantity ?? 1}</span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-right py-2.5">
+                            {isEditingThis ? (
+                              <Input
+                                type="number"
+                                value={editingLine!.unitAmount}
+                                onChange={(e) => setEditingLine({ ...editingLine!, unitAmount: e.target.value })}
+                                className="h-8 text-sm text-right w-28 ml-auto"
+                                data-testid="input-edit-line-unit"
+                                step="any"
+                                placeholder="0.00"
+                              />
+                            ) : (
+                              <span className="font-mono text-sm tabular-nums" data-testid="text-line-unit">{fmtMoney(line.unitAmount)}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right py-2.5">
+                            <span className="font-mono text-sm font-semibold tabular-nums" data-testid="text-line-total">
+                              {fmtMoney(lineTotal)}
+                            </span>
+                          </TableCell>
+                          {isEditable && (
+                            <TableCell className="text-right py-2.5">
+                              {isEditingThis ? (
+                                <div className="flex items-center gap-1 justify-end">
+                                  <Button size="sm" className="h-7 px-2" disabled={updateLineMutation.isPending} onClick={saveLineEdit} data-testid="button-save-line">
+                                    <Save className="h-3 w-3" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingLine(null)} data-testid="button-cancel-line">
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1 justify-end">
+                                  <Button variant="ghost" size="sm" className="h-7 px-1.5 text-muted-foreground hover:text-foreground"
+                                    onClick={() => startLineEdit(line)} data-testid={`button-edit-line-${line.id}`}>
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 px-1.5 text-muted-foreground hover:text-destructive"
+                                    disabled={deleteLineMutation.isPending}
+                                    onClick={() => deleteLineMutation.mutate(line.id)} data-testid={`button-delete-line-${line.id}`}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+
+                    {lines.length === 0 && !addingLine && (
+                      <TableRow>
+                        <TableCell colSpan={isEditable ? 5 : 4} className="text-center py-6 text-muted-foreground text-sm italic">
+                          No line items
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                    {addingLine && (
+                      <TableRow data-testid="row-add-line">
+                        <TableCell className="py-2.5">
+                          <Textarea
+                            value={newLine.description}
+                            onChange={(e) => setNewLine({ ...newLine, description: e.target.value })}
+                            placeholder="Line description…"
+                            className="text-sm min-h-[50px]"
+                            data-testid="input-new-line-description"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center py-2.5">
+                          <Input
+                            type="number"
+                            value={newLine.quantity}
+                            onChange={(e) => setNewLine({ ...newLine, quantity: e.target.value })}
+                            className="h-8 text-sm text-center w-16 mx-auto"
+                            data-testid="input-new-line-qty"
+                            step="any"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right py-2.5">
+                          <Input
+                            type="number"
+                            value={newLine.unitAmount}
+                            onChange={(e) => setNewLine({ ...newLine, unitAmount: e.target.value })}
+                            className="h-8 text-sm text-right w-28 ml-auto"
+                            data-testid="input-new-line-unit"
+                            step="any"
+                            placeholder="0.00"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right py-2.5">
+                          <span className="font-mono text-sm tabular-nums text-muted-foreground">
+                            {fmtMoney((parseFloat(newLine.quantity) || 1) * (parseFloat(newLine.unitAmount) || 0))}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right py-2.5">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button size="sm" className="h-7 px-2" disabled={addLineMutation.isPending} onClick={submitAddLine} data-testid="button-confirm-add-line">
+                              <Save className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setAddingLine(false)} data-testid="button-cancel-add-line">
+                              <X className="h-3 w-3" />
+                            </Button>
                           </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center py-3">
-                        <span className="font-mono text-sm tabular-nums" data-testid="text-line-qty">1</span>
-                      </TableCell>
-                      <TableCell className="text-right py-3">
-                        <span className="font-mono text-sm tabular-nums" data-testid="text-line-unit">{fmtMoney(invoice.amountExclGst)}</span>
-                      </TableCell>
-                      <TableCell className="text-right py-3">
-                        <span className="font-mono text-sm font-semibold tabular-nums" data-testid="text-line-total">{fmtMoney(invoice.amountExclGst)}</span>
-                      </TableCell>
-                    </TableRow>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+
+                {isEditable && !addingLine && (
+                  <div className="px-4 py-2 border-t">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                      disabled={isLineBusy} onClick={() => setAddingLine(true)} data-testid="button-add-line">
+                      <Plus className="h-3 w-3" /> Add Line
+                    </Button>
+                  </div>
+                )}
 
                 <div className="border-t bg-muted/30">
                   <div className="max-w-xs ml-auto px-4 py-3 space-y-1.5">
@@ -606,30 +840,64 @@ export default function InvoiceDetailPage() {
             <Card className="md:col-span-1">
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Xero</h3>
+                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Xero Integration</h3>
                   {invoice.xeroInvoiceId && (
                     <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1"
                       disabled={syncFromXeroMutation.isPending}
                       onClick={() => syncFromXeroMutation.mutate()}
                       data-testid="button-sync-xero">
                       <RefreshCw className={`h-3 w-3 ${syncFromXeroMutation.isPending ? "animate-spin" : ""}`} />
-                      Sync
+                      Sync from Xero
                     </Button>
                   )}
                 </div>
                 {invoice.xeroInvoiceId ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">Invoice</span>
+                      <span className="text-[10px] text-muted-foreground">Xero Invoice</span>
                       <span className="font-mono text-xs font-medium" data-testid="text-xero-number">{invoice.xeroInvoiceNumber}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">Status</span>
-                      <span className="font-mono text-[10px] font-medium" data-testid="text-xero-status">{invoice.xeroStatus}</span>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">SteelIQ Status</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${STATUS_COLORS[invoice.status] ?? "bg-muted text-muted-foreground border-border"}`} data-testid="text-steeliq-status">
+                          {STATUS_LABELS[invoice.status] || invoice.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">Xero Status</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${XERO_STATUS_COLORS[invoice.xeroStatus ?? ""] ?? "bg-muted text-muted-foreground"}`} data-testid="text-xero-status">
+                          {XERO_STATUS_LABELS[invoice.xeroStatus ?? ""] ?? invoice.xeroStatus ?? "Unknown"}
+                        </span>
+                      </div>
+                      {xPaid != null && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground">Payment</span>
+                          <span className="text-[10px] font-medium" data-testid="text-xero-payment-summary">
+                            {(xDue ?? 0) <= 0 && (xPaid ?? 0) > 0
+                              ? <span className="text-emerald-600 dark:text-emerald-400">Paid in full</span>
+                              : (xPaid ?? 0) > 0 && (xDue ?? 0) > 0
+                                ? <span className="text-amber-600 dark:text-amber-400">Part paid ({fmtMoney(xPaid)})</span>
+                                : <span className="text-muted-foreground">Unpaid</span>
+                            }
+                          </span>
+                        </div>
+                      )}
                     </div>
+
+                    {invoice.xeroStatus === "AUTHORISED" && invoice.status === "pushed_to_xero_draft" && (
+                      <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800" data-testid="cue-xero-authorised-pending">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-snug">
+                          This invoice has been authorised in Xero. Click <strong>Approve</strong> above to confirm the SteelIQ business signoff.
+                        </p>
+                      </div>
+                    )}
+
                     {xSynced && (
                       <p className="text-[9px] text-muted-foreground">
-                        Synced: {new Date(xSynced).toLocaleString("en-NZ")}
+                        Last synced: {new Date(xSynced).toLocaleString("en-NZ")}
                       </p>
                     )}
                     <p className="text-[8px] font-mono text-muted-foreground/50 truncate">{invoice.xeroInvoiceId}</p>

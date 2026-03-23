@@ -1,0 +1,299 @@
+STEELIQ IMPLEMENTATION PHASE — XERO STATUS READBACK / WORKFLOW ALIGNMENT (PRESERVE INTERNAL APPROVE, NO MULTI-LINE XERO PUSH YET)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow workflow-alignment and status-readback phase for Xero invoicing. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model.
+- Do not redesign the invoice model in this phase.
+- Do not change customer quote PDF generation.
+- Do not remove the internal SteelIQ "Approve" action.
+- Do not collapse Xero status and SteelIQ internal status into one field.
+- Do not implement multi-line Xero push in this phase.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, retention controls, or invoice locking rules.
+- Do not perform hidden refactors.
+- Do not introduce speculative dashboard/cashflow rewrites in this phase.
+- Do not introduce standalone/admin quote-independent invoice creation in this phase.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not pretend SteelIQ and Xero statuses are the same thing.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- SteelIQ can read back and visibly show more accurate/current Xero invoice status
+- the invoice detail page clearly distinguishes Xero state from SteelIQ internal state
+- the invoice list remains compatible and ideally improves Xero state visibility where safe
+- internal "Approve" remains intact as a separate owner/admin business-control action
+- the live workflow becomes clearer for high-level users who approve in Xero first, then confirm in SteelIQ
+- no current invoice creation, invoice line editing, locking, Xero push, payment sync, or governance flows are broken
+- the handover clearly states what was changed and what remains intentionally unchanged
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+SteelIQ currently has:
+- accepted quote -> project -> job -> invoice workflow foundations
+- invoice list and invoice detail surfaces
+- Xero push integration
+- manual sync from Xero
+- Xero payment visibility readback
+- invoice reference field
+- improved quote/project/job linkage visibility
+- governance and demo/test shielding materially implemented
+- invoice_lines foundation added
+- invoice detail supports draft-only multi-line body editing
+- header totals remain authoritative for current operational flows
+- line/header discipline has been hardened
+- internal "Approve" exists after Xero push and is intentionally retained
+
+CURRENT WORKFLOW TRUTH
+
+The intended control flow is:
+1. user prepares invoice in SteelIQ
+2. user marks ready and pushes to Xero
+3. invoice exists in Xero draft state
+4. high-level user checks and approves/authorises invoice in Xero
+5. user returns to SteelIQ and clicks internal "Approve" as the business-control signoff
+
+This means:
+- Xero status is accounting-system truth
+- SteelIQ status is internal workflow/control truth
+- both should be visible
+- neither should silently overwrite the other
+
+PRIMARY OBJECTIVE
+
+Improve Xero status readback and workflow clarity so SteelIQ shows the latest meaningful Xero invoice state after external approval in Xero, while preserving SteelIQ’s own internal "Approve" action and status lifecycle.
+
+This phase should establish:
+1. stronger Xero status refresh/readback
+2. clearer Xero status display in invoice detail
+3. optionally clearer Xero status display in invoice list if low-risk
+4. explicit distinction between:
+   - SteelIQ internal status
+   - Xero invoice status
+   - Xero payment state
+5. no change to current Xero push payload shape
+6. no removal of internal Approve
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — AUDIT CURRENT XERO STATUS READBACK TRUTH
+Before changing behavior, inspect and confirm:
+- what Xero fields are currently read back
+- what Xero status values are currently stored
+- what sync-from-Xero already updates
+- what invoice detail currently shows
+- what invoice list currently shows
+- whether SteelIQ already stores enough Xero status information for this phase
+- whether additional small fields are required or existing ones are sufficient
+
+If existing fields are sufficient, prefer using them.
+Do not add schema unless clearly necessary.
+
+PHASE B — STRENGTHEN XERO READBACK / SYNC
+Improve the existing sync/readback so SteelIQ more clearly reflects the current Xero invoice status after the user changes it in Xero.
+
+Goals:
+- after user syncs from Xero, SteelIQ should store and display the latest meaningful Xero invoice status
+- current payment readback should remain intact
+- current Xero invoice number/reference linkage should remain intact
+
+Possible acceptable improvements:
+- make sure Xero status returned from Xero is persisted reliably
+- make sure sync route returns a richer response payload if helpful to the UI
+- make sure invoice detail refreshes correctly after sync
+- if safe, update invoice list query/display to better surface Xero status
+
+Rules:
+- do not auto-change SteelIQ internal status to approved merely because Xero became authorised
+- do not weaken existing error handling
+- do not make this phase dependent on webhooks
+- do not implement background polling in this phase unless already trivial and explicitly justified; prefer manual sync/readback hardening first
+
+PHASE C — CLARIFY UI STATUS LAYERS
+The invoice detail page must make the workflow understandable.
+
+Required UI clarity:
+- show SteelIQ internal status clearly
+- show Xero invoice status clearly
+- show payment state clearly
+- make it obvious that Xero status and SteelIQ approval are separate
+
+Examples of the intended concept:
+- SteelIQ Status: Pushed to Xero / Approved
+- Xero Status: Draft / Authorised / Paid / Void etc.
+- Payment State: Unpaid / Part Paid / Paid
+
+Do not hardcode these exact labels unless they fit repo conventions, but achieve this level of clarity.
+
+If the Xero status indicates the invoice has already been approved/authorised in Xero while SteelIQ internal approval is still pending, surface a helpful cue such as:
+- "Xero invoice is Authorised — SteelIQ approval still pending"
+or equivalent
+
+This cue should help high-level users understand why the internal Approve step still exists.
+
+PHASE D — PRESERVE INTERNAL APPROVE
+Do not remove or bypass SteelIQ internal Approve.
+
+Rules:
+- internal Approve must remain an explicit action
+- it should still be restricted to the intended high-level users if that restriction already exists or is part of current logic
+- Xero status becoming authorised should not automatically flip SteelIQ internal status to approved in this phase
+- however, Xero state should be visible enough that the user knows SteelIQ approval is now appropriate
+
+PHASE E — OPTIONAL LOW-RISK LIST IMPROVEMENT
+If safe and low-risk, improve the invoice list page so users can see more useful Xero state at a glance.
+
+Examples:
+- show clearer Xero status text
+- show “Authorised in Xero” vs generic “DRAFT” if available
+- show a subtle hint when SteelIQ approval is pending but Xero is already authorised
+
+Do not overdesign the list page.
+Do not create a dense dashboard in this phase.
+Do this only if it is low-risk and clean.
+
+PHASE F — DO NOT EXPAND INTO DASHBOARD REWRITES
+You may acknowledge that stronger Xero status truth will later support:
+- project cashflow
+- financial dashboard
+- operational dashboard
+- job/project commercial visibility
+
+But do NOT build those layers now.
+This phase is about getting Xero readback/status clarity right first.
+
+PHASE G — PRESERVE CURRENT SAFEGUARDS
+Do not break or weaken:
+- invoice creation flows from quote detail
+- invoice detail multi-line body editing
+- ready_for_xero -> draft auto-demotion on line edits
+- pushed/approved lock behavior
+- quote detail invoice section
+- allocation guards
+- variation protections
+- retention controls
+- payment sync readback
+- governance/demo/test shielding
+- division protections
+- archive behavior
+
+NON-GOALS
+
+Do NOT:
+- implement multi-line Xero push
+- redesign invoice lifecycle broadly
+- auto-approve SteelIQ invoices based only on Xero status
+- add webhooks unless absolutely trivial and explicitly justified (not expected here)
+- add background polling infrastructure
+- redesign dashboards/cashflow modules
+- redesign quotes/projects/jobs
+- add standalone/admin invoice creation
+- widen into a general accounting rewrite
+- claim the whole project/job/dashboard propagation is complete after this phase
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirm internal SteelIQ Approve remains intact
+- confirm Xero payload push remains unchanged
+- confirm status clarity improved if completed
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. XERO READBACK RESULT
+- what Xero fields/statuses are now read and stored
+- what sync route behavior changed
+- what remained unchanged
+- whether schema changes were needed or not
+
+4. UI RESULT
+- what changed on invoice detail
+- whether invoice list changed
+- how SteelIQ status vs Xero status vs payment state are now shown
+- what user cue exists when Xero is approved/authorised but SteelIQ approval is still pending
+
+5. WORKFLOW RESULT
+- exact intended user flow after this phase
+- what happens after Xero draft approval in Xero
+- why the user still returns to SteelIQ to click Approve
+- what did NOT get automated
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- invoice list page core behavior
+- quote detail invoice section
+- invoice line editing / lock hardening
+- allocation guards
+- variation protections
+- retention controls
+- Xero push payload
+- Xero payment sync
+- governance/demo/division/archive behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no multi-line Xero push yet
+- no automatic SteelIQ approval based solely on Xero status
+- no webhook/background polling solution yet unless actually implemented
+- header still remains authoritative for current operational flows
+- dashboard/cashflow propagation is still future work
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+- should logically build on better Xero readback truth
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining Xero status ambiguity
+- any remaining sync/manual-refresh caveat
+- any remaining operational caveat around invoice approval flow
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. XERO READBACK RESULT
+
+4. UI RESULT
+
+5. WORKFLOW RESULT
+
+6. COMPATIBILITY RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the Xero status readback / workflow-alignment improvements required to make SteelIQ’s internal Approve workflow clearer and more useful.
+Be exact, conservative, and truthful.
+Do not claim full accounting/dashboard propagation after this phase.

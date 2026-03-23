@@ -26,6 +26,15 @@ type EnrichedInvoice = Invoice & {
   variationTitle: string | null;
 };
 
+const XERO_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Xero Draft",
+  SUBMITTED: "Submitted",
+  AUTHORISED: "Authorised",
+  PAID: "Paid",
+  VOIDED: "Voided",
+  DELETED: "Deleted",
+};
+
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   ready_for_xero: "Ready",
@@ -379,7 +388,10 @@ export default function InvoicesPage() {
                     <span className="text-[10px] text-muted-foreground/50">No Xero</span>
                   )}
                   {inv.xeroStatus && (
-                    <p className="text-[9px] text-muted-foreground font-mono" data-testid={`text-xero-status-${inv.id}`}>{inv.xeroStatus}</p>
+                    <p className="text-[9px] text-muted-foreground font-mono" data-testid={`text-xero-status-${inv.id}`}>{XERO_STATUS_LABELS[inv.xeroStatus] ?? inv.xeroStatus}</p>
+                  )}
+                  {inv.xeroStatus === "AUTHORISED" && inv.status === "pushed_to_xero_draft" && (
+                    <p className="text-[8px] text-amber-600 dark:text-amber-400 font-medium" data-testid={`text-xero-approval-hint-${inv.id}`}>Approval pending</p>
                   )}
                   <PaymentIndicator inv={inv} />
                 </div>

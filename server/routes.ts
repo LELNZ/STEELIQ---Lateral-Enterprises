@@ -2953,6 +2953,23 @@ export async function registerRoutes(
         createdByUserId: userId ?? undefined,
       } as any);
       logActivity("invoice_created", "invoice", invoice.id, userId, { number, type: parsed.data.type });
+
+      try {
+        await storage.createInvoiceLine({
+          invoiceId: invoice.id,
+          sortOrder: 0,
+          lineType: parsed.data.type ?? "deposit",
+          description: invoice.description ?? null,
+          quantity: 1,
+          unitAmount: invoice.amountExclGst ?? null,
+          lineAmountExclGst: invoice.amountExclGst ?? null,
+          variationId: parsed.data.variationId ?? null,
+          sourceContext: JSON.stringify({ origin: "auto_creation", invoiceType: parsed.data.type }),
+        });
+      } catch (lineErr: any) {
+        console.error("[invoice-lines] dual-write failed for invoice", invoice.id, lineErr.message);
+      }
+
       // Auto-sync variation status when a variation invoice is created
       if (parsed.data.type === "variation" && parsed.data.variationId) {
         await storage.syncVariationStatus(parsed.data.variationId);
@@ -3002,6 +3019,121 @@ export async function registerRoutes(
     return res.json({ ...invoice, customerName, projectName, jobName, jobId, variationTitle });
   });
 
+  app.get("/api/invoices/:id/lines", async (req, res) => {
+    const invoice = await storage.getInvoice(req.params.id);
+    if (!invoice) return res.status(404).json({ error: "Not found" });
+    if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
+    const userDivision = req.user?.divisionCode;
+    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+      return res.status(403).json({ error: "Access denied: different division" });
+    }
+    const lines = await storage.getInvoiceLines(req.params.id);
+    return res.json(lines);
+  });
+
+  const EDITABLE_INVOICE_STATUSES = new Set(["draft", "ready_for_xero", "returned_to_draft"]);
+  const GST_RATE_LINES = 0.15;
+
+  async function reconcileInvoiceHeaderFromLines(invoiceId: string, userId?: string | null): Promise<{ demoted: boolean }> {
+    const lines = await storage.getInvoiceLines(invoiceId);
+    const amountExclGst = lines.reduce((sum, l) => sum + (l.lineAmountExclGst ?? 0), 0);
+    const rounded = Math.round(amountExclGst * 100) / 100;
+    const gstAmount = Math.round(rounded * GST_RATE_LINES * 100) / 100;
+    const amountInclGst = Math.round((rounded + gstAmount) * 100) / 100;
+    await storage.updateInvoice(invoiceId, { amountExclGst: rounded, gstAmount, amountInclGst } as any);
+
+    const invoice = await storage.getInvoice(invoiceId);
+    if (invoice && invoice.status === "ready_for_xero") {
+      await storage.updateInvoice(invoiceId, { status: "draft" } as any);
+      logActivity("invoice_updated", "invoice", invoiceId, userId ?? null, {
+        from: "ready_for_xero",
+        to: "draft",
+        reason: "auto_demoted_after_line_edit",
+      });
+      return { demoted: true };
+    }
+    return { demoted: false };
+  }
+
+  async function guardInvoiceLineAccess(req: any, res: any, invoiceId: string, requireEditable: boolean): Promise<any | null> {
+    const invoice = await storage.getInvoice(invoiceId);
+    if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return null; }
+    if (invoice.isDemoRecord && !isPrivilegedUser(req)) { res.status(404).json({ error: "Not found" }); return null; }
+    const userDivision = req.user?.divisionCode;
+    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+      res.status(403).json({ error: "Access denied: different division" }); return null;
+    }
+    if (requireEditable && !EDITABLE_INVOICE_STATUSES.has(invoice.status)) {
+      res.status(403).json({ error: "Invoice is locked — editing not allowed in current status" }); return null;
+    }
+    return invoice;
+  }
+
+  app.post("/api/invoices/:id/lines", async (req, res) => {
+    const invoice = await guardInvoiceLineAccess(req, res, req.params.id, true);
+    if (!invoice) return;
+    const schema = z.object({
+      description: z.string().nullable().optional(),
+      quantity: z.number().default(1),
+      unitAmount: z.number().nullable().optional(),
+      lineType: z.string().default("standard"),
+      variationId: z.string().nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid line data", details: parsed.error.flatten() });
+    const { quantity, unitAmount } = parsed.data;
+    const lineAmountExclGst = unitAmount != null ? Math.round(quantity * unitAmount * 100) / 100 : null;
+    const existingLines = await storage.getInvoiceLines(req.params.id);
+    const maxSort = existingLines.reduce((max, l) => Math.max(max, l.sortOrder), -1);
+    const line = await storage.createInvoiceLine({
+      invoiceId: req.params.id,
+      sortOrder: maxSort + 1,
+      lineType: parsed.data.lineType,
+      description: parsed.data.description ?? null,
+      quantity,
+      unitAmount: unitAmount ?? null,
+      lineAmountExclGst,
+      variationId: parsed.data.variationId ?? null,
+      sourceContext: JSON.stringify({ origin: "manual_add" }),
+    });
+    const { demoted } = await reconcileInvoiceHeaderFromLines(req.params.id, req.user?.id ?? null);
+    return res.status(201).json({ ...line, _demotedToDraft: demoted });
+  });
+
+  app.patch("/api/invoice-lines/:lineId", async (req, res) => {
+    const line = await storage.getInvoiceLine(req.params.lineId);
+    if (!line) return res.status(404).json({ error: "Line not found" });
+    const invoice = await guardInvoiceLineAccess(req, res, line.invoiceId, true);
+    if (!invoice) return;
+    const schema = z.object({
+      description: z.string().nullable().optional(),
+      quantity: z.number().optional(),
+      unitAmount: z.number().nullable().optional(),
+      lineType: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+    const updates: any = { ...parsed.data };
+    const qty = updates.quantity ?? line.quantity;
+    const ua = updates.unitAmount !== undefined ? updates.unitAmount : line.unitAmount;
+    updates.lineAmountExclGst = ua != null ? Math.round(qty * ua * 100) / 100 : null;
+    const updated = await storage.updateInvoiceLine(req.params.lineId, updates);
+    const { demoted } = await reconcileInvoiceHeaderFromLines(line.invoiceId, req.user?.id ?? null);
+    return res.json({ ...updated, _demotedToDraft: demoted });
+  });
+
+  app.delete("/api/invoice-lines/:lineId", async (req, res) => {
+    const line = await storage.getInvoiceLine(req.params.lineId);
+    if (!line) return res.status(404).json({ error: "Line not found" });
+    const invoice = await guardInvoiceLineAccess(req, res, line.invoiceId, true);
+    if (!invoice) return;
+    await storage.deleteInvoiceLine(req.params.lineId);
+    const { demoted } = await reconcileInvoiceHeaderFromLines(line.invoiceId, req.user?.id ?? null);
+    return res.json({ success: true, _demotedToDraft: demoted });
+  });
+
   app.patch("/api/invoices/:id", async (req, res) => {
     const schema = z.object({
       type: z.enum(["deposit", "progress", "variation", "final", "retention_release", "credit_note"]).optional(),
@@ -3041,6 +3173,21 @@ export async function registerRoutes(
           return res.status(403).json({
             error: `Invoice is in '${invoice.status}' status. Commercial fields cannot be edited after Xero push. Return the invoice to draft first (and delete the corresponding Xero invoice before reissuing).`,
             lockedFields: COMMERCIAL_FIELDS,
+          });
+        }
+      }
+
+      const LINE_MANAGED_FIELDS = ["amountExclGst", "gstAmount", "amountInclGst", "description"] as const;
+      const attemptedLineManagedEdit = LINE_MANAGED_FIELDS.some(
+        (f) => Object.prototype.hasOwnProperty.call(parsed.data, f) && (parsed.data as any)[f] !== undefined,
+      );
+      if (attemptedLineManagedEdit) {
+        const existingLines = await storage.getInvoiceLines(req.params.id);
+        if (existingLines.length > 0) {
+          return res.status(409).json({
+            error: "This invoice has line items — amount and description fields are managed through line editing. Direct header edits to these fields are not permitted.",
+            code: "LINE_MANAGED_CONFLICT",
+            protectedFields: LINE_MANAGED_FIELDS,
           });
         }
       }

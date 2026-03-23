@@ -1,0 +1,263 @@
+STEELIQ HARDENING PHASE — INVOICE LOCK / VALIDATION DISCIPLINE BEFORE LIVE PUBLISH (NO XERO MULTI-LINE YET)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow hardening and safety phase for the newly introduced draft-only multi-line invoice detail editing. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model.
+- Do not change customer quote PDF generation.
+- Do not change current Xero payload structure in this phase.
+- Do not implement multi-line Xero push in this phase.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, or retention controls.
+- Do not perform hidden refactors.
+- Do not introduce speculative improvements outside the explicit scope below.
+- Do not introduce standalone/admin quote-independent invoice creation in this phase.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not pretend SteelIQ now has fully complete enterprise multi-line invoicing after this phase.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- the ready_for_xero edit looseness has been hardened
+- direct header/line desync risk has been materially reduced or eliminated
+- invoice detail editing still works in allowed states
+- current invoice creation flows remain intact
+- current invoice list, quote-detail invoice section, allocation guards, variation protections, retention controls, and Xero push remain compatible
+- the handover clearly states what was hardened and what remains intentionally unchanged
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+SteelIQ currently has:
+- accepted quote -> project -> job -> invoice workflow foundations
+- invoice list and invoice detail surfaces
+- Xero push integration
+- Xero payment visibility readback
+- invoice reference field
+- improved quote/project/job linkage visibility
+- governance and demo/test shielding materially implemented
+- invoice_lines foundation added
+- invoice detail now supports draft-only multi-line body editing
+- header totals are reconciled from line data during line CRUD
+- header totals remain authoritative for downstream operational flows
+- Xero payload remains single-line and header-driven
+
+CURRENT HARDENING GAP TO FIX
+
+Repo truth and handover now identify two important transitional weaknesses:
+
+1. ready_for_xero remains editable for invoice body line CRUD
+- this is a carry-forward of prior header-edit behavior
+- it creates a looseness window after readiness marking
+
+2. direct PATCH /api/invoices/:id can still mutate header commercial values directly
+- this can desync header from invoice lines
+- UI does not use this path for invoice body editing, but the API still permits it
+
+These must be hardened before live publish of the invoice-detail multi-line editing phase.
+
+PRIMARY OBJECTIVE
+
+Tighten invoice commercial discipline so the current multi-line invoice detail work becomes safer for live deployment, without changing Xero payload structure yet.
+
+This phase must:
+1. remove or materially reduce the ready_for_xero edit looseness
+2. remove or materially reduce direct header/line desync risk
+3. preserve draft-state editing usability
+4. preserve returned_to_draft editing usability
+5. preserve pushed/approved lock behavior
+6. keep current Xero push behavior unchanged
+7. keep current quote/project/job/invoice workflow compatibility intact
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — HARDEN READY_FOR_XERO EDITING BEHAVIOR
+You must choose the safest narrow approach and implement it consistently.
+
+Preferred hardening options, in order:
+1. Best option: if invoice line CRUD occurs while invoice.status = ready_for_xero, automatically demote the invoice back to draft after reconciliation, with clear user-facing messaging.
+2. Acceptable option: keep ready_for_xero editable, but re-run allocation/ceiling validation immediately after reconciliation and reject changes that violate commercial rules.
+3. Least preferred: block line CRUD entirely in ready_for_xero and require return to draft first.
+
+Choose one approach based on current architecture and minimal-risk compatibility. Do not invent a fourth broad redesign path.
+
+Requirements:
+- whatever rule you choose must be enforced server-side
+- UI behavior must match the server rule
+- behavior must be consistent for add/edit/delete line actions
+- handover must explain exactly why this option was chosen
+
+PHASE B — HARDEN DIRECT HEADER/LINE DESYNC RISK
+The current API reportedly still allows direct PATCH /api/invoices/:id writes to commercial header fields such as amountExclGst even when invoice lines exist.
+
+You must harden this.
+
+Preferred approach:
+- block direct commercial header amount editing through PATCH /api/invoices/:id once invoice_lines exist for that invoice
+- preserve non-commercial edits that still belong there, such as notes/reference/status where appropriate
+- if needed, allow a narrowly scoped fallback only when an invoice truly has no lines, but explain clearly
+
+Commercial fields to protect include at minimum:
+- amountExclGst
+- gstAmount
+- amountInclGst
+- any header description field if it is no longer the invoice body source
+- any other invoice-body/commercial fields that would desync from lines if edited directly
+
+Rules:
+- do not break legitimate status transitions
+- do not break reference/notes editing if those are still valid
+- do not break Xero sync fields
+- do not redesign the whole PATCH route if a narrow protection layer is sufficient
+
+PHASE C — CLEAN LOW-RISK DEAD CODE IF SAFE
+If the prior report is correct that there is clearly unreachable/dead invoice-detail code related to the old single-line body editor, remove it only if:
+- it is genuinely dead
+- removal is narrow and low-risk
+- it does not widen scope
+
+Examples may include:
+- unused buildTypeContext() if truly dead
+- unused header-level description edit state and handlers if truly dead
+
+Do not hunt for unrelated cleanup.
+Do not widen this into a refactor pass.
+
+PHASE D — PRESERVE CURRENT OPERATIONAL MODEL
+Do not change these in this phase:
+- quote-detail invoice creation still seeds simple invoice structures
+- invoice list remains header-summary-based
+- Xero push remains single-line and header-based
+- allocation logic remains header-based
+- variation/retention logic remains header-based
+- standalone/admin invoice creation does not get introduced
+
+PHASE E — UI / MESSAGING ALIGNMENT
+Make the UI reflect the hardened rule clearly.
+
+Examples depending on chosen approach:
+- if editing in ready_for_xero auto-demotes to draft, show clear user-facing toast/message
+- if editing in ready_for_xero is blocked, show clear explanation
+- if invalid line edits are rejected due to allocation ceilings, show a clear error
+
+The UI must not imply behavior the server will reject.
+
+NON-GOALS
+
+Do NOT:
+- implement multi-line Xero push
+- redesign invoice allocation logic to line-level enforcement
+- redesign quotes
+- redesign projects/jobs
+- add standalone/admin invoice creation
+- add drag/drop line ordering
+- add spreadsheet/grid editing
+- change customer quote PDF generation
+- overreach into unrelated accounting architecture
+- claim full multi-line invoice maturity after this phase
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was hardened
+- what behavior changed
+- what was intentionally not changed
+- confirm Xero payload remains unchanged
+- confirm header totals remain authoritative in current operational flows
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. LOCKING / VALIDATION RESULT
+- exact chosen hardening approach for ready_for_xero
+- why that option was chosen
+- exact statuses now editable
+- exact statuses now locked
+- exact server-side enforcement
+- exact user-visible behavior
+
+4. HEADER / LINE CONSISTENCY RESULT
+- exactly how direct header commercial desync was prevented or reduced
+- which fields are now protected
+- which fields remain editable through PATCH /api/invoices/:id
+- any remaining caveat
+
+5. UI RESULT
+- what changed in invoice detail messaging/behavior
+- whether draft editing still works
+- whether returned_to_draft editing still works
+- what happens in ready_for_xero now
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- invoice list page
+- quote detail invoice section
+- allocation guards
+- variation protections
+- retention controls
+- Xero push payload
+- Xero payment sync
+- governance/demo/division/archive behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no multi-line Xero push yet
+- no standalone admin invoice creation yet
+- header still remains authoritative for existing operational flows
+- allocation logic is still header-based
+- quote-detail creation still seeds simple invoice structures rather than a full composer
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+- should only come after this hardening phase is complete
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining line/header consistency caveat
+- any remaining startup/backfill caveat
+- any remaining operational caveat around invoice editing
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. LOCKING / VALIDATION RESULT
+
+4. HEADER / LINE CONSISTENCY RESULT
+
+5. UI RESULT
+
+6. COMPATIBILITY RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the lock/validation hardening required before live publish of the draft multi-line invoice detail phase.
+Be exact, conservative, and truthful.
+Do not claim full multi-line invoicing maturity after this phase.
