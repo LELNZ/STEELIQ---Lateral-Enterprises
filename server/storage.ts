@@ -901,15 +901,21 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(invoices).where(isNull(invoices.archivedAt)).orderBy(desc(invoices.createdAt));
   }
 
-  async getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null })[]> {
+  async getAllInvoicesEnriched(): Promise<(Invoice & { customerName: string | null; projectName: string | null; jobName: string | null; jobId: string | null; variationTitle: string | null })[]> {
     const result = await pool.query(`
       SELECT
         i.*,
         c.name AS "customerName",
-        p.name AS "projectName"
+        p.name AS "projectName",
+        j.name AS "jobName",
+        j.id AS "jobId",
+        v.title AS "variationTitle"
       FROM invoices i
       LEFT JOIN customers c ON c.id = i.customer_id
       LEFT JOIN projects p ON p.id = i.project_id
+      LEFT JOIN quotes q ON q.id = i.quote_id
+      LEFT JOIN jobs j ON j.id = q.source_job_id
+      LEFT JOIN variations v ON v.id = i.variation_id
       WHERE i.archived_at IS NULL
       ORDER BY i.created_at DESC
     `);
@@ -931,9 +937,13 @@ export class DatabaseStorage implements IStorage {
       description: row.description,
       notes: row.notes,
       variationId: row.variation_id,
+      reference: row.reference ?? null,
       xeroInvoiceId: row.xero_invoice_id,
       xeroInvoiceNumber: row.xero_invoice_number,
       xeroStatus: row.xero_status,
+      xeroAmountPaid: row.xero_amount_paid ?? null,
+      xeroAmountDue: row.xero_amount_due ?? null,
+      xeroLastSyncedAt: row.xero_last_synced_at ?? null,
       isDemoRecord: row.is_demo_record ?? false,
       archivedAt: row.archived_at ?? null,
       createdByUserId: row.created_by_user_id,
@@ -941,6 +951,9 @@ export class DatabaseStorage implements IStorage {
       updatedAt: row.updated_at,
       customerName: row.customerName ?? null,
       projectName: row.projectName ?? null,
+      jobName: row.jobName ?? null,
+      jobId: row.jobId ?? null,
+      variationTitle: row.variationTitle ?? null,
     }));
   }
 

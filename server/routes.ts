@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, pool, formatQuoteNumber } from "./storage";
-import { isXeroConfigured, hasRefreshToken, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, XeroPushError, refreshXeroTokenWithCredentials } from "./xero-client";
+import { isXeroConfigured, hasRefreshToken, getXeroConfig, buildXeroInvoicePayload, createXeroInvoice, getXeroInvoice, XeroPushError, refreshXeroTokenWithCredentials } from "./xero-client";
 import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
@@ -2761,6 +2761,7 @@ export async function registerRoutes(
       description: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       variationId: z.string().optional().nullable(),
+      reference: z.string().optional().nullable(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -2770,6 +2771,7 @@ export async function registerRoutes(
         customerId?: string | null;
         projectId?: string | null;
         divisionCode?: string | null;
+        reference?: string | null;
       } = {};
 
       if (parsed.data.quoteId) {
@@ -2781,14 +2783,21 @@ export async function registerRoutes(
         if (!quote.acceptedRevisionId) {
           return res.status(400).json({ error: "Cannot create invoice: accepted quote has no recorded revision. Please contact support." });
         }
-        // Source truth is always derived from the accepted quote — caller-supplied values for
-        // these fields are ignored to prevent revision/customer/project/division drift.
         inheritedFields = {
           quoteRevisionId: quote.acceptedRevisionId,
           customerId: quote.customerId ?? null,
           projectId: quote.projectId ?? null,
           divisionCode: quote.divisionId ?? null,
         };
+
+        if (!parsed.data.reference && quote.sourceJobId) {
+          try {
+            const sourceJob = await storage.getJob(quote.sourceJobId);
+            if (sourceJob?.name) {
+              inheritedFields.reference = sourceJob.name;
+            }
+          } catch (_) {}
+        }
 
         // ── Invoice allocation guard ─────────────────────────────────────────
         // Policy: max deposit = 50% of accepted contract value (excl. GST).
@@ -2958,7 +2967,39 @@ export async function registerRoutes(
     const invoice = await storage.getInvoice(req.params.id);
     if (!invoice) return res.status(404).json({ error: "Not found" });
     if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-    return res.json(invoice);
+    const userDivision = req.user?.divisionCode;
+    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+      return res.status(403).json({ error: "Access denied: different division" });
+    }
+    let customerName: string | null = null;
+    let projectName: string | null = null;
+    let jobName: string | null = null;
+    let jobId: string | null = null;
+    let variationTitle: string | null = null;
+    if (invoice.customerId) {
+      const customer = await storage.getCustomer(invoice.customerId);
+      customerName = customer?.name ?? null;
+    }
+    if (invoice.projectId) {
+      const project = await storage.getProject(invoice.projectId);
+      projectName = project?.name ?? null;
+    }
+    if (invoice.quoteId) {
+      const quote = await storage.getQuote(invoice.quoteId);
+      if (quote?.sourceJobId) {
+        const job = await storage.getJob(quote.sourceJobId);
+        if (job) {
+          jobName = job.name;
+          jobId = job.id;
+        }
+      }
+    }
+    if ((invoice as any).variationId) {
+      const variation = await storage.getVariation((invoice as any).variationId);
+      variationTitle = variation?.title ?? null;
+    }
+    return res.json({ ...invoice, customerName, projectName, jobName, jobId, variationTitle });
   });
 
   app.patch("/api/invoices/:id", async (req, res) => {
@@ -2972,22 +3013,24 @@ export async function registerRoutes(
       amountInclGst: z.number().optional().nullable(),
       description: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
-      xeroInvoiceId: z.string().optional().nullable(),
-      xeroInvoiceNumber: z.string().optional().nullable(),
-      xeroStatus: z.string().optional().nullable(),
+      reference: z.string().optional().nullable(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Not found" });
+      if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
+      const userDiv = req.user?.divisionCode;
+      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
+      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
       const userId = req.user?.id ?? null;
 
       const PUSHED_STATUSES = ["pushed_to_xero_draft", "approved"] as const;
       const COMMERCIAL_FIELDS = [
         "type", "quoteId", "quoteRevisionId", "customerId", "projectId", "divisionCode",
         "depositType", "depositPercentage", "amountExclGst", "gstAmount", "amountInclGst",
-        "description", "notes",
+        "description", "notes", "reference",
       ] as const;
 
       if (PUSHED_STATUSES.includes(invoice.status as any)) {
@@ -3101,6 +3144,10 @@ export async function registerRoutes(
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Invoice not found." });
+      if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
+      const userDiv = req.user?.divisionCode;
+      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
+      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
 
       if (invoice.status !== "ready_for_xero") {
         return res.status(400).json({
@@ -3143,6 +3190,7 @@ export async function registerRoutes(
             amountExclGst: invoice.amountExclGst ?? undefined,
             description: invoice.description ?? null,
             notes: invoice.notes ?? null,
+            reference: (invoice as any).reference ?? null,
             accountCode,
             taxType,
           });
@@ -3232,6 +3280,10 @@ export async function registerRoutes(
     try {
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Not found" });
+      if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
+      const userDiv = req.user?.divisionCode;
+      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
+      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
       const userId = req.user?.id ?? null;
       const updated = await storage.updateInvoice(req.params.id, { status: "returned_to_draft" } as any);
       logActivity("invoice_returned_to_draft", "invoice", invoice.id, userId, {
@@ -3250,6 +3302,57 @@ export async function registerRoutes(
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/invoices/:id/sync-from-xero", async (req, res) => {
+    try {
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found." });
+      if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
+      const userDiv = req.user?.divisionCode;
+      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
+      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
+
+      if (!invoice.xeroInvoiceId) {
+        return res.status(400).json({ error: "This invoice has not been pushed to Xero yet." });
+      }
+
+      const xeroTokens = await getValidXeroToken();
+      if (!xeroTokens) {
+        return res.status(503).json({
+          error: "Xero credentials not available. Connect via Settings → Xero to enable sync.",
+        });
+      }
+
+      const xeroData = await getXeroInvoice(invoice.xeroInvoiceId, xeroTokens);
+      const userId = req.user?.id ?? null;
+
+      const updated = await storage.updateInvoice(req.params.id, {
+        xeroStatus: xeroData.xeroStatus,
+        xeroAmountPaid: xeroData.amountPaid,
+        xeroAmountDue: xeroData.amountDue,
+        xeroLastSyncedAt: new Date(),
+      } as any);
+
+      logActivity("invoice_synced_from_xero", "invoice", invoice.id, userId, {
+        xeroStatus: xeroData.xeroStatus,
+        amountPaid: xeroData.amountPaid,
+        amountDue: xeroData.amountDue,
+      });
+
+      return res.json({
+        invoice: updated,
+        xeroPayment: {
+          status: xeroData.xeroStatus,
+          amountPaid: xeroData.amountPaid,
+          amountDue: xeroData.amountDue,
+          fullyPaidOnDate: xeroData.fullyPaidOnDate,
+        },
+      });
+    } catch (e: any) {
+      const statusCode = e instanceof XeroPushError ? (e.detail.code === 401 ? 401 : 502) : 500;
+      return res.status(statusCode).json({ error: e.message });
     }
   });
 
@@ -5222,12 +5325,12 @@ async function seedGlazingBands() {
 }
 
 const DEFAULT_INSTALLATION_RATES = [
-  { name: "Small Window", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 187.5, sellPerUnit: 250, description: "" },
-  { name: "Medium Window", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 225, sellPerUnit: 300, description: "" },
-  { name: "Large Window", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 262.5, sellPerUnit: 350, description: "" },
-  { name: "Extra Large Window", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 300, sellPerUnit: 400, description: "" },
-  { name: "Standard Door", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 262.5, sellPerUnit: 350, description: "" },
-  { name: "Large Door", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 337.5, sellPerUnit: 450, description: "" },
+  { name: "Small Window", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 187.5, sellPerUnit: 250, pricingBasis: "per_item", description: "" },
+  { name: "Medium Window", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 225, sellPerUnit: 300, pricingBasis: "per_item", description: "" },
+  { name: "Large Window", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 262.5, sellPerUnit: 350, pricingBasis: "per_item", description: "" },
+  { name: "Extra Large Window", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 300, sellPerUnit: 400, pricingBasis: "per_item", description: "" },
+  { name: "Standard Door", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 262.5, sellPerUnit: 350, pricingBasis: "per_item", description: "" },
+  { name: "Large Door", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 337.5, sellPerUnit: 450, pricingBasis: "per_item", description: "" },
 ];
 
 async function seedInstallationRates() {
@@ -5235,11 +5338,21 @@ async function seedInstallationRates() {
   if (existing.length > 0) {
     for (const entry of existing) {
       const d = entry.data as any;
+      let updated = false;
+      let patch = { ...d };
       if (d.pricePerUnit !== undefined && d.costPerUnit === undefined) {
         const sell = d.pricePerUnit;
         const cost = Math.round(sell * 0.75 * 100) / 100;
-        const { pricePerUnit, ...rest } = d;
-        await storage.updateLibraryEntry(entry.id, { data: { ...rest, costPerUnit: cost, sellPerUnit: sell } });
+        const { pricePerUnit, ...rest } = patch;
+        patch = { ...rest, costPerUnit: cost, sellPerUnit: sell };
+        updated = true;
+      }
+      if (!patch.pricingBasis) {
+        patch.pricingBasis = "per_item";
+        updated = true;
+      }
+      if (updated) {
+        await storage.updateLibraryEntry(entry.id, { data: patch });
       }
     }
     return;
@@ -5284,17 +5397,38 @@ async function seedDeliveryRates() {
 }
 
 const DEFAULT_REMOVAL_RATES = [
-  { name: "Small Window Removal", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 75, sellPerUnit: 100, description: "" },
-  { name: "Medium Window Removal", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 112.5, sellPerUnit: 150, description: "" },
-  { name: "Large Window Removal", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 150, sellPerUnit: 200, description: "" },
-  { name: "Extra Large Window Removal", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 187.5, sellPerUnit: 250, description: "" },
-  { name: "Standard Door Removal", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 112.5, sellPerUnit: 150, description: "" },
-  { name: "Large Door Removal", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 150, sellPerUnit: 200, description: "" },
+  { name: "Small Window Removal", category: "window", minSqm: 0, maxSqm: 1, costPerUnit: 75, sellPerUnit: 100, pricingBasis: "per_item", description: "" },
+  { name: "Medium Window Removal", category: "window", minSqm: 1, maxSqm: 2, costPerUnit: 112.5, sellPerUnit: 150, pricingBasis: "per_item", description: "" },
+  { name: "Large Window Removal", category: "window", minSqm: 2, maxSqm: 3, costPerUnit: 150, sellPerUnit: 200, pricingBasis: "per_item", description: "" },
+  { name: "Extra Large Window Removal", category: "window", minSqm: 3, maxSqm: 999, costPerUnit: 187.5, sellPerUnit: 250, pricingBasis: "per_item", description: "" },
+  { name: "Standard Door Removal", category: "door", minSqm: 0, maxSqm: 2.5, costPerUnit: 112.5, sellPerUnit: 150, pricingBasis: "per_item", description: "" },
+  { name: "Large Door Removal", category: "door", minSqm: 2.5, maxSqm: 999, costPerUnit: 150, sellPerUnit: 200, pricingBasis: "per_item", description: "" },
 ];
 
 async function seedRemovalRates() {
   const existing = await storage.getLibraryEntries("removal_rate");
-  if (existing.length > 0) return;
+  if (existing.length > 0) {
+    for (const entry of existing) {
+      const d = entry.data as any;
+      let updated = false;
+      let patch = { ...d };
+      if (d.pricePerUnit !== undefined && d.costPerUnit === undefined) {
+        const sell = d.pricePerUnit;
+        const cost = Math.round(sell * 0.75 * 100) / 100;
+        const { pricePerUnit, ...rest } = patch;
+        patch = { ...rest, costPerUnit: cost, sellPerUnit: sell };
+        updated = true;
+      }
+      if (!patch.pricingBasis) {
+        patch.pricingBasis = "per_item";
+        updated = true;
+      }
+      if (updated) {
+        await storage.updateLibraryEntry(entry.id, { data: patch });
+      }
+    }
+    return;
+  }
   for (let i = 0; i < DEFAULT_REMOVAL_RATES.length; i++) {
     await storage.createLibraryEntry({
       type: "removal_rate",

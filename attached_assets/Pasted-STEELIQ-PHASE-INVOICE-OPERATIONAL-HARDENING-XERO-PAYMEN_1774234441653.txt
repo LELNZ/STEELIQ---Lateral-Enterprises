@@ -1,0 +1,264 @@
+STEELIQ PHASE — INVOICE OPERATIONAL HARDENING + XERO PAYMENT VISIBILITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase addresses a real operational invoice workflow gap in the live platform.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign invoicing broadly.
+- Do not weaken Xero protections.
+- Do not weaken governance, archive/delete, lifecycle, or quote/project/job integrity.
+- Do not change customer quote PDF generation.
+- Do not introduce schema creep unless absolutely required and you stop and explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond invoice operational usability, job/reference linkage, and Xero payment-state visibility.
+
+CURRENT LIVE ISSUES
+
+In the live system:
+1. An invoice can be created and appears as a line item attached to a quote / in the invoices list, but there is no proper operational way to open the invoice as its own working surface.
+2. There is no practical place to add or edit:
+- invoice reference
+- job reference
+- other operational invoice identifiers needed for later back-costing and reconciliation
+3. Xero push exists, but SteelIQ does not yet clearly show when the invoice has been paid / part-paid / remains unpaid based on Xero feedback.
+4. The workflow needs to become more operationally complete:
+- accepted quote
+- create project
+- create job
+- create invoice
+- invoice linked to the job and carrying meaningful reference into SteelIQ and Xero
+
+PRIMARY OBJECTIVE
+
+Make invoices operationally usable inside SteelIQ by:
+- adding a proper invoice detail/open path
+- supporting editable operational references
+- linking invoice references more strongly to job context
+- surfacing Xero payment-state back into SteelIQ lists/cards/detail views
+
+PHASE A — AUDIT CURRENT INVOICE TRUTH
+
+1. Review the current invoice architecture in code and report exactly:
+- how invoices are created
+- where they are listed
+- whether any invoice detail route/page already exists
+- what invoice fields already exist for references / external IDs / notes
+- what Xero status/payment fields already exist in schema and sync logic
+- whether invoice records already link to quote/project/job directly or indirectly
+
+2. Report the narrowest architecture-preserving implementation path.
+
+PHASE B — ADD A PROPER INVOICE DETAIL / OPEN SURFACE
+
+Required behavior:
+1. From the invoices list and/or quote invoice section, the user must be able to open an invoice detail surface/page.
+2. That invoice detail surface must show at minimum:
+- invoice number
+- invoice type
+- status
+- quote link
+- project link if available
+- job link if available
+- Xero invoice reference / identifier if linked
+- total amounts
+- operational reference fields
+- notes / summary fields if already supported or trivially supportable
+
+3. This must be a real operational surface, not just a passive row.
+
+PHASE C — REFERENCE / JOB REFERENCE HARDENING
+
+Required behavior:
+1. Add or expose a practical operational reference field for invoices.
+2. Add or expose a job reference / project-linked reference in the invoice workflow.
+3. If current architecture already has an appropriate field, use it.
+4. If not, implement the narrowest safe field addition and stop to explain if schema change is required.
+
+Goal:
+- the invoice should carry meaningful operational reference text in SteelIQ
+- this reference should help later back-costing, searching, and reconciliation
+- where architecture permits, this reference should be pushed to or reflected in Xero appropriately
+
+5. The invoice workflow should be truthful to the chain:
+- accepted quote
+- project
+- job
+- invoice
+
+Without forcing a broad redesign.
+
+PHASE D — XERO PAYMENT VISIBILITY
+
+Required behavior:
+1. Review current Xero sync/push/readback truth.
+2. Determine what payment-state data is already available or can be read back safely.
+3. Surface invoice payment state in SteelIQ, such as:
+- unpaid
+- part-paid
+- paid
+- overdue if already available
+- voided / draft / authorized if already tracked
+
+4. Show this at minimum in:
+- invoice list
+- invoice detail surface
+- quote invoice section and/or relevant commercial card where appropriate
+
+5. If exact paid amount / remaining amount is already available or can be safely derived, show it.
+6. Do not invent payment-state semantics the current Xero integration cannot truly support.
+
+PHASE E — OPERATIONAL LINKAGE / FLOW CLARITY
+
+Required behavior:
+1. Ensure invoices created after quote acceptance are operationally understandable in relation to:
+- quote
+- project
+- job
+
+2. If a job exists, the invoice detail should make that relationship obvious.
+3. If the current invoice creation flow does not yet attach the right job/project context where repo truth allows, implement the narrowest truthful improvement.
+4. Do not force a broad workflow redesign.
+
+PHASE F — UI / UX CLARITY
+
+Required behavior:
+1. Invoice list should clearly indicate that invoices are openable.
+2. Invoice detail should be easy to navigate back from/to quote/project/job.
+3. Paid-state visibility should be clear and not buried.
+4. References should be editable in the right place for owner/admin/appropriate users according to current role model truth.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the full accounting system
+- redesign Xero integration broadly
+- redesign the quote/project/job architecture
+- redesign the executive summary
+- redesign dashboards broadly
+- add speculative back-costing modules in this phase
+- change governance or archive/delete behavior
+- add schema unless absolutely necessary
+
+REQUIRED TEST CASES
+
+TC-INV-001
+Open the invoices list.
+Expected:
+- each invoice has a clear open/view path
+
+TC-INV-002
+Open an invoice detail surface.
+Expected:
+- invoice details are visible and operationally usable
+
+TC-INV-003
+Edit the invoice reference / job reference field(s).
+Expected:
+- changes save correctly
+- invoice detail and relevant list views reflect the update
+
+TC-INV-004
+Review an invoice linked to quote/project/job context.
+Expected:
+- relationship to quote/project/job is clear
+
+TC-INV-005
+Review Xero-linked invoice payment-state display.
+Expected:
+- SteelIQ shows truthful Xero-derived payment state
+
+TC-INV-006
+If paid/part-paid amount data is available, confirm it displays correctly.
+Expected:
+- paid amount / remaining amount are shown truthfully
+
+TC-INV-007
+Verify quote invoice section and/or related commercial views reflect payment state appropriately.
+Expected:
+- no regression
+- improved visibility where implemented
+
+TC-INV-008
+Verify invoice creation, push-to-Xero, numbering, and existing protections still work.
+Expected:
+- no regression
+
+TC-INV-009
+Verify non-admin/role restrictions remain truthful where invoice edit controls should be restricted.
+Expected:
+- no unsafe broadening of edit rights
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact current invoice-detail/data truth found
+3. exact invoice open/detail behavior implemented
+4. exact reference/job-reference behavior implemented
+5. exact Xero payment-state behavior implemented
+6. exact relationship visibility to quote/project/job
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. INVOICE ARCHITECTURE TRUTH
+- what existed before
+- what detail surface existed or did not exist
+- what reference/payment fields existed
+- what linkage to quote/project/job existed
+
+4. INVOICE DETAIL / OPEN FLOW
+- where invoice can now be opened from
+- what the detail surface shows
+- what was intentionally not added
+
+5. REFERENCE / JOB REFERENCE BEHAVIOR
+- what fields are now editable or exposed
+- how they are used
+- whether they flow into Xero and how
+
+6. XERO PAYMENT VISIBILITY
+- what payment-state/status is now shown
+- where it is shown
+- what exact Xero-derived truth is used
+
+7. RELATIONSHIP VISIBILITY
+- how quote/project/job linkage is now shown on invoice surfaces
+- what operational clarity was added
+
+8. TEST RESULTS
+- TC-INV-001 result
+- TC-INV-002 result
+- TC-INV-003 result
+- TC-INV-004 result
+- TC-INV-005 result
+- TC-INV-006 result
+- TC-INV-007 result
+- TC-INV-008 result
+- TC-INV-009 result
+
+9. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Make invoices operationally usable inside SteelIQ.
+Add truthful Xero payment visibility without inventing unsupported accounting semantics.
+Report truthfully and exactly.

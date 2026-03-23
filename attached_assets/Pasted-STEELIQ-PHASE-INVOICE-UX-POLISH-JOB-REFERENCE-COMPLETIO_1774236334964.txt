@@ -1,0 +1,230 @@
+STEELIQ PHASE — INVOICE UX POLISH + JOB REFERENCE COMPLETION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow refinement pass on the new invoice detail/payment visibility work.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign invoicing broadly.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, archive/delete, or division-scoped security.
+- Do not change customer quote PDF generation.
+- Do not introduce schema creep unless absolutely required and you stop and explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond invoice UX polish, job/reference completion, and operational clarity.
+
+CURRENT TRUTH
+
+The new invoice detail page and Xero payment visibility features are functionally in place, but the live/dev UI is still too basic and not polished enough for a strong production operational experience.
+
+Known current gaps from repo truth and live review:
+- invoice detail page still feels sparse/basic
+- invoice list row composition is still weak
+- payment visibility is present but not visually strong enough
+- reference is manual only, not informed by job/quote context
+- no job link is displayed on invoice detail
+- variation linkage exists in data but is not surfaced
+- the feature is functionally improved but not yet operationally polished
+
+PRIMARY OBJECTIVE
+
+Make the invoice workflow feel operationally complete and polished without redesigning the accounting architecture.
+
+PHASE A — INVOICE DETAIL PAGE POLISH
+
+Refine the invoice detail page so it feels like a real operational working surface.
+
+Required improvements:
+1. Improve card hierarchy and layout density.
+2. Reduce excessive empty space.
+3. Make the page easier to scan quickly.
+4. Strengthen the header / status / Xero / reference areas visually.
+5. Preserve all existing behavior and security.
+
+Do not over-design it. The goal is professional enterprise clarity, not cosmetic flourish.
+
+PHASE B — JOB / PROJECT / QUOTE RELATIONSHIP COMPLETION
+
+Required behavior:
+1. If a related job can be resolved from current architecture truth, surface it on the invoice detail page.
+2. Show a clear job link alongside quote/project linkage.
+3. Make the relationship chain more obvious:
+- quote
+- project
+- job
+- invoice
+
+4. If a job cannot be resolved in some cases, show that truthfully rather than implying one exists.
+
+PHASE C — REFERENCE FIELD IMPROVEMENT
+
+Required behavior:
+1. Review whether invoice reference can be safely prefilled from existing job/quote/project context at invoice creation time.
+2. If a narrow, truthful auto-default is possible, implement it.
+3. If implemented, it must not overwrite a user-entered reference later.
+4. If full auto-population is not safe in this phase, improve the UI guidance around the reference field so staff know what it is for.
+
+Preferred direction:
+- reference defaults from best available operational context
+- remains editable before Xero push
+- continues mapping to Xero Reference
+
+PHASE D — PAYMENT / XERO VISIBILITY POLISH
+
+Required behavior:
+1. Make Xero payment state more visually obvious in:
+- invoice list
+- invoice detail
+
+2. Improve the presentation of:
+- unpaid
+- partial
+- paid
+- xero status
+- amount paid
+- amount due
+- last synced
+
+3. Keep semantics truthful to current integration.
+Do not invent unsupported accounting states.
+
+PHASE E — VARIATION / TYPE-SPECIFIC DETAIL CLARITY
+
+Required behavior:
+1. If invoice type is variation and variation linkage exists, surface that linkage on the detail page.
+2. If invoice type is deposit / progress / retention, ensure the type-specific context is visually clearer where useful.
+3. Do not redesign all invoice logic — just expose what already exists more clearly.
+
+PHASE F — INVOICE LIST POLISH
+
+Required behavior:
+1. Improve invoice list row readability and hierarchy.
+2. Make it clearer that invoice numbers are openable.
+3. Improve visual grouping of:
+- invoice number
+- type
+- status
+- Xero/payment state
+- customer/project linkage
+- actions
+
+4. Preserve existing functionality and permissions.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the full accounting module
+- redesign Xero integration broadly
+- add webhook sync
+- add invoice PDF generation
+- redesign quote/project/job architecture
+- alter governance or archive/delete behavior
+- add schema unless absolutely necessary
+
+REQUIRED TEST CASES
+
+TC-POLISH-INV-001
+Open invoice list.
+Expected:
+- list is more readable and operationally clearer
+
+TC-POLISH-INV-002
+Open invoice detail page.
+Expected:
+- page feels denser, clearer, and more polished
+- existing functionality preserved
+
+TC-POLISH-INV-003
+Review invoice with project/quote linkage.
+Expected:
+- relationship chain is clearer
+- job link shown if resolvable
+
+TC-POLISH-INV-004
+Review reference field behavior.
+Expected:
+- reference guidance or auto-default behavior is improved truthfully
+
+TC-POLISH-INV-005
+Review Xero payment-state presentation.
+Expected:
+- payment status / paid / due / sync information is clearer
+
+TC-POLISH-INV-006
+Review a variation invoice if available.
+Expected:
+- variation linkage/context shown if data exists
+
+TC-POLISH-INV-007
+Verify status actions, push-to-Xero, numbering, and security rules still work.
+Expected:
+- no regression
+
+TC-POLISH-INV-008
+Verify no unsafe broadening of edit rights or division access.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact invoice UX improvements implemented
+3. exact job/project/quote linkage improvements implemented
+4. exact reference behavior improvements implemented
+5. exact payment/Xero visibility polish implemented
+6. exact list-page polish implemented
+7. results of all required test cases
+8. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was polished
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. DETAIL PAGE POLISH
+- what layout/hierarchy improvements were made
+- what information is now clearer
+
+4. RELATIONSHIP / REFERENCE IMPROVEMENTS
+- job/project/quote linkage changes
+- reference behavior changes
+- whether auto-defaulting was added or not
+
+5. PAYMENT / XERO VISIBILITY POLISH
+- what changed in list and detail views
+- what remains manual
+
+6. LIST PAGE POLISH
+- what readability/action clarity improvements were made
+
+7. TEST RESULTS
+- TC-POLISH-INV-001 result
+- TC-POLISH-INV-002 result
+- TC-POLISH-INV-003 result
+- TC-POLISH-INV-004 result
+- TC-POLISH-INV-005 result
+- TC-POLISH-INV-006 result
+- TC-POLISH-INV-007 result
+- TC-POLISH-INV-008 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Make the invoice workflow feel operationally complete and polished.
+Do not stop at functional correctness if the UI still feels weak and unfinished.
+Report truthfully and exactly.

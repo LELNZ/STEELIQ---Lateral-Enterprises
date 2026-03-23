@@ -276,6 +276,7 @@ export function buildXeroInvoicePayload(params: {
   amountExclGst: number | null | undefined;
   description: string | null | undefined;
   notes: string | null | undefined;
+  reference: string | null | undefined;
   accountCode: string;
   taxType: string;
 }): XeroInvoicePayload {
@@ -287,6 +288,7 @@ export function buildXeroInvoicePayload(params: {
     amountExclGst,
     description,
     notes,
+    reference,
     accountCode,
     taxType,
   } = params;
@@ -347,7 +349,7 @@ export function buildXeroInvoicePayload(params: {
     ],
     Status: "DRAFT",
     CurrencyCode: "NZD",
-    Reference: invoiceNumber ?? "",
+    Reference: reference || invoiceNumber || "",
   };
 }
 
@@ -453,6 +455,85 @@ async function attemptXeroCreate(
     xeroInvoiceId: invoice.InvoiceID,
     xeroInvoiceNumber: invoice.InvoiceNumber,
     xeroStatus: invoice.Status ?? "DRAFT",
+  };
+}
+
+export type XeroInvoiceReadResult = {
+  xeroStatus: string;
+  amountPaid: number;
+  amountDue: number;
+  currencyCode: string;
+  fullyPaidOnDate: string | null;
+};
+
+export async function getXeroInvoice(
+  xeroInvoiceId: string,
+  config: XeroConfig
+): Promise<XeroInvoiceReadResult> {
+  const url = `${XERO_API_BASE}/Invoices/${xeroInvoiceId}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Xero-Tenant-Id": config.tenantId,
+        Accept: "application/json",
+      },
+    });
+  } catch (networkErr: any) {
+    throw new Error(`Network error reaching Xero API: ${networkErr.message}`);
+  }
+
+  if (response.status === 401 && hasRefreshToken()) {
+    let newToken: string;
+    try {
+      newToken = await tryRefreshXeroToken();
+    } catch (refreshErr: any) {
+      throw new XeroPushError({
+        code: 401,
+        message: `Xero access token expired and refresh failed: ${refreshErr.message}`,
+      });
+    }
+    const retryResponse = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${newToken}`,
+        "Xero-Tenant-Id": config.tenantId,
+        Accept: "application/json",
+      },
+    });
+    if (!retryResponse.ok) {
+      const retryBody = await retryResponse.json().catch(() => ({}));
+      throw new XeroPushError(extractXeroErrorDetail(retryResponse.status, retryBody));
+    }
+    const retryBody = await retryResponse.json();
+    const inv = retryBody?.Invoices?.[0];
+    if (!inv) throw new Error("Xero returned success but no invoice data.");
+    return {
+      xeroStatus: inv.Status ?? "UNKNOWN",
+      amountPaid: inv.AmountPaid ?? 0,
+      amountDue: inv.AmountDue ?? 0,
+      currencyCode: inv.CurrencyCode ?? "NZD",
+      fullyPaidOnDate: inv.FullyPaidOnDate ?? null,
+    };
+  }
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new XeroPushError(extractXeroErrorDetail(response.status, body));
+  }
+
+  const body = await response.json();
+  const inv = body?.Invoices?.[0];
+  if (!inv) throw new Error("Xero returned success but no invoice data.");
+  return {
+    xeroStatus: inv.Status ?? "UNKNOWN",
+    amountPaid: inv.AmountPaid ?? 0,
+    amountDue: inv.AmountDue ?? 0,
+    currencyCode: inv.CurrencyCode ?? "NZD",
+    fullyPaidOnDate: inv.FullyPaidOnDate ?? null,
   };
 }
 

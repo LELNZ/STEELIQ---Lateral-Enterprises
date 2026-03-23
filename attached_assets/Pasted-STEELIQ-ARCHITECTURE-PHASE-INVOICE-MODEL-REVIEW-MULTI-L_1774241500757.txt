@@ -1,0 +1,284 @@
+STEELIQ ARCHITECTURE PHASE — INVOICE MODEL REVIEW + MULTI-LINE INVOICE DESIGN (NO FULL IMPLEMENTATION YET)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is an architecture review and controlled design phase for invoicing. It is not a broad rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture in code during this phase unless explicitly required for a narrowly scoped proof-of-truth audit.
+- Do not implement a full multi-line invoice system in this phase.
+- Do not change customer quote PDF generation.
+- Do not redesign the quote model.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not perform hidden refactors.
+- Do not make speculative improvements outside the explicit scope below.
+- Do not introduce schema creep unless absolutely required for a minimal proof-of-concept and you stop and explain first.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+
+CURRENT CONTEXT
+
+SteelIQ now has:
+- accepted quote -> project -> job -> invoice workflow foundations
+- invoice list and invoice detail surfaces
+- Xero push integration
+- Xero payment visibility readback
+- invoice reference field
+- improved job/project/quote linkage visibility
+
+However, current repo truth also shows:
+- invoices are still effectively single-line documents
+- there is no invoice_lines table
+- invoice body is reconstructed from a single-line model
+- this limits the system’s ability to behave like a full operational invoice document
+
+BUSINESS NEED
+
+The business is moving toward a more serious invoice model like enterprise systems use:
+- invoice as a first-class document
+- header + line items
+- draft editing
+- stronger quote/project/job linkage
+- support for deposit, progress, variation, retention, and manual/admin invoice lines
+- better long-term back-costing and commercial traceability
+
+PRIMARY OBJECTIVE
+
+Perform a structured architecture review and design proposal for how SteelIQ should evolve from the current single-line invoice model toward a more robust invoice document model, without redesigning quotes and without prematurely implementing a full rewrite.
+
+This phase must answer:
+1. what the current invoice architecture truth actually is
+2. what the smallest correct next-step architecture should be
+3. whether multi-line invoices are necessary
+4. how quote/project/job/variation context should feed invoice drafts
+5. what should remain in quote vs what should move into invoice
+6. what the safest staged migration path would be
+
+PHASE A — AUDIT CURRENT INVOICE ARCHITECTURE TRUTH
+
+Review the repo and report exactly:
+
+1. Current invoice data model
+- what fields exist on invoices
+- how invoice content is represented today
+- how invoice amounts are stored
+- how invoice body is derived
+- how invoice status and Xero state are represented
+
+2. Current invoice creation flows
+- deposit invoice creation
+- progress invoice creation
+- variation invoice creation
+- retention release invoice creation
+- any manual/admin invoice creation path
+
+3. Current invoice linkage model
+- how invoices link to quote
+- how invoices link to project
+- how invoices link to job/estimate
+- how variations link into invoices
+- what is direct vs derived
+
+4. Current Xero model
+- what fields map to Xero
+- what locks once pushed
+- what payment state comes back
+- what assumptions current Xero sync makes about invoice structure
+
+PHASE B — DEFINE THE TARGET INVOICE MODEL
+
+Based on repo truth, define the recommended target model for SteelIQ invoices.
+
+You must clearly answer:
+
+1. Should SteelIQ evolve to a true invoice document model with:
+- invoice header
+- invoice lines
+- totals
+- locking rules
+- Xero sync state
+
+2. If yes, what should invoice lines support at minimum?
+Expected candidates:
+- standard line
+- deposit line
+- progress claim line
+- variation line
+- retention release line
+- manual/admin line
+
+3. What fields belong on the invoice header vs invoice lines?
+
+4. What should remain sourced from quote/project/job vs what should become invoice-owned data?
+
+PHASE C — QUOTE VS INVOICE BOUNDARY
+
+This is critical.
+
+Define the correct boundary between:
+- Quote = commercial offer / scope document
+- Invoice = billing / claim / accounting document
+
+Required conclusions:
+1. Whether quotes need redesign to support richer invoices
+2. Whether quotes can remain largely as-is
+3. What the quote-to-invoice handoff should look like
+4. What invoice drafts should inherit from:
+- quote
+- project
+- job
+- variation
+- admin/manual input
+
+The goal is to avoid collapsing quote and invoice into one model.
+
+PHASE D — STAGED MIGRATION PLAN
+
+Provide a recommended staged plan, not a big-bang rewrite.
+
+At minimum, define stages such as:
+- Stage 1: architecture hardening / data model preparation
+- Stage 2: invoice line table introduction
+- Stage 3: draft invoice body UI
+- Stage 4: Xero payload alignment for multi-line invoices
+- Stage 5: reporting / back-costing enhancements
+
+For each stage, describe:
+- what changes
+- what remains unchanged
+- key risks
+- migration/safety considerations
+
+PHASE E — RISK / IMPACT ASSESSMENT
+
+Assess the impact of moving to a richer invoice model on:
+- current invoice creation flows
+- Xero integration
+- existing invoice detail page
+- quote detail invoice section
+- payment sync
+- governance/demo/test behavior
+- archived/historical invoices
+- migration of existing single-line invoices
+
+You must explain:
+- what can stay compatible
+- what needs careful migration
+- what should not be changed yet
+
+PHASE F — MINIMAL NEXT IMPLEMENTATION RECOMMENDATION
+
+After the review, recommend the single best next implementation phase.
+
+This must be narrow and practical.
+
+Examples:
+- introduce invoice_lines table only
+- build invoice body draft view only
+- migrate deposit/progress/variation generation to line-based drafts
+- add draft-only multi-line authoring
+- etc.
+
+Pick one and justify it.
+
+STRICT NON-GOALS
+
+Do NOT:
+- implement the full target model in this phase
+- redesign the entire accounting module
+- redesign quotes broadly
+- rebuild Xero integration wholesale
+- add speculative procurement modules
+- add speculative dashboards
+- change unrelated executive summary, governance, lifecycle, or estimator systems
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. CURRENT INVOICE ARCHITECTURE TRUTH
+- exact current model
+- creation flows
+- linkage model
+- Xero model
+
+2. TARGET INVOICE MODEL
+- recommended future-state structure
+- header vs line ownership
+- line types required
+
+3. QUOTE / INVOICE BOUNDARY
+- what stays in quote
+- what moves into invoice
+- how handoff should work
+
+4. STAGED MIGRATION PLAN
+- staged roadmap with risks and dependencies
+
+5. RISK / IMPACT ASSESSMENT
+- exact areas affected
+- migration considerations
+
+6. RECOMMENDED NEXT IMPLEMENTATION PHASE
+- one narrow next step
+- why it is the correct next move
+
+7. EXACT FILES REVIEWED
+- file list inspected during the architecture review
+
+8. KNOWN OPEN QUESTIONS
+- any unresolved design choices that genuinely require product direction
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was reviewed
+- top conclusions
+- what was intentionally not implemented
+
+2. FILES REVIEWED
+- full file list
+- one-line relevance of each file
+
+3. CURRENT INVOICE ARCHITECTURE TRUTH
+- current data model
+- current creation flows
+- current linkage model
+- current Xero model
+
+4. TARGET INVOICE MODEL
+- recommended future-state structure
+- header fields
+- line fields
+- line types
+
+5. QUOTE VS INVOICE BOUNDARY
+- what remains quote-owned
+- what becomes invoice-owned
+- recommended handoff model
+
+6. STAGED MIGRATION PLAN
+- stage-by-stage plan
+- risks and dependencies
+
+7. RISK / IMPACT ASSESSMENT
+- compatibility impacts
+- migration impacts
+- what must be preserved
+
+8. RECOMMENDED NEXT IMPLEMENTATION PHASE
+- exact narrow next phase
+- why it should be done before later stages
+
+9. KNOWN OPEN QUESTIONS
+- real unresolved decisions only
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not jump into a rewrite.
+Give a truthful, enterprise-grade architecture recommendation for how SteelIQ invoicing should evolve.
+Report exactly and conservatively.
