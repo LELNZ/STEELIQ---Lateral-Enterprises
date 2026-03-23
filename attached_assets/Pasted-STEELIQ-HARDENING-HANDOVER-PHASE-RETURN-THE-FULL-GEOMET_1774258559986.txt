@@ -1,0 +1,162 @@
+STEELIQ HARDENING / HANDOVER PHASE — RETURN THE FULL GEOMETRY-AWARE CONFIG + PRICING + JOB-WORKFLOW COMPLETION REPORT (NO NEW SCOPE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is NOT a new implementation phase. It is a hardening, verification, and exact handover-report phase for the work you have just completed.
+
+Non-negotiable rules:
+- Do not start a new redesign.
+- Do not widen scope.
+- Do not implement speculative extra work.
+- Do not perform hidden refactors.
+- Do not change architecture unless you discovered an actual defect during the work already claimed complete, and if so, report it explicitly.
+- Treat current repo truth as the source of truth.
+- Do not give a short summary only.
+- Do not mark this phase complete unless you provide the exact structured report requested below.
+- Be conservative and exact.
+- If something is still approximate or incomplete, say so clearly.
+
+CONTEXT
+
+You have already reported a summary claiming completion of:
+- geometry-aware grouped/custom pricing integration
+- workflow emphasis improvement for Create Job
+- Measurement & Dimensions emphasis on the job page
+- config matching / fallback fixes
+- mullion/transom profile cost fallback fix
+
+That summary is not sufficient for signoff.
+
+This phase is to return the exact hardened completion report with file-level and logic-level detail so the work can be reviewed safely.
+
+PRIMARY OBJECTIVE
+
+Return a full, enterprise-grade completion report for the geometry-aware config/pricing + workflow/job UI phase.
+
+Do not give another short summary.
+Do not omit exact files.
+Do not omit exact remaining limitations.
+Do not omit exact before/after logic.
+
+STRICT SCOPE
+
+Do only the following:
+1. inspect your actual implemented repo truth
+2. verify what changed
+3. verify what did not change
+4. produce the exact structured report below
+
+If you discover a mismatch between your earlier summary and actual repo truth:
+- report the mismatch explicitly
+- follow actual repo truth
+- do not hide the discrepancy
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirm whether geometry-aware config detection now exists
+- confirm whether geometry-aware pricing inputs now exist
+- confirm whether Create Job workflow emphasis was improved
+- confirm whether Measurement Requirement / Dimension Source discoverability was improved
+- confirm backward compatibility status
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each file
+
+3. CURRENT VS NEW LOGIC RESULT
+You must explain exactly:
+- how config detection worked before
+- how config detection works now
+- how pricing inputs worked before
+- how pricing inputs work now
+- how Create Job emphasis worked before
+- how it works now
+- how Measurement & Dimensions discoverability worked before
+- how it works now
+
+4. GEOMETRY METRICS RESULT
+You must explain exactly:
+- what derived grouped/custom geometry metrics now exist
+- where they are computed
+- how unequal pane heights affect them
+- how the following case differs from a flat-top version:
+  - 1950 overall width
+  - 1320 overall height
+  - left pane 1010
+  - centre pane 1320
+  - right pane 1010
+- what exact metrics change between:
+  - 1010 / 1320 / 1010
+  - 1320 / 1320 / 1320
+
+5. AUTO CONFIG GENERATION RESULT
+You must explain exactly:
+- how new grouped configs are now detected
+- what signature logic now distinguishes unequal pane sizes
+- what readable label is produced
+- whether a distinct reusable config record is now auto-created for materially different grouped geometry
+- what data is inherited vs what is newly derived
+- what still remains simplified, if anything
+
+6. PRICING RESULT
+You must explain exactly:
+- what manufacturing-cost drivers now respond to grouped geometry
+- what metrics feed those drivers
+- what remained sale-price-per-m² based
+- what is more accurate now
+- what is still not yet fully exact
+- how mullion/transom length/cost handling now behaves
+- what fallback behavior remains for non-custom items
+
+7. WORKFLOW / JOB UI RESULT
+You must explain exactly:
+- what changed on the accepted quote page for Create Job emphasis
+- what changed on the job page for Measurement & Dimensions discoverability
+- how the action-required state behaves
+- what the user now sees
+- what remained unchanged
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any manufacturing logic still approximated
+- whether config generation still uses partial inheritance
+- whether accessory derivation remains generic
+- whether grouped-layout edge cases still remain
+- whether pricing is still commercially approximate anywhere
+- any remaining job-page workflow caveat
+- no broad system rewrite was done
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Do not return a short recap.
+Return the full exact completion report needed for signoff of the geometry-aware config/pricing + Create Job / Measurement workflow phase.
+Be exact, conservative, and truthful.
