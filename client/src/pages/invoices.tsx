@@ -331,7 +331,9 @@ export default function InvoicesPage() {
             <TableRow key={inv.id} className="hover:bg-muted/30" data-testid={`row-invoice-${inv.id}`}>
               <TableCell className="font-mono text-sm font-semibold py-3" data-testid={`text-invoice-number-${inv.id}`}>
                 <div className="flex items-center gap-1.5">
-                  {inv.number}
+                  <Link href={`/invoices/${inv.id}`} className="text-primary underline underline-offset-2 hover:no-underline" data-testid={`link-invoice-detail-${inv.id}`}>
+                    {inv.number}
+                  </Link>
                   {isAdmin && inv.isDemoRecord && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-invoice-${inv.id}`}>
                       <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
@@ -354,6 +356,20 @@ export default function InvoicesPage() {
                       Xero: {inv.xeroStatus}
                     </p>
                   )}
+                  {inv.xeroInvoiceId && (inv as any).xeroAmountPaid != null && (() => {
+                    const paid = (inv as any).xeroAmountPaid ?? 0;
+                    const due = (inv as any).xeroAmountDue ?? 0;
+                    if (due <= 0 && paid > 0) {
+                      return <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium" data-testid={`text-payment-status-${inv.id}`}>Paid</span>;
+                    }
+                    if (paid > 0 && due > 0) {
+                      return <span className="text-[10px] text-amber-600 dark:text-amber-400" data-testid={`text-payment-status-${inv.id}`}>Partial</span>;
+                    }
+                    if (due > 0) {
+                      return <span className="text-[10px] text-muted-foreground" data-testid={`text-payment-status-${inv.id}`}>Unpaid</span>;
+                    }
+                    return null;
+                  })()}
                 </div>
               </TableCell>
               <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground py-3" data-testid={`text-xero-number-${inv.id}`}>

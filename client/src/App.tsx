@@ -41,6 +41,7 @@ import Users from "@/pages/users";
 import OpJobsList from "@/pages/op-jobs-list";
 import OpJobDetail from "@/pages/op-job-detail";
 import InvoicesPage from "@/pages/invoices";
+import InvoiceDetailPage from "@/pages/invoice-detail";
 import ProjectsList from "@/pages/projects-list";
 import ProjectDetail from "@/pages/project-detail";
 
@@ -115,6 +116,7 @@ function Router() {
       <Route path="/users" component={Users} />
       <Route path="/op-jobs" component={OpJobsList} />
       <Route path="/op-jobs/:id" component={OpJobDetail} />
+      <Route path="/invoices/:id" component={InvoiceDetailPage} />
       <Route path="/invoices" component={InvoicesPage} />
       <Route path="/projects" component={ProjectsList} />
       <Route path="/projects/:id" component={ProjectDetail} />
