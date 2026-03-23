@@ -1,0 +1,201 @@
+STEELIQ REFINEMENT PHASE — REMOVE DUPLICATE JOB CTA NOISE AND LET THE TOP WORKFLOW ACTION OWN THE NEXT STEP
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow workflow-simplification and UI cleanup phase for accepted-quote lifecycle guidance. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote/project/job/invoice data models.
+- Do not change customer quote PDF generation.
+- Do not change invoice/Xero behavior in this phase.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, retention controls, invoice line hardening, or Xero reset/reissue controls.
+- Do not perform hidden refactors.
+- Do not widen this into a full quote-detail page redesign.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not add more duplicate CTA surfaces.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+PROBLEM TO FIX
+
+The top Delivery Workflow panel now correctly surfaces the next action and can trigger the real job-creation flow.
+
+However, the page still contains a lower "Convert to Job" section with its own CTA, creating duplicate action noise.
+
+This makes the workflow heavier than necessary.
+
+User intent is clear:
+- the integrated top workflow CTA should be the primary action
+- the duplicate lower CTA should not compete with it
+- the correct workflow matters more than repeating the same action twice
+
+PRIMARY OBJECTIVE
+
+Simplify the accepted-quote workflow UI so the top workflow action owns the next step and duplicate lower CTA noise is removed or demoted.
+
+This phase must ensure:
+1. only one clear primary CTA exists for the next operational step
+2. duplicate lower job-conversion action does not visually compete
+3. the page remains operationally clear and lighter
+4. no underlying business logic changes
+5. the detailed context can remain, but the duplicated action emphasis is removed
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — MAKE THE TOP WORKFLOW CTA THE PRIMARY OWNER
+The Delivery Workflow panel should remain the main place where the user performs the next step.
+
+For the “project exists, job does not” state:
+- the top workflow panel should own the primary Create Job action
+- this should remain the dominant and only primary CTA for that step
+
+Do not add another top CTA elsewhere.
+
+PHASE B — REMOVE OR DEMOTE THE LOWER DUPLICATE JOB CTA
+The lower “Convert to Job” section must no longer act as a competing primary CTA.
+
+Preferred outcomes, in order:
+1. Best option:
+- keep the lower section as informational/context only
+- remove the duplicate button from that lower section
+- optionally replace with passive supporting text such as:
+  - “Job creation is available from the Delivery Workflow panel above.”
+2. Acceptable option:
+- collapse the lower section into a lighter informational block
+- no duplicate prominent CTA
+3. Less preferred:
+- keep the lower button but make it visually secondary and clearly subordinate to the top workflow CTA only if there is a genuine technical reason it cannot be removed
+
+Use the cleanest low-risk option.
+
+PHASE C — PRESERVE CONTEXT WITHOUT DUPLICATION
+If the lower section still provides useful context, preserve that context, but not as a second primary action surface.
+
+Examples of what can remain:
+- explanation of what job conversion does
+- traceability note
+- relationship to accepted revision/project
+- non-primary supporting info
+
+Examples of what should not remain:
+- another strong blue primary button doing the same thing
+- another top-level duplicated call-to-action competing with the workflow card
+
+PHASE D — KEEP THE SAME REAL ACTION FLOW
+Do not change the real creation flow itself.
+
+Preserve:
+- same modal/dialog
+- same creation handler
+- same business logic
+- same quote -> job linkage logic
+
+This phase is about reducing duplicate content and CTA competition, not changing the operation.
+
+PHASE E — APPLY SAME THINKING TO INVOICE CTA IF APPROPRIATE
+Review whether the same duplication problem exists for invoice creation.
+
+If the top workflow CTA now owns “Create First Invoice,” ensure the lower invoice section does not visually fight it too early.
+
+Be conservative:
+- do not remove necessary invoice operational surfaces
+- only reduce duplication or CTA competition if clearly safe and beneficial
+- report exactly what you did
+
+NON-GOALS
+
+Do NOT:
+- redesign the page broadly
+- add a wizard
+- change underlying project/job/invoice business logic
+- change Xero behavior
+- change invoice model
+- widen into a full navigation rewrite
+- hide important sections behind unnecessary tabs/accordions
+- claim lifecycle UX is complete beyond this cleanup
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what duplicate CTA/content was removed or demoted
+- what now owns the primary next action
+- what was intentionally not changed
+- confirm the page is lighter and less repetitive
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CTA OWNERSHIP RESULT
+- what now owns the primary action for project/job/invoice states
+- what duplicate CTA was removed, hidden, or demoted
+- whether any lower section still remains as informational-only
+
+4. UI RESULT
+- what changed visually on accepted quote pages
+- what remained
+- whether invoice CTA duplication was also reviewed/addressed
+- how the workflow now feels simpler
+
+5. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- quote acceptance logic
+- project creation logic
+- job creation logic
+- invoice creation logic
+- invoice/Xero workflow
+- governance/demo/division/archive behavior
+
+6. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no full lifecycle wizard yet
+- no dashboard/cashflow propagation yet
+- no multi-line Xero push yet
+- no standalone admin invoice creation yet
+- lower operational sections may still exist for detail/context, but top workflow owns primary next-step actions
+
+7. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+8. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining lifecycle UI/UX duplication
+- any remaining internal navigation caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. CTA OWNERSHIP RESULT
+
+4. UI RESULT
+
+5. COMPATIBILITY RESULT
+
+6. KNOWN LIMITS AFTER THIS PHASE
+
+7. RECOMMENDED NEXT PHASE
+
+8. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Refine the accepted-quote workflow so the top workflow panel owns the next action and duplicate lower CTA noise is removed or demoted.
+Be exact, conservative, and truthful.

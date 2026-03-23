@@ -523,6 +523,10 @@ export default function QuoteDetail() {
         </div>
       )}
 
+      {quote.status === "accepted" && (
+        <WorkflowProgress quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} />
+      )}
+
       <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} quoteLabel={quote.customer ?? quote.number} />
 
       {currentRevisionForDetails && (
@@ -635,9 +639,9 @@ export default function QuoteDetail() {
       {quote.status === "accepted" && (
         <>
           <Separator />
-          <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} customerId={quote.customerId ?? undefined} projectId={quote.projectId ?? undefined} acceptedRevisionId={quote.acceptedRevisionId ?? undefined} />
-          <Separator />
           <ConvertToJobSection quoteId={quote.id} projectId={quote.projectId} />
+          <Separator />
+          <InvoiceSection quoteId={quote.id} acceptedValue={quote.acceptedValue ?? 0} divisionCode={quote.divisionId ?? undefined} customerId={quote.customerId ?? undefined} projectId={quote.projectId ?? undefined} acceptedRevisionId={quote.acceptedRevisionId ?? undefined} />
           <Separator />
           <div className="rounded-lg border border-dashed p-4 space-y-2" data-testid="section-revert-to-draft">
             <div className="flex items-center gap-2 text-sm font-medium">
@@ -950,6 +954,160 @@ function CollapsibleCard({
   );
 }
 
+function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string; customerId?: string | null; projectId?: string | null }) {
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery<Invoice[]>({
+    queryKey: ["/api/quotes", quoteId, "invoices"],
+    queryFn: () => fetch(`/api/quotes/${quoteId}/invoices`).then((r) => r.json()),
+  });
+  const { data: linkedJob, isLoading: jobLoading } = useQuery({
+    queryKey: ["/api/op-jobs", "by-quote", quoteId],
+    queryFn: async () => {
+      const res = await fetch(`/api/op-jobs?quoteId=${quoteId}`);
+      const jobs = await res.json();
+      return (jobs as any[]).find((j) => j.sourceQuoteId === quoteId) ?? null;
+    },
+    enabled: !!projectId,
+    staleTime: 15_000,
+  });
+
+  const isLoading = invoicesLoading || (!!projectId && jobLoading);
+  const hasProject = !!projectId;
+  const hasJob = !!linkedJob;
+  const hasInvoice = invoices.length > 0;
+
+  const steps = [
+    { label: "Project", done: hasProject, blocked: !customerId, blockedMsg: "Link a customer first" },
+    { label: "Job", done: hasJob, blocked: !hasProject, blockedMsg: "Create project first" },
+    { label: "Invoice", done: hasInvoice, blocked: false },
+  ];
+
+  const nextStepIdx = steps.findIndex((s) => !s.done);
+  const nextStep = nextStepIdx >= 0 ? steps[nextStepIdx] : null;
+
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-3" data-testid="section-workflow-progress">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        <h3 className="text-sm font-semibold">Delivery Workflow</h3>
+      </div>
+
+      <div className="flex items-center gap-1">
+        {steps.map((step, i) => {
+          const isNext = nextStepIdx === i;
+          return (
+            <div key={step.label} className="flex items-center gap-1 flex-1">
+              <div className="flex items-center gap-1.5 flex-1">
+                <div className={[
+                  "h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
+                  step.done
+                    ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"
+                    : isNext && !step.blocked
+                      ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 ring-2 ring-blue-400/50"
+                      : "bg-muted text-muted-foreground"
+                ].join(" ")} data-testid={`workflow-step-${step.label.toLowerCase()}`}>
+                  {step.done ? "✓" : i + 1}
+                </div>
+                <span className={[
+                  "text-xs font-medium",
+                  step.done ? "text-emerald-700 dark:text-emerald-400" : isNext ? "text-foreground" : "text-muted-foreground"
+                ].join(" ")}>
+                  {step.label}
+                  {step.done && <span className="text-[10px] font-normal text-muted-foreground ml-1">✓</span>}
+                </span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={["h-px flex-1 min-w-[12px]", step.done ? "bg-emerald-300 dark:bg-emerald-700" : "bg-border"].join(" ")} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground" data-testid="text-workflow-loading">Checking workflow status…</p>
+      ) : nextStep ? (
+        <div data-testid="text-workflow-next-step">
+          {nextStep.blocked ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{nextStep.blockedMsg}</p>
+          ) : nextStep.label === "Job" ? (
+            <div className="rounded-md border-2 border-blue-400 dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                    Ready to create job
+                  </p>
+                  <p className="text-xs text-blue-600/80 dark:text-blue-400/70">
+                    Project is linked. Create the operational job to begin scheduling and production.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => window.dispatchEvent(new Event("steeliq:open-job-dialog"))}
+                  data-testid="button-workflow-next-action"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Create Job
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Next: <strong>{nextStep.label === "Project" ? "Create Project" : invoices.length === 0 ? "Raise first invoice" : "Continue invoicing"}</strong>
+              </p>
+              <Button
+                size="sm"
+                className="h-7 text-xs shrink-0"
+                onClick={() => {
+                  const selectors: Record<string, string> = {
+                    Project: '[data-testid="button-create-project-cta"], [data-testid="button-create-project-from-quote"]',
+                    Invoice: '[data-testid="button-create-invoice"]',
+                  };
+                  const sel = selectors[nextStep.label];
+                  if (sel) {
+                    const btn = document.querySelector<HTMLButtonElement>(sel);
+                    if (btn) {
+                      btn.scrollIntoView({ behavior: "smooth", block: "center" });
+                      setTimeout(() => btn.click(), 350);
+                    }
+                  }
+                }}
+                data-testid="button-workflow-next-action"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                {nextStep.label === "Project" ? "Create Project" : invoices.length === 0 ? "Create First Invoice" : "Create Invoice"}
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-emerald-700 dark:text-emerald-400" data-testid="text-workflow-complete">
+            All delivery steps completed
+          </p>
+          <div className="flex items-center gap-1.5">
+            {linkedJob && (
+              <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => {
+                const btn = document.querySelector<HTMLButtonElement>('[data-testid="button-view-job"]');
+                if (btn) btn.click();
+              }} data-testid="button-workflow-view-job">
+                <Briefcase className="h-3 w-3 mr-1" /> View Job
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => {
+              const el = document.querySelector('[data-testid="button-create-invoice"]');
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }} data-testid="button-workflow-view-invoices">
+              <ReceiptText className="h-3 w-3 mr-1" /> Invoices
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, sourceJobId, quoteLabel }: { quoteId: string; customerId?: string | null; projectId?: string | null; quoteStatus?: string; sourceJobId?: string; quoteLabel?: string }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
@@ -1133,30 +1291,30 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
               <p className="text-xs font-semibold text-foreground/80 uppercase tracking-wider">Next Actions</p>
               <div className="space-y-1.5">
                 <div className="flex items-start gap-2">
-                  <span className={["h-4 w-4 shrink-0 mt-0.5 rounded-full flex items-center justify-center text-[10px] font-bold", invoices.length > 0 ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" : "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400"].join(" ")}>
-                    {invoices.length > 0 ? "✓" : "1"}
-                  </span>
-                  <div>
-                    <p className="text-xs font-medium text-foreground/80">
-                      {invoices.length > 0 ? `${invoices.length} invoice${invoices.length !== 1 ? "s" : ""} raised` : "Raise deposit invoice"}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {invoices.length > 0 ? "Invoices in progress — continue in the Invoices section below." : "Start billing by creating a deposit invoice in the Invoices section below."}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
                   <span className={["h-4 w-4 shrink-0 mt-0.5 rounded-full flex items-center justify-center text-[10px] font-bold", linkedJob ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" : "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400"].join(" ")}>
-                    {linkedJob ? "✓" : "2"}
+                    {linkedJob ? "✓" : "1"}
                   </span>
                   <div>
                     <p className="text-xs font-medium text-foreground/80">
-                      {linkedJob ? "Operational job created" : "Convert to operational job"}
+                      {linkedJob ? "Operational job created" : "Create operational job"}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {linkedJob
                         ? <a href={`/op-jobs/${linkedJob.id}`} className="text-primary hover:underline">View job →</a>
                         : "Create a job shell in the Convert to Job section below to track production and site work."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className={["h-4 w-4 shrink-0 mt-0.5 rounded-full flex items-center justify-center text-[10px] font-bold", invoices.length > 0 ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" : "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400"].join(" ")}>
+                    {invoices.length > 0 ? "✓" : "2"}
+                  </span>
+                  <div>
+                    <p className="text-xs font-medium text-foreground/80">
+                      {invoices.length > 0 ? `${invoices.length} invoice${invoices.length !== 1 ? "s" : ""} raised` : "Raise first invoice"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {invoices.length > 0 ? "Invoices in progress — continue in the Invoices section below." : "Start billing by creating an invoice in the Invoices section below."}
                     </p>
                   </div>
                 </div>
@@ -1353,6 +1511,12 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  useEffect(() => {
+    const handler = () => { if (projectId && !existingJob) setShowDialog(true); };
+    window.addEventListener("steeliq:open-job-dialog", handler);
+    return () => window.removeEventListener("steeliq:open-job-dialog", handler);
+  }, [projectId, existingJob]);
+
   if (checkingJob) return null;
 
   if (existingJob) {
@@ -1390,32 +1554,16 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
       <div className="rounded-lg border border-dashed p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Briefcase className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold">Convert to Job</h3>
+          <h3 className="text-sm font-semibold">Job Conversion</h3>
         </div>
         {!projectId ? (
-          <>
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-sm font-medium">
-                A project must be created first before converting to a job.
-                <span className="block text-xs font-normal text-muted-foreground mt-0.5">
-                  Use the <strong>Create Project</strong> button in the Customer &amp; Project section above, then return here to convert.
-                </span>
-              </AlertDescription>
-            </Alert>
-            <Button size="sm" disabled data-testid="button-convert-to-job">
-              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
-            </Button>
-          </>
+          <p className="text-sm text-muted-foreground">
+            A project must be created first before converting to a job. Use the <strong>Delivery Workflow</strong> panel above to proceed step by step.
+          </p>
         ) : (
-          <>
-            <p className="text-sm text-muted-foreground">
-              This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision and project.
-            </p>
-            <Button size="sm" onClick={() => setShowDialog(true)} data-testid="button-convert-to-job">
-              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
-            </Button>
-          </>
+          <p className="text-sm text-muted-foreground">
+            This accepted quote is ready to be converted into an operational job. Use the <strong>Create Job</strong> action in the Delivery Workflow panel above.
+          </p>
         )}
       </div>
 
@@ -1795,8 +1943,8 @@ function InvoiceSection({
         </div>
         <Button
           size="sm"
-          variant={invoices.length === 0 ? "default" : "outline"}
-          className={invoices.length === 0 ? "h-7 text-xs" : "h-7 text-xs"}
+          variant="outline"
+          className="h-7 text-xs"
           onClick={openCreateDialog}
           data-testid="button-create-invoice"
         >

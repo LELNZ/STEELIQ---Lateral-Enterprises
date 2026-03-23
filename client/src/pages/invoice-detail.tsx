@@ -260,6 +260,28 @@ export default function InvoiceDetailPage() {
     },
   });
 
+  const resetXeroLinkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/invoices/${id}/reset-xero-link`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Reset failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      toast({
+        title: "Xero link reset",
+        description: data.message ?? "Xero linkage cleared. You can now mark this invoice ready and push to Xero again.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Xero link reset failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   function handleDemotionToast(data: any, action: string) {
     if (data?._demotedToDraft) {
       toast({
@@ -892,6 +914,36 @@ export default function InvoiceDetailPage() {
                         <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-snug">
                           This invoice has been authorised in Xero. Click <strong>Approve</strong> above to confirm the SteelIQ business signoff.
                         </p>
+                      </div>
+                    )}
+
+                    {(invoice.xeroStatus === "DELETED" || invoice.xeroStatus === "VOIDED") && (
+                      <div className="space-y-2 p-2 rounded-md bg-red-50 border border-red-200 dark:bg-red-950/30 dark:border-red-800" data-testid="cue-xero-deleted-voided">
+                        <div className="flex items-start gap-1.5">
+                          <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-red-700 dark:text-red-300 leading-snug">
+                            The linked Xero invoice ({invoice.xeroInvoiceNumber || "unknown"}) has been <strong>{invoice.xeroStatus === "DELETED" ? "deleted" : "voided"}</strong> in Xero.
+                            {(user?.role === "admin" || user?.role === "owner")
+                              ? " To issue this invoice to Xero again, reset the Xero link below, then mark the invoice ready and push again."
+                              : " Contact an admin to reset the Xero link so this invoice can be reissued."}
+                          </p>
+                        </div>
+                        {(user?.role === "admin" || user?.role === "owner") && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-[10px] gap-1 border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/40"
+                            disabled={resetXeroLinkMutation.isPending}
+                            onClick={() => {
+                              if (window.confirm(`Reset Xero link for ${invoice.number}?\n\nThis will clear the connection to Xero invoice ${invoice.xeroInvoiceNumber || invoice.xeroInvoiceId} and allow you to push this invoice to Xero again as a new Xero invoice.\n\nThe prior linkage will be preserved in the audit trail.`)) {
+                                resetXeroLinkMutation.mutate();
+                              }
+                            }}
+                            data-testid="button-reset-xero-link">
+                            <RefreshCw className={`h-3 w-3 ${resetXeroLinkMutation.isPending ? "animate-spin" : ""}`} />
+                            Reset Xero Link for Reissue
+                          </Button>
+                        )}
                       </div>
                     )}
 

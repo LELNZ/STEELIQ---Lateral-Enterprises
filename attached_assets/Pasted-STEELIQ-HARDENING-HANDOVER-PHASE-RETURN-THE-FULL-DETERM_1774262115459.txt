@@ -1,0 +1,125 @@
+STEELIQ HARDENING / HANDOVER PHASE — RETURN THE FULL DETERMINISTIC REPRICING COMPLETION REPORT (NO NEW SCOPE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is NOT a new implementation phase. This is a hardening, verification, and exact handover-report phase for the deterministic repricing / item isolation / pricing transition work you have just claimed complete.
+
+Non-negotiable rules:
+- Do not widen scope.
+- Do not start a new redesign.
+- Do not perform hidden refactors.
+- Do not implement speculative extra work.
+- Do not give a short summary only.
+- Do not mark this phase complete unless you provide the exact structured report requested below.
+- If something is still approximate or incomplete, say so clearly.
+- Treat current repo truth as the source of truth.
+
+CONTEXT
+
+You have already reported a short summary claiming completion of:
+- deterministic repricing on reopen
+- item isolation
+- pricing stability during config transitions
+- master library profile resolution
+
+That short summary is not sufficient for signoff.
+
+PRIMARY OBJECTIVE
+
+Return the full exact completion report for the deterministic repricing / item isolation / pricing transition work.
+
+STRICT SCOPE
+
+Do only the following:
+1. inspect actual repo truth
+2. verify what changed
+3. verify what did not change
+4. produce the exact structured report below
+
+If your earlier short summary does not fully match repo truth:
+- report the mismatch explicitly
+- follow repo truth
+- do not hide the discrepancy
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what defect was found
+- what was fixed
+- what was intentionally not changed
+- confirm unchanged items now reopen/reselect with stable pricing
+- confirm shared-state mutation is eliminated
+- confirm stale cross-config pricing during transitions is eliminated
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE RESULT
+- exact root cause
+- where it lived
+- why unchanged items repriced differently after reselection
+- whether it was caused by:
+  - stale configurationId handling
+  - closest-config rematching
+  - async config/library fetch transition
+  - unstable derived geometry signature
+  - saved/edit state mismatch
+  - shared-reference mutation
+  - or another exact cause
+
+4. FIX RESULT
+- exact fix implemented
+- what now acts as the stable source of truth for unchanged items
+- how saved items are protected from repricing drift
+- how genuine edits still trigger valid repricing
+- how config transition gating now works
+
+5. PRICING DETERMINISM RESULT
+- what was tested
+- what happens now when:
+  - item A is opened
+  - item B is opened
+  - item A is reopened
+  - an unchanged duplicate is reopened
+  - an edited item is reopened
+- confirm unchanged items remain identical in pricing
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any pricing approximation still remaining
+- any config-library limitations still remaining
+- any grouped-layout edge cases still remaining
+- no broad system rewrite was done
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Do not return a short recap.
+Return the full exact completion report needed for signoff of the deterministic repricing / item isolation / pricing transition work.
+Be exact, conservative, and truthful.

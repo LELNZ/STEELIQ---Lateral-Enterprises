@@ -1,0 +1,309 @@
+STEELIQ IMPLEMENTATION PHASE — END-TO-END LIFECYCLE WORKFLOW GUIDANCE / CTA CLEANUP (QUOTE → PROJECT → JOB → INVOICE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow workflow-guidance and UI/UX continuity phase. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model.
+- Do not redesign the job/project/invoice data models in this phase.
+- Do not change customer quote PDF generation.
+- Do not change Xero payload structure in this phase.
+- Do not remove or weaken the internal SteelIQ Approve action.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, retention controls, invoice line hardening, or Xero reset/reissue controls.
+- Do not perform hidden refactors.
+- Do not introduce speculative dashboard/cashflow rewrites in this phase.
+- Do not introduce standalone/admin quote-independent invoice creation in this phase.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not solve this by dumping more cards or more text onto the page without improving user guidance.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- the workflow from accepted quote → create project → create job → create invoice is clearer and easier to follow
+- the next required action is surfaced prominently without the user needing to hunt/scroll excessively
+- CTA hierarchy is improved on the quote detail page
+- the user can understand what is done, what is next, and what is blocked
+- the implementation remains operationally usable, not backend-only or “technically present but hidden”
+- no current quote/project/job/invoice/Xero behavior is broken
+- the handover clearly states what was improved and what remains intentionally unchanged
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+SteelIQ currently has:
+- quote acceptance flow
+- project creation from accepted quote
+- job creation from accepted quote/project
+- invoice creation from accepted quote
+- invoice detail with line editing and Xero workflow improvements
+- governance/demo shielding materially implemented
+- linkage visibility between quote/project/job/invoice improved
+
+However, the UI/UX workflow is still fragmented:
+- create project exists after quote acceptance, but is not the only clearly dominant next step
+- create job is present lower on the quote page and can be missed
+- create invoice exists but is visually small and not sequenced clearly enough
+- users can complete the lifecycle, but the platform does not guide them through it simply and effectively
+
+BUSINESS / UX INTENT
+
+SteelIQ should guide users through the real operational lifecycle in a simple, clear order.
+
+For the normal pathway, the intended order is:
+
+1. Quote accepted
+2. Create project
+3. Create job
+4. Create invoice
+5. Proceed through invoice/Xero/internal approval workflow
+
+The user should not need to search the page to discover the next step.
+
+PRIMARY OBJECTIVE
+
+Improve the quote-to-project-to-job-to-invoice workflow guidance so the system clearly surfaces:
+- current state
+- next recommended action
+- blocked/locked dependencies
+- completed steps
+
+This phase should establish:
+1. stronger CTA hierarchy on accepted quote pages
+2. clearer dependency/order between project, job, and invoice actions
+3. better visibility of “next step” without forcing the user to scroll and infer the workflow
+4. operationally usable guidance, not just extra explanatory text
+5. minimal-risk improvement without redesigning underlying business logic
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — AUDIT CURRENT ACCEPTED-QUOTE WORKFLOW SURFACES
+Review the current accepted-quote experience and report:
+- where project creation currently appears
+- where job creation currently appears
+- where invoice creation currently appears
+- what the user sees immediately after quote acceptance
+- what is above the fold vs buried lower on the page
+- what dependencies already exist in logic (e.g. project required before job, etc.)
+- what guidance/callouts/next-step messaging already exists
+
+Use current repo truth, not assumptions.
+
+PHASE B — DEFINE CLEAR CTA ORDER
+Implement a clearer operational sequence on accepted quote pages.
+
+Preferred order:
+1. Create Project
+2. Create Job
+3. Create Invoice
+
+Rules:
+- if project does not yet exist, “Create Project” should be the primary next action
+- if project exists but job does not, “Create Job” should become the primary next action
+- if job exists, “Create Invoice” should become the primary next action
+- if invoices already exist, the workflow should shift from “create first invoice” toward “continue invoicing / manage invoices”
+- completed steps should be visually marked as done
+- blocked steps should be shown, but clearly marked as dependent on prior steps
+
+Important:
+- “Create Invoice” should not visually compete too early with “Create Project” and “Create Job”
+- invoice CTA should follow job creation in emphasis/order for the normal workflow
+- do not remove legitimate access to invoice creation if the current business rules still allow it; improve guidance and hierarchy instead
+
+PHASE C — IMPROVE ABOVE-THE-FOLD NEXT-STEP GUIDANCE
+On accepted quote pages, the user should quickly understand:
+- this quote is accepted
+- whether a project exists
+- whether a job exists
+- whether invoices exist
+- what the next recommended action is
+
+Implement a stronger “Next Step” / “Workflow Progress” surface near the top of the accepted-quote experience.
+
+This may be:
+- a single ordered step card
+- a workflow progress panel
+- a compact action stack
+- or similar
+
+But it must:
+- be operationally useful
+- not be visually noisy
+- not duplicate huge amounts of page content
+- make the next action obvious
+
+Recommended content model:
+- Step 1: Project
+- Step 2: Job
+- Step 3: Invoice
+Each step should show:
+- Not started / ready / done
+- primary action button when appropriate
+- simple explanation where needed
+
+PHASE D — KEEP EXISTING DETAIL SECTIONS COMPATIBLE
+Do not remove the existing deeper project/job/invoice sections unless clearly redundant and safe.
+The goal is:
+- improve workflow guidance and CTA hierarchy
+- not destroy existing operational surfaces users may already rely on
+
+Allowed:
+- reorganise emphasis
+- move/surface CTA buttons
+- add summary/progress surface
+- reduce hiddenness of critical actions
+
+Not allowed:
+- broad page rewrite
+- unrelated layout churn
+- redesigning all quote detail content
+
+PHASE E — PRESERVE UNDERLYING BUSINESS LOGIC
+Do not change the underlying commercial logic unless strictly necessary for UI correctness.
+
+Preserve:
+- quote acceptance logic
+- project creation behavior
+- job creation behavior
+- invoice creation behavior
+- invoice lifecycle
+- Xero workflow
+- demo/governance protections
+- archive/delete behavior
+- division rules
+
+If a step is intentionally allowed out of the preferred order in current business logic, do not break it casually.
+Instead:
+- guide the preferred order more clearly
+- explain blocked/recommended states honestly
+
+PHASE F — IMPROVE USER MESSAGING / COMPLETION STATES
+Add clear, minimal messaging such as:
+- Project created
+- Next: create job
+- Job created
+- Next: raise first invoice
+- Invoices raised
+- Continue in Invoices section
+
+Where useful, mark completed steps with:
+- check icon
+- badge
+- muted completed state
+- or similar lightweight cues
+
+PHASE G — OPTIONAL LOW-RISK FOLLOW-THROUGH IMPROVEMENTS
+If low-risk and helpful, you may also improve:
+- scroll anchoring or jump links to relevant sections
+- button labels like “Create First Invoice” vs “Create Invoice”
+- simple “View Job” / “View Project” continuation links
+
+Do not overengineer this.
+Do not introduce wizard complexity.
+Do not add speculative onboarding frameworks.
+
+NON-GOALS
+
+Do NOT:
+- redesign the architecture
+- redesign quote/project/job/invoice schemas
+- implement dashboard propagation
+- implement multi-line Xero push
+- change customer quote PDF generation
+- widen into a full navigation rewrite
+- add standalone/admin invoice creation
+- claim the whole operational lifecycle is complete after this phase
+- hide existing sections behind tabs/accordions unless clearly beneficial and low-risk
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was improved in the accepted-quote workflow
+- what was intentionally not changed
+- confirm the user is now guided more clearly through project -> job -> invoice
+- confirm no underlying lifecycle/business logic was weakened
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. WORKFLOW / CTA RESULT
+- what the user now sees on an accepted quote
+- how project/job/invoice next steps are ordered
+- what is shown as done vs next vs blocked
+- what was moved/surfaced/promoted in the UI
+
+4. UI RESULT
+- exact quote detail page improvements
+- what is now above the fold or more prominent
+- what remained unchanged
+- any new progress/next-step surface added
+
+5. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- quote acceptance logic
+- project creation logic
+- job creation logic
+- invoice creation logic
+- invoice list/detail behavior
+- invoice line editing / lock hardening
+- Xero push / sync / approve flow
+- governance/demo/division/archive behavior
+
+6. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no full lifecycle wizard yet
+- no dashboard/cashflow propagation yet
+- no multi-line Xero push yet
+- no standalone admin invoice creation yet
+- deeper workflow sections still exist below the new guidance surface
+
+7. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+- should logically build on a cleaner lifecycle UX
+
+8. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining lifecycle UI/UX gap
+- any remaining manual-sync or invoice workflow caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. WORKFLOW / CTA RESULT
+
+4. UI RESULT
+
+5. COMPATIBILITY RESULT
+
+6. KNOWN LIMITS AFTER THIS PHASE
+
+7. RECOMMENDED NEXT PHASE
+
+8. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the workflow-guidance / CTA cleanup needed to make the accepted-quote → project → job → invoice lifecycle clearer and easier to follow.
+Be exact, conservative, and truthful.
+Do not claim full operational lifecycle maturity after this phase.

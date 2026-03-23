@@ -7,7 +7,7 @@ import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES,
 import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
 import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
 import { calculatePricing, type PricingBreakdown, type ItemGeometry, type GlazingBandEntry } from "@/lib/pricing";
-import { deriveConfigSignature, findMatchingConfiguration, type ConfigSignature } from "@/lib/config-signature";
+import { deriveConfigSignature, findMatchingConfiguration, deriveGroupedGeometryMetrics, type ConfigSignature } from "@/lib/config-signature";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
@@ -375,6 +375,7 @@ export default function QuoteBuilder() {
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
   const skipCategoryResetRef = useRef(false);
   const expectedFrameTypeRef = useRef<string>("");
+  const savedItemBaselineRef = useRef<{ signature: string; configurationId: string } | null>(null);
   const hydratedJobRef = useRef(false);
   const didAutoCollapseOnFocusRef = useRef(false);
   const lastAutoWindZone = useRef<string>("");
@@ -636,7 +637,7 @@ export default function QuoteBuilder() {
   });
 
   const currentConfigId = w.configurationId || "";
-  const { data: configProfiles = [] } = useQuery<ConfigurationProfile[]>({
+  const { data: configProfiles = [], isFetching: profilesFetching } = useQuery<ConfigurationProfile[]>({
     queryKey: ["/api/configurations", currentConfigId, "profiles"],
     queryFn: async () => {
       if (!currentConfigId) return [];
@@ -646,7 +647,7 @@ export default function QuoteBuilder() {
     },
     enabled: !!currentConfigId,
   });
-  const { data: configAccessories = [] } = useQuery<ConfigurationAccessory[]>({
+  const { data: configAccessories = [], isFetching: accessoriesFetching } = useQuery<ConfigurationAccessory[]>({
     queryKey: ["/api/configurations", currentConfigId, "accessories"],
     queryFn: async () => {
       if (!currentConfigId) return [];
@@ -656,7 +657,7 @@ export default function QuoteBuilder() {
     },
     enabled: !!currentConfigId,
   });
-  const { data: configLabor = [] } = useQuery<ConfigurationLabor[]>({
+  const { data: configLabor = [], isFetching: laborFetching } = useQuery<ConfigurationLabor[]>({
     queryKey: ["/api/configurations", currentConfigId, "labor"],
     queryFn: async () => {
       if (!currentConfigId) return [];
@@ -666,6 +667,7 @@ export default function QuoteBuilder() {
     },
     enabled: !!currentConfigId,
   });
+  const configDataTransitioning = profilesFetching || accessoriesFetching || laborFetching;
 
   const configSignature = deriveConfigSignature(w as QuoteItem);
 
@@ -724,7 +726,7 @@ export default function QuoteBuilder() {
     return { enabled: true, source: w.wanzBarSource as "nz-local" | "direct", kgPerMetre: d.kgPerMetre || 0, pricePerKgUsd: d.pricePerKgUsd || 0, priceNzdPerLinM: d.priceNzdPerLinM || 0 };
   })();
 
-  const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
+  const hasConfigData = currentConfigId && !configDataTransitioning && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
   const currentPricing: PricingBreakdown | null = useMemo(() => {
     if (!hasConfigData) return null;
     const oMode = w.overrideMode || "none";
@@ -737,12 +739,23 @@ export default function QuoteBuilder() {
       configSignature.awningCount + configSignature.fixedCount +
       configSignature.hingeCount + configSignature.slidingCount
     );
+    const isCustomLayout = w.layout === "custom" && w.customColumns && w.customColumns.length > 0;
+    const geoMetrics = isCustomLayout
+      ? deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns!)
+      : null;
     const itemGeometry: ItemGeometry = {
       mullionCount: configSignature.mullionCount,
       transomCount: configSignature.transomCount,
-      paneCount: derivedPaneCount,
+      paneCount: geoMetrics ? geoMetrics.paneCount : derivedPaneCount,
       widthMm: w.width || 0,
       heightMm: w.height || 0,
+      mullionTotalLengthMm: geoMetrics?.mullionTotalLengthMm,
+      transomTotalLengthMm: geoMetrics?.transomTotalLengthMm,
+      cutCycleCount: geoMetrics?.cutCycleCount,
+      jointEndCount: geoMetrics?.jointEndCount,
+      gluePointCount: geoMetrics?.gluePointCount,
+      perPaneDimensions: geoMetrics?.perPaneDimensions,
+      totalGlassAreaSqm: geoMetrics?.totalGlassAreaSqm,
     };
     return calculatePricing(
       w.width || 0, w.height || 0, w.quantity || 1,
@@ -753,7 +766,7 @@ export default function QuoteBuilder() {
       itemGeometry,
       glazingBands
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount]);
+  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -884,6 +897,18 @@ export default function QuoteBuilder() {
 
   useEffect(() => {
     if (configurations.length === 0) return;
+    const baseline = savedItemBaselineRef.current;
+    if (
+      baseline &&
+      baseline.configurationId &&
+      configSignature.signature === baseline.signature &&
+      configurations.some((c) => c.id === baseline.configurationId)
+    ) {
+      if (w.configurationId !== baseline.configurationId) {
+        form.setValue("configurationId", baseline.configurationId);
+      }
+      return;
+    }
     const match = findMatchingConfiguration(configSignature, configurations);
     if (match && match.id !== w.configurationId) {
       form.setValue("configurationId", match.id);
@@ -959,6 +984,12 @@ export default function QuoteBuilder() {
   function setColumnWidth(colIdx: number, width: number) {
     const cols = [...(w.customColumns || [])];
     cols[colIdx] = { ...cols[colIdx], width };
+    form.setValue("customColumns", cols);
+  }
+
+  function setColumnHeightOverride(colIdx: number, heightOverride: number) {
+    const cols = [...(w.customColumns || [])];
+    cols[colIdx] = { ...cols[colIdx], heightOverride };
     form.setValue("customColumns", cols);
   }
 
@@ -1154,54 +1185,119 @@ export default function QuoteBuilder() {
     setRoomFilter("");
   }
 
+  function resolveMasterProfile(role: string): { mouldNumber: string; kgPerMetre: string; pricePerKgUsd: string; lengthFormula: string } | null {
+    const frameTypeEntry = libFrameTypes.find((e) => e.id === currentFrameTypeLibId);
+    const frameTypeLabel = frameTypeEntry ? (frameTypeEntry.data as any).label : "";
+    if (!frameTypeLabel || masterProfiles.length === 0) return null;
+
+    const candidates = masterProfiles.filter((mp) => {
+      const d = mp.data as any;
+      if (d.role !== role) return false;
+      const fg = d.familyGroup;
+      if (Array.isArray(fg)) return fg.includes(frameTypeLabel);
+      return fg === frameTypeLabel;
+    });
+    if (candidates.length === 0) return null;
+
+    const best = candidates[0];
+    const d = best.data as any;
+    return {
+      mouldNumber: d.mouldNumber || "2020250",
+      kgPerMetre: String(d.kgPerMetre || "0.78"),
+      pricePerKgUsd: String(d.pricePerKgUsd || "5.60"),
+      lengthFormula: d.lengthFormula || (role === "mullion" ? "height" : role === "transom" ? "width" : "perimeter"),
+    };
+  }
+
   async function autoGenerateConfiguration(sig: ConfigSignature): Promise<string | null> {
     if (!currentFrameTypeLibId || configurations.length === 0) return null;
     if (findMatchingConfiguration(sig, configurations)) return null;
     const baseConfig = configurations[0];
     try {
-      // Fetch base config data in parallel (3 requests → 1 round-trip)
       const [baseProfiles, baseAccessories, baseLabor] = await Promise.all([
         fetch(`/api/configurations/${baseConfig.id}/profiles`).then((r) => r.ok ? r.json() : []),
         fetch(`/api/configurations/${baseConfig.id}/accessories`).then((r) => r.ok ? r.json() : []),
         fetch(`/api/configurations/${baseConfig.id}/labor`).then((r) => r.ok ? r.json() : []),
       ]);
+
+      const geoDesc = sig.geometryClass !== "uniform"
+        ? ` (unequal heights: ${sig.geometryClass.replace("h:", "")})`
+        : "";
       const newConfigRes = await apiRequest("POST", `/api/frame-types/${currentFrameTypeLibId}/configurations`, {
         frameTypeId: currentFrameTypeLibId,
         name: sig.label,
-        description: `Auto-generated: ${sig.label}`,
+        description: `Auto-generated: ${sig.label}${geoDesc}`,
         defaultSalePricePerSqm: baseConfig.defaultSalePricePerSqm || 550,
         sortOrder: configurations.length,
       });
       const newConfig = await newConfigRes.json();
 
-      // Build all profile post calls, including optional mullion, then fire in parallel
-      const profilePosts = baseProfiles.map((p: any) => {
-        let qty = p.quantityPerSet || 1;
-        if (p.role === "sash-frame") qty = Math.max(1, sig.awningCount + sig.hingeCount + sig.slidingCount);
-        return apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-          configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
-          kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
-          quantityPerSet: qty, lengthFormula: p.lengthFormula, sortOrder: p.sortOrder,
-        });
-      });
-      if (sig.mullionCount > 0 && !baseProfiles.some((p: any) => p.role === "mullion")) {
+      const openingPanels = Math.max(0, sig.awningCount + sig.hingeCount + sig.slidingCount);
+      const neededRoles: { role: string; qty: number; defaultFormula: string }[] = [
+        { role: "outer-frame", qty: 1, defaultFormula: "perimeter" },
+      ];
+      if (openingPanels > 0) {
+        neededRoles.push({ role: "sash-frame", qty: openingPanels, defaultFormula: "perimeter" });
+      }
+      if (sig.mullionCount > 0) {
+        neededRoles.push({ role: "mullion", qty: sig.mullionCount, defaultFormula: "height" });
+      }
+      if (sig.transomCount > 0) {
+        neededRoles.push({ role: "transom", qty: sig.transomCount, defaultFormula: "width" });
+      }
+
+      const profilePosts: Promise<any>[] = [];
+      const coveredRoles = new Set<string>();
+      for (let i = 0; i < neededRoles.length; i++) {
+        const nr = neededRoles[i];
+        coveredRoles.add(nr.role);
+        const master = resolveMasterProfile(nr.role);
+        const baseMatch = baseProfiles.find((p: any) => p.role === nr.role);
         profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-          configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
-          kgPerMetre: "0.78", pricePerKgUsd: "5.60",
-          quantityPerSet: sig.mullionCount, lengthFormula: "height", sortOrder: 99,
+          configurationId: newConfig.id,
+          mouldNumber: master?.mouldNumber ?? baseMatch?.mouldNumber ?? "2020250",
+          role: nr.role,
+          kgPerMetre: master?.kgPerMetre ?? baseMatch?.kgPerMetre ?? "0.78",
+          pricePerKgUsd: master?.pricePerKgUsd ?? baseMatch?.pricePerKgUsd ?? "5.60",
+          quantityPerSet: nr.qty,
+          lengthFormula: master?.lengthFormula ?? baseMatch?.lengthFormula ?? nr.defaultFormula,
+          sortOrder: i,
         }));
       }
 
-      // Fire profiles, accessories and labor all in parallel (N+M+L → 1 round-trip)
+      const structuralRoles = new Set(["outer-frame", "sash-frame", "mullion", "transom"]);
+      const subsidiaryRoles = new Set<string>();
+      for (const p of baseProfiles) {
+        if (!coveredRoles.has(p.role) && !structuralRoles.has(p.role) && !subsidiaryRoles.has(p.role)) {
+          subsidiaryRoles.add(p.role);
+          profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+            configurationId: newConfig.id,
+            mouldNumber: p.mouldNumber, role: p.role,
+            kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
+            quantityPerSet: p.quantityPerSet || 1,
+            lengthFormula: p.lengthFormula,
+            sortOrder: 50 + subsidiaryRoles.size,
+          }));
+        }
+      }
+
+      const inactiveLabourNames = new Set<string>();
+      for (const ml of masterLabour) {
+        const d = ml.data as any;
+        if (d.name && d.isActive === false) inactiveLabourNames.add(d.name);
+      }
+
       await Promise.all([
         ...profilePosts,
         ...baseAccessories.map((a: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/accessories`, {
           configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
           priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
         })),
-        ...baseLabor.map((l: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
-          configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
-        })),
+        ...baseLabor
+          .filter((l: any) => !inactiveLabourNames.has(l.taskName))
+          .map((l: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
+            configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
+          })),
       ]);
 
       queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });
@@ -1220,7 +1316,7 @@ export default function QuoteBuilder() {
     const sig = deriveConfigSignature(data as QuoteItem);
     const matchingConfig = findMatchingConfiguration(sig, configurations);
     const cachedWeightKg = currentPricing?.totalWeightKg ?? 0;
-    const itemWithWeight = { ...data, cachedWeightKg };
+    const itemWithWeight = structuredClone({ ...data, cachedWeightKg });
 
     // ── Optimistic update: add/update item in state immediately so the UI responds
     //    at once. All network work (job creation, config generation) runs in the
@@ -1244,6 +1340,7 @@ export default function QuoteBuilder() {
       toast({ title: "Item added", description: `${data.name} added to quote.` });
     }
 
+    savedItemBaselineRef.current = null;
     form.reset(getNewItemDefaults(siteType));
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
 
@@ -1279,7 +1376,7 @@ export default function QuoteBuilder() {
   }
 
   function editItem(iwp: ItemWithPhoto) {
-    const { id, ...rest } = iwp.item;
+    const { id, ...rest } = structuredClone(iwp.item);
     const itemForForm = { ...rest };
 
     // Guard: if the saved frameType is blank or, once real DB options have loaded,
@@ -1300,6 +1397,11 @@ export default function QuoteBuilder() {
     skipCategoryResetRef.current = true;
     expectedFrameTypeRef.current = (itemForForm.frameType as string) || "";
     lastAutoWindZone.current = "";
+    const baselineSig = deriveConfigSignature(itemForForm as QuoteItem);
+    savedItemBaselineRef.current = {
+      signature: baselineSig.signature,
+      configurationId: iwp.item.configurationId || "",
+    };
     form.reset(itemForForm);
     setEditingId(iwp.uiId);
     if (!isLargeScreen) {
@@ -1309,21 +1411,24 @@ export default function QuoteBuilder() {
   }
 
   function duplicateItem(iwp: ItemWithPhoto) {
-    const newItem: QuoteItem = { ...iwp.item, id: crypto.randomUUID(), name: `${iwp.item.name} (copy)` };
-    setItems([...items, { uiId: crypto.randomUUID(), item: newItem }]);
+    const cloned = structuredClone(iwp.item);
+    cloned.id = crypto.randomUUID();
+    cloned.name = `${iwp.item.name} (copy)`;
+    setItems([...items, { uiId: crypto.randomUUID(), item: cloned }]);
     setHasUnsavedChanges(true);
     toast({ title: "Item duplicated" });
   }
 
   function deleteItem(id: string) {
     setItems(items.filter((iwp) => iwp.uiId !== id));
-    if (editingId === id) { setEditingId(null); form.reset(getNewItemDefaults(siteType)); lastAutoWindZone.current = getPresetDefaults(siteType).windZone || ""; }
+    if (editingId === id) { setEditingId(null); savedItemBaselineRef.current = null; form.reset(getNewItemDefaults(siteType)); lastAutoWindZone.current = getPresetDefaults(siteType).windZone || ""; }
     setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
   }
 
   function resetFormForNewItem() {
     setEditingId(null);
+    savedItemBaselineRef.current = null;
     form.reset(getNewItemDefaults(siteType));
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
   }
@@ -2603,6 +2708,19 @@ export default function QuoteBuilder() {
                                     placeholder="Auto (even split)"
                                     onChange={(e) => setColumnWidth(ci, parseFloat(e.target.value) || 0)}
                                     data-testid={`input-col-width-${ci}`}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label className="text-xs">Height Override (mm)</Label>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={col.heightOverride || ""}
+                                    placeholder={`Overall (${w.height || 0})`}
+                                    onChange={(e) => setColumnHeightOverride(ci, parseFloat(e.target.value) || 0)}
+                                    data-testid={`input-col-height-${ci}`}
                                     className="h-8 text-xs"
                                   />
                                 </div>

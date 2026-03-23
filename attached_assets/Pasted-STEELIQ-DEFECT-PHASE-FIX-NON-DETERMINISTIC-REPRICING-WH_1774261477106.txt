@@ -1,0 +1,251 @@
+STEELIQ DEFECT PHASE — FIX NON-DETERMINISTIC REPRICING WHEN REOPENING / RESELECTING QUOTE ITEMS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a defect investigation and fix phase for pricing determinism in the quote builder. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline.
+- Do not break existing quote builder item configurations.
+- Do not break existing preview/PDF pipeline.
+- Do not weaken accepted-quote protections, governance, lifecycle, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not perform hidden refactors.
+- Do not introduce speculative builder redesign outside the explicit scope below.
+- Treat current repo/runtime truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Preserve backward compatibility for existing quote items and existing configuration matching.
+- Do not broaden this into a full pricing-engine rewrite.
+- Do not change sale-price governance in this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- opening an unchanged quote item yields stable, repeatable profile/accessory/labour/net cost results
+- switching to another item and switching back does not change the first item’s costs unless underlying data genuinely changed
+- unchanged saved items resolve to one deterministic pricing/config path
+- any provisional/closest/stale repricing on re-entry is eliminated
+- the handover clearly explains the exact root cause, exact fix, and remaining limits
+
+CURRENT DEFECT TO FIX
+
+Observed behavior:
+- an item opens with one profile cost
+- user selects another item, then returns to the first item
+- the first item’s profile cost changes even though the item itself was not edited
+- this indicates pricing/config resolution is still non-deterministic on item re-entry / reselection
+
+This is a pricing integrity defect.
+
+PRIMARY OBJECTIVE
+
+Identify and fix the root cause so the same unchanged item always reprices to the same result when reopened or reselected.
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — REPRODUCE AND AUDIT EXACT ROOT CAUSE
+Inspect current repo/runtime truth and determine exactly why repricing changes when returning to an unchanged item.
+
+You must explicitly audit:
+- how selected item state is loaded when clicking an item in the quote schedule
+- whether stored item data contains a stable configurationId and/or stable derived config identity
+- whether deriveConfigSignature() is re-run on edit-open and can change effective matching without user edits
+- whether findMatchingConfiguration() / autoGenerateConfiguration() are re-entering on mount/reselect and swapping configs
+- whether currentPricing computes from:
+  - stored item fields first
+  - then fetched config/library data later
+  causing different second-pass values
+- whether “closest config during editing” logic is still causing repricing drift on re-open
+- whether useMemo/useEffect/query dependencies are causing a second deterministic recompute from a different input set
+- whether geometry metrics on stored items differ from runtime-derived metrics on reopen
+- whether configurationId persistence is insufficient or overridden
+
+Do not guess. Identify the actual root cause from repo truth.
+
+PHASE B — DEFINE THE CORRECT SOURCE OF TRUTH
+Establish and implement the correct deterministic rule for unchanged saved items.
+
+Expected principle:
+- a saved unchanged item should reopen against a stable config identity and stable pricing inputs
+- merely reselecting the item should not cause a different config match path unless the item data itself changed or authoritative library/config data genuinely changed
+
+Choose the narrowest correct implementation, but make the rule explicit in the handover.
+
+PHASE C — FIX REOPEN / RESELECT DETERMINISM
+Implement the minimum safe fix.
+
+Possible valid fix types (choose only what repo truth requires):
+- preserve and honor saved configurationId more strictly when item geometry/signature has not changed
+- stop “closest config” logic from repricing unchanged saved items on edit-open
+- separate saved-item pricing from in-progress edit matching until the user actually edits geometry
+- make derived geometry/config signature comparison stable so unchanged items don’t drift
+- prevent async library/config fetch from changing resolved config for an unchanged saved item
+- add correct gating so pricing waits for the right config data and does not switch paths after first render
+
+Rules:
+- fix the actual root cause, not just the symptom
+- do not add hacky delays
+- do not suppress recalculation generally; make it correct
+- do not introduce broad state-management rewrites
+
+PHASE D — VERIFY STABLE BEHAVIOR
+Specifically verify:
+- open item A → note pricing
+- open item B
+- return to item A
+- pricing remains identical
+- duplicate items with identical geometry still remain stable
+- editing an item intentionally can still change pricing
+- unchanged items do not drift just because of navigation/reselection
+
+PHASE E — PRESERVE VALID REPRICING WHEN REAL INPUTS CHANGE
+Do not accidentally freeze pricing when a real change happens.
+
+Valid changes that should still reprice:
+- dimensions
+- pane type
+- custom column structure
+- height overrides
+- layout
+- resolved config when geometry truly changes
+- any other real pricing inputs
+
+The fix must distinguish:
+- unchanged item reopened
+vs
+- item genuinely edited
+
+PHASE F — DO NOT WIDEN INTO NEW FEATURES
+Do not broaden this into:
+- geometry-aware accessory scaling
+- labour derivation rewrite
+- sale price policy rewrite
+- BOM rewrite
+- backend pricing API redesign
+
+This phase is about deterministic pricing for unchanged items, not new costing features.
+
+PHASE G — PRESERVE EXISTING LOGIC
+Do not break:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved quote items
+- preview/PDF pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero flows
+
+NON-GOALS
+
+Do NOT:
+- redesign the full library system
+- build a full pricing engine rewrite
+- redesign the whole builder
+- change sale-price governance
+- broaden into dashboard propagation
+- change invoice/Xero/project/job workflows
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what defect was found
+- what root cause was identified
+- what was fixed
+- what was intentionally not changed
+- confirm unchanged items now re-open/reselect with stable pricing
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE RESULT
+- exact root cause
+- where it lived
+- why unchanged items repriced differently after reselection
+- whether it was caused by:
+  - stale configurationId handling
+  - closest-config rematching
+  - async config/library fetch transition
+  - unstable derived geometry signature
+  - saved/edit state mismatch
+  - or another exact cause
+
+4. FIX RESULT
+- exact fix implemented
+- what now acts as the stable source of truth for unchanged items
+- how saved items are protected from repricing drift
+- how genuine edits still trigger valid repricing
+
+5. PRICING DETERMINISM RESULT
+- what was tested
+- what happens now when:
+  - item A is opened
+  - item B is opened
+  - item A is reopened
+  - an unchanged duplicate is reopened
+  - an edited item is reopened
+- confirm unchanged items remain identical in pricing
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any pricing approximation still remaining
+- any config-library limitations still remaining
+- any grouped-layout edge cases still remaining
+- no broad system rewrite was done
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. ROOT CAUSE RESULT
+
+4. FIX RESULT
+
+5. PRICING DETERMINISM RESULT
+
+6. COMPATIBILITY RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Fix the actual pricing integrity defect so unchanged quote items reopen and reselect with stable, deterministic pricing.
+Be exact, conservative, and truthful.

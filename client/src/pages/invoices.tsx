@@ -393,6 +393,9 @@ export default function InvoicesPage() {
                   {inv.xeroStatus === "AUTHORISED" && inv.status === "pushed_to_xero_draft" && (
                     <p className="text-[8px] text-amber-600 dark:text-amber-400 font-medium" data-testid={`text-xero-approval-hint-${inv.id}`}>Approval pending</p>
                   )}
+                  {(inv.xeroStatus === "DELETED" || inv.xeroStatus === "VOIDED") && (
+                    <p className="text-[8px] text-red-600 dark:text-red-400 font-medium" data-testid={`text-xero-reset-hint-${inv.id}`}>Reset required</p>
+                  )}
                   <PaymentIndicator inv={inv} />
                 </div>
               </TableCell>

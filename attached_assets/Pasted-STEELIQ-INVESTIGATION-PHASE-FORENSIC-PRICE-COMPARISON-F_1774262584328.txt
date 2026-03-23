@@ -1,0 +1,211 @@
+STEELIQ INVESTIGATION PHASE — FORENSIC PRICE COMPARISON FOR TWO NEAR-SIMILAR GROUPED ITEMS (NO NEW FEATURE WORK)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a forensic investigation and explanation phase for a pricing reasonability question. It is not a rewrite phase and not a new feature phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline.
+- Do not perform hidden refactors.
+- Do not widen into new feature implementation unless a clear defect is found and you report it explicitly.
+- Treat current repo/runtime truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Be exact and forensic.
+- Do not give a vague summary only.
+- If the difference is expected, explain exactly why.
+- If the difference is not expected, identify the exact root cause and say so clearly.
+
+CURRENT QUESTION TO ANSWER
+
+In the quote builder, two very similar grouped/custom items now keep stable prices when reopened, but there is still a concern that the profile cost difference between them is too large to be commercially reasonable.
+
+Observed example from live testing:
+- W-01 ≈ 2400 × 1300, price about 1716, profile cost about 253.38
+- W-01 (copy)(copy) ≈ 2400 × 1500, price about 1980, profile cost about 459.17
+
+The user’s question is:
+Why is there such a large difference between these two items when they appear almost the same size?
+
+PRIMARY OBJECTIVE
+
+Perform a forensic comparison of the two specific items and explain exactly what is driving the cost difference.
+
+You must determine whether:
+1. the difference is correct and justified by the actual config/geometry/profile logic
+or
+2. the difference indicates another pricing/config defect
+
+STRICT SCOPE
+
+Implement only the following investigation/reporting work.
+
+PHASE A — INSPECT THE TWO ITEMS EXACTLY
+Inspect the actual runtime/repo truth for the two compared items.
+
+You must compare:
+- dimensions
+- layout
+- pane types
+- custom column structure
+- height overrides
+- row counts per column
+- derived geometry metrics
+- matched/generated configurationId
+- config signature / geometryClass
+- profile rows used for pricing
+- accessory rows used for pricing
+- labour rows used for pricing
+- sale price sqm logic
+
+Do not generalize. Compare the actual two items directly.
+
+PHASE B — SHOW EXACT COST BREAKDOWN DIFFERENCE
+For each of the two items, report:
+- profile subtotal
+- accessory subtotal
+- labour subtotal
+- glass subtotal
+- liner subtotal
+- handle subtotal
+- net cost
+- sale price
+- margin
+
+Then explain the delta between them line by line.
+
+PHASE C — PROFILE FORENSICS
+This is the most important part.
+
+For profiles specifically, show:
+- which configuration each item matched/used
+- every profile row used in each config
+- role
+- mould number
+- qty/set
+- length formula or actual derived length path
+- effective total length used in pricing
+- kg/m
+- price/kg
+- resulting cost contribution per profile row
+
+Then explain exactly why the profile subtotal for item B is so much higher than item A.
+
+If the difference is driven by:
+- more mullions/transoms
+- taller mullions
+- different sash-frame quantity
+- different geometryClass causing a different config
+- different auto-generated profile set
+state that precisely.
+
+If the difference appears commercially unreasonable or caused by a bug, state that clearly.
+
+PHASE D — DETERMINE WHETHER THE DIFFERENCE IS CORRECT
+You must make a clear conclusion:
+
+Either:
+- “The price difference is expected because …”
+or
+- “The price difference is not expected; root cause is …”
+
+Do not hedge without explanation.
+
+PHASE E — IF A DEFECT EXISTS, IDENTIFY THE MINIMUM FIX
+If you determine there is a real pricing defect, describe:
+- exact root cause
+- exact file(s)/logic causing it
+- narrowest safe fix
+- do not implement it in this phase unless absolutely necessary and explicitly report it
+
+PHASE F — PRESERVE EXISTING LOGIC
+Do not change:
+- standard layouts
+- grouped layout behavior
+- preview/PDF pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero flows
+
+NON-GOALS
+
+Do NOT:
+- redesign the full pricing engine
+- redesign the full library system
+- start accessory-scaling implementation in this phase
+- start labour-scaling implementation in this phase
+- redesign the builder UI
+- broaden into dashboard propagation
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what two items were compared
+- whether the difference appears correct or incorrect
+- what was intentionally not changed
+
+2. FILES / LOGIC INSPECTED
+- exact files/functions inspected
+- one-line reason for each
+
+3. ITEM A VS ITEM B COMPARISON
+- dimensions
+- layout
+- pane structure
+- geometry metrics
+- config signature / geometry class
+- configurationId used
+
+4. COST BREAKDOWN COMPARISON
+For each item show:
+- profiles
+- accessories
+- labour
+- glass
+- liner
+- handle
+- net cost
+- sale price
+- margin
+
+Then show the delta between them.
+
+5. PROFILE FORENSIC RESULT
+- exact profile rows for item A
+- exact profile rows for item B
+- exact reason profile subtotal differs
+- whether that difference is commercially reasonable
+
+6. CONCLUSION
+State one of:
+- “Difference is expected because …”
+or
+- “Difference is not expected because …”
+
+7. IF DEFECT EXISTS — NARROW FIX RECOMMENDATION
+- exact root cause
+- exact narrow fix
+- no implementation unless explicitly necessary
+
+8. KNOWN LIMITS
+- any remaining pricing approximation relevant to this comparison
+- anything that still prevents exact manufacturing truth
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- grouped-geometry pricing caveat
+- config-library caveat
+- lifecycle UX caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Do not implement a new feature in this phase unless a clear defect is proven and you report it explicitly.
+Provide an exact forensic explanation for the price difference between the two compared items.
+Be exact, conservative, and truthful.
