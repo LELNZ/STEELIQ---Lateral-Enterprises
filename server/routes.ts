@@ -5493,7 +5493,7 @@ const DEFAULT_LABOUR_OPERATIONS_V2: Array<Record<string, unknown>> = [
   { name: "slotting",         category: "manual", setupMinutes: 0,  driverType: "per_slot",            minutesPerDriver: 5,   ratePerHour: 45, description: "Slotting — 5 min per slot, minimum 2 slots per operation", isActive: true },
   { name: "milling",          category: "manual", setupMinutes: 0,  driverType: "per_end",             minutesPerDriver: 5,   ratePerHour: 45, description: "Milling — 5 min per mullion/transom end (2 ends per member)", isActive: true },
   { name: "assembly-screwed", category: "manual", setupMinutes: 0,  driverType: "per_screw",           minutesPerDriver: 0.5, ratePerHour: 45, description: "Assembly screwing — 0.5 min per screw: 16 outer frame screws + 2 per mullion/transom end", isActive: true },
-  { name: "assembly-crimped", category: "manual", setupMinutes: 0,  driverType: "per_item",            minutesPerDriver: 20,  ratePerHour: 45, description: "Assembly crimping — flat 20 min per item", isActive: true },
+  { name: "assembly-crimped", category: "manual", setupMinutes: 0,  driverType: "per_item",            minutesPerDriver: 20,  ratePerHour: 45, description: "Assembly crimping — flat 20 min per item", isActive: false },
   { name: "glue",             category: "manual", setupMinutes: 0,  driverType: "per_glue_point",      minutesPerDriver: 1,   ratePerHour: 45, description: "Gluing — 1 min per glue point: 4 outer corners + 2 per mullion/transom end", isActive: true },
   { name: "glazing",          category: "manual", setupMinutes: 0,  driverType: "per_pane_area_band",  minutesPerDriver: 10,  ratePerHour: 45, description: "Glazing — time per pane scales with pane area band (configurable in Glazing Bands library)", isActive: true },
 ];
@@ -5526,6 +5526,13 @@ async function seedLabourOperations() {
       });
     }
     // If entry already has driverType, leave it alone (may have been customised by staff)
+  }
+
+  const crimpedEntry = byName.get("assembly-crimped");
+  if (crimpedEntry && (crimpedEntry.data as any).isActive !== false) {
+    await storage.updateLibraryEntry(crimpedEntry.id, {
+      data: { ...(crimpedEntry.data as any), isActive: false },
+    });
   }
 }
 

@@ -1,0 +1,198 @@
+STEELIQ DEFECT PHASE — FIX ASSEMBLY-CRIMPED STILL APPEARING / CONTRIBUTING AND VERIFY LIVE COSTING PATH (NO NEW SCOPE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a defect verification and fix phase. It is not a rewrite phase and not a new feature phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline.
+- Do not perform hidden refactors.
+- Do not widen scope.
+- Treat current repo/runtime truth as the source of truth, not assumptions from prior reports.
+- If the previously reported completion does not match runtime truth, report the mismatch explicitly.
+- Do not mark this phase complete unless runtime behavior actually matches the claimed fix.
+
+CURRENT VERIFIED PROBLEM
+
+Previous report claimed:
+- Assembly Crimped is retained in the master library but excluded from active costing
+- Assembly Screwed is the active/default assembly labour method
+- Inactive labour is excluded from auto-generated config labour and pricing
+
+However, current runtime screenshots show:
+- assembly-crimped is still visible in the manufacturing labour list as an active-looking entry
+- quote/item pricing does not appear to reflect the claimed exclusion clearly
+- therefore the previous completion claim is not operationally verified
+
+PRIMARY OBJECTIVE
+
+Determine exactly why assembly-crimped is still appearing and/or still contributing, then fix it so runtime behavior matches the intended policy:
+
+- keep Assembly Crimped in the library
+- do not delete it
+- make Assembly Screwed the active/default current costing method
+- exclude/deactivate Assembly Crimped from active/live costing
+- preserve historical reference and future reactivation path
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT REPO TRUTH VS RUNTIME TRUTH
+Inspect the actual repo and runtime paths and answer exactly:
+
+1. Why is assembly-crimped still visible in the labour library UI?
+2. Is it still marked active in persisted data?
+3. Is the UI failing to show inactive status correctly?
+4. Is the pricing engine still consuming it?
+5. Are auto-generated configurations still copying it?
+6. Is there seeded/master data that still marks it active?
+7. Is the current estimate item pricing path using old cached/generated config data that still contains crimped labour rows?
+
+Do not guess. Use repo truth.
+
+PHASE B — FIX MASTER DATA / ACTIVE STATE PATH
+Make the runtime truth correct.
+
+Requirements:
+- Assembly Crimped must remain in the library
+- It must be clearly inactive / non-current
+- Assembly Screwed must be the active/default current method
+- The library UI must reflect this truth clearly
+- No hard delete
+
+If master data, seed data, or reset/default logic is still reactivating crimped, fix that exact cause.
+
+PHASE C — FIX COSTING PATH
+Ensure Assembly Crimped is not contributing to active/live pricing.
+
+You must verify and fix all of these possible layers if needed:
+- master labour map used by pricing
+- auto-generated config labour copying
+- existing generated configs currently in use
+- any fallback/default labour inclusion path
+- any cache/transition path that still leaves crimped cost in current item pricing
+
+Important:
+If historical or already-generated configs still contain assembly-crimped labour rows, do NOT hard-delete them blindly.
+Instead:
+- preserve historical references
+- ensure active costing ignores inactive labour
+- if current live/generated grouped configs need safe regeneration or filtering, do that narrowly and explicitly
+
+PHASE D — VERIFY RUNTIME BEHAVIOR
+Do not report complete unless you verify:
+
+1. In Manufacturing Labour Library:
+- assembly-screwed appears as active/current
+- assembly-crimped appears clearly inactive/non-current
+- crimped is not presented as an active current labour method
+
+2. In Quote Builder pricing:
+- current/live item pricing uses screwed assembly only
+- crimped does not contribute to labour cost
+- if a grouped/custom item is repriced or regenerated, labour reflects the intended policy
+
+3. In historical safety:
+- crimped record still exists
+- future reactivation remains possible
+
+PHASE E — EXPLAIN ANY DATA MIGRATION / CLEANUP NEEDED
+If previously auto-generated configs or current test items still reference crimped rows:
+- explain exactly what was found
+- explain exactly what was done
+- keep the fix narrow and safe
+- do not perform broad destructive cleanup
+
+PHASE F — DO NOT WIDEN INTO OTHER PHASES
+Do not broaden this into:
+- accessory scaling
+- labour derivation redesign
+- multi-line Xero push
+- PDF redesign
+- lifecycle redesign
+- pricing engine rewrite
+
+This phase is specifically about:
+- crimped vs screwed active costing truth
+- runtime verification
+- fixing any mismatch between report and actual app behavior
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what mismatch was found between prior report and runtime truth
+- what was fixed
+- what was intentionally not changed
+- confirm assembly-crimped is retained but inactive
+- confirm assembly-screwed is the active costing method
+- confirm crimped no longer contributes to active/live pricing
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE RESULT
+- exact reason assembly-crimped was still visible / still contributing
+- where that truth lived
+- whether the issue was:
+  - master data still active
+  - UI status rendering
+  - pricing path still including inactive labour
+  - old generated configs
+  - reset/default reseeding
+  - caching
+  - or another exact cause
+
+4. FIX RESULT
+- exact fix implemented
+- how library UI now represents crimped vs screwed
+- how pricing now excludes crimped
+- how historical references were preserved
+
+5. RUNTIME VERIFICATION RESULT
+You must explicitly verify:
+- labour library view result
+- quote builder pricing result
+- grouped/custom auto-generated config result
+- whether any old test items had to be refreshed/repriced/regenerated
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any labour approximation still remaining
+- any legacy config caveat still remaining
+- no broad system rewrite was done
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Fix the mismatch between the claimed crimped/screwed policy and the actual runtime behavior.
+Do not report complete unless the runtime truth visibly matches the policy.
+Be exact, conservative, and truthful.
