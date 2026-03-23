@@ -636,7 +636,7 @@ export default function QuoteBuilder() {
   });
 
   const currentConfigId = w.configurationId || "";
-  const { data: configProfiles = [] } = useQuery<ConfigurationProfile[]>({
+  const { data: configProfiles = [], isFetching: profilesFetching } = useQuery<ConfigurationProfile[]>({
     queryKey: ["/api/configurations", currentConfigId, "profiles"],
     queryFn: async () => {
       if (!currentConfigId) return [];
@@ -646,7 +646,7 @@ export default function QuoteBuilder() {
     },
     enabled: !!currentConfigId,
   });
-  const { data: configAccessories = [] } = useQuery<ConfigurationAccessory[]>({
+  const { data: configAccessories = [], isFetching: accessoriesFetching } = useQuery<ConfigurationAccessory[]>({
     queryKey: ["/api/configurations", currentConfigId, "accessories"],
     queryFn: async () => {
       if (!currentConfigId) return [];
@@ -656,7 +656,7 @@ export default function QuoteBuilder() {
     },
     enabled: !!currentConfigId,
   });
-  const { data: configLabor = [] } = useQuery<ConfigurationLabor[]>({
+  const { data: configLabor = [], isFetching: laborFetching } = useQuery<ConfigurationLabor[]>({
     queryKey: ["/api/configurations", currentConfigId, "labor"],
     queryFn: async () => {
       if (!currentConfigId) return [];
@@ -666,6 +666,7 @@ export default function QuoteBuilder() {
     },
     enabled: !!currentConfigId,
   });
+  const configDataTransitioning = profilesFetching || accessoriesFetching || laborFetching;
 
   const configSignature = deriveConfigSignature(w as QuoteItem);
 
@@ -724,7 +725,7 @@ export default function QuoteBuilder() {
     return { enabled: true, source: w.wanzBarSource as "nz-local" | "direct", kgPerMetre: d.kgPerMetre || 0, pricePerKgUsd: d.pricePerKgUsd || 0, priceNzdPerLinM: d.priceNzdPerLinM || 0 };
   })();
 
-  const hasConfigData = currentConfigId && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
+  const hasConfigData = currentConfigId && !configDataTransitioning && (configProfiles.length > 0 || configAccessories.length > 0 || configLabor.length > 0);
   const currentPricing: PricingBreakdown | null = useMemo(() => {
     if (!hasConfigData) return null;
     const oMode = w.overrideMode || "none";
@@ -1281,7 +1282,7 @@ export default function QuoteBuilder() {
     const sig = deriveConfigSignature(data as QuoteItem);
     const matchingConfig = findMatchingConfiguration(sig, configurations);
     const cachedWeightKg = currentPricing?.totalWeightKg ?? 0;
-    const itemWithWeight = { ...data, cachedWeightKg };
+    const itemWithWeight = structuredClone({ ...data, cachedWeightKg });
 
     // ── Optimistic update: add/update item in state immediately so the UI responds
     //    at once. All network work (job creation, config generation) runs in the
@@ -1340,7 +1341,7 @@ export default function QuoteBuilder() {
   }
 
   function editItem(iwp: ItemWithPhoto) {
-    const { id, ...rest } = iwp.item;
+    const { id, ...rest } = structuredClone(iwp.item);
     const itemForForm = { ...rest };
 
     // Guard: if the saved frameType is blank or, once real DB options have loaded,
@@ -1370,8 +1371,10 @@ export default function QuoteBuilder() {
   }
 
   function duplicateItem(iwp: ItemWithPhoto) {
-    const newItem: QuoteItem = { ...iwp.item, id: crypto.randomUUID(), name: `${iwp.item.name} (copy)` };
-    setItems([...items, { uiId: crypto.randomUUID(), item: newItem }]);
+    const cloned = structuredClone(iwp.item);
+    cloned.id = crypto.randomUUID();
+    cloned.name = `${iwp.item.name} (copy)`;
+    setItems([...items, { uiId: crypto.randomUUID(), item: cloned }]);
     setHasUnsavedChanges(true);
     toast({ title: "Item duplicated" });
   }

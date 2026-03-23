@@ -1,0 +1,227 @@
+STEELIQ DEFECT PHASE — FIX SHARED/UNSTABLE PRICING STATE FOR DUPLICATED CUSTOM GEOMETRY ITEMS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a defect investigation and fix phase for pricing integrity in the quote builder. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline.
+- Do not break existing quote builder item configurations.
+- Do not break existing preview/PDF pipeline.
+- Do not weaken accepted-quote protections, governance, lifecycle, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not perform hidden refactors.
+- Do not introduce speculative builder redesign outside the explicit scope below.
+- Treat current repo/runtime truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Preserve backward compatibility for existing quote items and existing configuration matching.
+- Do not broaden this into a full pricing-engine rewrite.
+- Do not change sale-price governance in this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- duplicated custom/grouped items no longer show unstable profile pricing
+- editing one duplicated item no longer changes another item’s profile pricing unless a shared global value legitimately changed
+- pricing becomes stable and item-isolated
+- any shared-state / stale-match / mutated-config issue is fixed
+- the handover clearly explains the root cause, exact fix, and remaining limits
+
+CURRENT DEFECT TO FIX
+
+Observed behavior:
+- duplicating a custom/grouped window causes profile cost to fluctuate briefly
+- profile cost can snap from one value to another after duplicate/recalculation
+- changing pane type/dimensions on one duplicated item causes profile pricing on both items to change
+- this indicates pricing/config state is likely not isolated correctly per item
+
+This is a pricing integrity problem and must be treated as a defect.
+
+PRIMARY OBJECTIVE
+
+Identify and fix the root cause of unstable/shared pricing state for duplicated custom/grouped items so each item prices deterministically and independently.
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — REPRODUCE AND AUDIT ROOT CAUSE
+Inspect current repo/runtime truth and determine exactly why this happens.
+
+You must explicitly audit:
+- item duplication flow
+- how config signatures are derived per item
+- how findMatchingConfiguration() is called after duplication/edit
+- how autoGenerateConfiguration() is called after duplication/edit
+- whether configuration objects or profile arrays are being mutated/shared by reference
+- whether quote item state is being shallow-copied where deep-copy isolation is required
+- whether pricing useMemo dependencies are incomplete or causing transient mispricing
+- whether React Query/cache/local state is briefly pricing against stale config data
+- whether duplicate items are resolving to the same auto-generated configuration in a way that is correct or incorrect
+- whether editing one item mutates shared configuration/profile data used by the other
+
+Do not guess. Identify the actual root cause from repo truth.
+
+PHASE B — FIX ITEM ISOLATION / CONFIG MUTATION ISSUE
+Implement the minimum safe fix.
+
+Possible valid fix types (choose only what repo truth requires):
+- deep-copy item config state on duplicate instead of shallow-copy
+- prevent mutation of shared configuration/profile arrays
+- ensure pricing uses immutable derived data
+- ensure item-specific geometry/config signature resolution is stable
+- ensure auto-generated configuration creation/matching does not mutate reusable config data in-place
+- ensure memo/query dependencies are complete so stale interim values do not leak into pricing
+
+Rules:
+- fix the actual root cause, not just the visible symptom
+- do not add hacky timeouts
+- do not suppress recalculation instead of making it correct
+- do not introduce broad state-management rewrites
+
+PHASE C — ENSURE DETERMINISTIC CONFIG MATCHING AFTER DUPLICATE
+After duplication and after subsequent edits:
+- each item must resolve pricing from the correct config/signature path
+- if two items are truly identical, they may share the same matched configuration logically
+- but editing one item must not mutate the other item’s pricing inputs/state
+- if an edited duplicate now has a different geometry signature, it must resolve independently and deterministically
+
+PHASE D — VERIFY PRICING STABILITY
+Specifically verify:
+- duplicate item created from custom/grouped source
+- both items initially price correctly and stably
+- editing pane type / dimensions / height override on one item updates only that item’s relevant pricing
+- the untouched item remains stable
+- no brief snap-back to wrong profile cost after recalculation
+- quote schedule and pricing panel stay consistent
+
+PHASE E — DO NOT WIDEN INTO NEW FEATURES
+Do not broaden this into:
+- geometry-aware accessory scaling
+- labour derivation rewrite
+- sale price policy rewrite
+- BOM rewrite
+- backend pricing API redesign
+
+This phase is about fixing pricing correctness/stability, not adding new costing features.
+
+PHASE F — PRESERVE EXISTING LOGIC
+Do not break:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved quote items
+- preview/PDF pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero flows
+
+NON-GOALS
+
+Do NOT:
+- redesign the full library system
+- build a full pricing engine rewrite
+- redesign the whole builder
+- change sale-price governance
+- broaden into dashboard propagation
+- change invoice/Xero/project/job workflows
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what defect was found
+- what root cause was identified
+- what was fixed
+- what was intentionally not changed
+- confirm duplicated custom/grouped items now price independently and stably
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE RESULT
+- exact root cause
+- where it lived
+- why duplicate/edit actions triggered unstable/shared pricing
+- whether it was:
+  - shared reference mutation
+  - stale config matching
+  - incomplete dependencies
+  - shallow copy bug
+  - config cache contamination
+  - or another exact cause
+
+4. FIX RESULT
+- exact fix implemented
+- how item isolation is now preserved
+- how config matching/generation is now stabilized
+- what behavior changed after duplicate/edit
+
+5. PRICING STABILITY RESULT
+- what was tested
+- what happens now when:
+  - an item is duplicated
+  - a pane type changes on the duplicate
+  - dimensions/height overrides change on the duplicate
+- confirm whether untouched items remain stable
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any pricing approximation still remaining
+- any config-library limitations still remaining
+- any grouped-layout edge cases still remaining
+- no broad system rewrite was done
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. ROOT CAUSE RESULT
+
+4. FIX RESULT
+
+5. PRICING STABILITY RESULT
+
+6. COMPATIBILITY RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Fix the actual pricing integrity defect so duplicated custom/grouped items price stably and independently.
+Be exact, conservative, and truthful.
