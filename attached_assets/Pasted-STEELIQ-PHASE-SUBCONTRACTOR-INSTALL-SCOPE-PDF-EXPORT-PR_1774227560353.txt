@@ -1,0 +1,454 @@
+STEELIQ PHASE — SUBCONTRACTOR INSTALL SCOPE PDF EXPORT (PROJECT-SPECIFIC, SCOPE-LED, PRICING-RETURN READY)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase adds a dedicated subcontractor-facing PDF export from the estimate phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote/estimate pipeline broadly.
+- Do not change customer quote PDF generation.
+- Do not change the QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline unless current repo truth proves the new export should reuse part of it in a narrow way.
+- Do not change governance, lifecycle, invoicing, Xero, archive/delete, or demo/test behavior.
+- Do not introduce schema creep unless absolutely required and you stop and explain first.
+- Do not perform hidden refactors.
+- Do not make speculative improvements.
+- Do not broaden scope beyond a dedicated subcontractor install-scope PDF export from the estimate phase.
+
+CURRENT NEED
+
+In the estimate phase, the existing “All Items (PDF)” export is useful as a raw drawing pack, but it is not a proper subcontractor issue document for installation pricing.
+
+The business need is to generate a dedicated PDF that can be sent to subcontractors so they can price installation work on a real project.
+
+This export must support two scope modes:
+
+1. Renovation
+Includes project-specific pricing request context for:
+- removal of old units
+- disposal of old units
+- installation of new units
+- what install includes
+- site works / assumptions
+- exclusions
+- variation triggers
+- site/context considerations relevant to renovation work
+
+2. New Build
+Includes project-specific pricing request context for:
+- installation of new units only
+- what install includes
+- assumptions about prepared openings / readiness
+- site works / assumptions
+- exclusions
+- variation triggers
+- site/context considerations relevant to new build work
+
+IMPORTANT DIRECTION
+
+This export must not be just a drawing pack.
+It must be a professional, project-specific subcontractor pricing issue document.
+
+It should combine:
+- project/estimate summary
+- clear scope definition
+- item schedule
+- item drawings/images
+- site photo(s) where available
+- assumptions, exclusions, and likely variation triggers
+- a pricing return section
+
+PRIMARY OBJECTIVE
+
+Create a dedicated subcontractor-facing PDF export from the estimate phase called something like:
+
+- Subcontractor Install Scope PDF
+or equivalent truthful naming
+
+This PDF must:
+- exclude customer sell pricing / commercial quote terms / margin language
+- include a professional project-specific item schedule
+- include item images/drawings
+- include site photo(s) where available
+- include a scope summary tailored to Renovation or New Build
+- include clear Included / Excluded / Assumptions / Potential Variations sections
+- include a pricing return section the subcontractor can fill in
+
+PHASE A — AUDIT CURRENT EXPORT / DATA TRUTH
+
+1. Review the current estimate-phase download/export options.
+2. Identify exactly:
+- how the current “All Items (PDF)” is generated
+- what estimate/job/item data is already available for export
+- whether site photos are already available in the estimate context
+- what drawing/image assets can be reused
+- whether the new PDF should reuse any existing PDF/render components or use a dedicated export path
+
+3. Report the narrowest architecture-preserving implementation path.
+
+PHASE B — ADD A NEW EXPORT OPTION IN ESTIMATE PHASE
+
+1. Add a new export option in the estimate-phase Download menu, with truthful naming such as:
+- Subcontractor Install Scope PDF
+
+2. When the user selects it, present a narrow scope configuration flow with at least:
+
+Required fields:
+- Scope type:
+  - Renovation
+  - New Build
+- Work package:
+  - Install only
+  - Removal + disposal + install
+- Include site photos: yes/no
+- Include detailed item drawings: yes/no
+- Include pricing return section: yes/no (default yes)
+
+Required scope definition fields:
+- Sealant:
+  - Included
+  - Excluded
+  - Price separately
+- Flashings:
+  - Included
+  - Excluded
+  - Supplied by others
+  - Price separately
+- WANZ bars / support systems:
+  - Included
+  - Excluded
+  - Price separately
+- Site clean-up:
+  - Included
+  - Excluded
+- Making good:
+  - By others
+  - Included
+  - Excluded
+- Access condition:
+  - Standard
+  - Restricted
+  - Upper level / height
+  - Scaffold likely / required
+- Include variation checklist:
+  - yes/no
+
+3. Keep this UI lightweight and operationally usable.
+Do not redesign the whole estimate page.
+
+PHASE C — PDF STRUCTURE
+
+The PDF must be scope-first, not drawing-first.
+
+Required structure:
+
+SECTION 1 — Cover / Project Summary
+Include:
+- Project / estimate name
+- Site address
+- Client / builder name if available and appropriate
+- Date issued
+- Prepared by
+- Item count
+- Scope type badge: Renovation or New Build
+- Work package badge: Install only or Removal + disposal + install
+- Statement such as:
+  “Issued for subcontractor installation pricing only”
+- Site photo(s) if enabled and available
+
+SECTION 2 — Scope Summary
+Provide a professional subcontractor-facing summary with headings like:
+- Scope Requested
+- Scope Includes
+- Scope Excludes
+- Assumptions
+- Potential Variations / To Be Confirmed
+
+For Renovation mode, include truthful content for:
+- removal of existing units
+- disposal of removed units
+- installation of new joinery
+- standard pack, level, fix, and seal
+- standard site clean-up of installation debris if included
+- site works assumptions
+- renovation-specific exclusions and variations
+
+For New Build mode, include truthful content for:
+- installation of new joinery only
+- standard pack, level, fix, and seal to prepared openings
+- site works assumptions
+- new-build-specific exclusions and variations
+
+This section must read like a professional subcontractor scope document, not internal notes or customer quote text.
+
+SECTION 3 — Scope Detail Matrix
+Add a compact project-specific scope matrix showing the selected issue settings, for example:
+- Scope type
+- Work package
+- Sealant
+- Flashings
+- WANZ bars / support systems
+- Site clean-up
+- Making good
+- Access condition
+
+SECTION 4 — Item Schedule Summary
+Include a clean table with columns such as:
+- Item ID
+- Location / room
+- Category
+- Layout / handing
+- Dimensions
+- Qty
+- Install notes (if relevant)
+- Drawing page reference (if detailed drawings included)
+
+This schedule should be more useful than the current raw all-items PDF.
+
+SECTION 5 — Detailed Item Pages
+If enabled, include one or more pages with:
+- Item ID
+- Qty
+- Drawing/image
+- Dimensions
+- Layout / handing
+- Category
+- Location / room if available
+- Install-relevant notes if available
+
+SECTION 6 — Site / Access / Variation Notes
+If enabled or if data exists, include a section covering site pricing risks and practical context such as:
+- access restrictions
+- upper-level / scaffold implications
+- occupied dwelling considerations
+- staging / delivery / protection notes
+- notes requiring confirmation before final pricing
+
+SECTION 7 — Pricing Return
+If enabled, include a subcontractor pricing return section with:
+
+A. Overall pricing block
+- Total price for scope: __________________
+- plus GST / incl GST: __________________
+- Lead time / availability: __________________
+- Contact name / company / phone / email
+
+B. Assumptions / exclusions / variation notes
+- Assumptions / clarifications
+- Exclusions
+- Variation risks / items requiring confirmation
+
+C. Optional item-by-item pricing table
+Include rows for each item with columns like:
+- Item ID
+- Location
+- Description
+- Qty
+- Subcontractor price
+- Notes
+
+This section should be suitable for printing or digital markup.
+
+PHASE D — SCOPE WORDING
+
+Provide professional default wording that varies by scope type and selected scope fields.
+
+RENOVATION MODE should support truthful headings/content like:
+- Scope Includes
+- Removal of existing units
+- Disposal of removed units
+- Installation of new units
+- Standard pack, level, fix, and seal
+- Standard site clean-up of installation debris
+- Assumptions
+- Exclusions
+- Potential variations
+
+NEW BUILD MODE should support truthful headings/content like:
+- Scope Includes
+- Installation of new units only
+- Standard pack, level, fix, and seal to prepared openings
+- Assumptions
+- Exclusions
+- Potential variations
+
+Do not include customer-facing commercial quote wording or internal margin language.
+
+PHASE E — EXCLUSIONS / VARIATION GUIDANCE
+
+The generated document must clearly cover typical subcontractor pricing-risk areas, such as:
+- structural alterations excluded unless noted
+- builder’s making good excluded unless noted
+- plastering / painting / tiling / floor repair excluded unless noted
+- electrical / blinds / alarms / special hardware removal and reinstatement excluded unless noted
+- unexpected framing/opening defects as variation items
+- access restrictions / scaffolding / lifting requirements as variation items unless noted
+- hidden damage / rot / out-of-square openings as variation items
+- sealing / flashing assumptions where relevant
+- support bars / WANZ bars where relevant
+- travel / staged install / after-hours if relevant
+
+Variation checklist options should cover likely pricing risks such as:
+- difficult access
+- height over 2m / scaffold
+- structural or framing alterations
+- hidden damage / rot
+- hazardous materials / asbestos
+- complex flashing requirements
+- support bars / WANZ bars
+- staging / travel / urgency
+
+Keep the wording professional and practical.
+
+PHASE F — OUTPUT QUALITY
+
+1. The PDF must look like a proper issue document, not a developer export.
+2. The item schedule must be readable and compact.
+3. The detailed drawings must remain useful.
+4. No sell pricing, gross margin, or internal costing information may appear.
+5. The document should be usable by an installation subcontractor without needing the customer quote PDF.
+6. The generated output should feel closer to a project-specific subcontractor scope/pricing request than a generic rate card.
+
+STRICT NON-GOALS
+
+Do NOT:
+- redesign the customer quote PDF
+- redesign the estimator broadly
+- add spreadsheet export in this phase unless it is trivial and explicitly reported as extra
+- change quote generation logic
+- change lifecycle/governance/Xero behavior
+- add schema unless absolutely necessary
+- add speculative procurement workflows
+
+REQUIRED TEST CASES
+
+TC-SCOPE-001
+Open the estimate phase Download menu.
+Expected:
+- a new subcontractor-facing PDF export option is present
+
+TC-SCOPE-002
+Generate a Renovation mode subcontractor PDF.
+Expected:
+- cover page present
+- scope summary reflects renovation work
+- scope matrix present
+- item schedule included
+- no customer pricing/terms included
+
+TC-SCOPE-003
+Generate a New Build mode subcontractor PDF.
+Expected:
+- cover page present
+- scope summary reflects installation-only new build work
+- scope matrix present
+- item schedule included
+- no renovation-only wording included
+
+TC-SCOPE-004
+Generate the PDF with site photos enabled when site photo(s) are available.
+Expected:
+- site photo(s) appear in the document
+
+TC-SCOPE-005
+Generate the PDF with detailed item drawings enabled.
+Expected:
+- detailed item pages appear and remain readable
+
+TC-SCOPE-006
+Verify the pricing return section is present and usable.
+Expected:
+- overall pricing block present
+- assumptions/exclusions/variation notes section present
+- optional item table present if enabled
+
+TC-SCOPE-007
+Verify no internal commercial information leaks into the subcontractor PDF.
+Expected:
+- no sell pricing
+- no margin
+- no customer commercial terms
+- no governance/admin/internal-only language
+
+TC-SCOPE-008
+Verify the document includes practical pricing-risk guidance for subcontractors.
+Expected:
+- exclusions/assumptions/variation triggers are present and professionally worded
+
+TC-SCOPE-009
+Verify the existing All Items (PDF) export and other download options still work.
+Expected:
+- no regression
+
+DELIVERABLES REQUIRED
+
+Do not report complete unless you provide:
+1. exact files changed
+2. exact export path used or added
+3. exact new download option added
+4. exact PDF structure implemented
+5. exact Renovation vs New Build wording differences
+6. exact scope fields supported in the export setup
+7. exact pricing return section behavior
+8. results of all required test cases
+9. known remaining gaps
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+
+2. FILES CHANGED
+- full file list
+- one-line purpose of each change
+
+3. EXPORT PATH / UI
+- exact new download option
+- where it appears
+- what configuration options are presented before export
+
+4. PDF STRUCTURE
+- cover/project summary
+- scope summary
+- scope detail matrix
+- item schedule
+- detailed item pages
+- site/access/variation notes
+- pricing return section
+
+5. SCOPE WORDING
+- Renovation wording implemented
+- New Build wording implemented
+- exclusions / assumptions / variation guidance implemented
+- what was intentionally excluded from the document
+
+6. PRICING RETURN SECTION
+- overall pricing block
+- assumptions / exclusions / variation notes
+- item-by-item pricing table behavior
+
+7. TEST RESULTS
+- TC-SCOPE-001 result
+- TC-SCOPE-002 result
+- TC-SCOPE-003 result
+- TC-SCOPE-004 result
+- TC-SCOPE-005 result
+- TC-SCOPE-006 result
+- TC-SCOPE-007 result
+- TC-SCOPE-008 result
+- TC-SCOPE-009 result
+
+8. KNOWN GAPS
+- exact remaining limitations
+- what should move to a later phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture.
+Create a professional subcontractor install-scope PDF export from the estimate phase.
+Make it useful for installation pricing without exposing internal/customer commercial information.
+Report truthfully and exactly.

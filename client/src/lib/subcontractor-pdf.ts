@@ -17,6 +17,22 @@ const CLR_BORDER = "#d1d5db";
 const CLR_BG = "#f3f4f6";
 
 type ScopeMode = "renovation" | "new_build";
+type WorkPackage = "install_only" | "removal_disposal_install";
+type ThreeWay = "included" | "excluded" | "price_separately";
+type FlashingOption = "included" | "excluded" | "supplied_by_others" | "price_separately";
+type MakingGoodOption = "by_others" | "included" | "excluded";
+type AccessCondition = "standard" | "restricted" | "upper_level" | "scaffold_required";
+type TwoWay = "included" | "excluded";
+
+export interface ScopeFields {
+  sealant: ThreeWay;
+  flashings: FlashingOption;
+  wanzBars: ThreeWay;
+  siteCleanup: TwoWay;
+  makingGood: MakingGoodOption;
+  accessCondition: AccessCondition;
+  includeVariationChecklist: boolean;
+}
 
 export interface SubcontractorPdfItem {
   name: string;
@@ -33,6 +49,8 @@ export interface SubcontractorPdfItem {
 
 export interface SubcontractorPdfOptions {
   scopeMode: ScopeMode;
+  workPackage: WorkPackage;
+  scopeFields: ScopeFields;
   projectName: string;
   siteAddress?: string;
   clientName?: string;
@@ -83,11 +101,20 @@ export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions): P
   pdf.addPage();
   drawFooter(pdf);
   let y = renderScopeSummary(pdf, opts);
+
+  y = renderScopeMatrix(pdf, opts, y);
+
   y = renderItemSchedule(pdf, opts, y);
 
   const hasDetailedContent = opts.includeDrawings || opts.includeSitePhotos;
   if (hasDetailedContent) {
     await renderDetailedItems(pdf, opts);
+  }
+
+  if (opts.scopeFields.includeVariationChecklist || opts.scopeFields.accessCondition !== "standard") {
+    pdf.addPage();
+    drawFooter(pdf);
+    renderSiteVariationNotes(pdf, opts);
   }
 
   if (opts.includePricingReturn) {
@@ -116,14 +143,24 @@ function renderCoverPage(pdf: jsPDF, opts: SubcontractorPdfOptions) {
   pdf.line(LM, y, LM + 40, y);
   y += 10;
 
-  const badge = opts.scopeMode === "renovation" ? "RENOVATION" : "NEW BUILD";
-  const badgeW = pdf.getTextWidth(badge) + 10;
+  const scopeBadge = opts.scopeMode === "renovation" ? "RENOVATION" : "NEW BUILD";
+  const scopeBadgeW = pdf.getTextWidth(scopeBadge) + 10;
   pdf.setFillColor(opts.scopeMode === "renovation" ? "#fef3c7" : "#dbeafe");
-  pdf.roundedRect(LM, y - 5, badgeW, 8, 1.5, 1.5, "F");
+  pdf.roundedRect(LM, y - 5, scopeBadgeW, 8, 1.5, 1.5, "F");
   pdf.setFont(FONT, "bold");
   pdf.setFontSize(8);
   pdf.setTextColor(opts.scopeMode === "renovation" ? "#92400e" : "#1e40af");
-  pdf.text(badge, LM + 5, y + 0.5);
+  pdf.text(scopeBadge, LM + 5, y + 0.5);
+
+  const wpLabel = opts.workPackage === "removal_disposal_install" ? "REMOVAL + DISPOSAL + INSTALL" : "INSTALL ONLY";
+  const wpX = LM + scopeBadgeW + 6;
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(8);
+  const wpW = pdf.getTextWidth(wpLabel) + 10;
+  pdf.setFillColor("#f0fdf4");
+  pdf.roundedRect(wpX, y - 5, wpW, 8, 1.5, 1.5, "F");
+  pdf.setTextColor("#166534");
+  pdf.text(wpLabel, wpX + 5, y + 0.5);
   y += 14;
 
   pdf.setTextColor(CLR_MUTED);
@@ -174,7 +211,7 @@ function renderCoverPage(pdf: jsPDF, opts: SubcontractorPdfOptions) {
       }
       try {
         pdf.addImage(dataUrl, "JPEG", px, y, maxPhotoW, maxPhotoH);
-      } catch { /* skip unloadable */ }
+      } catch { /* skip */ }
       px += maxPhotoW + 4;
     }
   }
@@ -182,6 +219,7 @@ function renderCoverPage(pdf: jsPDF, opts: SubcontractorPdfOptions) {
 
 function renderScopeSummary(pdf: jsPDF, opts: SubcontractorPdfOptions): number {
   let y = TM;
+  const sf = opts.scopeFields;
 
   pdf.setFont(FONT, "bold");
   pdf.setFontSize(13);
@@ -191,86 +229,102 @@ function renderScopeSummary(pdf: jsPDF, opts: SubcontractorPdfOptions): number {
   drawLine(pdf, y);
   y += 8;
 
-  if (opts.scopeMode === "renovation") {
-    y = renderScopeSection(pdf, y, "Scope Includes", [
-      "Removal of existing window and door units as scheduled",
-      "Disposal of removed units and associated debris from site",
-      "Supply and installation of new aluminium/steel joinery as scheduled",
-      "Standard pack, level, fix, and seal of all new units to existing openings",
-      "Standard site cleanup of installation debris on completion",
-    ]);
-    y = renderScopeSection(pdf, y, "What Installation Includes", [
-      "Positioning and fixing of new joinery into prepared openings",
-      "Plumbing, levelling, and squaring of all units",
-      "Fixing with appropriate mechanical fasteners",
-      "Perimeter sealing with approved sealant",
-      "Hardware adjustment and operation check",
-      "Final clean of installed units",
-    ]);
-    y = renderScopeSection(pdf, y, "Assumptions", [
-      "Existing openings are structurally sound and suitable for new joinery",
-      "Adequate clear access to all installation locations",
-      "Power and water available on site",
-      "Builder to provide making good to reveals, plaster, and external cladding after installation",
-      "Working hours: standard business hours unless agreed otherwise",
-      "All units will be installed at ground level unless otherwise noted",
-    ]);
-    y = renderScopeSection(pdf, y, "Exclusions", [
-      "Structural alterations or modifications to openings",
-      "Builder's making good (plaster, paint, cladding, tiling, flooring)",
-      "Electrical work including alarm sensors, blinds wiring, or light fittings",
-      "Curtain, blind, or security screen removal and reinstatement",
-      "Scaffolding, elevated work platforms, or crane access (unless specifically noted)",
-      "Consent applications or building inspections",
-      "Glazing replacement or reglazing of existing retained units",
-      "Any work outside the scheduled items",
-    ]);
-    y = renderScopeSection(pdf, y, "Potential Variations", [
-      "Unexpected framing defects, rot, or structural damage discovered during removal",
-      "Out-of-square or out-of-plumb openings requiring additional packing or trimming",
-      "Hidden services (electrical, plumbing) requiring relocation",
-      "Access restrictions requiring alternative installation methods",
-      "Additional sealant, flashing, or weatherproofing requirements beyond standard",
-      "Delays caused by other trades or site readiness",
-    ]);
-  } else {
-    y = renderScopeSection(pdf, y, "Scope Includes", [
-      "Supply and installation of new aluminium/steel joinery as scheduled",
-      "Standard pack, level, fix, and seal of all new units to prepared openings",
-      "Standard site cleanup of installation debris on completion",
-    ]);
-    y = renderScopeSection(pdf, y, "What Installation Includes", [
-      "Positioning and fixing of new joinery into prepared openings",
-      "Plumbing, levelling, and squaring of all units",
-      "Fixing with appropriate mechanical fasteners",
-      "Perimeter sealing with approved sealant",
-      "Hardware adjustment and operation check",
-      "Final clean of installed units",
-    ]);
-    y = renderScopeSection(pdf, y, "Assumptions", [
-      "All openings are prepared to correct dimensions and are plumb, level, and square",
-      "Adequate clear access to all installation locations",
-      "Power and water available on site",
-      "Builder to coordinate sequencing with other trades",
-      "Working hours: standard business hours unless agreed otherwise",
-      "All units will be installed at ground level unless otherwise noted",
-    ]);
-    y = renderScopeSection(pdf, y, "Exclusions", [
-      "Structural alterations or modifications to openings",
-      "Builder's making good (plaster, paint, cladding, tiling, flooring)",
-      "Electrical work including alarm sensors, blinds wiring, or light fittings",
-      "Scaffolding, elevated work platforms, or crane access (unless specifically noted)",
-      "Consent applications or building inspections",
-      "Any work outside the scheduled items",
-    ]);
-    y = renderScopeSection(pdf, y, "Potential Variations", [
-      "Openings not prepared to specified dimensions or not plumb/level/square",
-      "Hidden services requiring relocation",
-      "Access restrictions requiring alternative installation methods",
-      "Additional sealant, flashing, or weatherproofing requirements beyond standard",
-      "Delays caused by other trades or site readiness",
-    ]);
+  const scopeRequested: string[] = [];
+  if (opts.workPackage === "removal_disposal_install") {
+    scopeRequested.push("Removal of existing window and door units as scheduled");
+    scopeRequested.push("Disposal of removed units and associated debris from site");
   }
+  scopeRequested.push("Supply and installation of new aluminium/steel joinery as scheduled");
+
+  y = renderScopeSection(pdf, y, "Scope Requested", scopeRequested);
+
+  const scopeIncludes: string[] = [];
+  if (opts.workPackage === "removal_disposal_install") {
+    scopeIncludes.push("Careful removal of existing units to minimise damage to surrounding finishes");
+    scopeIncludes.push("Disposal of removed units and installation waste from site");
+  }
+  if (opts.scopeMode === "renovation") {
+    scopeIncludes.push("Installation of new joinery into existing openings");
+    scopeIncludes.push("Standard pack, level, fix, and seal of all new units to existing openings");
+  } else {
+    scopeIncludes.push("Installation of new joinery into prepared openings");
+    scopeIncludes.push("Standard pack, level, fix, and seal of all new units to prepared openings");
+  }
+  scopeIncludes.push("Plumbing, levelling, and squaring of all units");
+  scopeIncludes.push("Fixing with appropriate mechanical fasteners");
+  scopeIncludes.push("Hardware adjustment and operation check");
+  scopeIncludes.push("Final clean of installed units");
+  if (sf.sealant === "included") scopeIncludes.push("Perimeter sealing with approved sealant");
+  if (sf.flashings === "included") scopeIncludes.push("Supply and install flashings as required");
+  if (sf.wanzBars === "included") scopeIncludes.push("Supply and install WANZ bars / support systems as required");
+  if (sf.siteCleanup === "included") scopeIncludes.push("Standard site cleanup of installation debris on completion");
+  if (sf.makingGood === "included") scopeIncludes.push("Making good to reveals and surrounds after installation");
+
+  y = renderScopeSection(pdf, y, "Scope Includes", scopeIncludes);
+
+  const scopeExcludes: string[] = [];
+  scopeExcludes.push("Structural alterations or modifications to openings");
+  if (sf.makingGood !== "included") scopeExcludes.push("Builder's making good (plaster, paint, cladding, tiling, flooring)");
+  scopeExcludes.push("Electrical work including alarm sensors, blinds wiring, or light fittings");
+  if (opts.scopeMode === "renovation") {
+    scopeExcludes.push("Curtain, blind, or security screen removal and reinstatement");
+  }
+  if (sf.sealant === "excluded") scopeExcludes.push("Sealant — excluded from this scope");
+  if (sf.flashings === "excluded") scopeExcludes.push("Flashings — excluded from this scope");
+  if (sf.flashings === "supplied_by_others") scopeExcludes.push("Flashings — supplied by others; install only if included");
+  if (sf.wanzBars === "excluded") scopeExcludes.push("WANZ bars / support systems — excluded from this scope");
+  if (sf.siteCleanup === "excluded") scopeExcludes.push("Site cleanup — excluded from this scope");
+  if (sf.accessCondition !== "standard") {
+    scopeExcludes.push("Scaffolding, elevated work platforms, or crane access (unless specifically noted)");
+  }
+  scopeExcludes.push("Consent applications or building inspections");
+  if (opts.scopeMode === "renovation") {
+    scopeExcludes.push("Glazing replacement or reglazing of existing retained units");
+  }
+  scopeExcludes.push("Any work outside the scheduled items");
+
+  y = renderScopeSection(pdf, y, "Scope Excludes", scopeExcludes);
+
+  const assumptions: string[] = [];
+  if (opts.scopeMode === "renovation") {
+    assumptions.push("Existing openings are structurally sound and suitable for new joinery");
+  } else {
+    assumptions.push("All openings are prepared to correct dimensions and are plumb, level, and square");
+  }
+  assumptions.push("Adequate clear access to all installation locations");
+  assumptions.push("Power and water available on site");
+  if (opts.scopeMode === "renovation") {
+    assumptions.push("Builder to provide making good to reveals, plaster, and external cladding after installation");
+  } else {
+    assumptions.push("Builder to coordinate sequencing with other trades");
+  }
+  assumptions.push("Working hours: standard business hours unless agreed otherwise");
+  if (sf.accessCondition === "standard") {
+    assumptions.push("All units will be installed at ground level unless otherwise noted");
+  }
+  if (sf.sealant === "price_separately") assumptions.push("Sealant — to be priced separately by subcontractor");
+  if (sf.flashings === "price_separately") assumptions.push("Flashings — to be priced separately by subcontractor");
+  if (sf.wanzBars === "price_separately") assumptions.push("WANZ bars / support systems — to be priced separately by subcontractor");
+
+  y = renderScopeSection(pdf, y, "Assumptions", assumptions);
+
+  const variations: string[] = [];
+  if (opts.scopeMode === "renovation") {
+    variations.push("Unexpected framing defects, rot, or structural damage discovered during removal");
+    variations.push("Out-of-square or out-of-plumb openings requiring additional packing or trimming");
+    variations.push("Hidden services (electrical, plumbing) requiring relocation");
+  } else {
+    variations.push("Openings not prepared to specified dimensions or not plumb/level/square");
+    variations.push("Hidden services requiring relocation");
+  }
+  variations.push("Access restrictions requiring alternative installation methods");
+  variations.push("Additional sealant, flashing, or weatherproofing requirements beyond standard");
+  variations.push("Delays caused by other trades or site readiness");
+  if (sf.accessCondition !== "standard") {
+    variations.push("Height access / scaffold costs to be confirmed");
+  }
+
+  y = renderScopeSection(pdf, y, "Potential Variations / To Be Confirmed", variations);
 
   return y;
 }
@@ -290,7 +344,7 @@ function renderScopeSection(pdf: jsPDF, startY: number, heading: string, items: 
 
   for (const item of items) {
     y = ensureSpace(pdf, y, 5);
-    pdf.text("•", LM + 2, y);
+    pdf.text("\u2022", LM + 2, y);
     const lines = wrapText(pdf, item, CW - 8);
     for (const line of lines) {
       y = ensureSpace(pdf, y, 4.5);
@@ -300,6 +354,66 @@ function renderScopeSection(pdf: jsPDF, startY: number, heading: string, items: 
   }
 
   y += 4;
+  return y;
+}
+
+const SCOPE_FIELD_LABELS: Record<string, string> = {
+  included: "Included",
+  excluded: "Excluded",
+  price_separately: "Price separately",
+  supplied_by_others: "Supplied by others",
+  by_others: "By others",
+  standard: "Standard (ground level)",
+  restricted: "Restricted access",
+  upper_level: "Upper level / height work",
+  scaffold_required: "Scaffold likely / required",
+  install_only: "Install only",
+  removal_disposal_install: "Removal + disposal + install",
+};
+
+function renderScopeMatrix(pdf: jsPDF, opts: SubcontractorPdfOptions, startY: number): number {
+  let y = ensureSpace(pdf, startY, 70);
+
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(11);
+  pdf.setTextColor(CLR);
+  pdf.text("SCOPE DETAIL MATRIX", LM, y);
+  y += 3;
+  drawLine(pdf, y);
+  y += 6;
+
+  const sf = opts.scopeFields;
+  const rows: [string, string][] = [
+    ["Scope Type", opts.scopeMode === "renovation" ? "Renovation" : "New Build"],
+    ["Work Package", SCOPE_FIELD_LABELS[opts.workPackage]],
+    ["Sealant", SCOPE_FIELD_LABELS[sf.sealant]],
+    ["Flashings", SCOPE_FIELD_LABELS[sf.flashings]],
+    ["WANZ Bars / Support Systems", SCOPE_FIELD_LABELS[sf.wanzBars]],
+    ["Site Clean-up", SCOPE_FIELD_LABELS[sf.siteCleanup]],
+    ["Making Good", SCOPE_FIELD_LABELS[sf.makingGood]],
+    ["Access Condition", SCOPE_FIELD_LABELS[sf.accessCondition]],
+  ];
+
+  const labelW = 55;
+  const valW = CW - labelW;
+  pdf.setFontSize(8.5);
+
+  for (let i = 0; i < rows.length; i++) {
+    y = ensureSpace(pdf, y, 7);
+    if (i % 2 === 0) {
+      pdf.setFillColor("#f9fafb");
+      pdf.rect(LM, y - 3.5, CW, 6.5, "F");
+    }
+    pdf.setFont(FONT, "bold");
+    pdf.setTextColor(CLR_MUTED);
+    pdf.text(rows[i][0], LM + 2, y);
+    pdf.setFont(FONT, "normal");
+    pdf.setTextColor(CLR);
+    pdf.text(rows[i][1], LM + labelW, y);
+    y += 6.5;
+  }
+
+  y += 6;
   return y;
 }
 
@@ -326,15 +440,17 @@ function renderItemSchedule(pdf: jsPDF, opts: SubcontractorPdfOptions, startY: n
   drawLine(pdf, y);
   y += 6;
 
+  const hasDrawingRef = opts.includeDrawings;
   const cols = [
     { label: "#", w: 8 },
-    { label: "Item Ref", w: 30 },
-    { label: "Location", w: 28 },
-    { label: "Category", w: 30 },
-    { label: "Layout", w: 22 },
-    { label: "W×H (mm)", w: 26 },
+    { label: "Item Ref", w: 28 },
+    { label: "Location", w: 26 },
+    { label: "Category", w: 28 },
+    { label: "Layout", w: 20 },
+    { label: "W\u00D7H (mm)", w: 24 },
     { label: "Qty", w: 10 },
-    { label: "Notes", w: CW - 8 - 30 - 28 - 30 - 22 - 26 - 10 },
+    { label: "Notes", w: hasDrawingRef ? CW - 8 - 28 - 26 - 28 - 20 - 24 - 10 - 14 : CW - 8 - 28 - 26 - 28 - 20 - 24 - 10 },
+    ...(hasDrawingRef ? [{ label: "Dwg", w: 14 }] : []),
   ];
 
   y = ensureSpace(pdf, y, 8);
@@ -362,12 +478,13 @@ function renderItemSchedule(pdf: jsPDF, opts: SubcontractorPdfOptions, startY: n
     const values = [
       String(i + 1),
       item.name || `Item ${i + 1}`,
-      item.location || "—",
+      item.location || "\u2014",
       CATEGORY_LABELS[item.category] || item.category,
-      item.layout || "—",
-      `${item.width}×${item.height}`,
+      item.layout || "\u2014",
+      `${item.width}\u00D7${item.height}`,
       String(item.quantity || 1),
       item.notes || "",
+      ...(hasDrawingRef ? [item.drawingDataUrl ? "\u2713" : "\u2014"] : []),
     ];
 
     for (let c = 0; c < cols.length; c++) {
@@ -409,6 +526,10 @@ function loadImageDimensions(dataUrl: string): Promise<{ width: number; height: 
 async function renderDetailedItems(pdf: jsPDF, opts: SubcontractorPdfOptions) {
   for (let i = 0; i < opts.items.length; i++) {
     const item = opts.items[i];
+    const hasDrawing = opts.includeDrawings && item.drawingDataUrl;
+    const hasPhotos = opts.includeSitePhotos && item.photoDataUrls && item.photoDataUrls.length > 0;
+    if (!hasDrawing && !hasPhotos) continue;
+
     pdf.addPage();
     drawFooter(pdf);
     let y = TM;
@@ -423,7 +544,7 @@ async function renderDetailedItems(pdf: jsPDF, opts: SubcontractorPdfOptions) {
 
     const details: [string, string][] = [
       ["Category", CATEGORY_LABELS[item.category] || item.category],
-      ["Dimensions", `${item.width} × ${item.height} mm`],
+      ["Dimensions", `${item.width} \u00D7 ${item.height} mm`],
       ["Quantity", String(item.quantity || 1)],
     ];
     if (item.layout) details.push(["Layout / Handing", item.layout]);
@@ -441,7 +562,7 @@ async function renderDetailedItems(pdf: jsPDF, opts: SubcontractorPdfOptions) {
       y += 5.5;
     }
 
-    if (opts.includeDrawings && item.drawingDataUrl) {
+    if (hasDrawing && item.drawingDataUrl) {
       y += 4;
       const maxDrawW = CW;
       const maxDrawH = 140;
@@ -461,7 +582,7 @@ async function renderDetailedItems(pdf: jsPDF, opts: SubcontractorPdfOptions) {
       } catch { /* skip */ }
     }
 
-    if (opts.includeSitePhotos && item.photoDataUrls && item.photoDataUrls.length > 0) {
+    if (hasPhotos && item.photoDataUrls) {
       y = ensureSpace(pdf, y, 50);
       pdf.setFont(FONT, "bold");
       pdf.setFontSize(8);
@@ -483,6 +604,91 @@ async function renderDetailedItems(pdf: jsPDF, opts: SubcontractorPdfOptions) {
         px += 52;
       }
     }
+  }
+}
+
+function renderSiteVariationNotes(pdf: jsPDF, opts: SubcontractorPdfOptions) {
+  let y = TM;
+  const sf = opts.scopeFields;
+
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(13);
+  pdf.setTextColor(CLR);
+  pdf.text("SITE / ACCESS / VARIATION NOTES", LM, y);
+  y += 3;
+  drawLine(pdf, y);
+  y += 8;
+
+  if (sf.accessCondition !== "standard") {
+    y = renderScopeSection(pdf, y, "Access Condition", [
+      `Access has been noted as: ${SCOPE_FIELD_LABELS[sf.accessCondition]}`,
+      ...(sf.accessCondition === "restricted" ? [
+        "Subcontractor to allow for restricted access conditions",
+        "Confirm delivery and staging arrangements prior to pricing",
+      ] : []),
+      ...(sf.accessCondition === "upper_level" ? [
+        "Work involves upper-level installation — height access required",
+        "Subcontractor to confirm scaffold or EWP requirements and pricing",
+        "All height safety compliance is the responsibility of the installing party",
+      ] : []),
+      ...(sf.accessCondition === "scaffold_required" ? [
+        "Scaffold is likely or confirmed required for this project",
+        "Subcontractor to include scaffold cost or confirm if supplied by others",
+        "All height safety compliance is the responsibility of the installing party",
+      ] : []),
+    ]);
+  }
+
+  if (sf.includeVariationChecklist) {
+    const checklist = [
+      "Difficult or restricted site access",
+      "Height work over 2m / scaffold or EWP required",
+      "Structural or framing alterations required",
+      "Hidden damage, rot, or deterioration discovered during works",
+      "Hazardous materials (e.g. asbestos) encountered",
+      "Complex flashing or weatherproofing requirements",
+      "WANZ bars or support systems not included in base scope",
+      "Staging, travel, or split-visit requirements",
+      "After-hours or weekend work required",
+      "Occupied dwelling — additional protection or coordination",
+      "Builder delays or site not ready",
+      "Additional sealant beyond standard allowance",
+    ];
+
+    y = ensureSpace(pdf, y, 10 + checklist.length * 5);
+    pdf.setFont(FONT, "bold");
+    pdf.setFontSize(9.5);
+    pdf.setTextColor(CLR_ACCENT);
+    pdf.text("Variation Checklist — Items That May Affect Pricing", LM, y);
+    y += 2;
+    pdf.setFont(FONT, "italic");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(CLR_MUTED);
+    pdf.text("Tick any items relevant to this project and note impact in the Pricing Return section.", LM, y);
+    y += 6;
+
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(CLR);
+    for (const item of checklist) {
+      y = ensureSpace(pdf, y, 5.5);
+      pdf.setDrawColor(CLR_BORDER);
+      pdf.setLineWidth(0.3);
+      pdf.rect(LM + 2, y - 3, 3.5, 3.5);
+      pdf.setFont(FONT, "normal");
+      pdf.text(item, LM + 8, y);
+      y += 5;
+    }
+  }
+
+  if (opts.scopeMode === "renovation") {
+    y += 4;
+    y = renderScopeSection(pdf, y, "Renovation-Specific Considerations", [
+      "Occupied dwelling — additional care and protection may be required",
+      "Existing weather seal must be maintained between removal and installation stages",
+      "Temporary weather protection may be required if installation is staged",
+      "Existing alarm/sensor wiring to be noted and protected during removal",
+      "Floor protection in occupied areas during installation",
+    ]);
   }
 }
 
@@ -612,12 +818,12 @@ function renderPricingReturn(pdf: jsPDF, opts: SubcontractorPdfOptions) {
     const item = opts.items[i];
     cx = LM;
     const catLabel = CATEGORY_LABELS[item.category] || item.category;
-    const desc = `${catLabel} ${item.width}×${item.height}`;
+    const desc = `${catLabel} ${item.width}\u00D7${item.height}`;
 
     const vals = [
       String(i + 1),
       item.name || `Item ${i + 1}`,
-      item.location || "—",
+      item.location || "\u2014",
       desc,
       String(item.quantity || 1),
       "",

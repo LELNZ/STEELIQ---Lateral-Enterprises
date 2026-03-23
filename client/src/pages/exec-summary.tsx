@@ -36,7 +36,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
 import LifecyclePanel from "@/components/lifecycle-panel";
-import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions } from "@/lib/subcontractor-pdf";
+import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions, type ScopeFields } from "@/lib/subcontractor-pdf";
 import { svgToPngBlob } from "@/lib/export-png";
 
 function calcSqm(width: number, height: number, quantity: number): number {
@@ -121,10 +121,20 @@ export default function ExecSummary() {
 
   const [subconDialogOpen, setSubconDialogOpen] = useState(false);
   const [subconScopeMode, setSubconScopeMode] = useState<"renovation" | "new_build">("renovation");
+  const [subconWorkPackage, setSubconWorkPackage] = useState<"install_only" | "removal_disposal_install">("removal_disposal_install");
   const [subconIncludeDrawings, setSubconIncludeDrawings] = useState(true);
   const [subconIncludeSitePhotos, setSubconIncludeSitePhotos] = useState(true);
   const [subconIncludePricingReturn, setSubconIncludePricingReturn] = useState(true);
   const [subconGenerating, setSubconGenerating] = useState(false);
+  const [subconScopeFields, setSubconScopeFields] = useState<ScopeFields>({
+    sealant: "included",
+    flashings: "included",
+    wanzBars: "excluded",
+    siteCleanup: "included",
+    makingGood: "by_others",
+    accessCondition: "standard",
+    includeVariationChecklist: true,
+  });
 
   const SECTION_KEYS = ["financial", "installation", "delivery", "removal", "rubbish", "history", "items"] as const;
   type SectionKey = typeof SECTION_KEYS[number];
@@ -860,9 +870,11 @@ export default function ExecSummary() {
 
       const opts: SubcontractorPdfOptions = {
         scopeMode: subconScopeMode,
+        workPackage: subconWorkPackage,
+        scopeFields: subconScopeFields,
         projectName: job.name || "Untitled Project",
         siteAddress: job.address || undefined,
-        clientName: undefined,
+        clientName: (job as any).clientName || undefined,
         dateIssued: new Date().toLocaleDateString("en-NZ"),
         preparedBy: undefined,
         items: pdfItems,
@@ -974,7 +986,7 @@ export default function ExecSummary() {
       </div>
 
       <Dialog open={subconDialogOpen} onOpenChange={setSubconDialogOpen}>
-        <DialogContent className="sm:max-w-md" data-testid="dialog-subcontractor-config">
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" data-testid="dialog-subcontractor-config">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <HardHat className="h-5 w-5" />
@@ -1001,6 +1013,93 @@ export default function ExecSummary() {
               </p>
             </div>
 
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Work Package</Label>
+              <RadioGroup value={subconWorkPackage} onValueChange={(v) => setSubconWorkPackage(v as "install_only" | "removal_disposal_install")} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="removal_disposal_install" id="wp-rdi" data-testid="radio-wp-removal" />
+                  <Label htmlFor="wp-rdi" className="cursor-pointer text-sm">Removal + disposal + install</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="install_only" id="wp-io" data-testid="radio-wp-install-only" />
+                  <Label htmlFor="wp-io" className="cursor-pointer text-sm">Install only</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold">Scope Definition</Label>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Sealant</Label>
+                  <Select value={subconScopeFields.sealant} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, sealant: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-sealant"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                      <SelectItem value="price_separately">Price separately</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Flashings</Label>
+                  <Select value={subconScopeFields.flashings} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, flashings: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-flashings"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                      <SelectItem value="supplied_by_others">Supplied by others</SelectItem>
+                      <SelectItem value="price_separately">Price separately</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">WANZ Bars / Support</Label>
+                  <Select value={subconScopeFields.wanzBars} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, wanzBars: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-wanz"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                      <SelectItem value="price_separately">Price separately</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Site Clean-up</Label>
+                  <Select value={subconScopeFields.siteCleanup} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, siteCleanup: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-cleanup"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Making Good</Label>
+                  <Select value={subconScopeFields.makingGood} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, makingGood: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-making-good"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="by_others">By others</SelectItem>
+                      <SelectItem value="included">Included</SelectItem>
+                      <SelectItem value="excluded">Excluded</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Access Condition</Label>
+                  <Select value={subconScopeFields.accessCondition} onValueChange={(v) => setSubconScopeFields(p => ({ ...p, accessCondition: v as any }))}>
+                    <SelectTrigger className="h-8 text-xs" data-testid="select-access"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="restricted">Restricted</SelectItem>
+                      <SelectItem value="upper_level">Upper level / height</SelectItem>
+                      <SelectItem value="scaffold_required">Scaffold likely / required</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-3">
               <Label className="text-sm font-semibold">Include in PDF</Label>
               <div className="flex items-center gap-2">
@@ -1014,6 +1113,10 @@ export default function ExecSummary() {
               <div className="flex items-center gap-2">
                 <Checkbox id="subcon-pricing" checked={subconIncludePricingReturn} onCheckedChange={(v) => setSubconIncludePricingReturn(!!v)} data-testid="checkbox-include-pricing" />
                 <Label htmlFor="subcon-pricing" className="cursor-pointer text-sm">Pricing return section</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="subcon-variations" checked={subconScopeFields.includeVariationChecklist} onCheckedChange={(v) => setSubconScopeFields(p => ({ ...p, includeVariationChecklist: !!v }))} data-testid="checkbox-include-variations" />
+                <Label htmlFor="subcon-variations" className="cursor-pointer text-sm">Variation checklist</Label>
               </div>
             </div>
           </div>
