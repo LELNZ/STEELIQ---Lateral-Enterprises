@@ -1038,9 +1038,12 @@ function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string;
                 size="sm"
                 className="h-7 text-xs shrink-0"
                 onClick={() => {
+                  if (nextStep.label === "Job") {
+                    window.dispatchEvent(new Event("steeliq:open-job-dialog"));
+                    return;
+                  }
                   const selectors: Record<string, string> = {
                     Project: '[data-testid="button-create-project-cta"], [data-testid="button-create-project-from-quote"]',
-                    Job: '[data-testid="button-convert-to-job"]',
                     Invoice: '[data-testid="button-create-invoice"]',
                   };
                   const sel = selectors[nextStep.label];
@@ -1922,8 +1925,8 @@ function InvoiceSection({
         </div>
         <Button
           size="sm"
-          variant={invoices.length === 0 ? "default" : "outline"}
-          className={invoices.length === 0 ? "h-7 text-xs" : "h-7 text-xs"}
+          variant="outline"
+          className="h-7 text-xs"
           onClick={openCreateDialog}
           data-testid="button-create-invoice"
         >
