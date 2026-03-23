@@ -13,7 +13,7 @@ import {
   ArrowLeft, ReceiptText, CheckCircle2, Send, RotateCcw, FileCheck,
   RefreshCw, DollarSign, CreditCard, Save, X, Pencil,
   Building2, FolderOpen, FileText, Briefcase, Hash, Layers,
-  Clock, CircleDot, Lock, Plus, Trash2,
+  Clock, CircleDot, Lock, Plus, Trash2, AlertCircle,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useParams, useLocation } from "wouter";
@@ -95,6 +95,24 @@ function PaymentBadge({ invoice }: { invoice: EnrichedInvoice }) {
   }
   return null;
 }
+
+const XERO_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  SUBMITTED: "Submitted",
+  AUTHORISED: "Authorised",
+  PAID: "Paid",
+  VOIDED: "Voided",
+  DELETED: "Deleted",
+};
+
+const XERO_STATUS_COLORS: Record<string, string> = {
+  DRAFT: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  SUBMITTED: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  AUTHORISED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  PAID: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  VOIDED: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  DELETED: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+};
 
 type EditingLine = {
   id: string;
@@ -230,9 +248,11 @@ export default function InvoiceDetailPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      const xStatus = data.xeroPayment?.status;
+      const xLabel = XERO_STATUS_LABELS[xStatus] ?? xStatus ?? "Unknown";
       toast({
         title: "Synced from Xero",
-        description: `Status: ${data.xeroPayment?.status} — Paid: ${fmtMoney(data.xeroPayment?.amountPaid)} / Due: ${fmtMoney(data.xeroPayment?.amountDue)}`,
+        description: `Xero status: ${xLabel} — Paid: ${fmtMoney(data.xeroPayment?.amountPaid)} / Due: ${fmtMoney(data.xeroPayment?.amountDue)}`,
       });
     },
     onError: (err: Error) => {
@@ -820,30 +840,64 @@ export default function InvoiceDetailPage() {
             <Card className="md:col-span-1">
               <CardContent className="pt-4 pb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Xero</h3>
+                  <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Xero Integration</h3>
                   {invoice.xeroInvoiceId && (
                     <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1"
                       disabled={syncFromXeroMutation.isPending}
                       onClick={() => syncFromXeroMutation.mutate()}
                       data-testid="button-sync-xero">
                       <RefreshCw className={`h-3 w-3 ${syncFromXeroMutation.isPending ? "animate-spin" : ""}`} />
-                      Sync
+                      Sync from Xero
                     </Button>
                   )}
                 </div>
                 {invoice.xeroInvoiceId ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">Invoice</span>
+                      <span className="text-[10px] text-muted-foreground">Xero Invoice</span>
                       <span className="font-mono text-xs font-medium" data-testid="text-xero-number">{invoice.xeroInvoiceNumber}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground">Status</span>
-                      <span className="font-mono text-[10px] font-medium" data-testid="text-xero-status">{invoice.xeroStatus}</span>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">SteelIQ Status</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${STATUS_COLORS[invoice.status] ?? "bg-muted text-muted-foreground border-border"}`} data-testid="text-steeliq-status">
+                          {STATUS_LABELS[invoice.status] || invoice.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">Xero Status</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${XERO_STATUS_COLORS[invoice.xeroStatus ?? ""] ?? "bg-muted text-muted-foreground"}`} data-testid="text-xero-status">
+                          {XERO_STATUS_LABELS[invoice.xeroStatus ?? ""] ?? invoice.xeroStatus ?? "Unknown"}
+                        </span>
+                      </div>
+                      {xPaid != null && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground">Payment</span>
+                          <span className="text-[10px] font-medium" data-testid="text-xero-payment-summary">
+                            {(xDue ?? 0) <= 0 && (xPaid ?? 0) > 0
+                              ? <span className="text-emerald-600 dark:text-emerald-400">Paid in full</span>
+                              : (xPaid ?? 0) > 0 && (xDue ?? 0) > 0
+                                ? <span className="text-amber-600 dark:text-amber-400">Part paid ({fmtMoney(xPaid)})</span>
+                                : <span className="text-muted-foreground">Unpaid</span>
+                            }
+                          </span>
+                        </div>
+                      )}
                     </div>
+
+                    {invoice.xeroStatus === "AUTHORISED" && invoice.status === "pushed_to_xero_draft" && (
+                      <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800" data-testid="cue-xero-authorised-pending">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-snug">
+                          This invoice has been authorised in Xero. Click <strong>Approve</strong> above to confirm the SteelIQ business signoff.
+                        </p>
+                      </div>
+                    )}
+
                     {xSynced && (
                       <p className="text-[9px] text-muted-foreground">
-                        Synced: {new Date(xSynced).toLocaleString("en-NZ")}
+                        Last synced: {new Date(xSynced).toLocaleString("en-NZ")}
                       </p>
                     )}
                     <p className="text-[8px] font-mono text-muted-foreground/50 truncate">{invoice.xeroInvoiceId}</p>
