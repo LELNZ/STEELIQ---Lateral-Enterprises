@@ -3032,6 +3032,96 @@ export async function registerRoutes(
     return res.json(lines);
   });
 
+  const EDITABLE_INVOICE_STATUSES = new Set(["draft", "ready_for_xero", "returned_to_draft"]);
+  const GST_RATE_LINES = 0.15;
+
+  async function reconcileInvoiceHeaderFromLines(invoiceId: string) {
+    const lines = await storage.getInvoiceLines(invoiceId);
+    const amountExclGst = lines.reduce((sum, l) => sum + (l.lineAmountExclGst ?? 0), 0);
+    const rounded = Math.round(amountExclGst * 100) / 100;
+    const gstAmount = Math.round(rounded * GST_RATE_LINES * 100) / 100;
+    const amountInclGst = Math.round((rounded + gstAmount) * 100) / 100;
+    await storage.updateInvoice(invoiceId, { amountExclGst: rounded, gstAmount, amountInclGst } as any);
+  }
+
+  async function guardInvoiceLineAccess(req: any, res: any, invoiceId: string, requireEditable: boolean): Promise<any | null> {
+    const invoice = await storage.getInvoice(invoiceId);
+    if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return null; }
+    if (invoice.isDemoRecord && !isPrivilegedUser(req)) { res.status(404).json({ error: "Not found" }); return null; }
+    const userDivision = req.user?.divisionCode;
+    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
+    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+      res.status(403).json({ error: "Access denied: different division" }); return null;
+    }
+    if (requireEditable && !EDITABLE_INVOICE_STATUSES.has(invoice.status)) {
+      res.status(403).json({ error: "Invoice is locked — editing not allowed in current status" }); return null;
+    }
+    return invoice;
+  }
+
+  app.post("/api/invoices/:id/lines", async (req, res) => {
+    const invoice = await guardInvoiceLineAccess(req, res, req.params.id, true);
+    if (!invoice) return;
+    const schema = z.object({
+      description: z.string().nullable().optional(),
+      quantity: z.number().default(1),
+      unitAmount: z.number().nullable().optional(),
+      lineType: z.string().default("standard"),
+      variationId: z.string().nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid line data", details: parsed.error.flatten() });
+    const { quantity, unitAmount } = parsed.data;
+    const lineAmountExclGst = unitAmount != null ? Math.round(quantity * unitAmount * 100) / 100 : null;
+    const existingLines = await storage.getInvoiceLines(req.params.id);
+    const maxSort = existingLines.reduce((max, l) => Math.max(max, l.sortOrder), -1);
+    const line = await storage.createInvoiceLine({
+      invoiceId: req.params.id,
+      sortOrder: maxSort + 1,
+      lineType: parsed.data.lineType,
+      description: parsed.data.description ?? null,
+      quantity,
+      unitAmount: unitAmount ?? null,
+      lineAmountExclGst,
+      variationId: parsed.data.variationId ?? null,
+      sourceContext: JSON.stringify({ origin: "manual_add" }),
+    });
+    await reconcileInvoiceHeaderFromLines(req.params.id);
+    return res.status(201).json(line);
+  });
+
+  app.patch("/api/invoice-lines/:lineId", async (req, res) => {
+    const line = await storage.getInvoiceLine(req.params.lineId);
+    if (!line) return res.status(404).json({ error: "Line not found" });
+    const invoice = await guardInvoiceLineAccess(req, res, line.invoiceId, true);
+    if (!invoice) return;
+    const schema = z.object({
+      description: z.string().nullable().optional(),
+      quantity: z.number().optional(),
+      unitAmount: z.number().nullable().optional(),
+      lineType: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+    const updates: any = { ...parsed.data };
+    const qty = updates.quantity ?? line.quantity;
+    const ua = updates.unitAmount !== undefined ? updates.unitAmount : line.unitAmount;
+    updates.lineAmountExclGst = ua != null ? Math.round(qty * ua * 100) / 100 : null;
+    const updated = await storage.updateInvoiceLine(req.params.lineId, updates);
+    await reconcileInvoiceHeaderFromLines(line.invoiceId);
+    return res.json(updated);
+  });
+
+  app.delete("/api/invoice-lines/:lineId", async (req, res) => {
+    const line = await storage.getInvoiceLine(req.params.lineId);
+    if (!line) return res.status(404).json({ error: "Line not found" });
+    const invoice = await guardInvoiceLineAccess(req, res, line.invoiceId, true);
+    if (!invoice) return;
+    await storage.deleteInvoiceLine(req.params.lineId);
+    await reconcileInvoiceHeaderFromLines(line.invoiceId);
+    return res.json({ success: true });
+  });
+
   app.patch("/api/invoices/:id", async (req, res) => {
     const schema = z.object({
       type: z.enum(["deposit", "progress", "variation", "final", "retention_release", "credit_note"]).optional(),

@@ -183,6 +183,9 @@ export interface IStorage {
 
   createInvoiceLine(data: InsertInvoiceLine): Promise<InvoiceLine>;
   getInvoiceLines(invoiceId: string): Promise<InvoiceLine[]>;
+  updateInvoiceLine(id: string, data: Partial<InsertInvoiceLine>): Promise<InvoiceLine | undefined>;
+  deleteInvoiceLine(id: string): Promise<void>;
+  getInvoiceLine(id: string): Promise<InvoiceLine | undefined>;
 
   getNextJobNumber(divisionCode?: string): Promise<string>;
   getNumberSequences(): Promise<{ id: string; currentValue: number }[]>;
@@ -984,6 +987,23 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(invoiceLines)
       .where(eq(invoiceLines.invoiceId, invoiceId))
       .orderBy(asc(invoiceLines.sortOrder));
+  }
+
+  async getInvoiceLine(id: string): Promise<InvoiceLine | undefined> {
+    const [row] = await db.select().from(invoiceLines).where(eq(invoiceLines.id, id));
+    return row;
+  }
+
+  async updateInvoiceLine(id: string, data: Partial<InsertInvoiceLine>): Promise<InvoiceLine | undefined> {
+    const [updated] = await db.update(invoiceLines)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(invoiceLines.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteInvoiceLine(id: string): Promise<void> {
+    await db.delete(invoiceLines).where(eq(invoiceLines.id, id));
   }
 
   async getNextJobNumber(divisionCode?: string): Promise<string> {

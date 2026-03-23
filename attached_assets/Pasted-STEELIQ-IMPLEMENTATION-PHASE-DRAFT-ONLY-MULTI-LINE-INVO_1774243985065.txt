@@ -1,0 +1,320 @@
+STEELIQ IMPLEMENTATION PHASE — DRAFT-ONLY MULTI-LINE INVOICE BODY EDITING (HEADER STILL AUTHORITATIVE, NO XERO PAYLOAD CHANGE YET)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow operational invoice editing phase built on the newly added invoice_lines foundation. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model.
+- Do not implement a full accounting-module rewrite.
+- Do not change customer quote PDF generation.
+- Do not change current Xero payload structure in this phase.
+- Do not make invoice_lines the sole authoritative source of truth in this phase.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, or retention controls.
+- Do not perform hidden refactors.
+- Do not introduce speculative improvements outside the explicit scope below.
+- Do not introduce standalone/admin quote-independent invoice creation in this phase.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not pretend SteelIQ has full multi-line invoicing after this phase.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- draft-state invoice line CRUD exists for the invoice detail page
+- invoice detail can read and display real invoice lines
+- header totals are safely reconciled from draft line edits without breaking existing flows
+- pushed/approved invoice protections are preserved
+- current invoice list, quote-detail invoice section, allocation guards, variation protections, retention controls, and Xero push remain compatible
+- invoice_lines(invoice_id) indexing or equivalent query hardening is added
+- the handover clearly states what remains intentionally incomplete
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+SteelIQ currently has:
+- accepted quote -> project -> job -> invoice workflow foundations
+- invoice list and invoice detail surfaces
+- Xero push integration
+- Xero payment visibility readback
+- invoice reference field
+- improved quote/project/job linkage visibility
+- governance and demo/test shielding materially implemented
+- invoice_lines foundation already added
+- new invoices dual-write one matching invoice line row
+- historical invoices are backfilled with one line row if missing
+
+Current invoice model truth still is:
+- invoice UI is still operationally single-line
+- Xero push still assumes one line item from header fields
+- header amounts remain authoritative
+- invoice_lines are currently foundational/shadow-stage
+- invoice detail currently renders a pseudo single row from header values rather than real editable invoice lines
+
+BUSINESS INTENT
+
+The business wants SteelIQ to evolve toward a more serious invoice document model:
+- invoice as a first-class billing document
+- editable draft invoice body
+- stronger traceability between invoice and commercial context
+- future support for richer invoice composition
+- staged path to true multi-line invoice behavior
+
+However, this phase is NOT the full multi-line invoice rollout.
+
+PRIMARY OBJECTIVE
+
+Implement draft-only multi-line invoice body editing on the invoice detail page using the existing invoice_lines foundation, while keeping header-level invoice fields authoritative for current operational compatibility.
+
+This phase should establish:
+1. invoice detail reads real invoice lines
+2. draft/ready-for-xero/returned-to-draft invoices can edit line rows
+3. pushed_to_xero_draft and approved invoices remain locked
+4. header amounts are reconciled from invoice lines during allowed draft editing flows
+5. current Xero push remains unchanged and continues reading header values
+6. current list/allocation/retention/variation flows remain safe
+7. invoice_lines query performance is hardened with an invoice_id index or equivalent
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — HARDEN THE INVOICE LINES FOUNDATION
+1. Add a database index on invoice_lines(invoice_id), unless an equivalent performant access pattern already exists and you can prove it.
+2. Preserve current schema shape unless a tiny additive improvement is strictly required for this phase.
+3. Do not add speculative accounting/tax fields yet.
+
+PHASE B — SERVER / STORAGE SUPPORT FOR DRAFT LINE EDITING
+Add the minimum server/storage support needed for invoice line editing from invoice detail.
+
+Expected additions:
+- getInvoiceLines(invoiceId) if not already present
+- createInvoiceLine for adding a line
+- updateInvoiceLine for editing a line
+- deleteInvoiceLine for removing a line
+- possibly reorder support only if truly needed; otherwise keep it simple
+
+Add the minimum invoice-line routes needed for invoice detail editing, such as:
+- GET /api/invoices/:id/lines
+- POST /api/invoices/:id/lines
+- PATCH /api/invoice-lines/:lineId
+- DELETE /api/invoice-lines/:lineId
+
+You may use slightly different route naming if it fits current repo conventions better, but keep it narrow and predictable.
+
+Rules:
+- all route security must match existing invoice protections
+- draft-editing must be allowed only when invoice status is:
+  - draft
+  - ready_for_xero
+  - returned_to_draft
+- editing must be blocked when invoice status is:
+  - pushed_to_xero_draft
+  - approved
+- demo/division/archive protections must remain intact
+- if an invoice is locked due to Xero state, line editing must be blocked server-side, not only in UI
+
+PHASE C — HEADER RECONCILIATION RULE
+This phase must preserve header authority while allowing line editing.
+
+Required model:
+- invoice lines are edited in draft-compatible states
+- after each create/update/delete operation, the invoice header totals are reconciled from line data
+- header fields remain the values used by current allocation logic, list/detail summaries, and Xero push
+
+Minimum reconciliation behavior:
+- amountExclGst = sum of lineAmountExclGst
+- gstAmount = amountExclGst * current GST logic/rules already used by the app
+- amountInclGst = amountExclGst + gstAmount
+
+Rules:
+- keep reconciliation deterministic and centralized
+- do not create competing sources of truth in this phase
+- do not migrate allocation guards to line-level logic yet
+- do not migrate Xero payload generation to line iteration yet
+
+PHASE D — INVOICE DETAIL PAGE UI
+Update invoice detail so it becomes a draft-only operational invoice body editor.
+
+Required UI behavior:
+1. Invoice detail must read actual invoice lines instead of rendering a fake single row from header fields only.
+2. For editable statuses (draft, ready_for_xero, returned_to_draft):
+- user can add a line
+- user can edit a line
+- user can delete a line
+3. For locked statuses (pushed_to_xero_draft, approved):
+- lines are visible read-only
+- add/edit/delete controls are hidden or disabled
+- locked messaging remains clear
+4. Totals card must continue to show header totals, which are now reconciled from lines during editable states.
+5. Preserve reference, notes, status controls, Xero sync display, and linkage surfaces.
+
+Keep UI narrow and operational.
+Do not overdesign.
+Do not build a full spreadsheet-like experience.
+Do not add drag/drop if not necessary.
+Do not introduce speculative invoice composer workflows.
+
+Minimum line fields to support in UI:
+- description
+- quantity
+- unit amount
+- line total excl GST
+- optional read-only line type display if helpful
+
+Line total behavior:
+- either store and update directly with guarded recalculation
+- or derive consistently from quantity × unitAmount and persist the result
+- whichever fits current repo pattern best, but keep it simple and explicit
+
+PHASE E — PRESERVE CURRENT BUSINESS SAFEGUARDS
+Do not break or weaken:
+- invoice creation flows from quote detail
+- invoice status lifecycle
+- ready-for-Xero protections
+- returned-to-draft protections
+- Xero pushed lock behavior
+- quote detail invoice section
+- allocation guards
+- variation invoicing protections
+- retention controls
+- payment sync readback
+- governance/demo/test shielding
+- division protections
+- archive behavior
+
+Important safeguard rule:
+- current deposit/progress/variation/final/retention invoice creation from quote detail may still create a single seed line only
+- do not redesign those creation flows into a broader invoice composer in this phase
+
+PHASE F — KEEP XERO SINGLE-LINE FOR NOW
+Do not change current Xero payload generation in this phase.
+
+Specifically:
+- do not iterate invoice_lines in xero-client.ts yet
+- do not add per-line account codes or tax types yet
+- do not change current Xero lock assumptions
+- continue to use header values for Xero payload generation in this phase
+
+PHASE G — KEEP LIST / QUOTE / PROJECT SURFACES COMPATIBLE
+Do not turn this into a cross-app rewrite.
+
+Rules:
+- invoice list page may remain header-summary-based
+- quote detail invoice section may remain unchanged except for compatibility
+- project invoice surfaces may remain unchanged except for compatibility
+- do not rebuild every invoice display surface to show full line breakdown in this phase
+
+NON-GOALS
+
+Do NOT:
+- implement multi-line Xero push
+- redesign invoice allocation logic to line-level enforcement
+- redesign quotes
+- redesign projects/jobs
+- add standalone/admin quote-independent invoice creation
+- add credit-note rearchitecture
+- add procurement/reporting/back-costing enhancements
+- build a complex invoice template system
+- build a full spreadsheet/grid invoice editor
+- silently shift authoritative truth fully from header to lines
+- claim the platform now has fully complete enterprise multi-line invoicing
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirm header totals remain authoritative in current operational flows
+- confirm Xero payload remains unchanged
+- confirm invoice detail now supports draft-only line editing if completed
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. SERVER / STORAGE RESULT
+- storage methods added/changed
+- routes/endpoints added/changed
+- exact editable-status rules
+- exact locked-status rules
+- exact reconciliation behavior after line CRUD
+
+4. UI RESULT
+- what changed on invoice detail
+- what is editable vs read-only
+- what remained unchanged
+- how totals are shown
+
+5. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- invoice list page
+- quote detail invoice section
+- allocation guards
+- variation protections
+- retention controls
+- Xero push payload
+- Xero payment sync
+- governance/demo/division/archive behavior
+
+6. DATA / RECONCILIATION RESULT
+- how header values are recalculated from lines
+- when recalculation occurs
+- how zero-line or empty-state cases are handled
+- any guardrails to avoid inconsistent totals
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no multi-line Xero push yet
+- no standalone admin invoice creation yet
+- header still remains authoritative for existing operational flows
+- allocation logic is still header-based
+- quote-detail creation still seeds simple invoice structures rather than a full composer
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining line/header consistency caveat
+- any remaining migration/startup caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. SERVER / STORAGE RESULT
+
+4. UI RESULT
+
+5. COMPATIBILITY RESULT
+
+6. DATA / RECONCILIATION RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only draft-only multi-line invoice body editing on invoice detail, with header reconciliation and all current protections preserved.
+Be exact, conservative, and truthful.
+Do not claim full multi-line invoicing maturity after this phase.

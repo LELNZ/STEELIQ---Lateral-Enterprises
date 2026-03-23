@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex, index, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -562,7 +562,9 @@ export const invoiceLines = pgTable("invoice_lines", {
   sourceContext: text("source_context"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_invoice_lines_invoice_id").on(table.invoiceId),
+]);
 
 export const insertInvoiceLineSchema = createInsertSchema(invoiceLines).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertInvoiceLine = z.infer<typeof insertInvoiceLineSchema>;
