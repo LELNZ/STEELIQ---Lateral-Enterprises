@@ -1205,7 +1205,7 @@ export default function QuoteBuilder() {
       mouldNumber: d.mouldNumber || "2020250",
       kgPerMetre: String(d.kgPerMetre || "0.78"),
       pricePerKgUsd: String(d.pricePerKgUsd || "5.60"),
-      lengthFormula: d.lengthFormula || (role === "mullion" ? "height" : "width"),
+      lengthFormula: d.lengthFormula || (role === "mullion" ? "height" : role === "transom" ? "width" : "perimeter"),
     };
   }
 
@@ -1232,40 +1232,59 @@ export default function QuoteBuilder() {
       });
       const newConfig = await newConfigRes.json();
 
-      const profilePosts = baseProfiles.map((p: any) => {
-        let qty = p.quantityPerSet || 1;
-        if (p.role === "sash-frame") qty = Math.max(1, sig.awningCount + sig.hingeCount + sig.slidingCount);
-        return apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-          configurationId: newConfig.id, mouldNumber: p.mouldNumber, role: p.role,
-          kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
-          quantityPerSet: qty, lengthFormula: p.lengthFormula, sortOrder: p.sortOrder,
-        });
-      });
-      if (sig.mullionCount > 0 && !baseProfiles.some((p: any) => p.role === "mullion")) {
-        const masterMullion = resolveMasterProfile("mullion");
+      const openingPanels = Math.max(0, sig.awningCount + sig.hingeCount + sig.slidingCount);
+      const neededRoles: { role: string; qty: number; defaultFormula: string }[] = [
+        { role: "outer-frame", qty: 1, defaultFormula: "perimeter" },
+      ];
+      if (openingPanels > 0) {
+        neededRoles.push({ role: "sash-frame", qty: openingPanels, defaultFormula: "perimeter" });
+      }
+      if (sig.mullionCount > 0) {
+        neededRoles.push({ role: "mullion", qty: sig.mullionCount, defaultFormula: "height" });
+      }
+      if (sig.transomCount > 0) {
+        neededRoles.push({ role: "transom", qty: sig.transomCount, defaultFormula: "width" });
+      }
+
+      const profilePosts: Promise<any>[] = [];
+      const coveredRoles = new Set<string>();
+      for (let i = 0; i < neededRoles.length; i++) {
+        const nr = neededRoles[i];
+        coveredRoles.add(nr.role);
+        const master = resolveMasterProfile(nr.role);
+        const baseMatch = baseProfiles.find((p: any) => p.role === nr.role);
         profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
           configurationId: newConfig.id,
-          mouldNumber: masterMullion?.mouldNumber ?? "2020250",
-          role: "mullion",
-          kgPerMetre: masterMullion?.kgPerMetre ?? "0.78",
-          pricePerKgUsd: masterMullion?.pricePerKgUsd ?? "5.60",
-          quantityPerSet: sig.mullionCount,
-          lengthFormula: masterMullion?.lengthFormula ?? "height",
-          sortOrder: 99,
+          mouldNumber: master?.mouldNumber ?? baseMatch?.mouldNumber ?? "2020250",
+          role: nr.role,
+          kgPerMetre: master?.kgPerMetre ?? baseMatch?.kgPerMetre ?? "0.78",
+          pricePerKgUsd: master?.pricePerKgUsd ?? baseMatch?.pricePerKgUsd ?? "5.60",
+          quantityPerSet: nr.qty,
+          lengthFormula: master?.lengthFormula ?? baseMatch?.lengthFormula ?? nr.defaultFormula,
+          sortOrder: i,
         }));
       }
-      if (sig.transomCount > 0 && !baseProfiles.some((p: any) => p.role === "transom")) {
-        const masterTransom = resolveMasterProfile("transom");
-        profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-          configurationId: newConfig.id,
-          mouldNumber: masterTransom?.mouldNumber ?? "2020250",
-          role: "transom",
-          kgPerMetre: masterTransom?.kgPerMetre ?? "0.78",
-          pricePerKgUsd: masterTransom?.pricePerKgUsd ?? "5.60",
-          quantityPerSet: sig.transomCount,
-          lengthFormula: masterTransom?.lengthFormula ?? "width",
-          sortOrder: 100,
-        }));
+
+      const structuralRoles = new Set(["outer-frame", "sash-frame", "mullion", "transom"]);
+      const subsidiaryRoles = new Set<string>();
+      for (const p of baseProfiles) {
+        if (!coveredRoles.has(p.role) && !structuralRoles.has(p.role) && !subsidiaryRoles.has(p.role)) {
+          subsidiaryRoles.add(p.role);
+          profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
+            configurationId: newConfig.id,
+            mouldNumber: p.mouldNumber, role: p.role,
+            kgPerMetre: p.kgPerMetre, pricePerKgUsd: p.pricePerKgUsd,
+            quantityPerSet: p.quantityPerSet || 1,
+            lengthFormula: p.lengthFormula,
+            sortOrder: 50 + subsidiaryRoles.size,
+          }));
+        }
+      }
+
+      const inactiveLabourNames = new Set<string>();
+      for (const ml of masterLabour) {
+        const d = ml.data as any;
+        if (d.name && d.isActive === false) inactiveLabourNames.add(d.name);
       }
 
       await Promise.all([
@@ -1274,9 +1293,11 @@ export default function QuoteBuilder() {
           configurationId: newConfig.id, name: a.name, code: a.code, colour: a.colour,
           priceUsd: a.priceUsd, quantityPerSet: a.quantityPerSet, scalingType: a.scalingType, sortOrder: a.sortOrder,
         })),
-        ...baseLabor.map((l: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
-          configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
-        })),
+        ...baseLabor
+          .filter((l: any) => !inactiveLabourNames.has(l.taskName))
+          .map((l: any) => apiRequest("POST", `/api/configurations/${newConfig.id}/labor`, {
+            configurationId: newConfig.id, taskName: l.taskName, costNzd: l.costNzd, sortOrder: l.sortOrder,
+          })),
       ]);
 
       queryClient.invalidateQueries({ queryKey: ["/api/frame-types", currentFrameTypeLibId, "configurations"] });

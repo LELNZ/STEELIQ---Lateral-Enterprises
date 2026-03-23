@@ -209,7 +209,7 @@ export function calculatePricing(
   if (masterData?.masterLabour) {
     for (const ml of masterData.masterLabour) {
       const d = ml.data as any;
-      if (d.name) masterLabourMap.set(d.name, d);
+      if (d.name && d.isActive !== false) masterLabourMap.set(d.name, d);
     }
   }
 

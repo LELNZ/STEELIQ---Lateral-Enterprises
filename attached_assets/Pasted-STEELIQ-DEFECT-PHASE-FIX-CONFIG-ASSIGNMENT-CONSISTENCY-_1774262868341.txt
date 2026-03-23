@@ -1,0 +1,274 @@
+STEELIQ DEFECT PHASE — FIX CONFIG ASSIGNMENT CONSISTENCY + AUTO-GENERATED PROFILE OVER-COPYING FOR GROUPED/CUSTOM ITEMS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a defect investigation/fix phase for grouped/custom configuration assignment and auto-generated profile fidelity. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline.
+- Do not break existing quote builder item configurations.
+- Do not break existing preview/PDF pipeline.
+- Do not weaken accepted-quote protections, governance, lifecycle, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not perform hidden refactors.
+- Do not introduce speculative builder redesign outside the explicit scope below.
+- Treat current repo/runtime truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Preserve backward compatibility for existing quote items and existing configuration matching.
+- Do not broaden this into a full pricing-engine rewrite.
+- Do not change sale-price governance in this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- structurally equivalent grouped/custom items resolve to the same configuration path deterministically
+- auto-generated grouped/custom configs no longer over-copy irrelevant profile rows from a bad base config
+- profile row composition for auto-generated configs becomes materially more faithful to the target structure
+- grouped/custom items with the same structural signature no longer show commercially unreasonable profile-cost divergence
+- the handover clearly states the exact root cause, exact fix, and remaining limits
+
+CURRENT VERIFIED PROBLEM TO FIX
+
+The forensic review shows:
+
+- two near-equivalent grouped/custom items can end up using different configurations
+- one may match an existing/manual config
+- another may get an auto-generated config
+- autoGenerateConfiguration currently copies all profiles from configurations[0]
+- that can produce profile row sets and quantityPerSet values that are not structurally appropriate for the target grouped item
+- this leads to commercially unreasonable profile cost differences
+
+The pricing engine is not the primary defect.
+The defect is:
+1. config assignment consistency
+2. auto-generated config profile fidelity
+
+PRIMARY OBJECTIVE
+
+Fix grouped/custom config assignment so structurally equivalent items land on a consistent configuration path, and fix auto-generated configuration profile generation so it only creates the profile roles/quantities appropriate to the target structure.
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT ACTUAL CURRENT REPO TRUTH
+Review and report:
+- how findMatchingConfiguration currently resolves configs for grouped/custom items
+- how/why two same-signature items can diverge into different configs
+- how autoGenerateConfiguration currently chooses/copies base profiles
+- what profile roles are actually needed for grouped/custom items
+- what the minimum safe fix is
+
+Do not assume. Use actual repo truth.
+
+PHASE B — FIX CONFIG ASSIGNMENT CONSISTENCY
+Implement the narrowest safe fix so that grouped/custom items with the same effective structural signature resolve consistently.
+
+Requirements:
+- if two items have the same structural signature / geometry class and same relevant grouped traits, they should land on the same configuration path
+- do not allow initial assignment timing/order to cause one item to match and another to auto-generate something materially different
+- preserve deterministic behavior
+- do not add random or order-sensitive matching
+
+You may tighten or restructure matching behavior only as much as needed for consistency.
+
+PHASE C — FIX AUTO-GENERATED PROFILE FIDELITY
+This is the most important implementation phase.
+
+Current defect:
+- autoGenerateConfiguration copies all profiles from configurations[0]
+- this can import irrelevant or inflated profile rows
+
+Required fix:
+- auto-generated configs must build only the profile roles actually needed for the target grouped/custom structure
+
+At minimum, generate/select only the appropriate profile roles such as:
+- outer-frame
+- sash-frame
+- mullion (if needed)
+- transom (if needed)
+- bead / spacer only if repo truth requires them as profile rows in current pricing model
+
+Rules:
+- do not blindly clone every profile row from configurations[0]
+- use the target signature/geometry to decide what roles are required
+- preserve current master-library-resolved profile lookup where available
+- keep the logic narrow and reviewable
+- do not turn this into a full BOM engine rewrite
+
+PHASE D — FIX SASH-FRAME QUANTITY LOGIC IF NEEDED
+Review whether the current sash-frame quantityPerSet logic:
+- qty = awningCount + hingeCount + slidingCount
+
+is correct for the grouped/custom window model in repo truth.
+
+If it is not sufficiently accurate for current pricing:
+- implement the narrowest safe fix
+- explain the exact reasoning clearly
+
+Do not speculate. Use repo truth.
+
+PHASE E — VERIFY COMMERCIAL REASONABILITY
+Specifically verify that two structurally equivalent or near-equivalent grouped/custom items:
+- no longer land on materially different profile sets without reason
+- no longer show unreasonable profile-cost divergence caused by config assignment/generation defects
+
+Use the real kind of example already observed:
+- W-01 vs W-01 (copy) with same overall dimensions and similar grouped structure
+
+Explain whether the resulting difference now reflects actual geometry differences only.
+
+PHASE F — DO NOT WIDEN INTO ACCESSORY/LABOUR REWRITE YET
+Do not broaden this phase into:
+- geometry-aware accessory scaling
+- labour derivation rewrite
+- sale price policy rewrite
+- BOM rewrite
+- backend pricing API redesign
+
+Those are separate phases.
+This phase is specifically about:
+- consistent config assignment
+- profile-role fidelity in auto-generated configs
+
+PHASE G — ASSEMBLY METHOD POLICY (INCLUDE BUT KEEP NARROW)
+Include the following narrowly if repo truth supports it safely:
+
+- keep "Assembly Crimped" in the library
+- do not delete it
+- make "Assembly Screwed" the active/default assembly labour method for current costing
+- exclude/deactivate/archive "Assembly Crimped" from current auto-generated/live costing if the current production method is screwed assembly only
+- preserve historical references and future reactivation path
+
+Rules:
+- do not hard-delete labour master data
+- do not break historical configs
+- if this cannot be completed safely in the same phase, report exactly why and stop at the maximum safe point
+
+PHASE H — PRESERVE EXISTING LOGIC
+Do not break:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved quote items
+- preview/PDF pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero flows
+
+NON-GOALS
+
+Do NOT:
+- redesign the full library system
+- build a full CAD/CAM engine
+- rebuild full manufacturing BOM logic
+- redesign the whole pricing engine
+- redesign the builder UI broadly
+- broaden into dashboard propagation
+- change sale-price governance
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what exact defect was fixed
+- what was intentionally not changed
+- confirm same-signature grouped/custom items now resolve consistently
+- confirm auto-generated configs no longer blindly over-copy irrelevant profile rows
+- confirm assembly-method policy outcome (screwed active / crimped retained but inactive, if implemented)
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE RESULT
+- exact root cause of config divergence
+- exact root cause of profile-row over-copying
+- whether sash-frame quantity logic was also part of the issue
+
+4. FIX RESULT
+- how config assignment consistency now works
+- how auto-generated profile-role selection now works
+- what roles are generated and why
+- how master-library profile resolution is used
+- what changed in sash-frame quantity logic, if anything
+
+5. FORENSIC BEFORE VS AFTER RESULT
+You must compare the kind of case already observed:
+- W-01
+- W-01 (copy)
+
+Show:
+- config used before vs after
+- profile rows before vs after
+- why the unreasonable difference is removed or reduced
+- whether any remaining difference is now commercially reasonable
+
+6. ASSEMBLY METHOD RESULT
+- what happened to Assembly Crimped
+- what happened to Assembly Screwed
+- how current costing behaves now
+- what historical/future flexibility was preserved
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any pricing approximation still remaining
+- whether accessories remain generic
+- whether labour remains generic
+- whether config-library limitations still remain
+- no broad system rewrite was done
+
+9. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. ROOT CAUSE RESULT
+
+4. FIX RESULT
+
+5. FORENSIC BEFORE VS AFTER RESULT
+
+6. ASSEMBLY METHOD RESULT
+
+7. COMPATIBILITY RESULT
+
+8. KNOWN LIMITS AFTER THIS PHASE
+
+9. RECOMMENDED NEXT PHASE
+
+10. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Fix the actual configuration-consistency and auto-generated profile-fidelity defect so grouped/custom items with the same structural signature no longer produce commercially unreasonable profile-cost divergence.
+Be exact, conservative, and truthful.
