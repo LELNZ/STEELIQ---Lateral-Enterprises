@@ -3452,6 +3452,88 @@ export async function registerRoutes(
     }
   });
 
+  const XERO_RESET_SAFE_STATUSES = new Set(["DELETED", "VOIDED"]);
+
+  app.post("/api/invoices/:id/reset-xero-link", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Only admin or owner users can reset Xero linkage." });
+      }
+      const invoice = await storage.getInvoice(req.params.id);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found." });
+      if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
+      const userDiv = user.divisionCode;
+      const isAllDiv = !userDiv || user.role === "admin" || user.role === "owner";
+      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
+
+      if (!invoice.xeroInvoiceId) {
+        return res.status(400).json({ error: "This invoice is not linked to Xero. No reset needed." });
+      }
+
+      const xeroStatus = (invoice.xeroStatus ?? "").toUpperCase();
+      if (!XERO_RESET_SAFE_STATUSES.has(xeroStatus)) {
+        return res.status(409).json({
+          error: `Xero link reset is only allowed when the Xero invoice has been deleted or voided. Current Xero status: '${invoice.xeroStatus ?? "unknown"}'. Sync from Xero first to confirm the latest status.`,
+          code: "XERO_LINK_STILL_ACTIVE",
+          xeroStatus: invoice.xeroStatus,
+        });
+      }
+
+      const paid = (invoice as any).xeroAmountPaid ?? 0;
+      if (paid > 0) {
+        return res.status(409).json({
+          error: "Cannot reset Xero link — this invoice has recorded payments. Resolve payments in Xero first.",
+          code: "XERO_HAS_PAYMENTS",
+          xeroAmountPaid: paid,
+        });
+      }
+
+      const priorLinkage = {
+        xeroInvoiceId: invoice.xeroInvoiceId,
+        xeroInvoiceNumber: invoice.xeroInvoiceNumber,
+        xeroStatus: invoice.xeroStatus,
+        xeroAmountPaid: (invoice as any).xeroAmountPaid,
+        xeroAmountDue: (invoice as any).xeroAmountDue,
+        xeroLastSyncedAt: (invoice as any).xeroLastSyncedAt,
+      };
+
+      await storage.createAuditLog({
+        entityType: "invoice",
+        entityId: req.params.id,
+        action: "xero_link_reset_for_reissue",
+        performedByUserId: user.id,
+        metadataJson: {
+          reason: "Xero invoice was deleted/voided — link reset to allow reissue",
+          priorLinkage,
+        },
+      });
+
+      await storage.clearInvoiceXeroLink(req.params.id);
+
+      if (!EDITABLE_INVOICE_STATUSES.has(invoice.status)) {
+        await storage.updateInvoice(req.params.id, { status: "draft" } as any);
+      }
+
+      logActivity("xero_link_reset", "invoice", invoice.id, user.id, {
+        priorXeroInvoiceId: priorLinkage.xeroInvoiceId,
+        priorXeroInvoiceNumber: priorLinkage.xeroInvoiceNumber,
+        priorXeroStatus: priorLinkage.xeroStatus,
+      });
+
+      const finalInvoice = await storage.getInvoice(req.params.id);
+      return res.json({
+        success: true,
+        message: `Xero link reset for ${invoice.number}. Previous Xero reference: ${priorLinkage.xeroInvoiceNumber || priorLinkage.xeroInvoiceId}. This invoice can now be marked ready and pushed to Xero again.`,
+        invoice: finalInvoice,
+        priorLinkage,
+      });
+    } catch (e: any) {
+      console.error("Reset Xero link error:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post("/api/invoices/:id/sync-from-xero", async (req, res) => {
     try {
       const invoice = await storage.getInvoice(req.params.id);
@@ -4569,8 +4651,14 @@ export async function registerRoutes(
           code: "NOT_XERO_LINKED",
         });
       }
-      const previousXeroNumber = inv.xeroInvoiceNumber;
-      const previousXeroId = inv.xeroInvoiceId;
+      const priorLinkage = {
+        xeroInvoiceId: inv.xeroInvoiceId,
+        xeroInvoiceNumber: inv.xeroInvoiceNumber,
+        xeroStatus: inv.xeroStatus,
+        xeroAmountPaid: (inv as any).xeroAmountPaid,
+        xeroAmountDue: (inv as any).xeroAmountDue,
+        xeroLastSyncedAt: (inv as any).xeroLastSyncedAt,
+      };
       const updated = await storage.clearInvoiceXeroLink(invoiceId);
       await storage.createAuditLog({
         entityType: "invoice",
@@ -4578,15 +4666,14 @@ export async function registerRoutes(
         action: "xero_link_cleared",
         performedByUserId: user.id,
         metadataJson: {
-          previousXeroInvoiceId: previousXeroId,
-          previousXeroInvoiceNumber: previousXeroNumber,
+          priorLinkage,
           reason: "Admin cleared Xero link for demo/test invoice governance cleanup",
           isDemoRecord: true,
         },
       });
       return res.json({
         success: true,
-        message: `Xero link cleared for ${inv.number}. Previous Xero reference: ${previousXeroNumber || previousXeroId}. This invoice can now be archived or deleted.`,
+        message: `Xero link cleared for ${inv.number}. Previous Xero reference: ${priorLinkage.xeroInvoiceNumber || priorLinkage.xeroInvoiceId}. This invoice can now be archived or deleted.`,
         invoice: updated,
       });
     } catch (err: any) {

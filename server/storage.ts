@@ -1115,7 +1115,15 @@ export class DatabaseStorage implements IStorage {
 
   async clearInvoiceXeroLink(id: string): Promise<Invoice | undefined> {
     const [updated] = await db.update(invoices)
-      .set({ xeroInvoiceId: null, xeroInvoiceNumber: null, xeroStatus: null, updatedAt: new Date() } as any)
+      .set({
+        xeroInvoiceId: null,
+        xeroInvoiceNumber: null,
+        xeroStatus: null,
+        xeroAmountPaid: null,
+        xeroAmountDue: null,
+        xeroLastSyncedAt: null,
+        updatedAt: new Date(),
+      } as any)
       .where(eq(invoices.id, id))
       .returning();
     return updated;

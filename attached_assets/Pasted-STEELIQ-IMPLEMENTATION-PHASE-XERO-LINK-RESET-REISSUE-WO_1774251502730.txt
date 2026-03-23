@@ -1,0 +1,299 @@
+STEELIQ IMPLEMENTATION PHASE — XERO LINK RESET / REISSUE WORKFLOW FOR DELETED OR VOIDED XERO INVOICES (NO MULTI-LINE XERO PUSH YET)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow workflow-fix and audit-discipline phase for Xero-linked invoices. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model.
+- Do not redesign the invoice model in this phase.
+- Do not change customer quote PDF generation.
+- Do not remove the internal SteelIQ "Approve" action.
+- Do not collapse Xero status and SteelIQ internal status into one field.
+- Do not implement multi-line Xero push in this phase.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, retention controls, invoice locking rules, or invoice line hardening.
+- Do not perform hidden refactors.
+- Do not introduce speculative dashboard/cashflow rewrites in this phase.
+- Do not introduce standalone/admin quote-independent invoice creation in this phase.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not silently overwrite existing Xero linkage on an invoice.
+- Do not allow blind duplicate re-pushes to Xero while a prior Xero link still exists.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- there is a clear controlled workflow for a SteelIQ invoice whose linked Xero invoice was deleted or voided in Xero
+- users are no longer left stuck after returning to draft and marking ready again
+- the workflow preserves auditability
+- the same SteelIQ invoice can be reissued to Xero only through an explicit controlled reset action
+- normal invoices with active Xero links remain protected from accidental duplicate re-push
+- the invoice detail page clearly explains what happened and what the user must do next
+- no current invoice creation, line editing, locking, Xero push, payment sync, or governance flows are broken
+- the handover clearly states what was changed and what remains intentionally unchanged
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+SteelIQ currently has:
+- accepted quote -> project -> job -> invoice workflow foundations
+- invoice list and invoice detail surfaces
+- Xero push integration
+- manual sync from Xero
+- Xero payment visibility readback
+- Xero status readback clarity in UI
+- invoice reference field
+- improved quote/project/job linkage visibility
+- governance and demo/test shielding materially implemented
+- invoice_lines foundation added
+- invoice detail supports draft-only multi-line body editing
+- line/header discipline hardened
+- Xero status and SteelIQ internal status shown separately
+- internal "Approve" exists after Xero push and is intentionally retained
+
+CURRENT PROBLEM TO FIX
+
+A real workflow gap exists:
+
+- An invoice was pushed to Xero as a test
+- The Xero invoice was then deleted/voided in Xero
+- SteelIQ successfully reads back the Xero status (e.g. DELETED)
+- The user can return the invoice to draft and mark ready again
+- But push-to-Xero still refuses because the invoice still has existing Xero linkage fields and SteelIQ correctly prevents duplicate re-push over an already linked invoice
+
+This leaves the user stuck.
+
+CURRENT TRUTH / DESIGN INTENT
+
+The SteelIQ invoice should remain the internal commercial/control record.
+Deleting or voiding the Xero-side draft/test invoice should NOT force the user to delete the SteelIQ invoice and create a brand-new SteelIQ invoice.
+
+The correct model is:
+- same SteelIQ invoice record remains
+- prior Xero linkage can be explicitly reset/reissued through a controlled workflow
+- next push creates a new Xero invoice record with a new Xero id/number
+- audit trail is preserved
+
+PRIMARY OBJECTIVE
+
+Implement a controlled Xero link reset / reissue workflow so the same SteelIQ invoice can be re-pushed to Xero after the prior Xero invoice has been deleted or voided in Xero, without breaking auditability and without allowing accidental duplicate re-push for still-active Xero-linked invoices.
+
+This phase should establish:
+1. clear rules for when a Xero link may be reset
+2. explicit user confirmation workflow
+3. preserved audit trail of prior Xero linkage
+4. invoice detail UI guidance for deleted/voided Xero states
+5. safe ability to push the same SteelIQ invoice again after reset
+6. no weakening of existing duplicate-push protections for normal cases
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — AUDIT CURRENT XERO LINKAGE / PUSH GUARD TRUTH
+Before changing behavior, inspect and report:
+- how push-to-Xero currently blocks already-linked invoices
+- what fields define an existing Xero link
+- what statuses are currently returned from Xero (especially DELETED / VOIDED)
+- what return-to-draft currently does and does not clear
+- what sync-from-Xero already updates
+- what audit logging exists around invoice/Xero actions
+- whether there is already any existing mechanism for clearing Xero linkage
+
+Do not assume. Use repo truth.
+
+PHASE B — DEFINE SAFE RESET RULES
+Implement a narrow, explicit rule for when Xero linkage can be reset.
+
+The reset should only be allowed when it is safe, such as:
+- Xero status is DELETED, or
+- Xero status is VOIDED, or
+- another narrow condition that repo truth proves is safe and you explain clearly
+
+The reset must NOT be allowed when:
+- the Xero invoice is still active/authorised/live in a way that would risk duplicate accounting records
+- the Xero invoice is partially paid or paid
+- the prior Xero linkage still represents an active accounting document
+
+If more than one safe rule is possible, choose the most conservative one.
+
+PHASE C — ADD EXPLICIT XERO LINK RESET / REISSUE ACTION
+Add a controlled server-side action, for example:
+- POST /api/invoices/:id/reset-xero-link
+or equivalent, matching current route conventions
+
+This action should:
+- validate that reset is allowed under the rules above
+- preserve auditability
+- clear only the fields necessary to allow a fresh push
+- return the invoice to the correct internal state if needed, or validate current state clearly
+- not silently erase history
+
+At minimum consider handling fields such as:
+- xeroInvoiceId
+- xeroInvoiceNumber
+- xeroStatus
+- xeroAmountPaid
+- xeroAmountDue
+- xeroLastSyncedAt
+
+But do this conservatively and explain exactly what is cleared and why.
+
+Audit requirement:
+- log the prior Xero linkage before/reset during the reset action
+- include old Xero invoice id/number/status in audit metadata or equivalent
+- make it possible to understand later that this SteelIQ invoice was once pushed to Xero, then reset/reissued
+
+PHASE D — INVOICE DETAIL UI / WORKFLOW CLARITY
+Improve invoice detail so the user is not stuck or confused.
+
+Required behavior:
+- if Xero status is DELETED or VOIDED and reset is allowed, show a clear callout explaining:
+  - this invoice was previously pushed to Xero
+  - the linked Xero invoice is now deleted/voided
+  - to issue it again, the user must explicitly reset the Xero link
+- provide a clear action button for the reset if the user has permission
+- after reset, the invoice should clearly show it is no longer linked to Xero and can be marked ready/pushed again under the normal flow
+- do not auto-reset linkage without explicit user action
+
+If the current internal state also matters, make the message honest and clear.
+
+PHASE E — PRESERVE NORMAL DUPLICATE-PUSH PROTECTION
+For invoices with a valid active Xero link, existing protection must remain.
+
+Rules:
+- a normal linked invoice must still be blocked from being pushed again
+- reset/reissue must be the exceptional controlled path, not the default
+- do not create a loophole that lets users duplicate live Xero invoices from SteelIQ
+
+PHASE F — KEEP INTERNAL APPROVE / XERO READBACK MODEL INTACT
+Do not change these in this phase:
+- internal SteelIQ Approve remains a separate action
+- Xero status readback remains separate from SteelIQ internal status
+- Xero status/payment sync model remains intact
+- line editing hardening remains intact
+- quote-detail invoice creation remains intact
+
+PHASE G — OPTIONAL LIST SURFACE IMPROVEMENT ONLY IF LOW-RISK
+If low-risk and useful, you may add a subtle invoice-list hint for invoices whose Xero status is DELETED or VOIDED and are eligible for reset/reissue.
+
+Do not overdesign.
+Do not widen into dashboard logic.
+
+NON-GOALS
+
+Do NOT:
+- implement multi-line Xero push
+- redesign invoice lifecycle broadly
+- auto-reset Xero links
+- auto-approve SteelIQ invoices
+- add webhooks or polling in this phase
+- redesign dashboards/cashflow modules
+- redesign quotes/projects/jobs
+- add standalone/admin invoice creation
+- widen into a general accounting rewrite
+- claim the whole project/job/dashboard propagation is complete after this phase
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirm same SteelIQ invoice can now be reissued only through a controlled reset path if safe
+- confirm normal duplicate-push protection remains intact
+- confirm internal SteelIQ Approve remains intact
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. XERO RESET / REISSUE RESULT
+- exact safe conditions under which reset is allowed
+- exact route/action added
+- exact fields cleared
+- exact audit trail preserved
+- exact conditions under which reset is blocked
+
+4. UI RESULT
+- what changed on invoice detail
+- what the user now sees when Xero status is DELETED or VOIDED
+- what action the user can take
+- what happens after reset
+- whether invoice list changed
+
+5. WORKFLOW RESULT
+- exact intended user flow after this phase
+- what user should do if a Xero invoice was deleted/voided
+- why creating a brand-new SteelIQ invoice is no longer required in that scenario
+- what still remains intentionally manual
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- invoice list page core behavior
+- quote detail invoice section
+- invoice line editing / lock hardening
+- allocation guards
+- variation protections
+- retention controls
+- Xero push payload
+- Xero payment sync
+- governance/demo/division/archive behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no multi-line Xero push yet
+- no automatic reset of Xero linkage
+- no automatic SteelIQ approval based solely on Xero status
+- no webhook/background polling solution yet
+- header still remains authoritative for current operational flows
+- dashboard/cashflow propagation is still future work
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+- should logically build on this safer Xero lifecycle model
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining Xero reset/reissue caveat
+- any remaining manual-sync caveat
+- any remaining operational caveat around invoice approval flow
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. XERO RESET / REISSUE RESULT
+
+4. UI RESULT
+
+5. WORKFLOW RESULT
+
+6. COMPATIBILITY RESULT
+
+7. KNOWN LIMITS AFTER THIS PHASE
+
+8. RECOMMENDED NEXT PHASE
+
+9. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the controlled Xero link reset / reissue workflow required to safely re-push the same SteelIQ invoice after the prior Xero invoice was deleted or voided in Xero.
+Be exact, conservative, and truthful.
+Do not claim full accounting lifecycle maturity after this phase.
