@@ -96,19 +96,6 @@ function PaymentBadge({ invoice }: { invoice: EnrichedInvoice }) {
   return null;
 }
 
-function buildTypeContext(invoice: EnrichedInvoice): string {
-  if (invoice.type === "deposit") {
-    if (invoice.depositType === "percentage") return `${invoice.depositPercentage ?? 0}% deposit on accepted quotation`;
-    return "Fixed deposit amount";
-  }
-  if (invoice.type === "progress") return "Progress claim";
-  if (invoice.type === "variation") return invoice.variationTitle ? `Variation: ${invoice.variationTitle}` : "Variation invoice";
-  if (invoice.type === "final") return "Final invoice";
-  if (invoice.type === "retention_release") return "Retention release";
-  if (invoice.type === "credit_note") return "Credit note";
-  return TYPE_LABELS[invoice.type] || invoice.type;
-}
-
 type EditingLine = {
   id: string;
   description: string;
@@ -123,7 +110,6 @@ export default function InvoiceDetailPage() {
   const { user } = useAuth();
 
   const [editingField, setEditingField] = useState<string | null>(null);
-  const [editDescription, setEditDescription] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editReference, setEditReference] = useState("");
   const [editingLine, setEditingLine] = useState<EditingLine | null>(null);
@@ -254,6 +240,17 @@ export default function InvoiceDetailPage() {
     },
   });
 
+  function handleDemotionToast(data: any, action: string) {
+    if (data?._demotedToDraft) {
+      toast({
+        title: `${action} — status returned to Draft`,
+        description: "The invoice was in 'Ready for Xero' and has been returned to Draft because line items were changed. Mark it ready again when editing is complete.",
+      });
+    } else {
+      toast({ title: action });
+    }
+  }
+
   const addLineMutation = useMutation({
     mutationFn: async (data: { description: string; quantity: number; unitAmount: number | null }) => {
       const res = await apiRequest("POST", `/api/invoices/${id}/lines`, data);
@@ -263,13 +260,13 @@ export default function InvoiceDetailPage() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id, "lines"] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       setAddingLine(false);
       setNewLine({ description: "", quantity: "1", unitAmount: "" });
-      toast({ title: "Line added" });
+      handleDemotionToast(data, "Line added");
     },
     onError: (err: Error) => {
       toast({ title: "Failed to add line", description: err.message, variant: "destructive" });
@@ -285,12 +282,12 @@ export default function InvoiceDetailPage() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id, "lines"] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       setEditingLine(null);
-      toast({ title: "Line updated" });
+      handleDemotionToast(data, "Line updated");
     },
     onError: (err: Error) => {
       toast({ title: "Failed to update line", description: err.message, variant: "destructive" });
@@ -306,11 +303,11 @@ export default function InvoiceDetailPage() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices", id, "lines"] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      toast({ title: "Line removed" });
+      handleDemotionToast(data, "Line removed");
     },
     onError: (err: Error) => {
       toast({ title: "Failed to remove line", description: err.message, variant: "destructive" });
@@ -371,7 +368,6 @@ export default function InvoiceDetailPage() {
 
   function startEdit(field: string) {
     if (!invoice) return;
-    if (field === "description") setEditDescription(invoice.description ?? "");
     if (field === "notes") setEditNotes(invoice.notes ?? "");
     if (field === "reference") setEditReference((invoice as any).reference ?? "");
     setEditingField(field);
@@ -381,7 +377,6 @@ export default function InvoiceDetailPage() {
 
   function saveEdit(field: string) {
     if (!isEditable) return;
-    if (field === "description") patchMutation.mutate({ description: editDescription || null });
     if (field === "notes") patchMutation.mutate({ notes: editNotes || null });
     if (field === "reference") patchMutation.mutate({ reference: editReference || null });
   }

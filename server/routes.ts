@@ -3035,13 +3035,25 @@ export async function registerRoutes(
   const EDITABLE_INVOICE_STATUSES = new Set(["draft", "ready_for_xero", "returned_to_draft"]);
   const GST_RATE_LINES = 0.15;
 
-  async function reconcileInvoiceHeaderFromLines(invoiceId: string) {
+  async function reconcileInvoiceHeaderFromLines(invoiceId: string, userId?: string | null): Promise<{ demoted: boolean }> {
     const lines = await storage.getInvoiceLines(invoiceId);
     const amountExclGst = lines.reduce((sum, l) => sum + (l.lineAmountExclGst ?? 0), 0);
     const rounded = Math.round(amountExclGst * 100) / 100;
     const gstAmount = Math.round(rounded * GST_RATE_LINES * 100) / 100;
     const amountInclGst = Math.round((rounded + gstAmount) * 100) / 100;
     await storage.updateInvoice(invoiceId, { amountExclGst: rounded, gstAmount, amountInclGst } as any);
+
+    const invoice = await storage.getInvoice(invoiceId);
+    if (invoice && invoice.status === "ready_for_xero") {
+      await storage.updateInvoice(invoiceId, { status: "draft" } as any);
+      logActivity("invoice_updated", "invoice", invoiceId, userId ?? null, {
+        from: "ready_for_xero",
+        to: "draft",
+        reason: "auto_demoted_after_line_edit",
+      });
+      return { demoted: true };
+    }
+    return { demoted: false };
   }
 
   async function guardInvoiceLineAccess(req: any, res: any, invoiceId: string, requireEditable: boolean): Promise<any | null> {
@@ -3086,8 +3098,8 @@ export async function registerRoutes(
       variationId: parsed.data.variationId ?? null,
       sourceContext: JSON.stringify({ origin: "manual_add" }),
     });
-    await reconcileInvoiceHeaderFromLines(req.params.id);
-    return res.status(201).json(line);
+    const { demoted } = await reconcileInvoiceHeaderFromLines(req.params.id, req.user?.id ?? null);
+    return res.status(201).json({ ...line, _demotedToDraft: demoted });
   });
 
   app.patch("/api/invoice-lines/:lineId", async (req, res) => {
@@ -3108,8 +3120,8 @@ export async function registerRoutes(
     const ua = updates.unitAmount !== undefined ? updates.unitAmount : line.unitAmount;
     updates.lineAmountExclGst = ua != null ? Math.round(qty * ua * 100) / 100 : null;
     const updated = await storage.updateInvoiceLine(req.params.lineId, updates);
-    await reconcileInvoiceHeaderFromLines(line.invoiceId);
-    return res.json(updated);
+    const { demoted } = await reconcileInvoiceHeaderFromLines(line.invoiceId, req.user?.id ?? null);
+    return res.json({ ...updated, _demotedToDraft: demoted });
   });
 
   app.delete("/api/invoice-lines/:lineId", async (req, res) => {
@@ -3118,8 +3130,8 @@ export async function registerRoutes(
     const invoice = await guardInvoiceLineAccess(req, res, line.invoiceId, true);
     if (!invoice) return;
     await storage.deleteInvoiceLine(req.params.lineId);
-    await reconcileInvoiceHeaderFromLines(line.invoiceId);
-    return res.json({ success: true });
+    const { demoted } = await reconcileInvoiceHeaderFromLines(line.invoiceId, req.user?.id ?? null);
+    return res.json({ success: true, _demotedToDraft: demoted });
   });
 
   app.patch("/api/invoices/:id", async (req, res) => {
@@ -3161,6 +3173,21 @@ export async function registerRoutes(
           return res.status(403).json({
             error: `Invoice is in '${invoice.status}' status. Commercial fields cannot be edited after Xero push. Return the invoice to draft first (and delete the corresponding Xero invoice before reissuing).`,
             lockedFields: COMMERCIAL_FIELDS,
+          });
+        }
+      }
+
+      const LINE_MANAGED_FIELDS = ["amountExclGst", "gstAmount", "amountInclGst", "description"] as const;
+      const attemptedLineManagedEdit = LINE_MANAGED_FIELDS.some(
+        (f) => Object.prototype.hasOwnProperty.call(parsed.data, f) && (parsed.data as any)[f] !== undefined,
+      );
+      if (attemptedLineManagedEdit) {
+        const existingLines = await storage.getInvoiceLines(req.params.id);
+        if (existingLines.length > 0) {
+          return res.status(409).json({
+            error: "This invoice has line items — amount and description fields are managed through line editing. Direct header edits to these fields are not permitted.",
+            code: "LINE_MANAGED_CONFLICT",
+            protectedFields: LINE_MANAGED_FIELDS,
           });
         }
       }
