@@ -1171,6 +1171,30 @@ export default function QuoteBuilder() {
     setRoomFilter("");
   }
 
+  function resolveMasterProfile(role: string): { mouldNumber: string; kgPerMetre: string; pricePerKgUsd: string; lengthFormula: string } | null {
+    const frameTypeEntry = libFrameTypes.find((e) => e.id === currentFrameTypeLibId);
+    const frameTypeLabel = frameTypeEntry ? (frameTypeEntry.data as any).label : "";
+    if (!frameTypeLabel || masterProfiles.length === 0) return null;
+
+    const candidates = masterProfiles.filter((mp) => {
+      const d = mp.data as any;
+      if (d.role !== role) return false;
+      const fg = d.familyGroup;
+      if (Array.isArray(fg)) return fg.includes(frameTypeLabel);
+      return fg === frameTypeLabel;
+    });
+    if (candidates.length === 0) return null;
+
+    const best = candidates[0];
+    const d = best.data as any;
+    return {
+      mouldNumber: d.mouldNumber || "2020250",
+      kgPerMetre: String(d.kgPerMetre || "0.78"),
+      pricePerKgUsd: String(d.pricePerKgUsd || "5.60"),
+      lengthFormula: d.lengthFormula || (role === "mullion" ? "height" : "width"),
+    };
+  }
+
   async function autoGenerateConfiguration(sig: ConfigSignature): Promise<string | null> {
     if (!currentFrameTypeLibId || configurations.length === 0) return null;
     if (findMatchingConfiguration(sig, configurations)) return null;
@@ -1204,17 +1228,29 @@ export default function QuoteBuilder() {
         });
       });
       if (sig.mullionCount > 0 && !baseProfiles.some((p: any) => p.role === "mullion")) {
+        const masterMullion = resolveMasterProfile("mullion");
         profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-          configurationId: newConfig.id, mouldNumber: "2020250", role: "mullion",
-          kgPerMetre: "0.78", pricePerKgUsd: "5.60",
-          quantityPerSet: sig.mullionCount, lengthFormula: "height", sortOrder: 99,
+          configurationId: newConfig.id,
+          mouldNumber: masterMullion?.mouldNumber ?? "2020250",
+          role: "mullion",
+          kgPerMetre: masterMullion?.kgPerMetre ?? "0.78",
+          pricePerKgUsd: masterMullion?.pricePerKgUsd ?? "5.60",
+          quantityPerSet: sig.mullionCount,
+          lengthFormula: masterMullion?.lengthFormula ?? "height",
+          sortOrder: 99,
         }));
       }
       if (sig.transomCount > 0 && !baseProfiles.some((p: any) => p.role === "transom")) {
+        const masterTransom = resolveMasterProfile("transom");
         profilePosts.push(apiRequest("POST", `/api/configurations/${newConfig.id}/profiles`, {
-          configurationId: newConfig.id, mouldNumber: "2020250", role: "transom",
-          kgPerMetre: "0.78", pricePerKgUsd: "5.60",
-          quantityPerSet: sig.transomCount, lengthFormula: "width", sortOrder: 100,
+          configurationId: newConfig.id,
+          mouldNumber: masterTransom?.mouldNumber ?? "2020250",
+          role: "transom",
+          kgPerMetre: masterTransom?.kgPerMetre ?? "0.78",
+          pricePerKgUsd: masterTransom?.pricePerKgUsd ?? "5.60",
+          quantityPerSet: sig.transomCount,
+          lengthFormula: masterTransom?.lengthFormula ?? "width",
+          sortOrder: 100,
         }));
       }
 

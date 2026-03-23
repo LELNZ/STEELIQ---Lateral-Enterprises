@@ -1,0 +1,248 @@
+STEELIQ IMPLEMENTATION PHASE — MASTER-LIBRARY-RESOLVED AUTO PROFILE GENERATION FOR GEOMETRY-AWARE CONFIGS
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow pricing-accuracy and config-generation improvement phase. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing QuoteBuilder -> config-signature -> pricing pipeline.
+- Do not break existing quote builder item configurations.
+- Do not break existing preview/PDF pipeline.
+- Do not weaken accepted-quote protections, governance, lifecycle, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not perform hidden refactors.
+- Do not introduce speculative builder redesign outside the explicit scope below.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Preserve backward compatibility for existing quote items and existing configuration matching.
+- Do not broaden this into a full manufacturing-engine rewrite.
+- Do not change sale-price governance in this phase.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- autoGenerateConfiguration no longer relies on hardcoded mullion/transom profile defaults where master-library truth is available
+- auto-created grouped/custom configs resolve mullion/transom profile material data from the appropriate master/library path
+- pricing for geometry-aware auto-generated configs becomes more materially trustworthy than the current hardcoded-default behavior
+- existing standard items and existing configs still work correctly
+- backward compatibility is preserved
+- the handover clearly states what was changed and what remains intentionally unchanged
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+SteelIQ now has:
+- grouped/custom geometry metrics derivation
+- geometry-aware config signatures and matching
+- geometry-aware pricing inputs
+- auto-generated grouped/custom configs for unequal-height geometries
+- improved Create Job workflow emphasis
+- improved Measurement & Dimensions discoverability on job page
+
+However, current repo truth still shows a key accuracy gap:
+- auto-generated mullion/transom profiles use hardcoded defaults
+  - mould number: 2020250
+  - kg/m: 0.78
+  - price/kg USD: 5.60
+- this is not sufficiently trustworthy if the frame type / library already contains the correct material source
+
+PRIMARY OBJECTIVE
+
+Improve auto-generated grouped/custom configurations so mullion/transom profile generation resolves from the actual master/library material data wherever possible, instead of using hardcoded defaults.
+
+This phase should establish:
+1. master-library-resolved mullion/transom profile generation
+2. better pricing accuracy for auto-generated geometry-aware configs
+3. preserved current builder automation
+4. preserved backward compatibility when master data is incomplete
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT CURRENT MASTER / LIBRARY PATH
+Review and report:
+- where frame type / direct-material / profile library truth currently lives
+- how configuration profiles currently reference mould numbers, kg/m, and price/kg
+- what master/library sources are available at quote-builder time
+- how autoGenerateConfiguration currently builds mullion/transom profiles
+- the minimum additive path needed to resolve correct profile data from existing library/master data
+
+Do not assume. Use repo truth.
+
+PHASE B — DEFINE LIBRARY RESOLUTION RULES
+Implement a conservative resolution strategy for auto-generated mullion/transom profiles.
+
+Preferred resolution order:
+1. Use frame-type-appropriate/profile-library truth already available for the current frame type / configuration family
+2. If multiple plausible candidates exist, choose the most conservative repo-truth-based rule and explain it clearly
+3. Only fall back to the current hardcoded defaults if no trustworthy library/master match can be resolved
+
+Rules:
+- do not invent material data
+- do not silently use random first-match logic without explaining it
+- keep the logic deterministic and reviewable
+
+PHASE C — UPDATE AUTO CONFIGURATION GENERATION
+Update autoGenerateConfiguration so that when it needs to create mullion/transom profiles for a new grouped/custom geometry-aware config, it:
+- resolves mould number from library/master truth if available
+- resolves kg/m from library/master truth if available
+- resolves price/kg from library/master truth if available
+- records these values on the auto-generated configuration profile rows
+- keeps current quantity logic unless repo truth clearly supports a better narrow improvement
+
+Important:
+- preserve existing inheritance behavior for other profile/accessory/labour lines unless explicitly required otherwise
+- do not redesign the entire auto-generation model
+
+PHASE D — SAFE FALLBACK BEHAVIOR
+Preserve safe fallback behavior.
+
+If the required library/master profile cannot be resolved:
+- fall back to the current hardcoded/default behavior
+- report that fallback clearly in the code/handover
+- do not break auto-generation entirely because of missing library data
+
+Backward-compatible fallback is mandatory.
+
+PHASE E — PRICING INTEGRATION CONFIRMATION
+Ensure pricing uses the improved auto-generated profile data naturally.
+
+Requirements:
+- no sale-price redesign
+- no broad pricing-engine rewrite
+- confirm net manufacturing cost for auto-generated grouped configs now reflects master-library-resolved profile data where available
+- confirm old items still price correctly
+
+PHASE F — DO NOT WIDEN INTO ACCESSORY/LABOUR REWRITE
+Do not broaden this phase into:
+- geometry-aware accessory derivation rewrite
+- labour task derivation rewrite
+- BOM rewrite
+- procurement rewrite
+
+This phase is specifically about:
+- replacing hardcoded auto-profile defaults with library/master-resolved profile truth where available
+
+PHASE G — PRESERVE EXISTING LOGIC
+Do not break:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved quote items
+- preview/PDF pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero flows
+
+NON-GOALS
+
+Do NOT:
+- redesign the full library system
+- build a full CAD/CAM engine
+- rebuild manufacturing BOM architecture end to end
+- redesign quote summary/PDF pipeline
+- redesign project/job/invoice/Xero workflows
+- broaden into dashboard propagation in this phase
+- change sale-price governance beyond using better material-cost truth
+- claim pricing is fully exact after this phase if accessory/labour approximations remain
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not implemented
+- confirm auto-generated mullion/transom profiles now resolve from master/library truth where available
+- confirm fallback behavior remains safe
+- confirm backward compatibility was preserved
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT VS NEW AUTO-GENERATION RESULT
+- how auto-generated mullion/transom profiles worked before
+- how they work now
+- what was hardcoded before
+- what is now library/master-resolved
+- what still remains fallback/default behavior
+
+4. LIBRARY RESOLUTION RESULT
+- what master/library source is used
+- how candidate profiles are found
+- how deterministic selection works
+- what happens when no valid candidate exists
+
+5. PRICING RESULT
+- what becomes more accurate now
+- how auto-generated grouped/custom config costing changes
+- what stayed unchanged
+- what is still approximate after this phase
+
+6. BUILDER RESULT
+- what the user experiences in quote builder now
+- whether the workflow stayed automatic
+- whether any UI changed or not
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing standard layouts
+- existing grouped layouts without overrides
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- whether accessory derivation remains generic
+- whether labour derivation remains generic
+- whether some frame/library combinations still fall back to defaults
+- whether pricing is still commercially approximate anywhere
+- no broad system rewrite was done
+
+9. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining config-library caveat
+- any remaining lifecycle UX caveat
+
+OUTPUT FORMAT REQUIRED
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+
+2. FILES CHANGED
+
+3. CURRENT VS NEW AUTO-GENERATION RESULT
+
+4. LIBRARY RESOLUTION RESULT
+
+5. PRICING RESULT
+
+6. BUILDER RESULT
+
+7. COMPATIBILITY RESULT
+
+8. KNOWN LIMITS AFTER THIS PHASE
+
+9. RECOMMENDED NEXT PHASE
+
+10. OPEN RISKS / WATCH ITEMS
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Implement only the minimum additive enhancement required to replace hardcoded auto-generated mullion/transom profile defaults with master-library-resolved profile truth where available.
+Be exact, conservative, and truthful.
