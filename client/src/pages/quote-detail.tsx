@@ -1490,6 +1490,12 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  useEffect(() => {
+    const handler = () => { if (projectId && !existingJob) setShowDialog(true); };
+    window.addEventListener("steeliq:open-job-dialog", handler);
+    return () => window.removeEventListener("steeliq:open-job-dialog", handler);
+  }, [projectId, existingJob]);
+
   if (checkingJob) return null;
 
   if (existingJob) {
@@ -1527,32 +1533,16 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
       <div className="rounded-lg border border-dashed p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Briefcase className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold">Convert to Job</h3>
+          <h3 className="text-sm font-semibold">Job Conversion</h3>
         </div>
         {!projectId ? (
-          <>
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription className="text-sm font-medium">
-                A project must be created first before converting to a job.
-                <span className="block text-xs font-normal text-muted-foreground mt-0.5">
-                  Use the <strong>Create Project</strong> button in the Customer &amp; Project section above, then return here to convert.
-                </span>
-              </AlertDescription>
-            </Alert>
-            <Button size="sm" disabled data-testid="button-convert-to-job">
-              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
-            </Button>
-          </>
+          <p className="text-sm text-muted-foreground">
+            A project must be created first before converting to a job. Use the <strong>Delivery Workflow</strong> panel above to proceed step by step.
+          </p>
         ) : (
-          <>
-            <p className="text-sm text-muted-foreground">
-              This accepted quote is ready to be converted into an operational job. This creates a traceable job shell linked to the accepted revision and project.
-            </p>
-            <Button size="sm" onClick={() => setShowDialog(true)} data-testid="button-convert-to-job">
-              <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Convert to Job
-            </Button>
-          </>
+          <p className="text-sm text-muted-foreground">
+            This accepted quote is ready to be converted into an operational job. Use the <strong>Create Job</strong> action in the Delivery Workflow panel above.
+          </p>
         )}
       </div>
 
