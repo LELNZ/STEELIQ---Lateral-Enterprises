@@ -1,0 +1,181 @@
+STEELIQ CORRECTION PHASE — SURFACE THE ACTUAL NEXT ACTION ABOVE THE FOLD ON ACCEPTED QUOTES
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow corrective UI/UX pass for accepted-quote workflow guidance. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote/project/job/invoice data models.
+- Do not change customer quote PDF generation.
+- Do not change invoice/Xero behavior in this phase.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, retention controls, invoice line hardening, or Xero reset/reissue controls.
+- Do not perform hidden refactors.
+- Do not widen this into a full quote-detail page redesign.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not solve this by adding more explanatory text while keeping the real CTA buried.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+
+PROBLEM TO FIX
+
+The prior workflow-guidance phase improved signaling, but the actual operational CTA is still too low on the accepted quote page.
+
+Current issue:
+- The workflow panel correctly says “Next: Create Job”
+- But the actual “Convert to Job” action is still buried lower on the page
+- Users still need to scroll/search to perform the next required action
+- This means the workflow fix is incomplete
+
+PRIMARY OBJECTIVE
+
+Make the actual next required action available above the fold on accepted quotes, not just described.
+
+This phase must ensure:
+1. the workflow panel shows the current step state
+2. the actual primary CTA for the next required step is surfaced prominently near the workflow panel
+3. users do not need to scroll to find the next action in the normal quote → project → job → invoice lifecycle
+4. deeper sections can remain below, but the primary next-action control must be immediately usable
+
+STRICT SCOPE
+
+Implement only the following:
+
+PHASE A — SURFACE PRIMARY NEXT ACTION NEAR THE WORKFLOW PANEL
+On accepted quote pages, add a prominent top-level action area near the Delivery Workflow panel.
+
+Required behavior:
+- If no project exists:
+  - show primary CTA: Create Project
+- If project exists but no job exists:
+  - show primary CTA: Create Job
+- If project and job exist but no invoices exist:
+  - show primary CTA: Create First Invoice
+- If invoices already exist:
+  - show a sensible continuation CTA such as View Invoices / Continue Invoicing if appropriate and low-risk
+
+This must be a real usable action, not just text telling the user to scroll.
+
+Important:
+- use the actual existing operational actions/handlers where possible
+- do not duplicate business logic unnecessarily
+- do not create a fake button that only scrolls unless that is truly the safest necessary bridge and you explain why
+- preferred result is that the real action itself is available near the top
+
+PHASE B — KEEP DEEPER OPERATIONAL SECTIONS BELOW
+Do not remove the lower sections unless clearly redundant and safe.
+
+The lower sections such as:
+- Customer & Project
+- Convert to Job
+- Invoices
+may remain as the detailed working areas.
+
+But:
+- the primary user should not be forced to rely on those lower sections just to perform the next obvious step
+
+PHASE C — ALIGN CTA HIERARCHY
+Make the CTA hierarchy visually clear:
+
+Top-of-page accepted-quote area should communicate:
+- current workflow state
+- next required action
+- completed prior steps
+
+The top CTA should be the dominant action for the current state.
+Lower-page buttons should become secondary/supporting surfaces.
+
+PHASE D — MINIMAL-RISK REUSE
+Where possible:
+- reuse existing modals/forms/handlers
+- reuse existing create project / convert to job / create invoice flows
+- avoid duplicating logic in multiple places
+- if a shared button/action component can be reused safely, do so
+
+PHASE E — OPTIONAL SCROLL SUPPORT ONLY IF NEEDED
+If technical constraints mean the real action cannot safely be fully duplicated near the top, then:
+- provide a clear top CTA that scrolls directly to the correct section
+- visually anchors/highlights that section on arrival if practical
+
+But this is second-best.
+Preferred outcome is:
+- the real actionable button/control exists near the workflow panel
+
+NON-GOALS
+
+Do NOT:
+- redesign the page broadly
+- add a full wizard
+- change underlying project/job/invoice business logic
+- change Xero behavior
+- change invoice model
+- widen into a full navigation rewrite
+- hide everything behind tabs/accordions
+- claim the lifecycle UX is complete unless the actual next action is genuinely surfaced and usable
+
+REQUIRED DELIVERABLES
+
+Do not report complete unless you provide:
+
+1. SUMMARY
+- what was corrected
+- what actual next-step action is now surfaced near the top
+- what was intentionally not changed
+- confirm users no longer need to hunt/scroll for the normal next action on accepted quotes
+
+2. EXACT FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. TOP-OF-PAGE CTA RESULT
+- what CTA now appears for each state:
+  - no project
+  - project but no job
+  - project + job but no invoice
+  - invoices already exist
+- whether the CTA is the real action or only a scroll bridge
+- why that approach was used
+
+4. UI RESULT
+- what changed on the accepted quote page
+- what remained below the fold
+- how the workflow panel and CTA now work together
+- whether the lower sections remain
+
+5. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- quote acceptance logic
+- project creation logic
+- job creation logic
+- invoice creation logic
+- invoice/Xero workflow
+- governance/demo/division/archive behavior
+
+6. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no full lifecycle wizard yet
+- no dashboard/cashflow propagation yet
+- no multi-line Xero push yet
+- no standalone admin invoice creation yet
+- lower operational sections still exist for detailed work
+
+7. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+8. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining lifecycle UI/UX gap
+- any remaining internal navigation caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a rewrite.
+Correct the accepted-quote workflow so the actual next required action is surfaced above the fold and immediately usable.
+Be exact, conservative, and truthful.

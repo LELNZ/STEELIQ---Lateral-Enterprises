@@ -1026,17 +1026,62 @@ function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string;
       {isLoading ? (
         <p className="text-xs text-muted-foreground" data-testid="text-workflow-loading">Checking workflow status…</p>
       ) : nextStep ? (
-        <p className="text-xs text-muted-foreground" data-testid="text-workflow-next-step">
+        <div className="flex items-center justify-between gap-3" data-testid="text-workflow-next-step">
           {nextStep.blocked ? (
-            <span className="text-amber-600 dark:text-amber-400">{nextStep.blockedMsg}</span>
+            <p className="text-xs text-amber-600 dark:text-amber-400">{nextStep.blockedMsg}</p>
           ) : (
-            <>Next: <strong>{nextStep.label === "Project" ? "Create Project" : nextStep.label === "Job" ? "Create Job" : invoices.length === 0 ? "Raise first invoice" : "Continue invoicing"}</strong> — scroll to the {nextStep.label === "Project" ? "Customer & Project" : nextStep.label === "Job" ? "Convert to Job" : "Invoices"} section below</>
+            <>
+              <p className="text-xs text-muted-foreground">
+                Next: <strong>{nextStep.label === "Project" ? "Create Project" : nextStep.label === "Job" ? "Create Job" : invoices.length === 0 ? "Raise first invoice" : "Continue invoicing"}</strong>
+              </p>
+              <Button
+                size="sm"
+                className="h-7 text-xs shrink-0"
+                onClick={() => {
+                  const selectors: Record<string, string> = {
+                    Project: '[data-testid="button-create-project-cta"], [data-testid="button-create-project-from-quote"]',
+                    Job: '[data-testid="button-convert-to-job"]',
+                    Invoice: '[data-testid="button-create-invoice"]',
+                  };
+                  const sel = selectors[nextStep.label];
+                  if (sel) {
+                    const btn = document.querySelector<HTMLButtonElement>(sel);
+                    if (btn) {
+                      btn.scrollIntoView({ behavior: "smooth", block: "center" });
+                      setTimeout(() => btn.click(), 350);
+                    }
+                  }
+                }}
+                data-testid="button-workflow-next-action"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                {nextStep.label === "Project" ? "Create Project" : nextStep.label === "Job" ? "Create Job" : invoices.length === 0 ? "Create First Invoice" : "Create Invoice"}
+              </Button>
+            </>
           )}
-        </p>
+        </div>
       ) : (
-        <p className="text-xs text-emerald-700 dark:text-emerald-400" data-testid="text-workflow-complete">
-          All delivery steps completed — manage invoices and job below.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-emerald-700 dark:text-emerald-400" data-testid="text-workflow-complete">
+            All delivery steps completed
+          </p>
+          <div className="flex items-center gap-1.5">
+            {linkedJob && (
+              <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => {
+                const btn = document.querySelector<HTMLButtonElement>('[data-testid="button-view-job"]');
+                if (btn) btn.click();
+              }} data-testid="button-workflow-view-job">
+                <Briefcase className="h-3 w-3 mr-1" /> View Job
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => {
+              const el = document.querySelector('[data-testid="button-create-invoice"]');
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }} data-testid="button-workflow-view-invoices">
+              <ReceiptText className="h-3 w-3 mr-1" /> Invoices
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
