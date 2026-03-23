@@ -375,6 +375,7 @@ export default function QuoteBuilder() {
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
   const skipCategoryResetRef = useRef(false);
   const expectedFrameTypeRef = useRef<string>("");
+  const savedItemBaselineRef = useRef<{ signature: string; configurationId: string } | null>(null);
   const hydratedJobRef = useRef(false);
   const didAutoCollapseOnFocusRef = useRef(false);
   const lastAutoWindZone = useRef<string>("");
@@ -896,6 +897,18 @@ export default function QuoteBuilder() {
 
   useEffect(() => {
     if (configurations.length === 0) return;
+    const baseline = savedItemBaselineRef.current;
+    if (
+      baseline &&
+      baseline.configurationId &&
+      configSignature.signature === baseline.signature &&
+      configurations.some((c) => c.id === baseline.configurationId)
+    ) {
+      if (w.configurationId !== baseline.configurationId) {
+        form.setValue("configurationId", baseline.configurationId);
+      }
+      return;
+    }
     const match = findMatchingConfiguration(configSignature, configurations);
     if (match && match.id !== w.configurationId) {
       form.setValue("configurationId", match.id);
@@ -1306,6 +1319,7 @@ export default function QuoteBuilder() {
       toast({ title: "Item added", description: `${data.name} added to quote.` });
     }
 
+    savedItemBaselineRef.current = null;
     form.reset(getNewItemDefaults(siteType));
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
 
@@ -1362,6 +1376,11 @@ export default function QuoteBuilder() {
     skipCategoryResetRef.current = true;
     expectedFrameTypeRef.current = (itemForForm.frameType as string) || "";
     lastAutoWindZone.current = "";
+    const baselineSig = deriveConfigSignature(itemForForm as QuoteItem);
+    savedItemBaselineRef.current = {
+      signature: baselineSig.signature,
+      configurationId: iwp.item.configurationId || "",
+    };
     form.reset(itemForForm);
     setEditingId(iwp.uiId);
     if (!isLargeScreen) {
@@ -1381,13 +1400,14 @@ export default function QuoteBuilder() {
 
   function deleteItem(id: string) {
     setItems(items.filter((iwp) => iwp.uiId !== id));
-    if (editingId === id) { setEditingId(null); form.reset(getNewItemDefaults(siteType)); lastAutoWindZone.current = getPresetDefaults(siteType).windZone || ""; }
+    if (editingId === id) { setEditingId(null); savedItemBaselineRef.current = null; form.reset(getNewItemDefaults(siteType)); lastAutoWindZone.current = getPresetDefaults(siteType).windZone || ""; }
     setHasUnsavedChanges(true);
     toast({ title: "Item removed" });
   }
 
   function resetFormForNewItem() {
     setEditingId(null);
+    savedItemBaselineRef.current = null;
     form.reset(getNewItemDefaults(siteType));
     lastAutoWindZone.current = getPresetDefaults(siteType).windZone || "";
   }
