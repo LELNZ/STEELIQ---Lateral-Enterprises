@@ -8,23 +8,41 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck, AlertTriangle, LinkIcon, FlaskConical } from "lucide-react";
+import {
+  ReceiptText, Search, CheckCircle2, Send, RotateCcw, FileCheck,
+  AlertTriangle, LinkIcon, FlaskConical, DollarSign, CreditCard, Clock,
+  ChevronRight,
+} from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 
-type EnrichedInvoice = Invoice & { customerName: string | null; projectName: string | null };
-
-const INVOICE_STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  ready_for_xero: "Ready for Xero",
-  pushed_to_xero_draft: "Pushed to Xero",
-  approved: "Approved",
-  returned_to_draft: "Returned to Draft",
+type EnrichedInvoice = Invoice & {
+  customerName: string | null;
+  projectName: string | null;
+  jobName: string | null;
+  jobId: string | null;
+  variationTitle: string | null;
 };
 
-const INVOICE_TYPE_COLORS: Record<string, string> = {
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  ready_for_xero: "Ready",
+  pushed_to_xero_draft: "In Xero",
+  approved: "Approved",
+  returned_to_draft: "Returned",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  draft: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700",
+  ready_for_xero: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-400 dark:border-sky-800",
+  pushed_to_xero_draft: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
+  approved: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800",
+  returned_to_draft: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800",
+};
+
+const TYPE_COLORS: Record<string, string> = {
   deposit: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800",
   progress: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-400 dark:border-violet-800",
   variation: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-800",
@@ -33,21 +51,14 @@ const INVOICE_TYPE_COLORS: Record<string, string> = {
   credit_note: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800",
 };
 
-const INVOICE_TYPE_LABELS: Record<string, string> = {
+const TYPE_LABELS: Record<string, string> = {
   deposit: "Deposit",
   progress: "Progress",
   variation: "Variation",
   final: "Final",
-  retention_release: "Retention Release",
+  retention_release: "Retention",
   credit_note: "Credit Note",
 };
-
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "approved") return "default";
-  if (status === "returned_to_draft") return "destructive";
-  if (status === "ready_for_xero") return "outline";
-  return "secondary";
-}
 
 class MissingCustomerError extends Error {
   quoteId: string | null;
@@ -57,7 +68,37 @@ class MissingCustomerError extends Error {
   }
 }
 
-function InvoiceActions({ inv, onMutate }: { inv: EnrichedInvoice; onMutate: (id: string) => void }) {
+function PaymentIndicator({ inv }: { inv: EnrichedInvoice }) {
+  if (!inv.xeroInvoiceId) return null;
+  const paid = (inv as any).xeroAmountPaid ?? 0;
+  const due = (inv as any).xeroAmountDue ?? 0;
+  if ((inv as any).xeroAmountPaid == null) return null;
+
+  if (due <= 0 && paid > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400" data-testid={`text-payment-status-${inv.id}`}>
+        <DollarSign className="h-2.5 w-2.5" /> Paid
+      </span>
+    );
+  }
+  if (paid > 0 && due > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400" data-testid={`text-payment-status-${inv.id}`}>
+        <CreditCard className="h-2.5 w-2.5" /> Partial (${paid.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+      </span>
+    );
+  }
+  if (due > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`text-payment-status-${inv.id}`}>
+        <Clock className="h-2.5 w-2.5" /> Unpaid
+      </span>
+    );
+  }
+  return null;
+}
+
+function InvoiceActions({ inv }: { inv: EnrichedInvoice }) {
   const { toast } = useToast();
   const [missingCustomerQuoteId, setMissingCustomerQuoteId] = useState<string | null>(null);
 
@@ -125,139 +166,76 @@ function InvoiceActions({ inv, onMutate }: { inv: EnrichedInvoice; onMutate: (id
 
   if (inv.status === "draft") {
     actions.push(
-      <Button
-        key="mark-ready"
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs"
-        disabled={isPending}
-        onClick={() => patchMutation.mutate({ id: inv.id, status: "ready_for_xero" })}
-        data-testid={`button-mark-ready-${inv.id}`}
-      >
-        <FileCheck className="h-3 w-3 mr-1" /> Mark Ready
+      <Button key="mark-ready" size="sm" variant="outline" className="h-6 text-[10px] px-2" disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "ready_for_xero" })} data-testid={`button-mark-ready-${inv.id}`}>
+        <FileCheck className="h-2.5 w-2.5 mr-0.5" /> Ready
       </Button>
     );
   }
-
   if (inv.status === "ready_for_xero") {
     actions.push(
-      <Button
-        key="push-xero"
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs"
-        disabled={isPending}
-        onClick={() => pushToXeroMutation.mutate(inv.id)}
-        data-testid={`button-push-xero-${inv.id}`}
-      >
-        <Send className="h-3 w-3 mr-1" /> Push to Xero
+      <Button key="push-xero" size="sm" variant="outline" className="h-6 text-[10px] px-2" disabled={isPending}
+        onClick={() => pushToXeroMutation.mutate(inv.id)} data-testid={`button-push-xero-${inv.id}`}>
+        <Send className="h-2.5 w-2.5 mr-0.5" /> Push
       </Button>
     );
     actions.push(
-      <Button
-        key="back-draft"
-        size="sm"
-        variant="ghost"
-        className="h-7 text-xs text-muted-foreground"
-        disabled={isPending}
-        onClick={() => patchMutation.mutate({ id: inv.id, status: "draft" })}
-        data-testid={`button-back-draft-${inv.id}`}
-      >
-        <RotateCcw className="h-3 w-3 mr-1" /> Back to Draft
+      <Button key="back-draft" size="sm" variant="ghost" className="h-6 text-[10px] px-1.5 text-muted-foreground" disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "draft" })} data-testid={`button-back-draft-${inv.id}`}>
+        <RotateCcw className="h-2.5 w-2.5" />
       </Button>
     );
   }
-
   if (inv.status === "pushed_to_xero_draft") {
     actions.push(
-      <Button
-        key="approve"
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
-        disabled={isPending}
-        onClick={() => patchMutation.mutate({ id: inv.id, status: "approved" })}
-        data-testid={`button-approve-${inv.id}`}
-      >
-        <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+      <Button key="approve" size="sm" variant="outline" className="h-6 text-[10px] px-2 text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950/30"
+        disabled={isPending} onClick={() => patchMutation.mutate({ id: inv.id, status: "approved" })} data-testid={`button-approve-${inv.id}`}>
+        <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" /> Approve
       </Button>
     );
     actions.push(
-      <Button
-        key="return-draft"
-        size="sm"
-        variant="ghost"
-        className="h-7 text-xs text-muted-foreground"
-        disabled={isPending}
-        onClick={() => returnToDraftMutation.mutate(inv.id)}
-        data-testid={`button-return-draft-${inv.id}`}
-      >
-        <RotateCcw className="h-3 w-3 mr-1" /> Return to Draft
+      <Button key="return-draft" size="sm" variant="ghost" className="h-6 text-[10px] px-1.5 text-muted-foreground" disabled={isPending}
+        onClick={() => returnToDraftMutation.mutate(inv.id)} data-testid={`button-return-draft-${inv.id}`}>
+        <RotateCcw className="h-2.5 w-2.5" />
       </Button>
     );
   }
-
   if (inv.status === "approved") {
     actions.push(
-      <Button
-        key="return-draft"
-        size="sm"
-        variant="ghost"
-        className="h-7 text-xs text-muted-foreground"
-        disabled={isPending}
-        onClick={() => returnToDraftMutation.mutate(inv.id)}
-        data-testid={`button-return-draft-approved-${inv.id}`}
-      >
-        <RotateCcw className="h-3 w-3 mr-1" /> Return to Draft
+      <Button key="return-draft" size="sm" variant="ghost" className="h-6 text-[10px] px-1.5 text-muted-foreground" disabled={isPending}
+        onClick={() => returnToDraftMutation.mutate(inv.id)} data-testid={`button-return-draft-approved-${inv.id}`}>
+        <RotateCcw className="h-2.5 w-2.5 mr-0.5" /> Return
       </Button>
     );
   }
-
   if (inv.status === "returned_to_draft") {
     actions.push(
-      <Button
-        key="mark-ready"
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs"
-        disabled={isPending}
-        onClick={() => patchMutation.mutate({ id: inv.id, status: "ready_for_xero" })}
-        data-testid={`button-mark-ready-rtd-${inv.id}`}
-      >
-        <FileCheck className="h-3 w-3 mr-1" /> Mark Ready
+      <Button key="mark-ready" size="sm" variant="outline" className="h-6 text-[10px] px-2" disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "ready_for_xero" })} data-testid={`button-mark-ready-rtd-${inv.id}`}>
+        <FileCheck className="h-2.5 w-2.5 mr-0.5" /> Ready
       </Button>
     );
     actions.push(
-      <Button
-        key="back-draft"
-        size="sm"
-        variant="ghost"
-        className="h-7 text-xs text-muted-foreground"
-        disabled={isPending}
-        onClick={() => patchMutation.mutate({ id: inv.id, status: "draft" })}
-        data-testid={`button-to-draft-rtd-${inv.id}`}
-      >
-        <RotateCcw className="h-3 w-3 mr-1" /> Back to Draft
+      <Button key="back-draft" size="sm" variant="ghost" className="h-6 text-[10px] px-1.5 text-muted-foreground" disabled={isPending}
+        onClick={() => patchMutation.mutate({ id: inv.id, status: "draft" })} data-testid={`button-to-draft-rtd-${inv.id}`}>
+        <RotateCcw className="h-2.5 w-2.5" />
       </Button>
     );
   }
 
   if (actions.length === 0 && !missingCustomerQuoteId) return null;
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {missingCustomerQuoteId && (
-        <Alert data-testid={`alert-missing-customer-${inv.id}`}>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="text-xs">
-            No customer linked — required for Xero.{" "}
-            <Link href={`/quote/${missingCustomerQuoteId}`} className="underline font-medium">
-              Link a customer on the quote
-            </Link>
-            .
+        <Alert className="py-1.5 px-2" data-testid={`alert-missing-customer-${inv.id}`}>
+          <AlertTriangle className="h-3 w-3" />
+          <AlertDescription className="text-[10px]">
+            No customer linked.{" "}
+            <Link href={`/quote/${missingCustomerQuoteId}`} className="underline font-medium">Fix on quote</Link>
           </AlertDescription>
         </Alert>
       )}
-      {actions.length > 0 && <div className="flex items-center gap-1 flex-wrap">{actions}</div>}
+      {actions.length > 0 && <div className="flex items-center gap-0.5 flex-wrap">{actions}</div>}
     </div>
   );
 }
@@ -298,8 +276,9 @@ export default function InvoicesPage() {
       (inv.xeroInvoiceNumber ?? "").toLowerCase().includes(q) ||
       (inv.customerName ?? "").toLowerCase().includes(q) ||
       (inv.projectName ?? "").toLowerCase().includes(q) ||
-      INVOICE_TYPE_LABELS[inv.type]?.toLowerCase().includes(q) ||
-      INVOICE_STATUS_LABELS[inv.status]?.toLowerCase().includes(q)
+      ((inv as any).jobName ?? "").toLowerCase().includes(q) ||
+      TYPE_LABELS[inv.type]?.toLowerCase().includes(q) ||
+      STATUS_LABELS[inv.status]?.toLowerCase().includes(q)
     );
   });
 
@@ -314,136 +293,111 @@ export default function InvoicesPage() {
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50">
-            <TableHead className="w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Number</TableHead>
-            <TableHead className="hidden md:table-cell w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
-            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
-            <TableHead className="hidden xl:table-cell w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Xero #</TableHead>
-            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</TableHead>
-            <TableHead className="hidden lg:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Project</TableHead>
-            <TableHead className="text-right w-[120px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Excl. GST</TableHead>
-            <TableHead className="hidden xl:table-cell text-right w-[120px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Incl. GST</TableHead>
-            <TableHead className="hidden lg:table-cell w-[90px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quote</TableHead>
-            <TableHead className="w-[60px]" />
+            <TableHead className="w-[140px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice</TableHead>
+            <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+            <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Customer / Project</TableHead>
+            <TableHead className="text-right w-[120px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+            <TableHead className="hidden lg:table-cell text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Xero / Payment</TableHead>
+            <TableHead className="w-[120px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {filtered.map((inv) => (
-            <TableRow key={inv.id} className="hover:bg-muted/30" data-testid={`row-invoice-${inv.id}`}>
-              <TableCell className="font-mono text-sm font-semibold py-3" data-testid={`text-invoice-number-${inv.id}`}>
-                <div className="flex items-center gap-1.5">
-                  <Link href={`/invoices/${inv.id}`} className="text-primary underline underline-offset-2 hover:no-underline" data-testid={`link-invoice-detail-${inv.id}`}>
-                    {inv.number}
-                  </Link>
-                  {isAdmin && inv.isDemoRecord && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-invoice-${inv.id}`}>
-                      <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
-                    </Badge>
+            <TableRow key={inv.id} className="group hover:bg-muted/30" data-testid={`row-invoice-${inv.id}`}>
+              <TableCell className="py-2.5" data-testid={`text-invoice-number-${inv.id}`}>
+                <Link href={`/invoices/${inv.id}`} className="group/link flex items-center gap-1" data-testid={`link-invoice-detail-${inv.id}`}>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-sm font-bold text-primary group-hover/link:underline underline-offset-2">
+                        {inv.number}
+                      </span>
+                      {isAdmin && inv.isDemoRecord && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-invoice-${inv.id}`}>
+                          <FlaskConical className="h-2 w-2 mr-0.5" />Demo
+                        </Badge>
+                      )}
+                    </div>
+                    <span className={`inline-flex items-center px-1.5 py-0 rounded-full text-[9px] font-medium border mt-0.5 ${TYPE_COLORS[inv.type] ?? "bg-muted text-muted-foreground border-border"}`}>
+                      {TYPE_LABELS[inv.type] || inv.type}
+                    </span>
+                  </div>
+                  <ChevronRight className="h-3 w-3 text-muted-foreground/40 group-hover/link:text-primary shrink-0 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                </Link>
+              </TableCell>
+
+              <TableCell className="py-2.5">
+                <div className="space-y-1">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${STATUS_COLORS[inv.status] ?? "bg-muted text-muted-foreground border-border"}`} data-testid={`badge-status-${inv.id}`}>
+                    {STATUS_LABELS[inv.status] || inv.status}
+                  </span>
+                </div>
+              </TableCell>
+
+              <TableCell className="py-2.5" data-testid={`text-customer-${inv.id}`}>
+                <div className="min-w-0">
+                  {inv.customerName ? (
+                    <p className="text-sm font-medium truncate">{inv.customerName}</p>
+                  ) : (
+                    <div className="space-y-0.5">
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 gap-0.5">
+                        <LinkIcon className="h-2 w-2" /> Unlinked
+                      </Badge>
+                      {inv.quoteId && (
+                        <div>
+                          <Link href={`/quote/${inv.quoteId}`} className="text-[10px] text-primary underline underline-offset-2 hover:no-underline" data-testid={`link-repair-customer-${inv.id}`}>
+                            Link customer
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {inv.projectName && (
+                    <p className="text-[11px] text-muted-foreground truncate" data-testid={`text-project-${inv.id}`}>{inv.projectName}</p>
+                  )}
+                  {(inv as any).jobName && (
+                    <p className="text-[10px] text-muted-foreground/70 truncate">Est: {(inv as any).jobName}</p>
                   )}
                 </div>
               </TableCell>
-              <TableCell className="hidden md:table-cell py-3">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${INVOICE_TYPE_COLORS[inv.type] ?? "bg-muted text-muted-foreground border-border"}`}>
-                  {INVOICE_TYPE_LABELS[inv.type] || inv.type}
-                </span>
+
+              <TableCell className="text-right py-2.5">
+                <div>
+                  <span className="font-mono text-sm font-bold tabular-nums">
+                    ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <p className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                    incl ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
               </TableCell>
-              <TableCell className="py-3">
+
+              <TableCell className="hidden lg:table-cell py-2.5">
                 <div className="space-y-0.5">
-                  <Badge variant={statusVariant(inv.status)} className="text-xs" data-testid={`badge-status-${inv.id}`}>
-                    {INVOICE_STATUS_LABELS[inv.status] || inv.status}
-                  </Badge>
-                  {inv.xeroStatus && (
-                    <p className="text-[10px] text-muted-foreground font-mono" data-testid={`text-xero-status-${inv.id}`}>
-                      Xero: {inv.xeroStatus}
-                    </p>
+                  {inv.xeroInvoiceNumber ? (
+                    <p className="font-mono text-[11px] text-muted-foreground" data-testid={`text-xero-number-${inv.id}`}>{inv.xeroInvoiceNumber}</p>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/50">No Xero</span>
                   )}
-                  {inv.xeroInvoiceId && (inv as any).xeroAmountPaid != null && (() => {
-                    const paid = (inv as any).xeroAmountPaid ?? 0;
-                    const due = (inv as any).xeroAmountDue ?? 0;
-                    if (due <= 0 && paid > 0) {
-                      return <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium" data-testid={`text-payment-status-${inv.id}`}>Paid</span>;
-                    }
-                    if (paid > 0 && due > 0) {
-                      return <span className="text-[10px] text-amber-600 dark:text-amber-400" data-testid={`text-payment-status-${inv.id}`}>Partial</span>;
-                    }
-                    if (due > 0) {
-                      return <span className="text-[10px] text-muted-foreground" data-testid={`text-payment-status-${inv.id}`}>Unpaid</span>;
-                    }
-                    return null;
-                  })()}
+                  {inv.xeroStatus && (
+                    <p className="text-[9px] text-muted-foreground font-mono" data-testid={`text-xero-status-${inv.id}`}>{inv.xeroStatus}</p>
+                  )}
+                  <PaymentIndicator inv={inv} />
                 </div>
               </TableCell>
-              <TableCell className="hidden xl:table-cell font-mono text-xs text-muted-foreground py-3" data-testid={`text-xero-number-${inv.id}`}>
-                {inv.xeroInvoiceNumber ?? <span className="opacity-40">—</span>}
-              </TableCell>
-              <TableCell className="text-sm py-3" data-testid={`text-customer-${inv.id}`}>
-                {inv.customerName ? (
-                  <span className="font-medium">{inv.customerName}</span>
-                ) : (
-                  <div className="space-y-0.5">
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 gap-1">
-                      <LinkIcon className="h-2.5 w-2.5" /> Unlinked
-                    </Badge>
-                    {inv.quoteId && (
-                      <div>
-                        <Link href={`/quote/${inv.quoteId}`} className="text-[10px] text-primary underline underline-offset-2 hover:no-underline" data-testid={`link-repair-customer-${inv.id}`}>
-                          Link customer →
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </TableCell>
-              <TableCell className="hidden lg:table-cell text-sm py-3" data-testid={`text-project-${inv.id}`}>
-                {inv.projectName ? (
-                  <span className="font-medium">{inv.projectName}</span>
-                ) : (
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] text-muted-foreground italic">No project</span>
-                    {inv.quoteId && (
-                      <div>
-                        <Link href={`/quote/${inv.quoteId}`} className="text-[10px] text-primary underline underline-offset-2 hover:no-underline" data-testid={`link-repair-project-${inv.id}`}>
-                          Review record →
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </TableCell>
-              <TableCell className="text-right py-3">
-                <span className="font-mono text-sm font-semibold tabular-nums">
-                  ${(inv.amountExclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
-                </span>
-              </TableCell>
-              <TableCell className="hidden xl:table-cell text-right py-3">
-                <span className="font-mono text-sm font-medium text-muted-foreground tabular-nums">
-                  ${(inv.amountInclGst ?? 0).toLocaleString("en-NZ", { minimumFractionDigits: 2 })}
-                </span>
-              </TableCell>
-              <TableCell className="hidden lg:table-cell py-3">
-                {inv.quoteId ? (
-                  <Link href={`/quote/${inv.quoteId}`} className="text-primary underline underline-offset-2 hover:no-underline text-xs" data-testid={`link-quote-${inv.id}`}>
-                    View quote
-                  </Link>
-                ) : (
-                  <span className="text-muted-foreground text-xs">—</span>
-                )}
-              </TableCell>
-              <TableCell className="py-3">
-                <div className="flex items-center gap-1">
+
+              <TableCell className="py-2.5">
+                <div className="flex items-center gap-0.5">
                   {isAdmin && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`h-7 px-2 text-xs ${inv.isDemoRecord ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+                    <Button variant="ghost" size="sm"
+                      className={`h-6 w-6 p-0 ${inv.isDemoRecord ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground/40"}`}
                       onClick={() => demoFlagMutation.mutate({ id: inv.id, isDemoRecord: !inv.isDemoRecord })}
                       disabled={demoFlagMutation.isPending}
                       data-testid={`button-toggle-demo-invoice-${inv.id}`}
-                      title={inv.isDemoRecord ? "Remove demo/test flag" : "Flag as demo/test"}
-                    >
+                      title={inv.isDemoRecord ? "Remove demo flag" : "Flag as demo"}>
                       <FlaskConical className="w-3 h-3" />
                     </Button>
                   )}
-                  <InvoiceActions inv={inv} onMutate={() => {}} />
+                  <InvoiceActions inv={inv} />
                 </div>
               </TableCell>
             </TableRow>

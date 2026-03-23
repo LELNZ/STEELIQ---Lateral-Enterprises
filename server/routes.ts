@@ -2761,6 +2761,7 @@ export async function registerRoutes(
       description: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
       variationId: z.string().optional().nullable(),
+      reference: z.string().optional().nullable(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -2770,6 +2771,7 @@ export async function registerRoutes(
         customerId?: string | null;
         projectId?: string | null;
         divisionCode?: string | null;
+        reference?: string | null;
       } = {};
 
       if (parsed.data.quoteId) {
@@ -2781,14 +2783,21 @@ export async function registerRoutes(
         if (!quote.acceptedRevisionId) {
           return res.status(400).json({ error: "Cannot create invoice: accepted quote has no recorded revision. Please contact support." });
         }
-        // Source truth is always derived from the accepted quote — caller-supplied values for
-        // these fields are ignored to prevent revision/customer/project/division drift.
         inheritedFields = {
           quoteRevisionId: quote.acceptedRevisionId,
           customerId: quote.customerId ?? null,
           projectId: quote.projectId ?? null,
           divisionCode: quote.divisionId ?? null,
         };
+
+        if (!parsed.data.reference && quote.sourceJobId) {
+          try {
+            const sourceJob = await storage.getJob(quote.sourceJobId);
+            if (sourceJob?.name) {
+              inheritedFields.reference = sourceJob.name;
+            }
+          } catch (_) {}
+        }
 
         // ── Invoice allocation guard ─────────────────────────────────────────
         // Policy: max deposit = 50% of accepted contract value (excl. GST).
@@ -2965,6 +2974,9 @@ export async function registerRoutes(
     }
     let customerName: string | null = null;
     let projectName: string | null = null;
+    let jobName: string | null = null;
+    let jobId: string | null = null;
+    let variationTitle: string | null = null;
     if (invoice.customerId) {
       const customer = await storage.getCustomer(invoice.customerId);
       customerName = customer?.name ?? null;
@@ -2973,7 +2985,21 @@ export async function registerRoutes(
       const project = await storage.getProject(invoice.projectId);
       projectName = project?.name ?? null;
     }
-    return res.json({ ...invoice, customerName, projectName });
+    if (invoice.quoteId) {
+      const quote = await storage.getQuote(invoice.quoteId);
+      if (quote?.sourceJobId) {
+        const job = await storage.getJob(quote.sourceJobId);
+        if (job) {
+          jobName = job.name;
+          jobId = job.id;
+        }
+      }
+    }
+    if ((invoice as any).variationId) {
+      const variation = await storage.getVariation((invoice as any).variationId);
+      variationTitle = variation?.title ?? null;
+    }
+    return res.json({ ...invoice, customerName, projectName, jobName, jobId, variationTitle });
   });
 
   app.patch("/api/invoices/:id", async (req, res) => {
