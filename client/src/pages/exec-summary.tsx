@@ -107,6 +107,8 @@ export default function ExecSummary() {
   const [rubbishEnabled, setRubbishEnabled] = useState(false);
   const [rubbishTonnage, setRubbishTonnage] = useState<string>("");
   const [initialized, setInitialized] = useState(false);
+  const [disabledInstallLines, setDisabledInstallLines] = useState<Set<number>>(new Set());
+  const [disabledRemovalLines, setDisabledRemovalLines] = useState<Set<number>>(new Set());
 
   const SECTION_KEYS = ["financial", "installation", "delivery", "removal", "rubbish", "history", "items"] as const;
   type SectionKey = typeof SECTION_KEYS[number];
@@ -412,10 +414,10 @@ export default function ExecSummary() {
       const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
       return { cost, sell, isOverride: true };
     }
-    const cost = installationItems.reduce((acc, i) => acc + i.costTotal, 0);
-    const sell = installationItems.reduce((acc, i) => acc + i.sellTotal, 0);
+    const cost = installationItems.reduce((acc, i, idx) => acc + (disabledInstallLines.has(idx) ? 0 : i.costTotal), 0);
+    const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
     return { cost, sell, isOverride: false };
-  }, [installEnabled, installOverride, installMarkup, installationItems]);
+  }, [installEnabled, installOverride, installMarkup, installationItems, disabledInstallLines]);
 
   const deliveryTotals = useMemo(() => {
     if (!deliveryEnabled) return { cost: 0, sell: 0, isCustom: false };
@@ -483,10 +485,10 @@ export default function ExecSummary() {
       const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
       return { cost, sell, isOverride: true };
     }
-    const cost = removalItems.reduce((acc, i) => acc + i.costTotal, 0);
-    const sell = removalItems.reduce((acc, i) => acc + i.sellTotal, 0);
+    const cost = removalItems.reduce((acc, i, idx) => acc + (disabledRemovalLines.has(idx) ? 0 : i.costTotal), 0);
+    const sell = Math.round(cost * (1 + markupPct / 100) * 100) / 100;
     return { cost, sell, isOverride: false };
-  }, [removalEnabled, removalOverride, removalMarkup, removalItems]);
+  }, [removalEnabled, removalOverride, removalMarkup, removalItems, disabledRemovalLines]);
 
   const rubbishTotals = useMemo(() => {
     if (!rubbishEnabled) return { cost: 0, sell: 0, rateEntry: null as any };
@@ -1141,31 +1143,44 @@ export default function ExecSummary() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8 print:hidden"></TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Unit m²</TableHead>
                   <TableHead>Tier</TableHead>
                   <TableHead className="text-right">Cost/Unit</TableHead>
-                  <TableHead className="text-right">Sell/Unit</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Cost Total</TableHead>
-                  <TableHead className="text-right">Sell Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {installationItems.map((ii, idx) => (
-                  <TableRow key={idx} data-testid={`row-install-${idx}`}>
+                {installationItems.map((ii, idx) => {
+                  const isOff = disabledInstallLines.has(idx);
+                  return (
+                  <TableRow key={idx} data-testid={`row-install-${idx}`} className={isOff ? "opacity-40" : ""}>
+                    <TableCell className="print:hidden">
+                      <Checkbox
+                        checked={!isOff}
+                        onCheckedChange={() => {
+                          setDisabledInstallLines(prev => {
+                            const next = new Set(prev);
+                            next.has(idx) ? next.delete(idx) : next.add(idx);
+                            return next;
+                          });
+                        }}
+                        data-testid={`checkbox-install-${idx}`}
+                      />
+                    </TableCell>
                     <TableCell className="text-sm">{ii.name}</TableCell>
                     <TableCell><Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ii.category] || ii.category}</Badge></TableCell>
                     <TableCell className="text-right">{ii.unitSqm.toFixed(2)}</TableCell>
                     <TableCell><Badge variant="secondary" className="text-xs">{ii.tierName}</Badge></TableCell>
                     <TableCell className="text-right">${fmt(ii.costPerUnit)}</TableCell>
-                    <TableCell className="text-right">${fmt(ii.sellPerUnit)}</TableCell>
                     <TableCell className="text-right">{ii.qty}</TableCell>
-                    <TableCell className="text-right font-medium">${fmt(ii.costTotal)}</TableCell>
-                    <TableCell className="text-right font-medium">${fmt(ii.sellTotal)}</TableCell>
+                    <TableCell className="text-right font-medium">{isOff ? "—" : `$${fmt(ii.costTotal)}`}</TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
             <Separator />
@@ -1202,10 +1217,11 @@ export default function ExecSummary() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-4 font-bold text-sm">
+            <div className="flex items-center justify-end gap-4 font-bold text-sm" data-testid="text-installation-total">
               <span>Cost: ${fmt(installationTotals.cost)}</span>
               <span>Sell: ${fmt(installationTotals.sell)}</span>
               {installationTotals.isOverride && <Badge variant="outline">Override</Badge>}
+              {!installationTotals.isOverride && <span className="text-xs font-normal text-muted-foreground">(Cost + {installMarkup || "15"}%)</span>}
             </div>
           </>
         )}
@@ -1327,31 +1343,44 @@ export default function ExecSummary() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8 print:hidden"></TableHead>
                   <TableHead>Item</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-right">Unit m²</TableHead>
                   <TableHead>Tier</TableHead>
                   <TableHead className="text-right">Cost/Unit</TableHead>
-                  <TableHead className="text-right">Sell/Unit</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Cost Total</TableHead>
-                  <TableHead className="text-right">Sell Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {removalItems.map((ri, idx) => (
-                  <TableRow key={idx} data-testid={`row-removal-${idx}`}>
+                {removalItems.map((ri, idx) => {
+                  const isOff = disabledRemovalLines.has(idx);
+                  return (
+                  <TableRow key={idx} data-testid={`row-removal-${idx}`} className={isOff ? "opacity-40" : ""}>
+                    <TableCell className="print:hidden">
+                      <Checkbox
+                        checked={!isOff}
+                        onCheckedChange={() => {
+                          setDisabledRemovalLines(prev => {
+                            const next = new Set(prev);
+                            next.has(idx) ? next.delete(idx) : next.add(idx);
+                            return next;
+                          });
+                        }}
+                        data-testid={`checkbox-removal-${idx}`}
+                      />
+                    </TableCell>
                     <TableCell className="text-sm font-medium">{ri.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground capitalize">{ri.category}</TableCell>
                     <TableCell className="text-right text-sm">{ri.unitSqm.toFixed(2)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{ri.tierName}</TableCell>
                     <TableCell className="text-right text-sm">${fmt(ri.costPerUnit)}</TableCell>
-                    <TableCell className="text-right text-sm">${fmt(ri.sellPerUnit)}</TableCell>
                     <TableCell className="text-right text-sm">{ri.qty}</TableCell>
-                    <TableCell className="text-right text-sm">${fmt(ri.costTotal)}</TableCell>
-                    <TableCell className="text-right text-sm">${fmt(ri.sellTotal)}</TableCell>
+                    <TableCell className="text-right text-sm">{isOff ? "—" : `$${fmt(ri.costTotal)}`}</TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4 print:hidden">
@@ -1387,6 +1416,7 @@ export default function ExecSummary() {
               <span>Cost: ${fmt(removalTotals.cost)}</span>
               <span>Sell: ${fmt(removalTotals.sell)}</span>
               {removalTotals.isOverride && <Badge variant="outline">Override</Badge>}
+              {!removalTotals.isOverride && <span className="text-xs font-normal text-muted-foreground">(Cost + {removalMarkup || "15"}%)</span>}
             </div>
           </>
         )}
