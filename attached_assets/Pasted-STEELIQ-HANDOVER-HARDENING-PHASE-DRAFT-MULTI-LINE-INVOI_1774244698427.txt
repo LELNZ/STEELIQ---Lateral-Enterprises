@@ -1,0 +1,218 @@
+STEELIQ HANDOVER HARDENING PHASE — DRAFT MULTI-LINE INVOICE DETAIL REVIEW + LOCKING/TRUTH CLARIFICATION (NO NEW FEATURE PHASE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is NOT a new implementation phase. It is a narrow validation, clarification, and handover-hardening phase for the recently completed draft-only multi-line invoice detail work.
+
+Non-negotiable rules:
+- Do not start a new feature phase.
+- Do not widen scope.
+- Do not redesign the architecture.
+- Do not redesign the quote model.
+- Do not change customer quote PDF generation.
+- Do not change Xero payload structure in this phase.
+- Do not weaken Xero protections.
+- Do not weaken governance, lifecycle, division security, archive/delete behavior, or existing invoice safeguards.
+- Do not weaken allocation guards, variation protections, or retention controls.
+- Do not perform hidden refactors.
+- Treat current repo truth as the source of truth, not assumptions from previous prompts.
+- If repo truth differs from prior handover wording, report the mismatch explicitly and follow repo truth.
+- Do not pretend SteelIQ now has fully complete enterprise multi-line invoicing.
+- Do not forget the reported live app freeze after inactivity; it remains out of scope unless directly encountered, but must remain listed in open risks.
+- Do not forget subcontractor PDF export branding/polish remains an adjacent open item, but it is out of scope for this phase.
+- Do not use broad phrases like “verified” or “e2e tested” unless you specify exactly what was actually exercised.
+
+PHASE PURPOSE
+
+The prior phase reportedly implemented:
+- invoice detail reading real invoice lines
+- draft-only line add/edit/delete
+- server-side line CRUD routes
+- header reconciliation from lines
+- invoice_lines(invoice_id) index
+- locked behavior for pushed/approved invoices
+- editable behavior for draft/ready_for_xero/returned_to_draft
+
+This follow-up phase exists only to:
+1. verify exact repo truth
+2. harden the handover report
+3. clarify line-edit locking semantics
+4. confirm what remains authoritative
+5. confirm what remains intentionally incomplete
+6. determine the correct next phase boundary
+
+This is a documentation/validation phase, not a build phase.
+
+STRICT SCOPE
+
+You must inspect the repo and return a strict, enterprise-grade completion report for the recently completed invoice-detail multi-line editing phase.
+
+You must answer precisely:
+- exactly what changed
+- exactly where it changed
+- exactly how reconciliation works
+- exactly what statuses permit editing
+- exactly what remains header-authoritative
+- exactly what remains unchanged in Xero/list/allocation behavior
+- whether allowing line edits in ready_for_xero is a deliberate compatibility decision or a loose carry-forward from prior behavior
+- what the safest next phase really is
+
+You may make tiny documentation-only wording cleanups if absolutely necessary for truthful handover, but do not change functional behavior unless there is a critical correctness bug and you stop and explain first.
+
+REQUIRED REVIEW TARGETS
+
+Review at minimum all relevant files involved in the reported phase, including wherever applicable:
+- shared/schema.ts
+- server/storage.ts
+- server/routes.ts
+- client/src/pages/invoice-detail.tsx
+- any startup/backfill file touched in relation to this phase
+- any migration/index addition file(s), if used
+- any touched invoice-related client files, if changed
+
+PRIMARY QUESTIONS TO ANSWER
+
+A. REPO TRUTH
+Report exact repo truth for:
+- invoice_lines index addition
+- line CRUD routes
+- storage methods
+- invoice detail line rendering
+- invoice detail edit UI
+- reconciliation helper
+- lock/edit rules by status
+
+B. RECONCILIATION TRUTH
+Report exactly:
+- where reconciliation logic lives
+- when it runs
+- what formula it uses
+- rounding behavior
+- what happens if all lines are deleted
+- whether header values are always rewritten from lines after line edits
+- whether any route updates lines without reconciliation
+
+C. LOCKING TRUTH
+Report exactly:
+- which statuses allow line editing
+- which statuses block line editing
+- whether this is enforced server-side
+- whether ready_for_xero editability is an intentional compatibility decision
+- whether it is considered ideal target behavior or transitional behavior
+- whether invoice reference/notes/body now have inconsistent lock rules across surfaces
+
+D. UI TRUTH
+Report exactly:
+- whether invoice detail truly reads GET /api/invoices/:id/lines
+- what fields are editable
+- whether line type is editable
+- whether variation linkage can be set/changed in the UI
+- whether the UI is operationally usable or still partial
+- whether any legacy single-line body behavior remains in parallel
+
+E. COMPATIBILITY TRUTH
+State explicitly whether these remain behaviorally unchanged in current repo truth:
+- invoice list page
+- quote detail invoice creation section
+- allocation guards
+- variation protections
+- retention controls
+- invoice status lifecycle
+- Xero push payload
+- Xero payment sync
+- governance/demo/division/archive behavior
+
+F. NEXT PHASE BOUNDARY
+This is critical.
+You must answer:
+- whether the safest next phase is really multi-line Xero push
+- or whether the safer next phase is lock/validation hardening before Xero payload changes
+- justify this conservatively for a live enterprise platform
+
+NON-GOALS
+
+Do NOT:
+- implement the next phase
+- change line locking behavior in this phase
+- change Xero payload generation
+- redesign allocation logic
+- redesign quote/project/job models
+- add standalone/admin invoice creation
+- overstate testing or verification
+- hide any readiness caveats
+
+REQUIRED DELIVERABLES
+
+Return your report in this exact structure:
+
+1. SUMMARY
+- what was implemented in the prior phase
+- what was intentionally not implemented
+- confirm header invoice amounts remain authoritative in operational flows
+- confirm Xero payload generation is unchanged
+- confirm invoice detail line editing status truth
+
+2. EXACT FILES CHANGED
+- full file list only
+- one-line purpose for each file
+
+3. RECONCILIATION RESULT
+- exact helper/function and location
+- exact formula used
+- exact rounding behavior
+- zero-line behavior
+- whether any gaps remain
+
+4. LOCKING / STATUS RESULT
+- exact editable statuses
+- exact locked statuses
+- exact server-side enforcement
+- whether ready_for_xero editability is deliberate compatibility behavior or target-state behavior
+- whether this should remain or be revisited next
+
+5. UI RESULT
+- exact invoice detail behavior
+- what is actually editable
+- what is read-only
+- what remained unchanged
+- whether operational usability is sufficient
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- invoice list page
+- quote detail invoice section
+- allocation guards
+- variation protections
+- retention controls
+- Xero push payload
+- Xero payment sync
+- governance/demo/division/archive behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- no multi-line Xero push yet
+- no standalone admin invoice creation yet
+- header still remains authoritative for existing operational flows
+- allocation logic is still header-based
+- quote-detail creation still seeds simple invoice structures rather than a full composer
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- justify conservatively
+- explicitly answer whether lock/validation hardening should come before multi-line Xero push
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining line/header consistency caveat
+- any remaining startup/backfill caveat
+- any locking/readiness caveat around ready_for_xero editability
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Preserve architecture discipline.
+Do not drift into a new build phase.
+Return an exact, conservative, repo-truth handover report for the draft multi-line invoice detail work.
+Do not claim more than what the repo actually proves.
