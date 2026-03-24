@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical, FileText, CircleDot } from "lucide-react";
+import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { routes } from "@/lib/routes";
@@ -25,17 +25,15 @@ import type { Job, Quote } from "@shared/schema";
 type LinkedQuoteSummary = { id: string; number: string; status: string; revisionCount: number };
 type JobWithCount = Job & { itemCount: number; totalSqm: number; linkedQuotes?: LinkedQuoteSummary[] };
 
-type EstimateStatus = "active" | "converted" | "archived";
+type EstimateStatus = "active" | "archived";
 
 function deriveEstimateStatus(job: JobWithCount): EstimateStatus {
   if (job.archivedAt) return "archived";
-  if (job.linkedQuotes?.some(q => q.status === "accepted")) return "converted";
   return "active";
 }
 
 const ESTIMATE_STATUS_STYLES: Record<EstimateStatus, { label: string; className: string }> = {
   active: { label: "Active", className: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-700" },
-  converted: { label: "Converted", className: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-700" },
   archived: { label: "Archived", className: "bg-gray-100 text-gray-500 border-gray-300 dark:bg-gray-900/40 dark:text-gray-400 dark:border-gray-600" },
 };
 
@@ -312,7 +310,7 @@ export default function JobsList() {
                         </TableCell>
                         <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-estimate-status-${job.id}`}>
                           <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${estStyle.className}`} data-testid={`badge-estimate-status-${job.id}`}>
-                            <CircleDot className="w-2.5 h-2.5 mr-1" />{estStyle.label}
+                            {estStyle.label}
                           </Badge>
                         </TableCell>
                         <TableCell className="py-2.5 hidden md:table-cell" data-testid={`cell-quote-status-${job.id}`}>
@@ -424,7 +422,7 @@ export default function JobsList() {
                         </TableCell>
                         <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-archived-estimate-status-${job.id}`}>
                           <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${estStyle.className}`} data-testid={`badge-archived-estimate-status-${job.id}`}>
-                            <CircleDot className="w-2.5 h-2.5 mr-1" />{estStyle.label}
+                            {estStyle.label}
                           </Badge>
                         </TableCell>
                         <TableCell className="py-2.5 hidden md:table-cell" data-testid={`cell-archived-quote-status-${job.id}`}>

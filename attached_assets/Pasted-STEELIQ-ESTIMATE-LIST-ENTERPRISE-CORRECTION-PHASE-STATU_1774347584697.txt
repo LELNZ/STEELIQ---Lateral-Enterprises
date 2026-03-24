@@ -1,0 +1,264 @@
+STEELIQ ESTIMATE LIST ENTERPRISE CORRECTION PHASE — STATUS SEMANTICS LOCK + CONTROL-SURFACE CLEANUP
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system. This is a narrow correction phase to harden the estimate list to enterprise standard.
+
+This is NOT a redesign phase.
+This is NOT a workflow-model rewrite.
+This is NOT a lifecycle-model expansion phase.
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign estimate, quote, revision, lifecycle, or job models.
+- Do not introduce schema creep.
+- Do not invent new business states unless they already exist explicitly in current repo/runtime truth.
+- Do not derive new estimate states from quote outcomes unless that exact estimate state already exists in repo truth.
+- Do not perform hidden refactors.
+- Do not widen scope into filtering, sorting, dashboarding, kanban, analytics, pricing, manufacturing, or reporting.
+- Do not alter QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not change estimate -> quote linking behavior.
+- Do not change accepted quote protections.
+- Do not change archive/delete governance.
+- Do not change lifecycle template behavior.
+- Do not modify route architecture beyond the touched estimate-list surface.
+- Preserve backward compatibility fully.
+
+CURRENT PROBLEM TO CORRECT
+
+The estimate list improvement work is directionally useful, but it is not yet enterprise-clean because estimate-state semantics were muddied by introducing a derived state like "Converted" from linked accepted quotes.
+
+That is not acceptable unless current repo/runtime truth already defines estimate state that way.
+
+We need the estimate list to become an enterprise-grade commercial control surface WITHOUT mixing:
+- estimate state
+- quote commercial state
+- revision signal
+
+These must remain clearly separated.
+
+PRIMARY OBJECTIVE
+
+Correct the estimate list so that it communicates three distinct signals with strict semantic discipline:
+
+1. ESTIMATE STATUS = only the estimate’s own real state
+2. QUOTE STATUS = the linked quote’s commercial state
+3. REVISION SIGNAL = revision count/signal only
+
+Do this without inventing new meanings.
+
+MEANING CONTRACT — MUST FOLLOW EXACTLY
+
+You must obey this semantic model:
+
+A. ESTIMATE STATUS
+- May only reflect true estimate-level state already supported by repo/runtime truth.
+- If repo truth only safely supports:
+  - Active
+  - Archived
+  then use ONLY:
+  - Active
+  - Archived
+- Do NOT add:
+  - Converted
+  - Quoted
+  - Won
+  - Lost
+  - In Review
+  - Any other estimate-level label
+  unless that is already an explicit estimate field/state in current repo/runtime truth.
+
+B. QUOTE STATUS
+- Must reflect linked quote commercial state only.
+- Use only existing quote statuses already supported in repo truth.
+- Do not map quote states into estimate states.
+
+C. REVISION SIGNAL
+- Must remain compact and secondary.
+- Must not act as a substitute for quote state or estimate state.
+
+STRICT IMPLEMENTATION PLAN
+
+PHASE A — AUDIT CURRENT REPO TRUTH
+Audit and report only what the repo currently supports for estimate-level state.
+
+You must explicitly answer:
+- what fields define estimate archived vs active
+- whether any true estimate-level status field exists beyond archive state
+- whether the current implementation introduced derived estimate-state behavior from linked quotes
+- what minimum safe semantic correction is
+
+Do not assume.
+Use actual repo truth.
+
+PHASE B — REMOVE SEMANTIC DRIFT
+If the current implementation introduced any estimate status that is derived from quote status or quote acceptance, remove that behavior unless it is explicitly supported by current estimate model truth.
+
+Specifically:
+- if "Converted" is derived from accepted quote state, remove it
+- if any estimate badge is currently based on quote outcome, remove that logic from the estimate-status column
+
+PHASE C — LOCK THE TABLE HIERARCHY
+Final table hierarchy must be:
+
+[ NAME | ADDRESS | DATE | ITEMS | M² | ESTIMATE STATUS | QUOTE | ACTIONS ]
+
+Rules:
+- ESTIMATE STATUS column = estimate only
+- QUOTE column = quote badge + quote number link + revision signal
+- Do not add more columns
+- Do not collapse estimate and quote into one badge cluster
+
+PHASE D — ESTIMATE STATUS RULES
+Implement only the minimum truthful estimate status model.
+
+If repo truth supports only archive state:
+- non-archived rows = Active
+- archived rows = Archived
+
+Rendering rules:
+- Active = neutral/clean solid badge
+- Archived = subdued grey solid badge
+- no icons unless already used consistently in this table and they improve clarity
+- no invented semantic flourish
+
+PHASE E — QUOTE COLUMN RULES
+Keep the quote column compact and truthful.
+
+It may contain:
+- quote status badge
+- clickable quote number
+- compact revision signal such as Rev N
+- muted "No quote" when none exists
+
+It must not:
+- imply estimate conversion
+- restate estimate status
+- overload the row
+
+PHASE F — ACTION PRESERVATION
+Keep existing behavior unchanged:
+- estimate open
+- archive / unarchive
+- delete
+- quote open link
+- route helper usage already introduced for touched estimate-list paths
+
+PHASE G — NO SCOPE CREEP
+Explicitly do NOT do any of the following in this phase:
+- sort/filter controls
+- bulk actions
+- dashboard widgets
+- list redesign beyond column/status cleanup
+- lifecycle redesign
+- quote selection heuristic redesign
+- new business terminology
+- new server aggregation model unless absolutely required for semantic correction
+
+PRIMARY QUOTE SELECTION RULE
+Do not redesign primary quote selection in this phase.
+Keep current repo/runtime behavior exactly as-is unless there is a proven bug.
+Do not introduce latest-accepted, preferred, ranked, or heuristic quote selection logic.
+
+UI STANDARD
+The resulting table must feel:
+- commercially readable
+- semantically disciplined
+- visually calm
+- enterprise-grade
+- non-gimmicky
+
+The operator must be able to scan and correctly understand:
+- whether the estimate itself is active or archived
+- whether there is a quote and what its commercial state is
+- whether multiple revisions exist
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was corrected
+- whether any derived estimate state was removed
+- confirm estimate status now reflects estimate state only
+- confirm quote status now reflects quote state only
+- confirm revision signal remains separate
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. REPO TRUTH AUDIT RESULT
+- what estimate-level state truly exists in repo truth
+- whether any explicit estimate status exists beyond archive state
+- whether prior implementation had semantic drift
+
+4. ROOT CAUSE
+- why the prior estimate-list implementation was not fully enterprise-clean
+- exactly how estimate and quote meanings were being mixed
+
+5. FIX IMPLEMENTATION
+- exact estimate status logic now used
+- exact quote status logic now used
+- exact revision signal logic now used
+- confirm primary quote selection logic was not changed
+
+6. UI RESULT
+Show the final practical row structure and explain how the hierarchy now reads correctly at a glance.
+
+7. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- estimate list renders correctly
+- active rows show only true estimate-level status
+- archived rows show only true estimate-level status
+- quote badge reflects quote status only
+- revision signal renders correctly
+- quote link still works
+- estimate open/archive behavior still works
+- no touched route returns 404
+
+8. COMPATIBILITY RESULT
+Confirm specifically these remain unchanged:
+- estimate creation
+- estimate archive/unarchive/delete
+- quote generation from estimate
+- quote revisions
+- accepted quote protections
+- preview/PDF overall pipeline
+- lifecycle template behavior
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any remaining estimate-list caveat still outside this scope
+- whether estimate status remains intentionally minimal because repo truth does not support more
+- confirm no schema redesign was done
+- confirm no lifecycle rewrite was done
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- accessory pricing scaling gap
+- subcontractor PDF polish/branding gap
+- any remaining glass-library caveat
+- any remaining lifecycle UX caveat
+- any remaining internal navigation contract drift outside this phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise platform correction.
+Do not try to be clever.
+Do not improve business semantics by invention.
+Do not broaden the phase.
+
+Your job is to make the estimate list enterprise-clean by enforcing strict meaning boundaries:
+- estimate status = estimate truth only
+- quote status = quote truth only
+- revision signal = revision truth only
+
+If repo truth only supports Active/Archived at estimate level, then use only Active/Archived and stop there.
