@@ -1,0 +1,253 @@
+STEELIQ RAKED / TRIANGULAR FIXED WINDOW — QUOTE DOCUMENT / PDF POLISH PHASE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow presentation-polish phase for the already-working raked / triangular fixed-window Quote Document / PDF output.
+
+This is NOT:
+- a quote builder redesign
+- a geometry-engine rewrite
+- a pricing-engine redesign
+- a manufacturing/BOM/cut-list phase
+- an awning-in-raked phase
+- a broad PDF system redesign
+- a document-pipeline architecture rewrite
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models.
+- Do not introduce schema creep unless absolutely required and explicitly justified.
+- Do not perform hidden refactors.
+- Do not widen scope beyond document/render polish for current raked-fixed items.
+- Do not alter the core QuoteDocument -> QuoteRenderModel -> Preview/PDF contract except for minimal backward-compatible presentation additions.
+- Do not widen into manufacturing outputs.
+- Do not widen into sash/operable geometry logic.
+- Preserve backward compatibility for all existing rectangular items and current quote documents.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED STATE
+==================================================
+
+Current platform truth:
+
+- raked / triangular fixed-window support exists in Quote Builder
+- left-rake and right-rake work
+- split and no-split work
+- trapezoidal area pricing is implemented
+- role-aware perimeter handling is implemented for current raked-fixed scope
+- raked items now flow into Quote Preview / Quote Document / PDF
+- dual-height dimension labels already exist
+- PDF output for raked items is functionally working
+
+Current remaining need:
+
+- improve the presentation quality of raked item rendering in Quote Preview / PDF
+- make the document output cleaner, clearer, and more client-facing
+- preserve the locked render pipeline and current semantics
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Polish the Quote Preview / Quote Document / PDF presentation for current raked-fixed items so that the output is:
+
+- visually cleaner
+- easier for clients to understand
+- consistent with the rest of the document set
+- still clearly non-manufacturing in purpose
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY client-facing polish for current raked-fixed document output, such as:
+
+- cleaner drawing framing / spacing
+- cleaner dimension presentation
+- clearer split presentation where already supported
+- improved label readability
+- improved alignment/centering/scaling of raked diagrams within their schedule cells
+
+Do NOT widen into:
+- new geometry features
+- pricing changes
+- manufacturing annotations
+- workshop cut sizes
+- awning-in-raked support
+- all future non-rectangular shapes
+- a full document template redesign
+
+==================================================
+PHASE A — AUDIT CURRENT PDF / PREVIEW PRESENTATION QUALITY
+==================================================
+
+Audit and report:
+
+1. how raked items currently appear in Quote Preview
+2. how raked items currently appear in PDF output
+3. what specific presentation weaknesses exist now, for example:
+   - cramped diagrams
+   - unclear label placement
+   - awkward dual-height formatting
+   - poor split visibility
+   - inconsistent margins/alignment
+   - scaling issues versus rectangular items
+4. what the minimum safe polish improvements are without changing document meaning
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — POLISH THE RAKED DIAGRAM PRESENTATION
+==================================================
+
+Improve the raked item diagram presentation in preview/PDF while preserving current geometry truth.
+
+Requirements:
+- raked shape remains accurate
+- left/right orientation remains obvious
+- split/no-split remains readable where supported
+- diagram fits cleanly inside the existing item drawing area
+- linework remains legible in PDF export
+- no placeholder/rectangle fallback for supported raked items
+
+Do NOT:
+- turn the quote PDF into a workshop drawing
+- add fabrication-specific internal detail
+- change the meaning of any dimensions
+
+==================================================
+PHASE C — POLISH DIMENSION / LABEL DISPLAY
+==================================================
+
+Improve how raked dimensions and labels appear in preview/PDF.
+
+Requirements:
+- dual-height dimensions must remain truthful and readable
+- overall width should remain clearly understandable
+- if split labels or indicators are shown, they must be clear but not noisy
+- category / dimension text should not become cluttered
+- if current dimension formatting is too dense, simplify presentation while keeping it accurate
+
+Important:
+- show fewer dimensions rather than wrong or cluttered ones
+- preserve existing semantics
+- do not relabel derived/internal values as overall frame dimensions
+
+==================================================
+PHASE D — KEEP RECTANGULAR OUTPUTS UNCHANGED
+==================================================
+
+Rectangular items must remain unchanged unless a tiny shared styling improvement is unavoidable and backward-safe.
+
+The raked polish must not regress:
+- rectangular preview output
+- rectangular PDF output
+- overall document readability
+- quote schedule layout stability
+
+==================================================
+PHASE E — KEEP THE LOCKED PIPELINE INTACT
+==================================================
+
+The QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked.
+
+Any changes in this phase must be:
+- minimal
+- presentation-focused
+- backward-compatible
+- isolated to current raked-fixed rendering polish needs
+
+Do not redesign the pipeline.
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what polish improvements were implemented
+- confirm raked-fixed preview is cleaner
+- confirm raked-fixed PDF/document output is cleaner
+- confirm no manufacturing outputs were added
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. PRESENTATION AUDIT RESULT
+- how raked preview/PDF looked before
+- what presentation weaknesses were found
+- what minimum safe polish changes were chosen
+
+4. DIAGRAM POLISH RESULT
+- what changed in the raked diagram presentation
+- how orientation/split readability improved
+- how scaling/alignment/spacing improved
+
+5. DIMENSION / LABEL POLISH RESULT
+- what changed in width/dual-height label presentation
+- how readability improved
+- confirm semantics remain unchanged
+
+6. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- left-rake preview still works
+- right-rake preview still works
+- split preview still works
+- no-split preview still works
+- PDF/document renders raked-fixed items cleanly
+- rectangular preview is unchanged
+- rectangular PDF output is unchanged
+- no touched route returns 404
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing rectangular quote-builder items
+- quote editing
+- revision flow
+- pricing engine
+- preview/PDF structure for non-raked items
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- fixed only for now
+- awning-in-raked support not implemented
+- manufacturing outputs not implemented
+- any remaining PDF/document caveat still outside this scope
+
+9. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current raked-fixed support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform document-polish phase.
+
+Do not broaden the phase.
+Do not redesign the locked document pipeline.
+Do not add manufacturing-style detail.
+
+Your job is to make current raked-fixed items render more cleanly and professionally in Quote Preview and PDF/document output while preserving existing meaning, geometry truth, and backward compatibility.

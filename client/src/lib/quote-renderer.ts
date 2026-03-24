@@ -194,7 +194,7 @@ function buildScheduleItem(
     itemRef: item.itemRef || item.title || `Item ${index + 1}`,
     title: `Item ${item.itemNumber || index + 1} — ${item.itemRef || item.title || `Item ${index + 1}`}`,
     dimensionLabel: item.category === "raked-fixed" && item.rakedLeftHeight != null && item.rakedRightHeight != null
-      ? `${item.width}mm x ${item.rakedLeftHeight}/${item.rakedRightHeight}mm`
+      ? `${item.width}mm W × ${item.rakedLeftHeight}/${item.rakedRightHeight}mm H (L/R)`
       : `${item.width}mm x ${item.height}mm`,
     quantityLabel: `Qty: ${item.quantity || 1}`,
     visibleSpecs,

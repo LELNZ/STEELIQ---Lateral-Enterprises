@@ -692,6 +692,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
         fill="#fafafa" stroke="#2d2d2d" strokeWidth={2.5 * ss} />
     );
 
+    const crossStroke = 0.8 * ss;
+    const crossColor = "#888";
+
     if (splitEnabled && splitPos > 0 && splitPos < W) {
       const splitTopY = slopeAtX(splitPos);
       const glassSplitLeft = Math.max(glassLeft, splitPos - inset * 0.5);
@@ -708,6 +711,24 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
         <polygon key="glass-right" points={rightGlassPoints}
           fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * ss} />
       );
+
+      const lCenterX = (glassLeft + glassSplitLeft) / 2;
+      const lCenterY = (glassTopLeftY + glassSlopeAtX(glassSplitLeft) + glassBot * 2) / 4;
+      elements.push(
+        <g key="cross-left">
+          <line x1={lCenterX - inset * 0.4} y1={lCenterY - inset * 0.4} x2={lCenterX + inset * 0.4} y2={lCenterY + inset * 0.4} stroke={crossColor} strokeWidth={crossStroke} />
+          <line x1={lCenterX + inset * 0.4} y1={lCenterY - inset * 0.4} x2={lCenterX - inset * 0.4} y2={lCenterY + inset * 0.4} stroke={crossColor} strokeWidth={crossStroke} />
+        </g>
+      );
+      const rCenterX = (glassSplitRight + glassRight) / 2;
+      const rCenterY = (glassSlopeAtX(glassSplitRight) + glassTopRightY + glassBot * 2) / 4;
+      elements.push(
+        <g key="cross-right">
+          <line x1={rCenterX - inset * 0.4} y1={rCenterY - inset * 0.4} x2={rCenterX + inset * 0.4} y2={rCenterY + inset * 0.4} stroke={crossColor} strokeWidth={crossStroke} />
+          <line x1={rCenterX + inset * 0.4} y1={rCenterY - inset * 0.4} x2={rCenterX - inset * 0.4} y2={rCenterY + inset * 0.4} stroke={crossColor} strokeWidth={crossStroke} />
+        </g>
+      );
+
       elements.push(
         <line key="split-line" x1={splitPos} y1={splitTopY} x2={splitPos} y2={H}
           stroke="#2d2d2d" strokeWidth={2.5 * ss} />
@@ -717,6 +738,15 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
       elements.push(
         <polygon key="glass" points={glassPoints}
           fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * ss} />
+      );
+
+      const centerX = (glassLeft + glassRight) / 2;
+      const centerY = ((glassTopLeftY + glassTopRightY) / 2 + glassBot) / 2;
+      elements.push(
+        <g key="cross-fixed">
+          <line x1={centerX - inset * 0.5} y1={centerY - inset * 0.5} x2={centerX + inset * 0.5} y2={centerY + inset * 0.5} stroke={crossColor} strokeWidth={crossStroke} />
+          <line x1={centerX + inset * 0.5} y1={centerY - inset * 0.5} x2={centerX - inset * 0.5} y2={centerY + inset * 0.5} stroke={crossColor} strokeWidth={crossStroke} />
+        </g>
       );
     }
 
@@ -766,7 +796,8 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
   const dimGap = maxDim * 0.06;
   const textGap = maxDim * 0.1;
   const padLeft = maxDim * 0.16;
-  const padBottom = maxDim * 0.16;
+  const rakedHasSplit = isRaked && rakedSplitEnabled && rakedSplitPos > 0 && rakedSplitPos < W;
+  const padBottom = rakedHasSplit ? maxDim * 0.24 : maxDim * 0.16;
   const padRight = isRaked ? maxDim * 0.16 : maxDim * 0.05;
   const padTop = maxDim * 0.1;
 

@@ -703,7 +703,7 @@ export default function ExecSummary() {
         itemRef: item.name,
         configuration: ip.configName,
         itemCategory: CATEGORY_LABELS[item.category] || item.category,
-        overallSize: isRaked ? `${item.width} x ${rakedLH}/${rakedRH}mm` : `${item.width} x ${item.height}mm`,
+        overallSize: isRaked ? `${item.width}mm W × ${rakedLH}/${rakedRH}mm H (L/R)` : `${item.width} x ${item.height}mm`,
         quantity: String(item.quantity || 1),
         width: `${item.width}mm`,
         height: `${item.height}mm`,
