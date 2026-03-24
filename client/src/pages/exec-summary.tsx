@@ -8,6 +8,7 @@ import { deriveConfigSignature } from "@/lib/config-signature";
 import { getGlassPrice, getGlassRValue } from "@shared/glass-library";
 import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, getLocksForCategory, getLockTypeForCategory, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES, isDoorCategory } from "@shared/item-options";
 import { useSettings } from "@/lib/settings-context";
+import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -956,7 +957,7 @@ export default function ExecSummary() {
     <div className="max-w-5xl mx-auto p-4 sm:p-6 flex flex-col gap-4 sm:gap-6 overflow-x-hidden print:p-2 print:gap-4" data-testid="exec-summary-page">
       <div className="flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/job/${jobId}`)} data-testid="button-back-to-job">
+          <Button variant="ghost" size="icon" onClick={() => navigate(routes.jobDetail(jobId!))} data-testid="button-back-to-job">
             <ArrowLeftCircle className="h-5 w-5" />
           </Button>
           <div>
@@ -1023,6 +1024,35 @@ export default function ExecSummary() {
           </DropdownMenu>
         </div>
       </div>
+
+      {hasExistingQuote && (() => {
+        const primaryQuote = existingQuotes.find((q: any) => q.status === "accepted")
+          || existingQuotes.find((q: any) => q.status === "sent")
+          || existingQuotes.find((q: any) => q.status === "review")
+          || existingQuotes.find((q: any) => q.status === "draft")
+          || existingQuotes[0];
+        return (
+          <div className="flex items-center gap-3 rounded-md border bg-card px-3 py-2 print:hidden" data-testid="metadata-linked-quote">
+            <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs text-muted-foreground">Linked Quote:</span>
+            <Badge variant="outline" className="text-xs font-mono" data-testid="badge-header-quote-ref">
+              {primaryQuote.number || primaryQuote.id?.slice(0, 8)}
+            </Badge>
+            <Badge variant="secondary" className="text-xs capitalize">
+              {primaryQuote.status}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs gap-1 ml-auto"
+              onClick={() => navigate(routes.quoteDetail(primaryQuote.id))}
+              data-testid="button-header-open-quote"
+            >
+              <ExternalLink className="h-3 w-3" /> Open Quote
+            </Button>
+          </div>
+        );
+      })()}
 
       <Dialog open={subconDialogOpen} onOpenChange={setSubconDialogOpen}>
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" data-testid="dialog-subcontractor-config">
@@ -1811,7 +1841,7 @@ export default function ExecSummary() {
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs gap-1"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/quote/${aq.id}`); }}
+                  onClick={(e) => { e.stopPropagation(); navigate(routes.quoteDetail(aq.id)); }}
                   data-testid="button-open-quote"
                 >
                   <ExternalLink className="h-3 w-3" /> Open Quote

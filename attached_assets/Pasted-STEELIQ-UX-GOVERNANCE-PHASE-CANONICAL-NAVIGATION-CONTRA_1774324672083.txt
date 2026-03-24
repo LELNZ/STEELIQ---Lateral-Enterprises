@@ -1,0 +1,240 @@
+STEELIQ UX/GOVERNANCE PHASE — CANONICAL NAVIGATION CONTRACT + RELATED-RECORD LINK STANDARDIZATION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow navigation-governance and workflow UX standardization phase. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote, estimate, job, or revision model broadly.
+- Do not replace the existing estimate -> quote -> revision -> preview/PDF pipeline.
+- Do not perform hidden refactors.
+- Do not change pricing-engine logic in this phase.
+- Do not change accepted-quote protections, governance, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not widen scope into manufacturing engine work.
+- Treat current repo/runtime truth as the source of truth, not assumptions from prior reports.
+- Preserve backward compatibility for existing estimates, quotes, revisions, jobs, and saved items.
+- Keep this phase operationally usable and enterprise-grade, not cosmetic only.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- the app has a clear canonical navigation standard for core commercial records
+- core entity detail/list routes are no longer hand-typed ad hoc in scattered components where a shared route helper can safely be used
+- estimate, quote, and job pages expose related-record links in a consistent, visible location
+- lifecycle/workflow cards are no longer the only or primary place users discover linked records
+- internal navigation is standardized toward router-safe navigation for core app flows
+- no current core route behavior is broken
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+Current app truth includes:
+- /quotes is the quotes list route
+- /quote/:id is the single quote detail route
+- estimate -> quote linking now works after the route typo fix
+- workflow/lifecycle has already been demoted lower in the exec summary hierarchy
+- some internal navigation patterns and raw href usage may still exist elsewhere
+- linked-record visibility is still inconsistent across estimate/quote/job surfaces
+
+This phase must preserve what already works while standardizing the pattern across the app.
+
+PRIMARY OBJECTIVE
+
+Create a canonical navigation contract for SteelIQ’s core commercial records and standardize related-record UX so the app feels professional, predictable, and enterprise-grade.
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT CURRENT REPO TRUTH
+Review and report:
+- all currently registered list/detail routes for the core commercial entities:
+  - estimates
+  - quotes
+  - jobs
+  - projects (if relevant to this path)
+- where navigation to these routes is currently hardcoded as raw strings
+- where internal navigation still uses raw <a href> or otherwise causes full-page reloads for app-internal paths
+- where related-record links are currently surfaced on:
+  - estimate pages
+  - quote pages
+  - job pages
+  - exec summary / workflow views
+- what the minimum safe standardization pass is
+
+Do not assume. Use actual repo truth.
+
+PHASE B — CREATE A CANONICAL ROUTE HELPER / NAVIGATION CONTRACT
+Implement a shared route helper for the core entities.
+
+Requirements:
+- centralize canonical paths for at least:
+  - quote list
+  - quote detail
+  - estimate list
+  - estimate detail (if the app has a dedicated estimate detail route)
+  - job detail
+  - project detail only if already part of this current flow
+- use one consistent naming convention
+- route helpers must be truth-preserving and reflect actual registered routes
+- do not invent routes that do not already exist
+- do not break existing router configuration
+
+Goal:
+- core routes should not be manually retyped in scattered components when a shared helper can safely be used
+
+PHASE C — STANDARDIZE CORE NAVIGATION USAGE
+Replace ad hoc navigation usage for core commercial routes with the canonical helper where safe.
+
+Requirements:
+- update the relevant current estimate/quote/job/workflow components to use the shared route helper
+- eliminate avoidable singular/plural route mismatch risk
+- preserve current working behavior
+- do not perform a massive whole-app rewrite; focus on the commercial workflow surfaces first
+
+Priority surfaces:
+- estimate -> quote links
+- quote -> source estimate / source job links
+- job / exec summary links into quote detail
+- related quote/revision navigation where applicable
+
+PHASE D — STANDARDIZE RELATED-RECORD UX
+This is the most important UX part.
+
+Implement a consistent related-record presentation pattern on the primary commercial pages.
+
+Requirements:
+- estimate pages should visibly show linked quote information in a standard metadata/header area when a quote exists
+- quote pages should visibly show source estimate and source job in a standard metadata/header area when available
+- job / exec summary surfaces should expose quote access clearly without relying only on the workflow card
+- related-record links should be visible in a professional, predictable place near the page header/summary metadata
+- lifecycle/workflow may still include shortcuts, but must not be the only place those links exist
+
+Do not redesign the whole page layout.
+Make the smallest clean change that establishes a repeatable standard.
+
+PHASE E — IMPROVE INTERNAL LINK SAFETY
+Where repo truth supports it safely:
+- replace app-internal raw href navigation with router-safe navigation on the touched commercial surfaces
+- avoid full-page reload behavior for internal app routes
+- do not change external links that should remain normal links
+- do not widen this into a total app-wide anchor purge; keep it targeted to the relevant commercial workflow surfaces found in the audit
+
+PHASE F — WORKFLOW UX GOVERNANCE
+Preserve the current improved hierarchy:
+- financial/commercial content stays primary
+- workflow/lifecycle stays secondary
+- workflow/lifecycle can include action shortcuts, but not as the sole navigation source
+
+If needed, add only small supporting improvements such as:
+- clear source record labels
+- consistent “Open Quote”, “Open Estimate”, “View Job” action language
+- status/reference chips in metadata areas where already consistent with current design
+
+Do not broaden into a full design-system rewrite.
+
+PHASE G — PRESERVE EXISTING LOGIC
+Do not break:
+- existing quote revisions
+- existing estimate creation / quote generation flow
+- preview/PDF overall pipeline
+- accepted quote protections
+- lifecycle template behavior
+- related quotes/revisions behavior
+- saved item load/edit
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+NON-GOALS
+
+Do NOT:
+- redesign the full sidebar/navigation shell
+- redesign the entire workflow/lifecycle system
+- redesign the whole estimate module
+- redesign the whole quote module
+- redesign the whole job module
+- change pricing calculations
+- change manufacturing logic
+- introduce a global app router rewrite
+- broaden into generic UX polish outside the explicit scope above
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+- confirm a canonical navigation contract now exists for the touched core entities
+- confirm related-record links are now surfaced more consistently outside lifecycle-only placement
+- confirm internal navigation on the touched surfaces is more router-safe and standardized
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE / CURRENT-STATE RESULT
+- what route/string duplication risks existed before
+- where related-record visibility was inconsistent before
+- where lifecycle was being overused as a navigation fallback
+- where internal href / full-page reload risks existed, if found
+
+4. FIX RESULT
+- how the canonical route helper works
+- which components/pages now use it
+- how estimate -> quote navigation now works
+- how quote -> source estimate/source job navigation now works
+- how job / exec summary quote access now works
+- what internal-link safety improvements were made
+
+5. RELATED-RECORD UX RESULT
+Show the before vs after for:
+- estimate page linked quote visibility
+- quote page source record visibility
+- job / exec summary quote visibility
+- lifecycle/workflow’s role after the change
+
+6. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- estimate -> quote navigation
+- quote -> source estimate navigation (if supported by current routes)
+- quote -> source job navigation
+- job / exec summary -> quote navigation
+- no touched route returns 404
+- no touched internal navigation causes unnecessary full-page reloads
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing quote revisions
+- related quotes/revisions
+- preview/PDF overall pipeline
+- accepted quote protections
+- lifecycle template behavior
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any remaining raw internal-link caveat still outside the touched scope
+- any remaining lifecycle UX caveat still outside the touched scope
+- no broad system rewrite was done
+
+9. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining glass-library caveat
+- any remaining lifecycle UX caveat
+- any remaining internal navigation caveat outside this phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Establish a canonical navigation contract and professional related-record UX for the core commercial workflow so the app feels predictable, trustworthy, and enterprise-grade.
+Keep it narrow, safe, and truthful.

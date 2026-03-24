@@ -16,12 +16,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical } from "lucide-react";
+import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { routes } from "@/lib/routes";
 import type { Job, Quote } from "@shared/schema";
 
-type JobWithCount = Job & { itemCount: number; totalSqm: number };
+type LinkedQuoteSummary = { id: string; number: string; status: string; revisionCount: number };
+type JobWithCount = Job & { itemCount: number; totalSqm: number; linkedQuotes?: LinkedQuoteSummary[] };
 
 type CascadeDialogState =
   | { type: "none" }
@@ -167,7 +169,7 @@ export default function JobsList() {
             <p className="text-[11px] text-muted-foreground leading-tight">Joinery quotation estimates</p>
           </div>
         </div>
-        <Link href="/job/new">
+        <Link href={routes.jobNew()}>
           <Button size="sm" data-testid="button-new-job">
             <Plus className="w-3.5 h-3.5 mr-1.5" /> New Estimate
           </Button>
@@ -195,7 +197,7 @@ export default function JobsList() {
                 <FolderOpen className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
                 <p className="text-sm font-medium text-muted-foreground">No estimates yet</p>
                 <p className="text-xs text-muted-foreground mt-1 mb-4">Create your first estimate to get started.</p>
-                <Link href="/job/new">
+                <Link href={routes.jobNew()}>
                   <Button size="sm" data-testid="button-create-first-job">
                     <Plus className="w-3.5 h-3.5 mr-1.5" /> Create Estimate
                   </Button>
@@ -211,6 +213,7 @@ export default function JobsList() {
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Date</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Items</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden lg:table-cell">m²</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Quote Status</TableHead>
                       <TableHead className="w-[180px]" />
                     </TableRow>
                   </TableHeader>
@@ -253,6 +256,44 @@ export default function JobsList() {
                             </Badge>
                           ) : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
+                        <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-quote-status-${job.id}`}>
+                          {(() => {
+                            const lq = job.linkedQuotes;
+                            if (!lq || lq.length === 0) {
+                              return (
+                                <span className="text-xs text-muted-foreground italic">No quote</span>
+                              );
+                            }
+                            const primary = lq[0];
+                            const statusColors: Record<string, string> = {
+                              draft: "border-gray-300 text-gray-600 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-400",
+                              review: "border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400",
+                              sent: "border-indigo-300 text-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 dark:text-indigo-400",
+                              accepted: "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400",
+                              declined: "border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
+                              archived: "border-gray-300 text-gray-500 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500",
+                            };
+                            return (
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColors[primary.status] || ""}`} data-testid={`badge-quote-status-${job.id}`}>
+                                    {primary.status.charAt(0).toUpperCase() + primary.status.slice(1)}
+                                  </Badge>
+                                  {primary.revisionCount > 1 && (
+                                    <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-revision-count-${job.id}`}>
+                                      Rev {primary.revisionCount}
+                                    </span>
+                                  )}
+                                </div>
+                                <Link href={routes.quoteDetail(primary.id)}>
+                                  <span className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer" data-testid={`link-open-quote-${job.id}`}>
+                                    <FileText className="w-2.5 h-2.5" />{primary.number}
+                                  </span>
+                                </Link>
+                              </div>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell className="py-2.5">
                           <div className="flex items-center gap-1 justify-end">
                             {isAdmin && (
@@ -268,7 +309,7 @@ export default function JobsList() {
                                 <FlaskConical className="w-3 h-3" />
                               </Button>
                             )}
-                            <Link href={`/job/${job.id}`}>
+                            <Link href={routes.jobDetail(job.id)}>
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" data-testid={`button-open-job-${job.id}`}>
                                 <ExternalLink className="w-3 h-3 mr-1" /> Open
                               </Button>
@@ -323,6 +364,7 @@ export default function JobsList() {
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Archived</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Items</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Quote Status</TableHead>
                       <TableHead className="w-[160px]" />
                     </TableRow>
                   </TableHeader>
@@ -354,6 +396,42 @@ export default function JobsList() {
                           <Badge variant="secondary" className="text-xs" data-testid={`badge-archived-item-count-${job.id}`}>
                             {job.itemCount}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-archived-quote-status-${job.id}`}>
+                          {(() => {
+                            const lq = job.linkedQuotes;
+                            if (!lq || lq.length === 0) {
+                              return <span className="text-xs text-muted-foreground italic">No quote</span>;
+                            }
+                            const primary = lq[0];
+                            const statusColors: Record<string, string> = {
+                              draft: "border-gray-300 text-gray-600 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-400",
+                              review: "border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400",
+                              sent: "border-indigo-300 text-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 dark:text-indigo-400",
+                              accepted: "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400",
+                              declined: "border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
+                              archived: "border-gray-300 text-gray-500 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500",
+                            };
+                            return (
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColors[primary.status] || ""}`} data-testid={`badge-archived-quote-status-${job.id}`}>
+                                    {primary.status.charAt(0).toUpperCase() + primary.status.slice(1)}
+                                  </Badge>
+                                  {primary.revisionCount > 1 && (
+                                    <span className="text-[10px] text-muted-foreground font-mono">
+                                      Rev {primary.revisionCount}
+                                    </span>
+                                  )}
+                                </div>
+                                <Link href={routes.quoteDetail(primary.id)}>
+                                  <span className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer">
+                                    <FileText className="w-2.5 h-2.5" />{primary.number}
+                                  </span>
+                                </Link>
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="py-2.5">
                           <div className="flex items-center gap-1 justify-end">

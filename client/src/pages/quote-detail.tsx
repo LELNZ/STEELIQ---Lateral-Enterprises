@@ -2,6 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
+import { routes } from "@/lib/routes";
 import { type Quote, type QuoteRevision, type AuditLog, type Invoice, type Customer, type Project, type OpJob, VALID_STATUS_TRANSITIONS, type QuoteStatus, type Variation } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -175,7 +176,7 @@ export default function QuoteDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
       toast({ title: "Quote deleted" });
-      navigate("/quotes");
+      navigate(routes.quoteList());
     },
     onError: (err: Error) => {
       toast({ title: "Delete failed", description: err.message, variant: "destructive" });
@@ -309,7 +310,7 @@ export default function QuoteDetail() {
     <div className="max-w-4xl mx-auto p-6 space-y-6" data-testid="quote-detail-page">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/quotes")} data-testid="button-back-to-quotes">
+          <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteList())} data-testid="button-back-to-quotes">
             <ArrowLeftCircle className="h-5 w-5" />
           </Button>
           <div>
@@ -318,7 +319,7 @@ export default function QuoteDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => navigate(`/quote/${quoteId}/preview`)} data-testid="button-preview-quote">
+          <Button variant="outline" size="sm" onClick={() => navigate(routes.quotePreview(quoteId!))} data-testid="button-preview-quote">
             <Eye className="h-4 w-4 mr-1" /> Customer Preview
           </Button>
           <Button
@@ -416,15 +417,26 @@ export default function QuoteDetail() {
         </div>
         {quote.sourceJobId && (
           <div className="rounded-lg border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Source Job</p>
-            <Button
-              variant="ghost"
-              className="p-0 h-auto text-sm underline"
-              onClick={() => navigate(`/job/${quote.sourceJobId}`)}
-              data-testid="link-source-job"
-            >
-              View Job
-            </Button>
+            <p className="text-xs text-muted-foreground">Source Estimate</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <Button
+                variant="ghost"
+                className="p-0 h-auto text-sm underline"
+                onClick={() => navigate(routes.jobDetail(quote.sourceJobId!))}
+                data-testid="link-source-job"
+              >
+                Open Estimate
+              </Button>
+              <span className="text-muted-foreground text-xs">·</span>
+              <Button
+                variant="ghost"
+                className="p-0 h-auto text-xs underline text-muted-foreground"
+                onClick={() => navigate(routes.jobExecSummary(quote.sourceJobId!))}
+                data-testid="link-source-exec-summary"
+              >
+                Exec Summary
+              </Button>
+            </div>
           </div>
         )}
         {quote.projectId && (
@@ -433,7 +445,7 @@ export default function QuoteDetail() {
             <Button
               variant="ghost"
               className="p-0 h-auto text-sm underline"
-              onClick={() => navigate(`/projects/${quote.projectId}`)}
+              onClick={() => navigate(routes.projectDetail(quote.projectId!))}
               data-testid="link-header-project"
             >
               View Project
@@ -557,7 +569,7 @@ export default function QuoteDetail() {
                 variant="ghost"
                 size="sm"
                 className="text-xs text-muted-foreground h-7 px-2"
-                onClick={() => navigate(`/quote/${quoteId}/preview`)}
+                onClick={() => navigate(routes.quotePreview(quoteId!))}
                 data-testid="link-open-quote-display-settings"
               >
                 <ExternalLink className="h-3 w-3 mr-1" />
@@ -1271,9 +1283,9 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
               {project ? (
                 <div>
                   <p className="text-sm font-medium" data-testid="text-linked-project">{project.name}</p>
-                  <a href={`/projects/${project.id}`} className="text-xs text-muted-foreground hover:underline flex items-center gap-1 mt-0.5" data-testid="link-view-project">
+                  <button onClick={() => navigate(routes.projectDetail(project.id))} className="text-xs text-muted-foreground hover:underline flex items-center gap-1 mt-0.5" data-testid="link-view-project">
                     <ExternalLink className="h-2.5 w-2.5" /> View project
-                  </a>
+                  </button>
                 </div>
               ) : (
                 <div>
@@ -1300,7 +1312,7 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {linkedJob
-                        ? <a href={`/op-jobs/${linkedJob.id}`} className="text-primary hover:underline">View job →</a>
+                        ? <button onClick={() => navigate(routes.opJobDetail(linkedJob.id))} className="text-primary hover:underline">View job →</button>
                         : "Create a job shell in the Convert to Job section below to track production and site work."}
                     </p>
                   </div>
@@ -1506,7 +1518,7 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
       if (projectId) queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "jobs"] });
       toast({ title: "Job created", description: `${newJob.jobNumber} — ${newJob.title}` });
       setShowDialog(false);
-      navigate(`/op-jobs/${newJob.id}`);
+      navigate(routes.opJobDetail(newJob.id));
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -1527,7 +1539,7 @@ function ConvertToJobSection({ quoteId, projectId }: { quoteId: string; projectI
             <Briefcase className="h-4 w-4 text-green-600" />
             <h3 className="text-sm font-semibold">Converted to Job</h3>
           </div>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => navigate(`/op-jobs/${existingJob.id}`)} data-testid="button-view-job">
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => navigate(routes.opJobDetail(existingJob.id))} data-testid="button-view-job">
             <ExternalLink className="h-3 w-3 mr-1" /> View Job
           </Button>
         </div>
@@ -2677,7 +2689,7 @@ function RelatedQuotes({ sourceJobId, currentQuoteId }: { sourceJobId: string; c
                     {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : "—"}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => navigate(`/quote/${q.id}`)} data-testid={`button-view-related-${q.id}`}>
+                    <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteDetail(q.id))} data-testid={`button-view-related-${q.id}`}>
                       <Eye className="h-4 w-4" />
                     </Button>
                   </TableCell>
