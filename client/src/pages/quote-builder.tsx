@@ -29,7 +29,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List, Package } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useToast } from "@/hooks/use-toast";
@@ -215,6 +215,9 @@ const defaultValues: InsertQuoteItem = {
   cachedWeightKg: 0,
   overrideMode: "none",
   overrideValue: null,
+  fulfilmentSource: "in-house",
+  outsourcedCostNzd: null,
+  outsourcedSellNzd: null,
 };
 
 interface ItemPhotoRef {
@@ -1753,6 +1756,9 @@ export default function QuoteBuilder() {
   }
 
   function calcItemPrice(item: QuoteItem | InsertQuoteItem): number {
+    if ((item as any).fulfilmentSource === "outsourced") {
+      return (item as any).outsourcedSellNzd ?? 0;
+    }
     const sqm = calcRakedAreaSqm(item);
     const oMode = (item as any).overrideMode || "none";
     const oVal = (item as any).overrideValue ?? null;
@@ -3437,6 +3443,63 @@ export default function QuoteBuilder() {
                       </div>
                     </div>
 
+                    <div className="rounded-md border p-2 space-y-2 bg-amber-50 dark:bg-amber-950/20" data-testid="outsourced-section">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Package className="h-3.5 w-3.5 text-amber-600" />
+                          <Label className="text-xs font-semibold">Outsourced Item</Label>
+                        </div>
+                        <Switch
+                          checked={(w.fulfilmentSource || "in-house") === "outsourced"}
+                          onCheckedChange={(checked) => {
+                            form.setValue("fulfilmentSource", checked ? "outsourced" : "in-house");
+                            if (!checked) {
+                              form.setValue("outsourcedCostNzd", null);
+                              form.setValue("outsourcedSellNzd", null);
+                            }
+                          }}
+                          data-testid="switch-outsourced"
+                        />
+                      </div>
+                      {(w.fulfilmentSource || "in-house") === "outsourced" && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] text-amber-700 dark:text-amber-400">Cost and sell values override manufacturing pricing for this item.</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground">Cost (NZD)</Label>
+                              <Input
+                                type="number"
+                                className="h-7 text-xs"
+                                placeholder="Buy cost"
+                                min={0}
+                                value={w.outsourcedCostNzd ?? ""}
+                                onChange={(e) => form.setValue("outsourcedCostNzd", e.target.value ? parseFloat(e.target.value) : null)}
+                                data-testid="input-outsourced-cost"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] text-muted-foreground">Sell (NZD)</Label>
+                              <Input
+                                type="number"
+                                className="h-7 text-xs"
+                                placeholder="Sell price"
+                                min={0}
+                                value={w.outsourcedSellNzd ?? ""}
+                                onChange={(e) => form.setValue("outsourcedSellNzd", e.target.value ? parseFloat(e.target.value) : null)}
+                                data-testid="input-outsourced-sell"
+                              />
+                            </div>
+                          </div>
+                          {(w.fulfilmentSource === "outsourced") && (w.outsourcedCostNzd == null || w.outsourcedSellNzd == null) && (
+                            <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+                              <AlertTriangle className="h-3 w-3" />
+                              <span>{w.outsourcedCostNzd == null && w.outsourcedSellNzd == null ? "Enter cost and sell values" : w.outsourcedCostNzd == null ? "Enter cost value" : "Enter sell value"}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {currentPricing && (
                       <div className="rounded-md border p-3 space-y-2 bg-muted/30" data-testid="pricing-breakdown">
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -3688,7 +3751,10 @@ export default function QuoteBuilder() {
                       <TableRow key={iwp.uiId} data-testid={`row-item-${iwp.uiId}`}>
                         <TableCell className="text-muted-foreground text-xs">{index + 1}</TableCell>
                         <TableCell className="font-medium">{iwp.item.name}</TableCell>
-                        <TableCell className="text-sm">{getCategoryLabel(iwp.item.category)}</TableCell>
+                        <TableCell className="text-sm">
+                          {getCategoryLabel(iwp.item.category)}
+                          {(iwp.item as any).fulfilmentSource === "outsourced" && <Badge variant="secondary" className="text-[9px] ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" data-testid={`badge-outsourced-${iwp.uiId}`}>Outsourced</Badge>}
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {getLayoutSummary(iwp.item)}
                         </TableCell>
@@ -3827,6 +3893,7 @@ export default function QuoteBuilder() {
                             <span className="text-xs font-bold text-muted-foreground shrink-0">{index + 1}.</span>
                             <span className="font-medium text-sm truncate">{iwp.item.name}</span>
                             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{getCategoryLabel(iwp.item.category)}</Badge>
+                            {(iwp.item as any).fulfilmentSource === "outsourced" && <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Outsourced</Badge>}
                           </div>
                           <div className="flex items-center gap-2 mt-1 text-sm font-semibold font-mono" data-testid={`text-card-dims-${iwp.uiId}`}>
                             {iwp.item.width} × {iwp.item.height}

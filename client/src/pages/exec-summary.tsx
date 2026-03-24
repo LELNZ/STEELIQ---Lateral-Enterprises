@@ -32,7 +32,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat, ExternalLink } from "lucide-react";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat, ExternalLink, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
@@ -593,15 +593,31 @@ export default function ExecSummary() {
     let totalWeight = 0;
     let totalLaborHours = 0;
 
+    let outsourcedCostTotal = 0;
+    let outsourcedSellTotal = 0;
+    let outsourcedCount = 0;
+
     for (const ip of itemPricings) {
+      const isOutsourced = (ip.item.fulfilmentSource || "in-house") === "outsourced";
       totalSqm += ip.sqm;
-      itemSaleTotal += ip.pricing?.salePriceNzd ?? ip.salePrice;
-      if (ip.pricing) {
-        totalManufCost += ip.pricing.netCostNzd;
-        totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd + ip.pricing.wanzBarCostNzd;
-        totalLabor += ip.pricing.laborCostNzd;
-        totalWeight += ip.pricing.totalWeightKg;
-        totalLaborHours += ip.pricing.laborHours;
+
+      if (isOutsourced) {
+        outsourcedCount++;
+        const oCost = ip.item.outsourcedCostNzd ?? 0;
+        const oSell = ip.item.outsourcedSellNzd ?? 0;
+        outsourcedCostTotal += oCost;
+        outsourcedSellTotal += oSell;
+        totalManufCost += oCost;
+        itemSaleTotal += oSell;
+      } else {
+        itemSaleTotal += ip.pricing?.salePriceNzd ?? ip.salePrice;
+        if (ip.pricing) {
+          totalManufCost += ip.pricing.netCostNzd;
+          totalMaterials += ip.pricing.profilesCostNzd + ip.pricing.accessoriesCostNzd + ip.pricing.glassCostNzd + ip.pricing.linerCostNzd + ip.pricing.handleCostNzd + ip.pricing.wanzBarCostNzd;
+          totalLabor += ip.pricing.laborCostNzd;
+          totalWeight += ip.pricing.totalWeightKg;
+          totalLaborHours += ip.pricing.laborHours;
+        }
       }
     }
 
@@ -630,6 +646,7 @@ export default function ExecSummary() {
       avgCostPerSqm, avgSalePerSqm, installCost, installSell,
       delivCost, delivSell, removalCost, removalSell, rubbishCost, rubbishSell,
       grandTotalCost, totalSaleExGst, gstAmount, totalSaleIncGst,
+      outsourcedCostTotal, outsourcedSellTotal, outsourcedCount,
     };
   }, [itemPricings, installEnabled, installationTotals, deliveryTotals, removalEnabled, removalTotals, rubbishEnabled, rubbishTotals, gstRate]);
 
@@ -1280,11 +1297,20 @@ export default function ExecSummary() {
                 <TableCell className="text-right text-sm" data-testid="text-total-labor">${fmt(totals.totalLabor)}</TableCell>
                 <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>
               </TableRow>
-              <TableRow className="border-b-2" data-testid="row-manuf-total">
+              <TableRow className={totals.outsourcedCount > 0 ? "" : "border-b-2"} data-testid="row-manuf-total">
                 <TableCell className="text-right text-sm font-semibold">Total</TableCell>
                 <TableCell className="text-right text-base font-bold" data-testid="text-total-manuf-cost">${fmt(totals.totalManufCost)}</TableCell>
                 <TableCell className="text-right text-base font-bold" data-testid="text-item-sale-total">${fmt(totals.itemSaleTotal)}</TableCell>
               </TableRow>
+              {totals.outsourcedCount > 0 && (
+                <TableRow className="border-b-2 bg-amber-50/50 dark:bg-amber-950/10" data-testid="row-outsourced-summary">
+                  <TableCell className="text-sm font-medium text-amber-700 dark:text-amber-400" colSpan={2}>
+                    <div className="flex items-center gap-1"><Package className="h-3.5 w-3.5" />Outsourced ({totals.outsourcedCount} item{totals.outsourcedCount !== 1 ? "s" : ""} incl. above)</div>
+                  </TableCell>
+                  <TableCell className="text-right text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="text-outsourced-cost">${fmt(totals.outsourcedCostTotal)}</TableCell>
+                  <TableCell className="text-right text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="text-outsourced-sell">${fmt(totals.outsourcedSellTotal)}</TableCell>
+                </TableRow>
+              )}
               <TableRow data-testid="row-installation">
                 <TableCell className="text-sm font-medium">Installation</TableCell>
                 <TableCell className="text-right text-sm text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
@@ -1335,6 +1361,20 @@ export default function ExecSummary() {
               <span className="text-right font-bold">${fmt(totals.itemSaleTotal)}</span>
             </div>
           </div>
+
+          {totals.outsourcedCount > 0 && (
+            <div className="rounded-md border border-amber-200 dark:border-amber-800 p-3 bg-amber-50/50 dark:bg-amber-950/10">
+              <div className="flex items-center gap-1 text-sm font-medium text-amber-700 dark:text-amber-400 mb-1">
+                <Package className="h-3.5 w-3.5" />Outsourced ({totals.outsourcedCount} item{totals.outsourcedCount !== 1 ? "s" : ""} incl. above)
+              </div>
+              <div className="grid grid-cols-2 gap-1 text-sm">
+                <span className="text-muted-foreground">Cost</span>
+                <span className="text-right text-amber-700 dark:text-amber-400">${fmt(totals.outsourcedCostTotal)}</span>
+                <span className="text-muted-foreground">Sell</span>
+                <span className="text-right text-amber-700 dark:text-amber-400">${fmt(totals.outsourcedSellTotal)}</span>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-md border p-3">
             <div className="grid grid-cols-2 gap-1 text-sm">
@@ -1939,12 +1979,14 @@ export default function ExecSummary() {
           <TableBody>
             {itemPricings.map((ip, idx) => {
               const isExpanded = expandedItems.has(idx);
-              const hasPricing = !!ip.pricing;
-              const netCost = ip.pricing?.netCostNzd ?? 0;
-              const salePrice = ip.pricing?.salePriceNzd ?? ip.salePrice;
+              const isOutsourced = (ip.item.fulfilmentSource || "in-house") === "outsourced";
+              const hasPricing = isOutsourced || !!ip.pricing;
+              const netCost = isOutsourced ? (ip.item.outsourcedCostNzd ?? 0) : (ip.pricing?.netCostNzd ?? 0);
+              const salePrice = isOutsourced ? (ip.item.outsourcedSellNzd ?? 0) : (ip.pricing?.salePriceNzd ?? ip.salePrice);
               const margin = hasPricing ? salePrice - netCost : 0;
-              const marginPct = hasPricing ? (ip.pricing?.marginPercent ?? 0) : 0;
+              const marginPct = hasPricing && salePrice > 0 ? (margin / salePrice) * 100 : (isOutsourced ? 0 : (ip.pricing?.marginPercent ?? 0));
               const marginColor = !hasPricing ? "text-muted-foreground" : margin >= 0 ? "text-green-600" : "text-red-600";
+              const outsourcedIncomplete = isOutsourced && (ip.item.outsourcedCostNzd == null || ip.item.outsourcedSellNzd == null);
 
               return (
                 <Collapsible key={idx} open={isExpanded} onOpenChange={() => toggleExpand(idx)} asChild>
@@ -1957,6 +1999,8 @@ export default function ExecSummary() {
                         <TableCell className="font-medium" data-testid={`text-item-name-${idx}`}>{ip.item.name}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ip.item.category] || ip.item.category}</Badge>
+                          {isOutsourced && <Badge variant="secondary" className="text-[10px] ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" data-testid={`badge-outsourced-${idx}`}><Package className="h-2.5 w-2.5 mr-0.5" />Outsourced</Badge>}
+                          {outsourcedIncomplete && <Badge variant="destructive" className="text-[10px] ml-1" data-testid={`badge-outsourced-incomplete-${idx}`}>Incomplete</Badge>}
                           {ip.configName && <span className="text-xs text-muted-foreground ml-1.5" data-testid={`text-config-name-${idx}`}>{ip.configName}</span>}
                         </TableCell>
                         <TableCell className="text-right text-xs">{ip.item.width}×{ip.item.height}</TableCell>
@@ -1971,7 +2015,26 @@ export default function ExecSummary() {
                     <CollapsibleContent asChild>
                       <TableRow className="bg-muted/20" data-testid={`row-item-detail-${idx}`}>
                         <TableCell colSpan={8}>
-                          {ip.pricing ? (
+                          {isOutsourced ? (
+                            <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                              <div>
+                                <span className="text-muted-foreground block">Fulfilment</span>
+                                <span className="font-medium text-amber-700 dark:text-amber-400">Outsourced</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground block">Cost (NZD)</span>
+                                <span className="font-medium">{ip.item.outsourcedCostNzd != null ? `$${fmt(ip.item.outsourcedCostNzd)}` : <span className="text-destructive">Not set</span>}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground block">Sell (NZD)</span>
+                                <span className="font-medium">{ip.item.outsourcedSellNzd != null ? `$${fmt(ip.item.outsourcedSellNzd)}` : <span className="text-destructive">Not set</span>}</span>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground block">Margin</span>
+                                <span className={`font-medium ${margin >= 0 ? "text-green-600" : "text-red-600"}`}>${fmt(margin)} ({marginPct.toFixed(1)}%)</span>
+                              </div>
+                            </div>
+                          ) : ip.pricing ? (
                             <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                               <div>
                                 <span className="text-muted-foreground block">Configuration</span>
