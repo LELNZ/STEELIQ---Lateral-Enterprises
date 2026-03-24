@@ -1,0 +1,264 @@
+STEELIQ RAKED / TRIANGULAR FIXED WINDOW — HEIGHT VALIDATION CORRECTION PHASE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow validation-correction phase for the already-implemented raked / triangular fixed-window feature.
+
+This is NOT:
+- a quote builder redesign
+- a geometry-engine rewrite
+- a pricing-engine redesign
+- a PDF/document redesign
+- a manufacturing/BOM/cut-list phase
+- an awning-in-raked phase
+- a broad form-validation overhaul
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models.
+- Do not introduce schema creep unless absolutely required and explicitly justified.
+- Do not perform hidden refactors.
+- Do not widen scope beyond correcting invalid raked-height validation behavior.
+- Do not alter QuoteDocument -> QuoteRenderModel -> Preview/PDF structure.
+- Do not widen into manufacturing outputs.
+- Preserve backward compatibility for existing rectangular items and current raked-fixed items.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED PROBLEM
+==================================================
+
+A real raked / triangular fixed window case requires a very small end height (for example 30mm or 50mm), but the current Quote Builder rejects that input with:
+
+"Value must be greater than or equal to 200"
+
+This is blocking valid raked-window quoting.
+
+Important observed truth:
+- the validation error appears on the raked side-height input
+- the live app reportedly does not currently show this error
+- the restriction may come from builder validation, input min attributes, shared schema validation, or category-specific constraints
+
+This phase exists to identify and correct that invalid minimum-height rule for raked-fixed items.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Correct the raked height validation so that valid low-end triangular/raked window heights are allowed where geometrically valid.
+
+The system must:
+- allow legitimate small edge heights for raked-fixed items
+- still block invalid values such as negative or structurally broken input
+- preserve rectangular-item validation behavior
+- preserve existing raked pricing/drawing/document behavior
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+1. audit of where the >= 200 rule is coming from
+2. correction of the raked height validation/input constraint
+3. verification that valid small-end raked heights now work
+4. regression check that rectangular validation remains unchanged
+
+Do NOT widen into:
+- slope-rule redesign
+- full geometry-contract redesign
+- pricing logic changes
+- PDF/document changes
+- new non-rectangular features
+- manufacturing logic
+- general validation redesign for the whole app
+
+==================================================
+PHASE A — AUDIT THE SOURCE OF THE INVALID 200MM RULE
+==================================================
+
+Audit current repo/runtime truth and report precisely:
+
+1. where the ">= 200" constraint is defined
+   - form input min attribute?
+   - Zod schema?
+   - shared numeric validator?
+   - category-specific rule?
+   - UI-only constraint plus schema constraint?
+2. whether it applies:
+   - to all window heights globally
+   - to both raked side heights
+   - to overall height only
+   - to rectangular items only
+   - to raked items incorrectly through shared reuse
+3. whether this rule existed before the recent raked passes or was introduced during them
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE CORRECT VALIDATION CONTRACT FOR RAKED-FIXED
+==================================================
+
+Implement a minimal correct validation contract for current raked-fixed items.
+
+Business requirement for this phase:
+- a small end height can be valid on a raked / triangular fixed window
+- therefore both side heights must NOT be forced to be >= 200 if that blocks legitimate geometry
+
+Minimum safe validation principles:
+- no negative heights
+- no zero-height shapes if that breaks current drawing/math/runtime
+- no invalid NaN/empty-state corruption
+- maintain a sensible lower bound only where genuinely required by current geometry/rendering logic
+
+Important:
+- do NOT guess structural manufacturing rules
+- do NOT invent a new engineering minimum unless repo/business truth supports it
+- if the system truly requires a tiny positive minimum for rendering/math stability, use the minimum safe value and report it explicitly
+
+==================================================
+PHASE C — IMPLEMENT THE CORRECTION NARROWLY
+==================================================
+
+Correct the validation only where needed so that:
+
+- rakedLeftHeight and rakedRightHeight can accept valid small-end values
+- builder UI no longer blocks legitimate raked wedge inputs like 30mm / 50mm if current geometry supports them
+- rectangular height validation remains unchanged unless it was accidentally coupled and must be separated
+- no unrelated categories are affected
+
+Potential correction points may include:
+- input min values
+- Zod/schema refinement
+- category-specific validation branching
+- form coercion/normalization
+
+Use the minimum safe change required.
+
+==================================================
+PHASE D — VERIFY DRAWING / PRICING / SAVE BEHAVIOR STILL HOLD
+==================================================
+
+After correcting validation, explicitly verify:
+
+- the raked preview still renders correctly with a small end height
+- left-rake/right-rake behavior still works
+- split/no-split still works
+- area/pricing still calculate correctly
+- save/edit roundtrip still works
+- document/PDF fields are unaffected by the validation change
+
+Do NOT change those systems unless a direct defect is discovered.
+
+==================================================
+PHASE E — REGRESSION SAFETY
+==================================================
+
+Explicitly verify:
+- rectangular items still keep their existing validation rules
+- rectangular rendering is unchanged
+- no touched route returns 404
+- no new console/form errors are introduced
+
+==================================================
+PHASE F — TRUTHFUL RELEASE READINESS CALL
+==================================================
+
+At the end of the report, make a truthful release-readiness statement for this validation issue:
+
+- either “validation issue resolved; safe for GitHub push and live publish”
+or
+- “safe for GitHub push only, not live publish yet”
+
+Do NOT over-claim if the correction still leaves edge-height cases broken.
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what caused the invalid 200mm rule
+- what was corrected
+- confirm whether small-end raked heights now work
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. VALIDATION AUDIT RESULT
+- exact source of the >= 200 rule
+- whether it was shared/global or incorrectly applied to raked items
+- whether it appears to be an older rule or introduced during recent work
+
+4. VALIDATION CONTRACT RESULT
+- exact new rule now used for rakedLeftHeight and rakedRightHeight
+- any minimum value still enforced and why
+- confirm rectangular validation behavior is unchanged
+
+5. IMPLEMENTATION RESULT
+- exact code-level fix applied
+- whether UI min constraints and schema constraints are now aligned
+
+6. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- a small-end raked case (e.g. 30mm or 50mm) now works if supported
+- left-rake works
+- right-rake works
+- split works
+- no-split works
+- save/update works
+- pricing remains correct
+- no touched route returns 404
+
+7. REGRESSION RESULT
+Confirm specifically whether these remain unchanged:
+- existing rectangular quote-builder items
+- rectangular validation behavior
+- rectangular rendering
+- quote editing
+- revision flow
+- preview/PDF structure
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- fixed only for now
+- awning-in-raked support not implemented
+- manufacturing outputs not implemented
+- any remaining minimum-height or geometry caveat still outside this scope
+
+9. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current raked-fixed support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform defect correction.
+
+Do not broaden the phase.
+Do not leave the source of the 200mm rule ambiguous.
+Do not “work around” the issue only in the UI if schema/runtime validation still blocks valid raked inputs.
+
+Your job is to identify exactly why legitimate small-end raked heights are being rejected, correct that behavior cleanly, and preserve the rest of the raked and rectangular system unchanged.

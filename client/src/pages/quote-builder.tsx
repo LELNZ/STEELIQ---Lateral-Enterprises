@@ -2241,7 +2241,7 @@ export default function QuoteBuilder() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <Label className="text-xs">Left Height (mm)</Label>
-                        <Input type="number" inputMode="decimal" min={200}
+                        <Input type="number" inputMode="decimal" min={1}
                           value={w.rakedLeftHeight || ""}
                           onChange={(e) => {
                             const v = e.target.value ? parseInt(e.target.value) : 0;
@@ -2253,7 +2253,7 @@ export default function QuoteBuilder() {
                       </div>
                       <div>
                         <Label className="text-xs">Right Height (mm)</Label>
-                        <Input type="number" inputMode="decimal" min={200}
+                        <Input type="number" inputMode="decimal" min={1}
                           value={w.rakedRightHeight || ""}
                           onChange={(e) => {
                             const v = e.target.value ? parseInt(e.target.value) : 0;
