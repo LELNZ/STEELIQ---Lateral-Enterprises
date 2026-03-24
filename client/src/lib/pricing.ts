@@ -43,6 +43,7 @@ export interface PricingExtras {
   openingPanelCount?: number;
   wanzBar?: WanzBarPricingInput;
   salePriceOverride?: number | null;
+  sqmOverride?: number | null;
 }
 
 export interface ItemGeometry {
@@ -186,7 +187,9 @@ export function calculatePricing(
   geometry?: ItemGeometry,
   glazingBands?: GlazingBandEntry[]
 ): PricingBreakdown {
-  const sqm = (widthMm * heightMm * quantity) / 1_000_000;
+  const sqm = (extras?.sqmOverride != null && extras.sqmOverride > 0)
+    ? extras.sqmOverride * quantity
+    : (widthMm * heightMm * quantity) / 1_000_000;
   const perimeterM = 2 * (widthMm / 1000 + heightMm / 1000);
 
   const masterProfileMap = new Map<string, any>();

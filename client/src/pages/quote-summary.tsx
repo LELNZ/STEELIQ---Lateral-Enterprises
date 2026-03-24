@@ -11,12 +11,17 @@ import {
 } from "@/components/ui/table";
 import { ArrowLeftCircle, FileText, Settings2 } from "lucide-react";
 
-function calcSqm(width: number, height: number, quantity: number): number {
+function calcSqm(width: number, height: number, quantity: number, item?: QuoteItem): number {
+  if (item && item.category === "raked-fixed") {
+    const lh = (item as any).rakedLeftHeight || item.height;
+    const rh = (item as any).rakedRightHeight || item.height;
+    return (width * ((lh + rh) / 2) * quantity) / 1_000_000;
+  }
   return (width * height * quantity) / 1_000_000;
 }
 
 function calcItemPrice(item: QuoteItem): number {
-  return calcSqm(item.width, item.height, item.quantity || 1) * (item.pricePerSqm || 500);
+  return calcSqm(item.width, item.height, item.quantity || 1, item) * (item.pricePerSqm || 500);
 }
 
 function formatPrice(amount: number): string {
@@ -62,6 +67,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   "bifold-door": "Bifold Door",
   "stacker-door": "Stacker Door",
   "bay-window": "Bay Window",
+  "raked-fixed": "Raked/Triangular Fixed",
 };
 
 interface JobData {
@@ -141,7 +147,9 @@ export default function QuoteSummary() {
     const items = job.items.map((ji) => ji.config as QuoteItem);
     let total = 0;
     for (const item of items) {
-      const unitSqm = (item.width * item.height) / 1_000_000;
+      const unitSqm = item.category === "raked-fixed"
+        ? calcSqm(item.width, item.height, 1, item)
+        : (item.width * item.height) / 1_000_000;
       const isDoor = DOOR_CATEGORIES.includes(item.category);
       const itemCat = isDoor ? "door" : "window";
       const catGroups = new Map<string, typeof installationRates>();
@@ -222,7 +230,7 @@ export default function QuoteSummary() {
   }
 
   const items = job.items.map((ji) => ji.config as QuoteItem);
-  const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1), 0);
+  const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1, item), 0);
   const totalWeight = itemWeights.reduce((sum, w) => sum + w, 0);
   const itemsSubtotal = items.reduce((sum, item) => sum + calcItemPrice(item), 0);
   const hasInstallation = !!job.installationEnabled && installSellTotal > 0;
@@ -284,7 +292,7 @@ export default function QuoteSummary() {
             </TableHeader>
             <TableBody>
               {items.map((item, index) => {
-                const sqm = calcSqm(item.width, item.height, item.quantity || 1);
+                const sqm = calcSqm(item.width, item.height, item.quantity || 1, item);
                 const price = calcItemPrice(item);
                 const weightKg = itemWeights[index] || 0;
                 return (

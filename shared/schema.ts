@@ -137,10 +137,15 @@ export const quoteItemSchema = z.object({
   category: z.enum([
     "windows-standard", "sliding-window", "sliding-door",
     "entrance-door", "hinge-door", "french-door",
-    "bifold-door", "stacker-door", "bay-window"
+    "bifold-door", "stacker-door", "bay-window",
+    "raked-fixed"
   ]),
   width: z.number().min(200, "Minimum width is 200mm"),
   height: z.number().min(200, "Minimum height is 200mm"),
+  rakedLeftHeight: z.number().min(0).default(0),
+  rakedRightHeight: z.number().min(0).default(0),
+  rakedSplitEnabled: z.boolean().default(false),
+  rakedSplitPosition: z.number().min(0).default(0),
   layout: z.enum(["standard", "custom"]).default("standard"),
   windowType: z.enum(["fixed", "awning", "french-left", "french-right", "french-pair"]).default("fixed"),
   hingeSide: z.enum(["left", "right"]).default("left"),
