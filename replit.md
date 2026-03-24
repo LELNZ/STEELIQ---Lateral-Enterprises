@@ -29,7 +29,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Job/Quote/Invoice Linkage**: Invoice detail and list pages resolve job name and variation title through linked records. Invoice creation auto-populates `reference` from the source job name.
 **Variations Commercial Model**: Manages project-level variations through a defined lifecycle.
 **Retention Commercial Model**: Supports optional percentage-based retention.
-**UI/UX**: Responsive tables, polished spec row formatting in PDFs, project dashboard guidance, customer relink safeguards, and an enterprise app shell with workflow-domain grouped navigation. Accepted quote workflow progress panel guides users through project, job, and invoice creation.
+**UI/UX**: Responsive tables, polished spec row formatting in PDFs, project dashboard guidance, customer relink safeguards, and an enterprise app shell with workflow-domain grouped navigation. Accepted quote workflow progress panel guides users through project, job, and invoice creation. Estimate list includes a "Quote Status" column (active and archived tabs) showing the most recent linked quote's status badge, revision count, and clickable quote number link for direct navigation. Server `/api/jobs` enriches each job with `linkedQuotes` metadata via batch SQL join.
 **Governance and Data Integrity**: Features for environment clarity, test data governance, and shielding of demo/test records from standard users, including archiving, Xero link clearing for demo invoices, and chain-aware linked-record cleanup.
 
 ## External Dependencies

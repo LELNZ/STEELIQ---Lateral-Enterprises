@@ -1,0 +1,242 @@
+STEELIQ COMMERCIAL CONTROL-SURFACE PHASE — ESTIMATE LIST STATUS + LINKED QUOTE + REVISION VISIBILITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow commercial list-view hardening phase. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the estimate, quote, job, or revision model broadly.
+- Do not replace the existing estimate -> quote -> revision flow.
+- Do not perform hidden refactors.
+- Do not change pricing-engine logic in this phase.
+- Do not change accepted-quote protections, governance, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not widen scope into manufacturing engine work.
+- Treat current repo/runtime truth as the source of truth, not assumptions from prior prompts.
+- Preserve backward compatibility for existing estimates, quotes, revisions, and archived records.
+- Keep this phase operationally usable and enterprise-grade, not cosmetic only.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- the estimate list clearly communicates commercial/workflow state at a glance
+- users can see estimate status in the estimate table without opening each estimate
+- users can see whether a linked quote exists, and its current commercial state, directly from the estimate table
+- users can see a revision signal when a linked quote exists
+- the estimate table remains scannable and not overloaded
+- no existing estimate open/archive behavior is broken
+
+CURRENT VERIFIED PROBLEM
+
+The current estimate table shows structural information only:
+- name
+- address
+- date
+- items
+- m²
+
+It does NOT show:
+- estimate status
+- linked quote status
+- revision signal / latest revision count
+
+This is not enterprise-grade because the estimate list is acting like a raw data table rather than a commercial control surface.
+
+PRIMARY OBJECTIVE
+
+Upgrade the estimate list so it behaves like a professional control surface by surfacing the minimum high-value commercial metadata:
+- estimate status
+- linked quote status
+- revision signal
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT CURRENT REPO TRUTH
+Review and report:
+- how estimates are currently listed and populated
+- what estimate fields are already available to the estimate list
+- how linked quote information is currently resolved (if at all) for estimates
+- how quote status is currently represented in repo/runtime truth
+- how revision count/latest revision is currently represented in repo/runtime truth
+- what the minimum safe implementation is without broad backend redesign
+
+Do not assume. Use actual repo truth.
+
+PHASE B — DEFINE THE ESTIMATE TABLE COMMERCIAL METADATA MODEL
+Implement the smallest clean UI/data addition needed for the estimate list.
+
+At minimum, the estimate table must expose:
+
+1. ESTIMATE STATUS
+A clear badge or compact status indicator for the estimate itself.
+
+2. LINKED QUOTE STATUS
+A clear indicator of whether:
+- no quote exists
+- a quote exists and is draft
+- a quote exists and is sent/review/accepted/etc. according to current repo truth
+
+3. REVISION SIGNAL
+A compact signal when a linked quote exists, such as:
+- Rev 1
+- Rev 4
+- 4 revs
+- Latest Rev 4
+
+Use repo truth. Do not invent fake status states.
+
+PHASE C — UPGRADE THE ESTIMATE TABLE UI
+Implement the estimate list as a more enterprise-grade control surface.
+
+Requirements:
+- add the minimum number of columns and/or badges necessary
+- keep the table scannable
+- do not overload the list with full lifecycle internals
+- make status visually primary
+- make linked quote state visually secondary
+- make revision signal compact and readable
+
+Preferred hierarchy:
+- estimate status = primary badge
+- quote status / linked quote = secondary commercial signal
+- revision signal = compact tertiary signal
+
+The result should allow a user to scan the estimate list and quickly understand:
+- what is still draft
+- what has become a quote
+- what has been revised multiple times
+- which records need attention
+
+PHASE D — ADD SAFE LINKED-QUOTE ACCESS FROM THE ESTIMATE TABLE
+Where repo truth supports it safely, the linked quote indicator in the estimate table should also provide direct access to the current quote.
+
+Requirements:
+- if a quote exists, expose an "Open Quote" action or equivalent directly from the table row
+- use the canonical route helper / routing contract already established
+- do not reintroduce raw route-string risk
+- do not break current row actions
+
+If repo truth does not make this safe for all rows, report that clearly and stop at the maximum safe point.
+
+PHASE E — STATUS / LABEL GOVERNANCE
+Use consistent terminology already supported by the current system.
+
+Rules:
+- do not invent new lifecycle jargon if the repo already has a status system
+- separate estimate status from quote status where possible
+- do not confuse workflow stage with commercial state
+- do not use revision count as a replacement for quote status
+
+Examples of acceptable distinction:
+- Estimate: Draft / Active / Archived / Converted (only if repo truth supports this)
+- Quote: No Quote / Draft / Sent / Accepted / etc. according to current quote truth
+- Revision: Rev 1 / Rev 4 / etc.
+
+PHASE F — PRESERVE EXISTING LOGIC
+Do not break:
+- estimate open behavior
+- estimate archive behavior
+- quote generation from estimate
+- linked estimate -> quote relationship
+- quote revisions
+- preview/PDF overall pipeline
+- accepted quote protections
+- lifecycle template behavior
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+NON-GOALS
+
+Do NOT:
+- redesign the whole estimates module
+- redesign the whole quotes module
+- redesign the status model broadly
+- redesign lifecycle templates broadly
+- change pricing calculations
+- change manufacturing logic
+- widen into kanban/dashboard work
+- turn the estimate list into a full reporting screen
+- add broad analytics outside the requested commercial visibility signals
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+- confirm estimate status is now visible in the estimate list
+- confirm linked quote state is now visible in the estimate list
+- confirm revision signal is now visible in the estimate list
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE / CURRENT-STATE RESULT
+- what was missing from the estimate list before
+- why the list was not enterprise-grade before
+- what data sources were already available vs what had to be added/resolved
+
+4. FIX RESULT
+- how estimate status is now shown
+- how linked quote status is now shown
+- how revision signal is now shown
+- whether linked quote open/navigation was added from the table
+- how the table remains scannable
+
+5. UI BEFORE VS AFTER RESULT
+Show the practical before vs after for:
+- estimate list row visibility
+- user ability to distinguish draft vs quoted vs revised records
+- user ability to jump from estimate list to linked quote when applicable
+
+6. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- estimate list renders correctly
+- status badges/signals render correctly
+- linked quote status is correct for rows with quotes
+- revision signal is correct for rows with revisions
+- open quote action works from the table if implemented
+- no touched route returns 404
+- estimate open/archive behavior still works
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- estimate creation
+- estimate archive/unarchive behavior
+- quote generation from estimate
+- quote revisions
+- preview/PDF overall pipeline
+- accepted quote protections
+- lifecycle template behavior
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any remaining estimate-list caveat still outside this scope
+- any remaining linked-quote visibility caveat
+- no broad system rewrite was done
+
+9. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining glass-library caveat
+- any remaining lifecycle UX caveat
+- any remaining internal navigation caveat outside this phase
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Upgrade the estimate list into a professional commercial control surface by surfacing status, linked quote state, and revision visibility cleanly and truthfully.
+Keep it narrow, safe, and enterprise-grade.

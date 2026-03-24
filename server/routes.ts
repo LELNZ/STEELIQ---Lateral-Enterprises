@@ -315,6 +315,29 @@ export async function registerRoutes(
       if (!isPrivilegedUser(req)) {
         allJobs = allJobs.filter(j => !j.isDemoRecord);
       }
+      const jobIds = allJobs.map(j => j.id);
+      let quotesByJob: Record<string, { id: string; number: string; status: string; revisionCount: number }[]> = {};
+      if (jobIds.length > 0) {
+        const quoteRows = await pool.query(
+          `SELECT q.id, q.number, q.status, q.source_job_id,
+                  (SELECT COUNT(*) FROM quote_revisions r WHERE r.quote_id = q.id)::int AS revision_count
+           FROM quotes q
+           WHERE q.source_job_id = ANY($1) AND q.deleted_at IS NULL
+           ORDER BY q.created_at DESC`,
+          [jobIds]
+        );
+        for (const row of quoteRows.rows) {
+          const sjid = row.source_job_id;
+          if (!quotesByJob[sjid]) quotesByJob[sjid] = [];
+          quotesByJob[sjid].push({
+            id: row.id,
+            number: row.number,
+            status: row.status,
+            revisionCount: row.revision_count,
+          });
+        }
+      }
+
       const jobsWithCounts = await Promise.all(
         allJobs.map(async (job) => {
           const items = await storage.getJobItems(job.id);
@@ -325,7 +348,13 @@ export async function registerRoutes(
               totalSqm += (cfg.width * cfg.height * (cfg.quantity || 1)) / 1_000_000;
             }
           }
-          return { ...job, itemCount: items.length, totalSqm: Math.round(totalSqm * 100) / 100 };
+          const linkedQuotes = quotesByJob[job.id] || [];
+          return {
+            ...job,
+            itemCount: items.length,
+            totalSqm: Math.round(totalSqm * 100) / 100,
+            linkedQuotes,
+          };
         })
       );
       res.json(jobsWithCounts);
