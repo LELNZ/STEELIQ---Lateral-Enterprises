@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type QuoteItem, type JobItem, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor, type FrameConfiguration, type LibraryEntry } from "@shared/schema";
-import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
+import { calculatePricing, calcRakedPerimeterM, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
 import { getGlassPrice, getGlassRValue } from "@shared/glass-library";
 import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, getLocksForCategory, getLockTypeForCategory, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES, isDoorCategory } from "@shared/item-options";
@@ -394,6 +394,7 @@ export default function ExecSummary() {
               wanzBar: wanzBarInput,
               salePriceOverride: salePriceOverride ?? undefined,
               sqmOverride: item.category === "raked-fixed" ? (((item as any).rakedLeftHeight || item.height || 0) + ((item as any).rakedRightHeight || item.height || 0)) / 2 * item.width / 1_000_000 : undefined,
+              perimeterOverrideM: item.category === "raked-fixed" ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0) : undefined,
             },
             { masterProfiles, masterAccessories, masterLabour }
           );
@@ -443,7 +444,9 @@ export default function ExecSummary() {
       return { basisQty: areaSqm, totalMultiplier: areaSqm * qty, label: `${areaSqm.toFixed(2)} m²` };
     }
     if (basis === "per_lm") {
-      const perimeterLm = 2 * (item.width + item.height) / 1000;
+      const perimeterLm = (item as any).category === "raked-fixed"
+        ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0)
+        : 2 * (item.width + item.height) / 1000;
       return { basisQty: perimeterLm, totalMultiplier: perimeterLm * qty, label: `${perimeterLm.toFixed(2)} l/m` };
     }
     return { basisQty: 1, totalMultiplier: qty, label: `${qty} item${qty !== 1 ? "s" : ""}` };

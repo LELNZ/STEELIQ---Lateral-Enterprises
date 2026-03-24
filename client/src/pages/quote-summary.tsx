@@ -3,6 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { type QuoteItem, type JobItem, type LibraryEntry, type ConfigurationProfile } from "@shared/schema";
 import { DOOR_CATEGORIES } from "@shared/item-options";
+import { calcRakedPerimeterM } from "@/lib/pricing";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -28,14 +29,14 @@ function formatPrice(amount: number): string {
   return amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function calcProfileLength(widthMm: number, heightMm: number, formula: string): number {
+function calcProfileLength(widthMm: number, heightMm: number, formula: string, perimeterOverrideM?: number): number {
   const wM = widthMm / 1000;
   const hM = heightMm / 1000;
   switch (formula) {
-    case "perimeter": return 2 * (wM + hM);
+    case "perimeter": return perimeterOverrideM != null && perimeterOverrideM > 0 ? perimeterOverrideM : 2 * (wM + hM);
     case "width": return wM;
     case "height": return hM;
-    default: return 2 * (wM + hM);
+    default: return perimeterOverrideM != null && perimeterOverrideM > 0 ? perimeterOverrideM : 2 * (wM + hM);
   }
 }
 
@@ -45,12 +46,15 @@ function calcItemWeight(
   masterProfileMap: Map<string, any>
 ): number {
   if (!profiles.length) return 0;
+  const perimOverride = item.category === "raked-fixed"
+    ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0)
+    : undefined;
   let totalKg = 0;
   for (const p of profiles) {
     const master = masterProfileMap.get(p.mouldNumber);
     const kgPerM = parseFloat(master?.kgPerMetre ?? p.kgPerMetre) || 0;
     const formula = master?.lengthFormula ?? p.lengthFormula ?? "perimeter";
-    const length = calcProfileLength(item.width, item.height, formula);
+    const length = calcProfileLength(item.width, item.height, formula, perimOverride);
     const qty = (p.quantityPerSet || 1) * (item.quantity || 1);
     totalKg += length * qty * kgPerM;
   }
@@ -172,7 +176,12 @@ export default function QuoteSummary() {
           const basis = matchedRate.pricingBasis || "per_item";
           const qty = item.quantity || 1;
           if (basis === "per_m2") total += sell * unitSqm * qty;
-          else if (basis === "per_lm") total += sell * (2 * (item.width + item.height) / 1000) * qty;
+          else if (basis === "per_lm") {
+            const perimLm = item.category === "raked-fixed"
+              ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0)
+              : 2 * (item.width + item.height) / 1000;
+            total += sell * perimLm * qty;
+          }
           else total += sell * qty;
         }
       }
