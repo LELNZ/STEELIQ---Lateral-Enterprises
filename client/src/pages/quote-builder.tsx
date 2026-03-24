@@ -2226,7 +2226,15 @@ export default function QuoteBuilder() {
                     <div>
                       <Label htmlFor="width" className="text-xs">Overall Width (mm)</Label>
                       <Input id="width" type="number" inputMode="decimal" min={200}
-                        {...form.register("width", { valueAsNumber: true })}
+                        {...form.register("width", {
+                          valueAsNumber: true,
+                          onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                            const v = e.target.value ? parseInt(e.target.value) : 0;
+                            if (w.rakedSplitEnabled && w.rakedSplitPosition && v > 0 && w.rakedSplitPosition >= v - 100) {
+                              form.setValue("rakedSplitPosition", Math.max(100, Math.round(v / 2)));
+                            }
+                          }
+                        })}
                         onFocus={handleConfigFieldFocus}
                         data-testid="input-width" />
                     </div>
@@ -2274,7 +2282,11 @@ export default function QuoteBuilder() {
                         <Label className="text-xs">Split Position from Left (mm)</Label>
                         <Input type="number" inputMode="decimal" min={100} max={(w.width || 1200) - 100}
                           value={w.rakedSplitPosition || ""}
-                          onChange={(e) => form.setValue("rakedSplitPosition", e.target.value ? parseInt(e.target.value) : 0)}
+                          onChange={(e) => {
+                            const v = e.target.value ? parseInt(e.target.value) : 0;
+                            const maxPos = (w.width || 1200) - 100;
+                            form.setValue("rakedSplitPosition", Math.min(Math.max(0, v), maxPos));
+                          }}
                           onFocus={handleConfigFieldFocus}
                           data-testid="input-raked-split-position" />
                         <p className="text-[10px] text-muted-foreground mt-0.5">
