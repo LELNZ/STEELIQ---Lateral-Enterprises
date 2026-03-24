@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -148,7 +149,7 @@ export default function QuotePreview() {
     <div className="mx-auto print:max-w-none" style={{ maxWidth: "794px" }} data-testid="quote-preview-page">
       <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden border-b">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/quote/${quoteId}`)} data-testid="button-back-to-quote">
+          <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteDetail(quoteId!))} data-testid="button-back-to-quote">
             <ArrowLeftCircle className="h-5 w-5" />
           </Button>
           <div>
@@ -382,7 +383,7 @@ function SnapshotBanner({ revisionVersion, sourceJobId }: { revisionVersion: num
             variant="ghost"
             size="sm"
             className="h-auto p-0 text-xs underline text-muted-foreground hover:text-foreground"
-            onClick={() => navigate(`/job/${sourceJobId}/exec-summary`)}
+            onClick={() => navigate(routes.jobExecSummary(sourceJobId))}
             data-testid="link-go-to-exec-summary"
           >
             Go to Executive Summary to update

@@ -14,7 +14,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Backend**: Express.js with PostgreSQL database, managed via Drizzle ORM and node-postgres.
 **Drawing Engine**: SVG for real-time technical drawing rendering and PNG export.
 **State Management**: React state for UI components; TanStack Query for API data fetching and caching. Global settings managed via React Context and localStorage.
-**Routing**: Client-side navigation handled by Wouter.
+**Routing**: Client-side navigation handled by Wouter. A canonical route helper (`client/src/lib/routes.ts`) centralizes all core entity paths (job, quote, project, op-job, invoice) and is used across commercial workflow surfaces to prevent route mismatch bugs.
 **Export Capabilities**: SVG to PNG conversion and multi-page, vector-text selectable PDF generation using jsPDF, including a specialized Subcontractor Install Scope PDF.
 **Storage**: Item photos in PostgreSQL (`bytea`), drawing PNGs on filesystem, division logos as base64 data URLs in PostgreSQL.
 **Multi-Division Architecture**: Supports organizational and division-specific settings.

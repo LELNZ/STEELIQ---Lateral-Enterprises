@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { routes } from "@/lib/routes";
 import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, type Invoice, type Variation, OP_JOB_STATUSES, MEASUREMENT_REQUIREMENTS, DIMENSION_SOURCES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -218,7 +219,7 @@ export default function OpJobDetail() {
     <div className="max-w-3xl mx-auto p-6 space-y-6" data-testid="op-job-detail-page">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/op-jobs")} data-testid="button-back-to-jobs">
+          <Button variant="ghost" size="icon" onClick={() => navigate(routes.opJobList())} data-testid="button-back-to-jobs">
             <ArrowLeftCircle className="h-5 w-5" />
           </Button>
           <div>
@@ -432,7 +433,7 @@ export default function OpJobDetail() {
               <div>
                 <button
                   className="font-medium text-sm text-primary hover:underline text-left"
-                  onClick={() => navigate(`/projects/${project.id}`)}
+                  onClick={() => navigate(routes.projectDetail(project.id))}
                   data-testid="link-detail-project"
                 >
                   {project.name}
@@ -452,7 +453,7 @@ export default function OpJobDetail() {
               <div className="space-y-1">
                 <button
                   className="font-mono text-sm text-primary hover:underline"
-                  onClick={() => navigate(`/quote/${sourceQuote.id}`)}
+                  onClick={() => navigate(routes.quoteDetail(sourceQuote.id))}
                   data-testid="link-source-quote"
                 >
                   {sourceQuote.number}
@@ -465,7 +466,7 @@ export default function OpJobDetail() {
                 <p className="text-xs text-muted-foreground">Status: Accepted</p>
                 <button
                   className="text-xs text-primary hover:underline flex items-center gap-1 mt-1"
-                  onClick={() => navigate(`/quote/${sourceQuote.id}`)}
+                  onClick={() => navigate(routes.quoteDetail(sourceQuote.id))}
                   data-testid="link-manage-billing"
                 >
                   <ReceiptText className="h-3 w-3" /> Manage billing →
@@ -597,7 +598,7 @@ export default function OpJobDetail() {
           {job?.sourceQuoteId && (
             <button
               className="flex items-center gap-1 text-xs text-primary hover:underline"
-              onClick={() => navigate(`/quote/${job.sourceQuoteId}`)}
+              onClick={() => navigate(routes.quoteDetail(job.sourceQuoteId!))}
               data-testid="link-manage-invoices"
             >
               Manage in quote <ExternalLink className="h-3 w-3" />
