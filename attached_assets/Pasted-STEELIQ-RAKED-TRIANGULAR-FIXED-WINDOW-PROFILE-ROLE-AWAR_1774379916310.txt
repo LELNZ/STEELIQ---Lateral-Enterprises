@@ -1,0 +1,235 @@
+STEELIQ RAKED / TRIANGULAR FIXED WINDOW — PROFILE-ROLE-AWARE PERIMETER HARDENING
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow hardening phase for the already-implemented raked / triangular fixed-window feature.
+
+This is NOT:
+- a new feature phase
+- an awning phase
+- a manufacturing/BOM/cut-list phase
+- a broad pricing-engine redesign
+- a geometry-engine rewrite
+- a PDF/document phase
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models.
+- Do not introduce schema creep unless absolutely required and explicitly justified.
+- Do not perform hidden refactors.
+- Do not widen scope beyond profile-role-aware perimeter handling for current raked-fixed items.
+- Do not alter QuoteDocument -> QuoteRenderModel -> Preview/PDF structure.
+- Do not widen into awning-in-raked support.
+- Do not widen into manufacturing outputs.
+- Preserve backward compatibility for rectangular items and current raked-fixed items.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED STATE
+==================================================
+
+The raked / triangular fixed-window feature is now largely release-ready, but one caution remains:
+
+- perimeterOverrideM for raked-fixed currently appears to be applied broadly to perimeter-formula profile calculations
+- this is acceptable for current frame-only raked-fixed behavior
+- however, it is not a sufficiently explicit long-term contract for future profile-role differentiation
+- if left as-is, it risks contaminating future raked operable/profile-role logic
+
+This pass exists to harden the perimeter logic so that raked perimeter application is role-aware and semantically explicit NOW, while current scope is still small.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Refine the current raked-fixed perimeter implementation so that:
+
+1. only the correct profile/pricing roles use the raked perimeter override
+2. the logic clearly reflects raked-fixed frame-only semantics
+3. future operable/raked profile-role additions will not inherit a blanket perimeter assumption by accident
+4. existing rectangular and current raked-fixed behavior remains commercially correct
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+- audit of current profile/perimeter role usage
+- explicit role-aware handling for raked-fixed perimeter-based calculations
+- minimal refactor required to make current behavior semantically correct and future-safe
+
+Do NOT widen into:
+- awning-in-raked support
+- sash role implementation
+- bead role implementation
+- manufacturing pack logic
+- BOM logic
+- geometry-family unification
+- pricing transparency UI
+- PDF rendering
+
+==================================================
+PHASE A — AUDIT CURRENT PROFILE/PERIMETER USAGE
+==================================================
+
+Audit current repo/runtime truth and report precisely:
+
+1. where perimeterOverrideM currently flows
+2. which calculations/components currently consume perimeter-based quantities
+3. whether those consumers are truly frame-role consumers, mixed-role consumers, or generic consumers
+4. what exact role assumptions are currently implicit in the raked-fixed implementation
+
+Do not assume.
+Do not over-claim.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE ROLE-AWARE CONTRACT
+==================================================
+
+Implement a clear contract for current raked-fixed behavior.
+
+The contract for THIS phase should be:
+
+- raked-fixed is fixed-only
+- raked-fixed perimeter override should apply only where the current feature genuinely represents frame/perimeter-based geometry for that fixed-only item
+- no future profile roles should inherit raked perimeter accidentally by default
+
+Important:
+- if the current implementation lacks explicit role tags, create the minimum safe code structure to express this boundary
+- do not redesign the whole profile system
+- do not invent future product logic
+- do not widen beyond what is needed to make raked-fixed perimeter use explicit and safe
+
+==================================================
+PHASE C — IMPLEMENT MINIMUM SAFE HARDENING
+==================================================
+
+Apply the minimum safe change needed so that:
+
+- perimeterOverrideM is not just a blanket substitution everywhere perimeter formulas exist
+- raked-fixed perimeter use is intentional, traceable, and limited to the correct consumers for current scope
+- rectangular behavior remains unchanged
+- current raked-fixed commercial outputs remain unchanged unless there was a hidden over-application bug
+
+Acceptable implementation patterns include:
+- explicit role gating
+- explicit raked-fixed frame-perimeter helper path
+- narrowly scoped perimeter consumer routing
+
+Do NOT:
+- rebuild the pricing engine
+- redesign all profile formulas
+- generalize for every future shape
+
+==================================================
+PHASE D — VERIFY COMMERCIAL OUTPUT IS UNCHANGED OR CORRECTED ONLY WHERE NEEDED
+==================================================
+
+After hardening, verify:
+
+- current raked-fixed totals still remain correct for the intended frame-only scenario
+- rectangular totals remain unchanged
+- no unintended pricing drift has been introduced
+- if any prior over-application bug is found, report exactly what changed and why
+
+==================================================
+PHASE E — FUTURE-SAFETY BOUNDARY
+==================================================
+
+Leave behind a clear code boundary so that future phases can distinguish:
+- frame perimeter
+- sash perimeter
+- other role-specific geometry consumers
+
+But in THIS phase:
+- do not implement those future roles
+- only make it impossible for current raked-fixed logic to silently stand in for them
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what perimeter-role hardening was implemented
+- confirm whether blanket perimeter application was reduced/removed
+- confirm whether current raked-fixed outputs remain correct
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- where perimeterOverrideM previously flowed
+- what role assumptions were implicit before this pass
+- what risk existed if left unchanged
+
+4. ROLE-AWARE CONTRACT RESULT
+- exact rule now used for raked-fixed perimeter handling
+- what consumers are allowed to use the raked perimeter
+- what consumers are intentionally excluded or left generic
+
+5. IMPLEMENTATION RESULT
+- exact code-level approach taken
+- whether any pricing output changed
+- whether any hidden over-application bug was corrected
+
+6. REGRESSION VERIFICATION RESULT
+Explicitly verify:
+- current raked-fixed pricing still works
+- rectangular pricing is unchanged
+- no touched route returns 404
+- no save/edit behavior was broken
+- no split/no-split behavior was broken
+- left-rake/right-rake behavior still works
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing rectangular quote-builder items
+- current raked-fixed item behavior
+- quote editing
+- revision flow
+- preview/PDF structure
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- fixed only for now
+- awning-in-raked support not implemented
+- profile-role expansion not implemented beyond current hardening
+- manufacturing outputs not implemented
+
+9. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current raked-fixed support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform hardening pass.
+
+Do not broaden the phase.
+Do not leave vague “good enough for now” perimeter assumptions in place.
+Do not redesign the whole profile system.
+
+Your job is to make current raked-fixed perimeter behavior explicit, role-aware, and future-safe while preserving current correct outputs.

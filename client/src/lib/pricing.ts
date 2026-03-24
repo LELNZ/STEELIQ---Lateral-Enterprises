@@ -163,6 +163,12 @@ export function calcRakedPerimeterM(widthMm: number, leftHeightMm: number, right
   return w + lH + rH + slope;
 }
 
+const FRAME_PERIMETER_ROLES = new Set(["outer-frame", "door-frame", "bead", "spacer", ""]);
+
+export function isFramePerimeterRole(role: string): boolean {
+  return FRAME_PERIMETER_ROLES.has(role);
+}
+
 function calcProfileLength(
   widthMm: number,
   heightMm: number,
@@ -247,7 +253,8 @@ export function calculatePricing(
     } else if (role === "transom" && hasTransomLength) {
       length = geometry!.transomTotalLengthMm! / 1000;
     } else {
-      length = calcProfileLength(widthMm, heightMm, formula, perimeterM !== 2 * (widthMm / 1000 + heightMm / 1000) ? perimeterM : undefined);
+      const rolePerimOverride = isFramePerimeterRole(role) ? extras?.perimeterOverrideM : undefined;
+      length = calcProfileLength(widthMm, heightMm, formula, rolePerimOverride != null && rolePerimOverride > 0 ? rolePerimOverride : undefined);
     }
 
     const qtyPerSet = p.quantityPerSet || 1;
