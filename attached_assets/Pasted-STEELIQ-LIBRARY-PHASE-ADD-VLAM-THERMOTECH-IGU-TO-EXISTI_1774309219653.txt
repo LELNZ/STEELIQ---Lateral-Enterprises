@@ -1,0 +1,275 @@
+STEELIQ LIBRARY PHASE — ADD VLAM THERMOTECH IGU TO EXISTING GLASS PRICING LIBRARY (DO NOT REMOVE EXISTING GLASS TYPES)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow glass-library extension phase. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing library -> quote-builder -> pricing connection path.
+- Do not remove or break existing EnergySaver or LightBridge glass options.
+- Do not convert IGU pricing into a manufacturing engine in this phase.
+- Do not treat Viridian IGU as an internally manufactured BOM in this phase.
+- Do not perform hidden refactors.
+- Do not widen scope into supplier ordering, cut lists, or manufacturing workflow.
+- Treat current repo/runtime truth as the source of truth, not assumptions from prior prompts.
+- Preserve backward compatibility for existing quotes, settings, presets, and saved items.
+- Keep this phase limited to adding the correct VLam Thermotech IGU library data and wiring it through the current glass selection flow.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- VLam Thermotech IGU is added as a third IGU family in the existing Glass Pricing Library
+- existing EnergySaver and LightBridge entries remain intact and usable
+- VLam Thermotech is manageable in the library UI
+- VLam Thermotech is selectable through the existing quote/settings connection path
+- the thickness matrix shown for VLam is correct for that family
+- no existing glass family behavior is broken
+
+CURRENT VERIFIED TRUTH TO PRESERVE
+
+Current live app already has:
+- a Glass Pricing Library tab
+- collapsible grouped headings for the existing IGU categories
+- EnergySaver IGU and LightBridge IGU already wired into the current flow
+- glass pricing treated as library pricing data, not as an internal manufacturing assembly
+
+This is correct and must be preserved.
+
+USER DIRECTION TO PRESERVE
+
+- Add VLam Thermotech IGU into the library
+- Do NOT remove other glass options from the system
+- For now this space is for pricing/library only
+- Viridian supplies the IGU as a complete unit
+- Do NOT broaden this into the manufacturing engine now
+
+PRIMARY OBJECTIVE
+
+Extend the existing Glass Pricing Library so VLam Thermotech IGU is added cleanly as an additional IGU family, using the correct pricing combinations and thickness columns from the supplied price list, while keeping the rest of the system stable.
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT CURRENT GLASS LIBRARY PATH
+Review and report:
+- how glass library entries are currently stored
+- where IGU family/type is currently defined
+- which files currently drive:
+  - fallback/default glass library data
+  - library UI display/editing
+  - quote-builder glass selection
+  - settings/preset glass selection
+- what parts are currently hardcoded to only EnergySaver / LightBridge
+- what parts are currently hardcoded to the existing thickness columns
+
+Do not assume. Use actual repo truth.
+
+PHASE B — ADD VLAM THERMOTECH IGU FAMILY TO THE SHARED GLASS LIBRARY MODEL
+Add a third IGU family to the existing model.
+
+Requirements:
+- keep existing IGU families unchanged
+- add a stable internal key for the new family
+- display label should clearly read VLam Thermotech IGU (or the repo’s existing naming convention equivalent)
+- do not fake or guess performance metadata not verified from repo/user data
+- if current family metadata includes R-value badges, handle VLam conservatively and truthfully
+
+Use the supplied PDF pricing only for the relevant VLam Thermotech IGU section.
+
+PHASE C — ADD THE CORRECT VLAM THICKNESS MATRIX
+This is the most important implementation detail.
+
+VLam Thermotech does NOT use the same thickness matrix as the existing standard IGU families.
+
+Use the VLam Thermotech IGU matrix only, with the correct thickness columns:
+- 4/6.38
+- 5/6.38
+- 6/6.38
+- 6.38/6.38
+
+Do not force VLam into the existing:
+- 4/4
+- 5/4
+- 5/5
+- 6/5
+- 6/6
+- 8/8
+
+model.
+
+The library UI and data handling must support the correct matrix for the selected family.
+
+PHASE D — ADD THE CORRECT VLAM COMBINATIONS AND PRICES
+Add only the VLam Thermotech IGU combinations from the supplied price list that belong to that section.
+
+Use these combinations and rates exactly from the provided source:
+
+- Clear // Clear Laminate
+  - 4/6.38 = 148.07
+  - 5/6.38 = 154.11
+  - 6/6.38 = 167.31
+
+- Clear Laminate // Clear Laminate
+  - 6.38/6.38 = 209.86
+
+- Clear Toughened // Clear Laminate
+  - 4/6.38 = 198.96
+  - 5/6.38 = 202.99
+  - 6/6.38 = 215.50
+
+- Tint // Clear Laminate
+  - 4/6.38 = 164.84
+  - 5/6.38 = 166.78
+  - 6/6.38 = 190.24
+
+- Tint Laminate // Clear Laminate
+  - 6.38/6.38 = 223.11
+
+- Tint Toughened // Clear Laminate
+  - 4/6.38 = 211.99
+  - 5/6.38 = 218.60
+  - 6/6.38 = 235.20
+
+Rules:
+- do not import unrelated IGU families
+- do not add PerformaTech
+- do not add custom surcharge logic in this phase
+- do not add supplier ordering logic
+- do not remove existing glass combinations
+
+PHASE E — WIRE VLAM THROUGH THE EXISTING APP PATH
+Ensure the new family works through the current path:
+
+- shared/default/fallback glass library data
+- library UI display
+- library add/edit behavior
+- quote-builder selectors
+- settings/preset selectors
+- any current helper methods used to derive combo/thickness options
+
+Requirements:
+- VLam must appear as a third family in the Glass Pricing Library
+- VLam must be collapsible like the other groups
+- thickness columns must match the selected family
+- quote-builder/settings must allow selecting VLam family without breaking current families
+- preserve existing saved records and existing families
+
+PHASE F — DO NOT WIDEN INTO MIN AREA / SURCHARGE ENGINE YET
+The supplied PDF includes additional pricing rules such as:
+- minimum area
+- oversize surcharge
+- irregular shape surcharge
+- argon
+- spacer surcharge
+- silicone seal
+- holes / colonial bars / other add-ons
+
+Do NOT implement those in this phase unless they are already supported safely in current repo truth and can be added without widening scope.
+
+For this phase:
+- add the VLam Thermotech base library pricing rows only
+- clearly state what pricing rules remain unimplemented
+
+PHASE G — PRESERVE EXISTING LOGIC
+Do not break:
+- existing EnergySaver behavior
+- existing LightBridge behavior
+- existing glass library editing
+- existing quote builder glazing selections
+- settings/preset behavior
+- saved item load/edit
+- preview/PDF pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+NON-GOALS
+
+Do NOT:
+- redesign the glass data model broadly unless absolutely required
+- convert IGU into an internal manufacturing assembly
+- add Viridian ordering outputs
+- add cut lists
+- add pick lists
+- add supplier integration
+- redesign the pricing engine
+- redesign the library system globally
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+- confirm VLam Thermotech IGU was added as a third family
+- confirm existing glass families remain intact
+- confirm the correct VLam thickness matrix is supported
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT VS NEW GLASS LIBRARY BEHAVIOR
+- how the glass library worked before
+- how it works now
+- what new VLam capability was added
+- what remained unchanged
+
+4. DATA / MODEL RESULT
+- how VLam family was represented
+- how the VLam thickness matrix was implemented
+- whether any data-shape or type changes were needed
+- how backward compatibility was preserved
+
+5. PRICE MATRIX RESULT
+- list the exact VLam combinations added
+- list the exact VLam thickness columns supported
+- confirm the rates entered
+- explicitly state which PDF pricing rules were NOT implemented in this phase
+
+6. APP CONNECTION RESULT
+- library UI behavior
+- add/edit behavior
+- quote-builder selector behavior
+- settings/preset behavior
+- any helper/path changes needed
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing EnergySaver entries
+- existing LightBridge entries
+- saved item load/edit
+- preview/PDF overall pipeline
+- accepted quote protections
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- VLam surcharge logic not yet implemented
+- min-area or special-add-on rules not yet implemented, if still true
+- no manufacturing engine was added
+- no broad system rewrite was done
+
+9. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining glass-library caveat
+- any remaining lifecycle UX caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Add VLam Thermotech IGU into the existing Glass Pricing Library cleanly and truthfully, preserving existing glass families and the current app connection path.
+Keep it narrow, safe, and exact.

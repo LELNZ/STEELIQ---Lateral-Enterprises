@@ -34,6 +34,7 @@ export function useLibraryOptions() {
   const iguTypeOptions: SelectOption[] = [
     { value: "EnergySaver", label: "EnergySaver" },
     { value: "LightBridge", label: "LightBridge" },
+    { value: "VLamThermotech", label: "VLam Thermotech" },
   ];
 
   const glassComboOptions = (iguType: string): string[] => {
