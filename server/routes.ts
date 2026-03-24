@@ -1067,10 +1067,27 @@ export async function registerRoutes(
               [existing.id]
             );
             const nextVersion = (revResult.rows[0].max_ver || 0) + 1;
+
+            let prevRemarks: string | null = null;
+            let prevSpecDisplay: string | null = null;
+            let prevTotalsConfig: string | null = null;
+            if (existing.current_revision_id) {
+              const prevRevResult = await client.query(
+                `SELECT commercial_remarks, spec_display_override_json, totals_display_config_json FROM quote_revisions WHERE id = $1`,
+                [existing.current_revision_id]
+              );
+              if (prevRevResult.rows.length > 0) {
+                const prev = prevRevResult.rows[0];
+                prevRemarks = prev.commercial_remarks || null;
+                prevSpecDisplay = prev.spec_display_override_json || null;
+                prevTotalsConfig = prev.totals_display_config_json || null;
+              }
+            }
+
             const revInsert = await client.query(
-              `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, template_key, created_at)
-               VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW()) RETURNING *`,
-              [existing.id, nextVersion, JSON.stringify(snapshot), templateKey]
+              `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, template_key, commercial_remarks, spec_display_override_json, totals_display_config_json, created_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+              [existing.id, nextVersion, JSON.stringify(snapshot), templateKey, prevRemarks, prevSpecDisplay, prevTotalsConfig]
             );
             const revision = revInsert.rows[0];
             const snapshotSellValue = (snapshot as any).totals?.sell ?? null;

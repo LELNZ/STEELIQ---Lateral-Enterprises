@@ -1,0 +1,212 @@
+STEELIQ COMMERCIAL UX / REVISION INTEGRITY PHASE — FIX CUSTOMER-FACING DETAIL PERSISTENCE + ESTIMATE↔QUOTE NAVIGATION + WORKFLOW CARD HIERARCHY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This phase is a narrow commercial UX / revision-integrity phase. It is not a rewrite phase.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign the quote model broadly.
+- Do not replace the existing estimate -> quote -> revision -> preview/PDF pipeline.
+- Do not perform hidden refactors.
+- Do not change pricing-engine logic in this phase.
+- Do not change accepted-quote protections, governance, division security, archive/delete behavior, invoice safeguards, or Xero safeguards.
+- Do not widen scope into manufacturing engine work.
+- Treat current repo/runtime truth as the source of truth, not assumptions from prior reports.
+- Preserve backward compatibility for existing estimates, quotes, revisions, and saved items.
+- Keep this phase operationally usable, not cosmetic only.
+
+OPERATIONAL COMPLETION RULE
+
+Do not report this phase complete unless:
+- customer-facing details persist correctly when a quote revision is created
+- estimate pages provide a clear navigation path to the linked quote once a quote exists
+- quote pages provide a clear navigation path back to the source estimate/job where relevant
+- workflow/lifecycle card hierarchy is improved so commercial/financial information remains primary
+- the workflow card is no longer occupying the current overly prominent position above the financial summary in the exec summary flow
+- behavior is verified in live runtime paths, not just code assumptions
+
+CURRENT VERIFIED PROBLEMS
+
+1. CUSTOMER-FACING DETAILS REVISION BUG
+Current live behavior shows customer-facing details are not persisting after a revision.
+This is not acceptable commercial behavior.
+Customer-facing details should carry forward into the new revision unless explicitly edited.
+
+2. ESTIMATE -> QUOTE WORKFLOW GAP
+After creating a quote, there is no clear link from the estimate page to the created quote.
+This is a workflow-standardization issue.
+Estimate/quote relationships must be visible and navigable.
+
+3. WORKFLOW CARD INFORMATION HIERARCHY ISSUE
+In the exec summary / commercial review flow, the workflow position / lifecycle card is currently too prominent and appears above the financial summary.
+This is the wrong hierarchy.
+Commercial/financial decision information should be primary.
+Workflow/process-tracking should be secondary and either lower on the page and/or collapsible.
+
+PRIMARY OBJECTIVE
+
+Fix the commercial-layer workflow so:
+- customer-facing commercial text survives revisions properly
+- estimate/quote navigation is standardized and explicit
+- workflow/lifecycle tracking is present but demoted to the correct hierarchy below primary financial decision content
+
+STRICT SCOPE
+
+Implement only the following.
+
+PHASE A — AUDIT CURRENT REPO TRUTH
+Review and report:
+- where customer-facing details are currently stored
+- how quote revisions are currently created
+- why customer-facing details are being lost on revision
+- how estimate -> quote linkage is currently stored and surfaced
+- how source estimate/source job links are currently surfaced on quote pages
+- which files control the exec-summary layout and workflow card placement
+- what the minimum safe fix is for each problem
+
+Do not assume. Use actual repo truth.
+
+PHASE B — FIX CUSTOMER-FACING DETAILS PERSISTENCE ACROSS REVISIONS
+Implement the narrowest safe fix so customer-facing details persist forward when a new quote revision is created.
+
+Requirements:
+- when revising a quote, customer-facing details must copy from the prior revision/current quote state into the new revision
+- preserve the current explicit edit/save behavior
+- do not wipe or reset the field on revision creation
+- do not rely on transient UI state
+- preserve backward compatibility for existing quotes and revisions
+- do not broaden into a full quote content snapshot redesign unless absolutely required
+
+Expected commercial rule:
+- customer-facing details persist by default
+- user edits can still change them intentionally afterward
+
+PHASE C — STANDARDIZE ESTIMATE -> QUOTE NAVIGATION
+Implement a clear navigation path from estimate pages to the linked quote.
+
+Requirements:
+- if no quote exists yet, estimate page may still show create-quote action
+- if a quote exists, estimate page must show a clear linked-quote reference and an "Open Quote" action (or current UI equivalent)
+- if multiple related quotes/revisions exist, surface the correct current quote path safely and truthfully
+- preserve existing estimate creation flow
+- do not redesign the whole estimates module
+
+Also verify quote pages still clearly show the originating source estimate/job path where available.
+
+PHASE D — FIX WORKFLOW / LIFECYCLE CARD HIERARCHY
+Improve the hierarchy of the workflow/lifecycle card in the exec summary / commercial review experience.
+
+Requirements:
+- financial summary must remain primary
+- workflow/lifecycle should be secondary
+- move the workflow/lifecycle section below the financial summary or otherwise demote it appropriately
+- make the workflow/lifecycle section collapsible by default if this is the safest/cleanest implementation
+- preserve lifecycle visibility and usability
+- do not remove lifecycle tracking
+- do not redesign the entire exec summary page
+
+Best-practice intent:
+- commercial decision content first
+- process-tracking content second
+
+PHASE E — KEEP HEADER / STATUS TRUTH CLEAR
+Where repo truth supports it safely, ensure the relevant page clearly communicates quote state/linkage without requiring the user to rely on the large workflow card.
+
+Examples of acceptable narrow improvements:
+- linked quote reference on estimate page
+- source estimate/source job reference on quote page
+- clear quote status badge/label where already supported by current UI model
+
+Do not widen into a full dashboard redesign.
+
+PHASE F — PRESERVE EXISTING LOGIC
+Do not break:
+- existing quote revision creation
+- existing preview/PDF pipeline
+- accepted quote protections
+- lifecycle template behavior
+- related quotes/revisions behavior
+- saved item load/edit
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+NON-GOALS
+
+Do NOT:
+- redesign the whole estimate module
+- redesign the whole quote module
+- redesign the revision system broadly
+- redesign lifecycle templates broadly
+- change pricing calculations
+- change manufacturing logic
+- change Xero/invoice architecture
+- build a new dashboard or kanban workflow
+- widen into general UX polish outside the explicit scope above
+
+REQUIRED DELIVERABLES
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- what was intentionally not changed
+- confirm customer-facing details now persist across revisions
+- confirm estimate -> quote navigation is now explicit
+- confirm workflow/lifecycle hierarchy is improved and demoted appropriately
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. ROOT CAUSE RESULT
+- exact root cause of customer-facing-details loss on revision
+- exact cause of estimate -> quote navigation gap
+- exact cause of workflow card hierarchy issue
+
+4. FIX RESULT
+- how customer-facing details persistence now works
+- how estimate -> quote linking/navigation now works
+- how workflow/lifecycle placement/collapse now works
+- any status/header/link improvements added
+
+5. RUNTIME BEFORE VS AFTER RESULT
+Show the practical before vs after for:
+- revising a quote with customer-facing details
+- opening an estimate after a quote has been created
+- viewing exec summary with financial summary and workflow/lifecycle sections
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged in behavior:
+- existing quote revisions
+- related quotes/revisions
+- preview/PDF overall pipeline
+- accepted quote protections
+- lifecycle template behavior
+- governance/demo/division/archive behavior
+- project/job/invoice/Xero behavior
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any lifecycle UX caveat still remaining
+- any quote/estimate linking caveat still remaining
+- no broad system rewrite was done
+
+8. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+9. OPEN RISKS / WATCH ITEMS
+Must include:
+- reported live app freeze after inactivity
+- subcontractor PDF export branding/polish still potentially incomplete
+- any remaining grouped-geometry pricing caveat
+- any remaining glass-library caveat
+- any remaining lifecycle UX caveat
+
+FINAL EXECUTION STANDARD
+
+Treat this as a live enterprise-platform continuation, not a casual reset.
+Do not drift into a rewrite.
+Fix the commercial-layer workflow issues so revision integrity, estimate/quote navigation, and information hierarchy are operationally sound.
+Keep it narrow, safe, and truthful.

@@ -31,7 +31,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat } from "lucide-react";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
@@ -136,15 +136,15 @@ export default function ExecSummary() {
     includeVariationChecklist: true,
   });
 
-  const SECTION_KEYS = ["financial", "installation", "delivery", "removal", "rubbish", "history", "items"] as const;
+  const SECTION_KEYS = ["financial", "installation", "delivery", "removal", "rubbish", "history", "items", "lifecycle"] as const;
   type SectionKey = typeof SECTION_KEYS[number];
   const [sectionCollapsed, setSectionCollapsed] = useState<Record<SectionKey, boolean>>({
     financial: false, installation: false, delivery: false,
-    removal: false, rubbish: false, history: false, items: false,
+    removal: false, rubbish: false, history: false, items: false, lifecycle: true,
   });
   const toggleSection = (key: SectionKey) => setSectionCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
-  const expandAll = () => setSectionCollapsed({ financial: false, installation: false, delivery: false, removal: false, rubbish: false, history: false, items: false });
-  const collapseAll = () => setSectionCollapsed({ financial: true, installation: true, delivery: true, removal: true, rubbish: true, history: true, items: true });
+  const expandAll = () => setSectionCollapsed({ financial: false, installation: false, delivery: false, removal: false, rubbish: false, history: false, items: false, lifecycle: false });
+  const collapseAll = () => setSectionCollapsed({ financial: true, installation: true, delivery: true, removal: true, rubbish: true, history: true, items: true, lifecycle: true });
   const allCollapsed = SECTION_KEYS.every(k => sectionCollapsed[k]);
 
   const { data: job, isLoading: jobLoading } = useQuery<JobData>({
@@ -1188,59 +1188,7 @@ export default function ExecSummary() {
         </Button>
       </div>
 
-      <div className="order-1 rounded-lg border bg-card p-4 print:hidden" data-testid="section-lifecycle-estimate">
-        {existingQuotes.length > 0 ? (() => {
-          const activeQuote = existingQuotes.find((q: any) => q.status === "accepted")
-            || existingQuotes.find((q: any) => q.status === "sent")
-            || existingQuotes.find((q: any) => q.status === "review")
-            || existingQuotes.find((q: any) => q.status === "draft")
-            || existingQuotes[0];
-          return (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold text-foreground">Workflow Position</span>
-                </div>
-                <Badge variant="outline" className="text-xs" data-testid="badge-lifecycle-quote-ref">
-                  Quote {activeQuote.number || activeQuote.id?.slice(0, 8)}
-                  {activeQuote.status ? ` · ${activeQuote.status.charAt(0).toUpperCase() + activeQuote.status.slice(1)}` : ""}
-                </Badge>
-              </div>
-              <div className="flex items-start gap-2 rounded-md bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-3 py-2" data-testid="banner-estimate-lifecycle-context">
-                <ClipboardList className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  This estimate has {existingQuotes.length === 1 ? "a linked quote" : `${existingQuotes.length} linked quotes`}. The lifecycle below tracks the most relevant quote's workflow progression.
-                </p>
-              </div>
-              <LifecyclePanel quoteId={activeQuote.id} previewOnly />
-            </div>
-          );
-        })() : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold text-foreground">Workflow Position</span>
-            </div>
-            <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-3" data-testid="banner-estimate-pre-quote">
-              <Badge variant="outline" className="shrink-0 text-xs border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
-                Planning
-              </Badge>
-              <p className="text-sm text-muted-foreground">
-                This estimate is in the planning and costing stage. No quote has been generated yet.
-              </p>
-            </div>
-            <div className="flex items-start gap-2 rounded-md bg-muted/30 px-3 py-2" data-testid="banner-estimate-next-step">
-              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Next step:</span> Review the financial summary and item breakdown below, then use <span className="font-medium">Generate Quote</span> above to create the first quote from this estimate. The lifecycle will begin tracking once the quote is created.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="order-5 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
+      <div className="order-1 md:order-2 rounded-lg border bg-card p-4 space-y-4" data-testid="financial-summary">
         <button
           className="w-full flex items-center justify-between print:hidden"
           onClick={() => toggleSection("financial")}
@@ -1841,7 +1789,81 @@ export default function ExecSummary() {
         </div>
       )}
 
-      <div className="order-2 md:order-5 rounded-lg border bg-card" data-testid="items-breakdown">
+      <div className="order-5 rounded-lg border bg-card p-4 print:hidden" data-testid="section-lifecycle-estimate">
+        <div className="flex items-center justify-between w-full cursor-pointer select-none" onClick={() => toggleSection("lifecycle")} role="button" tabIndex={0} data-testid="toggle-lifecycle">
+          <div className="flex items-center gap-2">
+            {sectionCollapsed.lifecycle ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Workflow & Lifecycle</span>
+          </div>
+          {existingQuotes.length > 0 && (() => {
+            const aq = existingQuotes.find((q: any) => q.status === "accepted")
+              || existingQuotes.find((q: any) => q.status === "sent")
+              || existingQuotes.find((q: any) => q.status === "review")
+              || existingQuotes.find((q: any) => q.status === "draft")
+              || existingQuotes[0];
+            return (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs" data-testid="badge-lifecycle-quote-ref">
+                  {aq.number || aq.id?.slice(0, 8)} · {aq.status ? aq.status.charAt(0).toUpperCase() + aq.status.slice(1) : ""}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/quote/${aq.id}`); }}
+                  data-testid="button-open-quote"
+                >
+                  <ExternalLink className="h-3 w-3" /> Open Quote
+                </Button>
+              </div>
+            );
+          })()}
+          {existingQuotes.length === 0 && (
+            <Badge variant="outline" className="shrink-0 text-xs border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400">
+              Planning
+            </Badge>
+          )}
+        </div>
+        {!sectionCollapsed.lifecycle && (
+          <div className="mt-3 space-y-3">
+            {existingQuotes.length > 0 ? (() => {
+              const activeQuote = existingQuotes.find((q: any) => q.status === "accepted")
+                || existingQuotes.find((q: any) => q.status === "sent")
+                || existingQuotes.find((q: any) => q.status === "review")
+                || existingQuotes.find((q: any) => q.status === "draft")
+                || existingQuotes[0];
+              return (
+                <>
+                  <div className="flex items-start gap-2 rounded-md bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 px-3 py-2" data-testid="banner-estimate-lifecycle-context">
+                    <ClipboardList className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      This estimate has {existingQuotes.length === 1 ? "a linked quote" : `${existingQuotes.length} linked quotes`}. The lifecycle below tracks the most relevant quote's workflow progression.
+                    </p>
+                  </div>
+                  <LifecyclePanel quoteId={activeQuote.id} previewOnly />
+                </>
+              );
+            })() : (
+              <>
+                <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-3" data-testid="banner-estimate-pre-quote">
+                  <p className="text-sm text-muted-foreground">
+                    This estimate is in the planning and costing stage. No quote has been generated yet.
+                  </p>
+                </div>
+                <div className="flex items-start gap-2 rounded-md bg-muted/30 px-3 py-2" data-testid="banner-estimate-next-step">
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Next step:</span> Review the financial summary and item breakdown, then use <span className="font-medium">Generate Quote</span> above to create the first quote.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="order-6 rounded-lg border bg-card" data-testid="items-breakdown">
         <div className="p-4 border-b flex items-center justify-between">
           <button className="flex items-center gap-2" onClick={() => toggleSection("items")} data-testid="toggle-per-item">
             {sectionCollapsed.items ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
