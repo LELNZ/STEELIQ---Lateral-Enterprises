@@ -1790,7 +1790,7 @@ export default function ExecSummary() {
       )}
 
       <div className="order-5 rounded-lg border bg-card p-4 print:hidden" data-testid="section-lifecycle-estimate">
-        <button className="flex items-center justify-between w-full" onClick={() => toggleSection("lifecycle")} data-testid="toggle-lifecycle">
+        <div className="flex items-center justify-between w-full cursor-pointer select-none" onClick={() => toggleSection("lifecycle")} role="button" tabIndex={0} data-testid="toggle-lifecycle">
           <div className="flex items-center gap-2">
             {sectionCollapsed.lifecycle ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
             <Clock className="h-4 w-4 text-muted-foreground" />
@@ -1811,7 +1811,7 @@ export default function ExecSummary() {
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs gap-1"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/quotes/${aq.id}`); }}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/quote/${aq.id}`); }}
                   data-testid="button-open-quote"
                 >
                   <ExternalLink className="h-3 w-3" /> Open Quote
@@ -1824,7 +1824,7 @@ export default function ExecSummary() {
               Planning
             </Badge>
           )}
-        </button>
+        </div>
         {!sectionCollapsed.lifecycle && (
           <div className="mt-3 space-y-3">
             {existingQuotes.length > 0 ? (() => {

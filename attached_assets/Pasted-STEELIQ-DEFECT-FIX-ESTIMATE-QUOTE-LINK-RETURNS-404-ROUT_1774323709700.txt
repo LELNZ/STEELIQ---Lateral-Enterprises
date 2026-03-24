@@ -1,0 +1,106 @@
+STEELIQ DEFECT FIX — ESTIMATE → QUOTE LINK RETURNS 404 (ROUTE / ID MISMATCH)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production system. This is a defect fix phase. Do not widen scope.
+
+Non-negotiable:
+- Do not redesign architecture
+- Do not redesign quote/revision model
+- Do not change pricing
+- Do not change lifecycle structure broadly
+- Fix ONLY the navigation defect
+- Verify runtime behavior, not just code
+
+CURRENT VERIFIED ISSUE
+
+Clicking "Open Quote" from lifecycle/estimate page returns:
+
+404 Page Not Found
+
+Observed URL pattern:
+- /quotes/:id
+
+Known working route:
+- /quote/:id
+
+All estimate → quote links currently fail.
+
+PRIMARY OBJECTIVE
+
+Fix estimate → quote navigation so:
+- links always resolve correctly
+- correct quote is opened
+- behavior is stable regardless of revisions
+
+PHASE A — AUDIT
+
+Determine:
+
+1. What route is currently being used in the lifecycle "Open Quote" button?
+2. What route is actually registered in the router?
+3. What ID is being passed (quoteId vs revisionId vs other)?
+4. Whether the quoteId stored on the estimate/lifecycle is correct
+
+Do not assume.
+
+PHASE B — FIX ROUTE
+
+Ensure navigation uses the correct route:
+
+REQUIRED:
+- /quote/:quoteId
+
+NOT:
+- /quotes/:id
+- any other variation
+
+PHASE C — FIX ID SOURCE
+
+Ensure:
+
+- the ID passed is the canonical quoteId
+- not a revisionId
+- not a derived ID
+
+If lifecycle is storing wrong ID:
+- fix to use correct quoteId
+- do not break existing data
+
+PHASE D — VERIFY WITH REVISIONS
+
+Confirm:
+
+- estimate → quote works with:
+  - single quote
+  - multiple revisions
+  - reopened quotes
+
+- always opens the active quote page
+
+PHASE E — RUNTIME VERIFICATION
+
+Must verify:
+
+1. Clicking "Open Quote" from estimate works
+2. Clicking from lifecycle works
+3. No 404 occurs
+4. Correct quote loads
+
+REQUIRED OUTPUT
+
+1. SUMMARY
+2. FILES CHANGED
+3. ROOT CAUSE (exact — route vs ID vs both)
+4. FIX RESULT
+5. RUNTIME VERIFICATION RESULT
+6. COMPATIBILITY RESULT
+7. KNOWN LIMITS
+8. NEXT PHASE (one only)
+9. OPEN RISKS
+
+FINAL STANDARD
+
+This is a production defect.
+Fix it cleanly and minimally.
+Do not report complete until navigation works in runtime.
