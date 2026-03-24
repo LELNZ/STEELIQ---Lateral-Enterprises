@@ -1,0 +1,271 @@
+STEELIQ RAKED / TRIANGULAR FIXED WINDOW PHASE — COMPLETION PASS (ORIENTATION + SPLIT + REGRESSION VERIFICATION)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow completion pass for the already-started raked / triangular fixed-window Quote Builder extension.
+
+This is NOT:
+- a restart of the phase
+- a broad geometry-engine rewrite
+- an awning implementation phase
+- a manufacturing pack phase
+- a general non-rectangular-shapes redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models.
+- Do not introduce schema creep unless absolutely required and explicitly justified.
+- Do not perform hidden refactors.
+- Do not widen scope beyond fixed raked / triangular windows.
+- Do not widen into awning support for raked windows.
+- Do not widen into manufacturing/BOM/cut-list outputs.
+- Do not alter QuoteDocument -> QuoteRenderModel -> Preview/PDF structure.
+- Preserve backward compatibility for existing rectangular quote-builder items.
+- Treat current repo/runtime truth as the source of truth.
+- Treat the already-implemented area/pricing work in this thread as existing baseline work, not something to re-argue or replace unless there is a proven bug.
+
+==================================================
+CURRENT VERIFIED STATE
+==================================================
+
+The prior implementation appears to have completed a partial subset of this phase:
+
+- trapezoidal/raked area calculation support across quote-summary, exec-summary, pricing, and quote-builder
+- sqmOverride support in pricing flow
+- category label for raked / triangular fixed
+- basic trapezoidal SVG preview
+- left/right height inputs for raked items
+
+However, the prior completion report did NOT yet adequately prove or document:
+
+- left-rake and right-rake orientation support
+- optional split handling
+- manual split input behavior
+- automatic/default split behavior
+- split rendering correctness
+- no-split rendering correctness
+- save/update persistence verification
+- rectangular-item regression verification
+- exact remaining scope boundaries
+
+This completion pass exists to finish and verify those missing items cleanly.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Complete the raked / triangular fixed-window phase to a sign-off standard by implementing and/or explicitly verifying:
+
+1. left-rake support
+2. right-rake support
+3. no-split support
+4. optional split support
+5. manual split handling
+6. automatic/default split handling
+7. save/update persistence
+8. regression safety for existing rectangular items
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement and verify ONLY the missing completion items required to finish the raked fixed-window phase.
+
+Do NOT widen into:
+- awning in raked sections
+- hardware logic for raked windows
+- manufacturing cut logic
+- BOM outputs
+- all future polygon types
+- full geometry unification across the platform
+- unrelated builder redesign
+
+==================================================
+PHASE A — AUDIT WHAT IS ACTUALLY DONE VS MISSING
+==================================================
+
+Audit current repo/runtime truth and report precisely:
+
+1. what part of raked fixed-window support is already implemented
+2. whether left-rake and right-rake are both actually supported
+3. whether split support exists at all
+4. whether split is manual only, automatic only, both, or neither
+5. whether save/edit roundtrip already works
+6. whether rectangular items have been regression-checked
+
+Do not assume.
+Do not over-claim.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — ORIENTATION COMPLETION
+==================================================
+
+Ensure both orientations are safely supported:
+
+- left-rake
+- right-rake
+
+Requirements:
+- visual slope direction must be correct
+- area calculation must remain correct
+- category/config meaning must remain explicit
+- no ambiguity about which side is high/low
+
+If current implementation already supports both safely, verify that explicitly.
+If not, implement the minimum safe completion needed.
+
+==================================================
+PHASE C — SPLIT / NO-SPLIT COMPLETION
+==================================================
+
+Support and verify both:
+
+1. NO-SPLIT
+- a single raked fixed panel renders correctly
+- pricing/area remains correct
+- save/edit remains correct
+
+2. SPLIT
+- optional split is supported for raked fixed windows
+- split can be manually entered
+- automatic/default split behavior exists where appropriate
+- split remains within total width
+- rendered split position is visually correct inside the raked frame
+- split does not break the trapezoidal geometry
+
+Important:
+- do not over-engineer mullion engineering logic
+- keep split handling client-facing and controlled
+- do not widen into full manufacturing-member logic
+
+==================================================
+PHASE D — SAVE / UPDATE / EDIT PERSISTENCE
+==================================================
+
+Verify and fix if necessary:
+
+- creating a raked fixed item saves correctly
+- re-opening that item restores the correct geometry inputs
+- editing width / left height / right height / split updates correctly
+- the preview stays consistent after save and reload
+- no silent reset to rectangular assumptions occurs
+
+==================================================
+PHASE E — REGRESSION SAFETY FOR RECTANGULAR ITEMS
+==================================================
+
+Because prior work touched pricing and summaries, explicitly verify that existing rectangular items are not broken.
+
+At minimum verify:
+- standard rectangular fixed items still calculate area correctly
+- standard rectangular items still display correctly in Quote Builder
+- quote-summary and exec-summary still show correct sqm/pricing for rectangular items
+- no existing category loses correct pricing due to sqmOverride work
+
+If a bug is found, fix only the minimum required regression.
+
+==================================================
+PHASE F — REPORT TRUTHFULLY
+==================================================
+
+If any of the originally requested raked fixed-window features still remain incomplete after this pass, state that clearly.
+
+Do NOT mark the phase complete unless runtime behavior, UI truth, and regression safety all support that claim.
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what missing items were completed
+- confirm whether left-rake works
+- confirm whether right-rake works
+- confirm whether no-split works
+- confirm whether split works
+- confirm whether save/edit roundtrip works
+- confirm whether rectangular-item regression was verified
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- what had already been implemented before this pass
+- what was missing before this pass
+- what is now complete vs still incomplete
+
+4. ORIENTATION RESULT
+- exactly how left-rake works
+- exactly how right-rake works
+- how orientation is represented in the builder/config
+
+5. SPLIT RESULT
+- whether split is supported
+- whether split is manual, automatic, or both
+- how split/no-split render
+- how split stays valid within total width
+
+6. SAVE / UPDATE RESULT
+- verify create/edit/save/reload behavior
+- confirm no loss of geometry state
+
+7. PRICING / AREA RESULT
+- confirm trapezoidal area logic still works
+- confirm split/no-split does not break area logic
+- confirm rectangular-item pricing remains correct
+
+8. REGRESSION VERIFICATION RESULT
+Explicitly verify:
+- left-rake render works
+- right-rake render works
+- no-split works
+- split works
+- save/update works
+- rectangular items still render correctly
+- rectangular pricing still works
+- no touched route returns 404
+
+9. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing rectangular quote-builder items
+- quote editing
+- revision flow
+- preview/PDF structure
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+10. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- fixed only for now
+- awning-in-raked support not implemented
+- manufacturing outputs not implemented
+- any remaining geometry caveat outside this scope
+
+11. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+12. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside this raked fixed-window phase
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform completion pass.
+
+Do not broaden the phase.
+Do not over-claim based on partial implementation.
+Do not confuse “basic trapezoid support” with fully completed raked fixed-window support.
+
+Finish the missing pieces, verify them properly, and report truthfully.

@@ -25,6 +25,54 @@ import type { Job, Quote } from "@shared/schema";
 type LinkedQuoteSummary = { id: string; number: string; status: string; revisionCount: number };
 type JobWithCount = Job & { itemCount: number; totalSqm: number; linkedQuotes?: LinkedQuoteSummary[] };
 
+type EstimateStatus = "active" | "archived";
+
+function deriveEstimateStatus(job: JobWithCount): EstimateStatus {
+  if (job.archivedAt) return "archived";
+  return "active";
+}
+
+const ESTIMATE_STATUS_STYLES: Record<EstimateStatus, { label: string; className: string }> = {
+  active: { label: "Active", className: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-700" },
+  archived: { label: "Archived", className: "bg-gray-100 text-gray-500 border-gray-300 dark:bg-gray-900/40 dark:text-gray-400 dark:border-gray-600" },
+};
+
+const QUOTE_STATUS_COLORS: Record<string, string> = {
+  draft: "border-gray-300 text-gray-600 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-400",
+  review: "border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400",
+  sent: "border-indigo-300 text-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 dark:text-indigo-400",
+  accepted: "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400",
+  declined: "border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
+  archived: "border-gray-300 text-gray-500 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500",
+};
+
+function QuoteSignalCell({ job }: { job: JobWithCount }) {
+  const lq = job.linkedQuotes;
+  if (!lq || lq.length === 0) {
+    return <span className="text-xs text-muted-foreground italic">No quote</span>;
+  }
+  const primary = lq[0];
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${QUOTE_STATUS_COLORS[primary.status] || ""}`} data-testid={`badge-quote-status-${job.id}`}>
+          {primary.status.charAt(0).toUpperCase() + primary.status.slice(1)}
+        </Badge>
+        {primary.revisionCount > 1 && (
+          <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-revision-count-${job.id}`}>
+            Rev {primary.revisionCount}
+          </span>
+        )}
+      </div>
+      <Link href={routes.quoteDetail(primary.id)}>
+        <span className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer" data-testid={`link-open-quote-${job.id}`}>
+          <FileText className="w-2.5 h-2.5" />{primary.number}
+        </span>
+      </Link>
+    </div>
+  );
+}
+
 type CascadeDialogState =
   | { type: "none" }
   | { type: "delete"; jobId: string; jobName: string; linkedQuotes: Quote[]; loading: boolean }
@@ -213,12 +261,16 @@ export default function JobsList() {
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Date</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Items</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center hidden lg:table-cell">m²</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Quote Status</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Status</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Quote</TableHead>
                       <TableHead className="w-[180px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {jobs.map((job) => (
+                    {jobs.map((job) => {
+                      const estStatus = deriveEstimateStatus(job);
+                      const estStyle = ESTIMATE_STATUS_STYLES[estStatus];
+                      return (
                       <TableRow key={job.id} className="hover:bg-muted/30" data-testid={`row-job-${job.id}`}>
                         <TableCell className="font-medium text-sm py-2.5" data-testid={`text-job-name-${job.id}`}>
                           <div className="flex items-center gap-1.5">
@@ -256,43 +308,13 @@ export default function JobsList() {
                             </Badge>
                           ) : <span className="text-xs text-muted-foreground">—</span>}
                         </TableCell>
-                        <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-quote-status-${job.id}`}>
-                          {(() => {
-                            const lq = job.linkedQuotes;
-                            if (!lq || lq.length === 0) {
-                              return (
-                                <span className="text-xs text-muted-foreground italic">No quote</span>
-                              );
-                            }
-                            const primary = lq[0];
-                            const statusColors: Record<string, string> = {
-                              draft: "border-gray-300 text-gray-600 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-400",
-                              review: "border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400",
-                              sent: "border-indigo-300 text-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 dark:text-indigo-400",
-                              accepted: "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400",
-                              declined: "border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
-                              archived: "border-gray-300 text-gray-500 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500",
-                            };
-                            return (
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-1.5">
-                                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColors[primary.status] || ""}`} data-testid={`badge-quote-status-${job.id}`}>
-                                    {primary.status.charAt(0).toUpperCase() + primary.status.slice(1)}
-                                  </Badge>
-                                  {primary.revisionCount > 1 && (
-                                    <span className="text-[10px] text-muted-foreground font-mono" data-testid={`text-revision-count-${job.id}`}>
-                                      Rev {primary.revisionCount}
-                                    </span>
-                                  )}
-                                </div>
-                                <Link href={routes.quoteDetail(primary.id)}>
-                                  <span className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer" data-testid={`link-open-quote-${job.id}`}>
-                                    <FileText className="w-2.5 h-2.5" />{primary.number}
-                                  </span>
-                                </Link>
-                              </div>
-                            );
-                          })()}
+                        <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-estimate-status-${job.id}`}>
+                          <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${estStyle.className}`} data-testid={`badge-estimate-status-${job.id}`}>
+                            {estStyle.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-2.5 hidden md:table-cell" data-testid={`cell-quote-status-${job.id}`}>
+                          <QuoteSignalCell job={job} />
                         </TableCell>
                         <TableCell className="py-2.5">
                           <div className="flex items-center gap-1 justify-end">
@@ -337,7 +359,8 @@ export default function JobsList() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -364,18 +387,18 @@ export default function JobsList() {
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Archived</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Items</TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Quote Status</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Status</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Quote</TableHead>
                       <TableHead className="w-[160px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {archivedJobs.map((job) => (
+                    {archivedJobs.map((job) => {
+                      const estStyle = ESTIMATE_STATUS_STYLES["archived"];
+                      return (
                       <TableRow key={job.id} className="opacity-80 hover:opacity-100 hover:bg-muted/30" data-testid={`row-archived-job-${job.id}`}>
                         <TableCell className="py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm" data-testid={`text-archived-job-name-${job.id}`}>{job.name}</span>
-                            <Badge variant="secondary" className="text-xs" data-testid={`badge-archived-${job.id}`}>Archived</Badge>
-                          </div>
+                          <span className="font-medium text-sm" data-testid={`text-archived-job-name-${job.id}`}>{job.name}</span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground py-2.5 hidden md:table-cell">
                           {job.address ? (
@@ -397,41 +420,13 @@ export default function JobsList() {
                             {job.itemCount}
                           </Badge>
                         </TableCell>
-                        <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-archived-quote-status-${job.id}`}>
-                          {(() => {
-                            const lq = job.linkedQuotes;
-                            if (!lq || lq.length === 0) {
-                              return <span className="text-xs text-muted-foreground italic">No quote</span>;
-                            }
-                            const primary = lq[0];
-                            const statusColors: Record<string, string> = {
-                              draft: "border-gray-300 text-gray-600 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-400",
-                              review: "border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400",
-                              sent: "border-indigo-300 text-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 dark:text-indigo-400",
-                              accepted: "border-green-300 text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400",
-                              declined: "border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
-                              archived: "border-gray-300 text-gray-500 bg-gray-50 dark:bg-gray-900/30 dark:text-gray-500",
-                            };
-                            return (
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-1.5">
-                                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColors[primary.status] || ""}`} data-testid={`badge-archived-quote-status-${job.id}`}>
-                                    {primary.status.charAt(0).toUpperCase() + primary.status.slice(1)}
-                                  </Badge>
-                                  {primary.revisionCount > 1 && (
-                                    <span className="text-[10px] text-muted-foreground font-mono">
-                                      Rev {primary.revisionCount}
-                                    </span>
-                                  )}
-                                </div>
-                                <Link href={routes.quoteDetail(primary.id)}>
-                                  <span className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer">
-                                    <FileText className="w-2.5 h-2.5" />{primary.number}
-                                  </span>
-                                </Link>
-                              </div>
-                            );
-                          })()}
+                        <TableCell className="py-2.5 hidden sm:table-cell" data-testid={`cell-archived-estimate-status-${job.id}`}>
+                          <Badge variant="outline" className={`text-[11px] px-2 py-0.5 font-medium ${estStyle.className}`} data-testid={`badge-archived-estimate-status-${job.id}`}>
+                            {estStyle.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-2.5 hidden md:table-cell" data-testid={`cell-archived-quote-status-${job.id}`}>
+                          <QuoteSignalCell job={job} />
                         </TableCell>
                         <TableCell className="py-2.5">
                           <div className="flex items-center gap-1 justify-end">
@@ -458,7 +453,8 @@ export default function JobsList() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

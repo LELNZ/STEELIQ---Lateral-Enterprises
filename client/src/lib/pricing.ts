@@ -43,6 +43,8 @@ export interface PricingExtras {
   openingPanelCount?: number;
   wanzBar?: WanzBarPricingInput;
   salePriceOverride?: number | null;
+  sqmOverride?: number | null;
+  perimeterOverrideM?: number | null;
 }
 
 export interface ItemGeometry {
@@ -153,22 +155,31 @@ function computeDriverResult(
   }
 }
 
+export function calcRakedPerimeterM(widthMm: number, leftHeightMm: number, rightHeightMm: number): number {
+  const w = widthMm / 1000;
+  const lH = leftHeightMm / 1000;
+  const rH = rightHeightMm / 1000;
+  const slope = Math.sqrt(w * w + (lH - rH) * (lH - rH));
+  return w + lH + rH + slope;
+}
+
 function calcProfileLength(
   widthMm: number,
   heightMm: number,
-  lengthFormula: string
+  lengthFormula: string,
+  perimeterOverrideM?: number
 ): number {
   const wM = widthMm / 1000;
   const hM = heightMm / 1000;
   switch (lengthFormula) {
     case "perimeter":
-      return 2 * (wM + hM);
+      return perimeterOverrideM != null && perimeterOverrideM > 0 ? perimeterOverrideM : 2 * (wM + hM);
     case "width":
       return wM;
     case "height":
       return hM;
     default:
-      return 2 * (wM + hM);
+      return perimeterOverrideM != null && perimeterOverrideM > 0 ? perimeterOverrideM : 2 * (wM + hM);
   }
 }
 
@@ -186,8 +197,12 @@ export function calculatePricing(
   geometry?: ItemGeometry,
   glazingBands?: GlazingBandEntry[]
 ): PricingBreakdown {
-  const sqm = (widthMm * heightMm * quantity) / 1_000_000;
-  const perimeterM = 2 * (widthMm / 1000 + heightMm / 1000);
+  const sqm = (extras?.sqmOverride != null && extras.sqmOverride > 0)
+    ? extras.sqmOverride * quantity
+    : (widthMm * heightMm * quantity) / 1_000_000;
+  const perimeterM = (extras?.perimeterOverrideM != null && extras.perimeterOverrideM > 0)
+    ? extras.perimeterOverrideM
+    : 2 * (widthMm / 1000 + heightMm / 1000);
 
   const masterProfileMap = new Map<string, any>();
   if (masterData?.masterProfiles) {
@@ -232,7 +247,7 @@ export function calculatePricing(
     } else if (role === "transom" && hasTransomLength) {
       length = geometry!.transomTotalLengthMm! / 1000;
     } else {
-      length = calcProfileLength(widthMm, heightMm, formula);
+      length = calcProfileLength(widthMm, heightMm, formula, perimeterM !== 2 * (widthMm / 1000 + heightMm / 1000) ? perimeterM : undefined);
     }
 
     const qtyPerSet = p.quantityPerSet || 1;

@@ -1,0 +1,278 @@
+STEELIQ RAKED / TRIANGULAR FIXED WINDOW — FINAL HARDENING PASS BEFORE LIVE RELEASE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow final hardening pass for the already-implemented raked / triangular fixed-window Quote Builder feature.
+
+This is NOT:
+- a new feature phase
+- a geometry rewrite
+- an awning phase
+- a manufacturing/BOM/cut-list phase
+- a broad schema redesign
+- a PDF redesign phase
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models.
+- Do not introduce schema creep unless absolutely required and explicitly justified.
+- Do not perform hidden refactors.
+- Do not widen scope beyond fixing the known release blockers for raked-fixed items.
+- Do not alter QuoteDocument -> QuoteRenderModel -> Preview/PDF structure.
+- Do not widen into awning-in-raked support.
+- Do not widen into manufacturing outputs.
+- Preserve backward compatibility for existing rectangular and existing raked items.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED STATE
+==================================================
+
+The raked / triangular fixed-window feature is largely implemented and appears functionally close, but is NOT yet approved for live release due to the following known blockers:
+
+1. Raked items still use an incorrect hardware mapping fallback:
+- raked-fixed currently falls through to awning_handle in CATEGORY_TO_HANDLE_TYPE or equivalent logic
+- this is semantically wrong because raked-fixed is fixed-only in current scope
+
+2. Raked items still use an approximate rectangular perimeter for some pricing components:
+- current perimeter behavior is reported as 2 × (width + maxHeight)
+- that is a bounding approximation, not the true raked perimeter
+- this can distort liner/profile pricing and is not commercially clean enough for live use
+
+3. Persistence contract needs to be stated clearly:
+- the prior report referenced shared/schema.ts changes and first-class raked fields
+- before live release, the implementation must explicitly confirm whether these fields live safely inside the existing item JSON structure or whether any risky persistence/migration behavior exists
+
+This pass exists only to resolve and verify these issues.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Make the existing raked / triangular fixed-window implementation safe for live release by:
+
+1. removing incorrect hardware fallback behavior
+2. replacing approximate rectangular perimeter usage with the correct raked perimeter where required
+3. explicitly verifying and documenting the persistence/storage contract
+4. regression-checking existing rectangular and raked items after these corrections
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement and verify ONLY the release-blocking corrections above.
+
+Do NOT widen into:
+- new raked features
+- awning in raked frames
+- new shape families
+- manufacturing pack outputs
+- PDF redesign
+- geometry-family unification
+- navigation cleanup
+- accessory pricing transparency
+
+==================================================
+PHASE A — AUDIT THE THREE KNOWN RELEASE BLOCKERS
+==================================================
+
+Audit current repo/runtime truth and report precisely:
+
+1. where raked-fixed currently maps into hardware type logic
+2. where raked items currently use approximate perimeter logic
+3. exactly how raked fields are persisted and loaded:
+   - existing item JSON blob?
+   - dedicated DB columns?
+   - migration or no migration?
+   - backward compatibility behavior for old records?
+
+Do not assume.
+Do not over-claim.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — FIX HARDWARE SEMANTICS FOR RAKED-FIXED
+==================================================
+
+Raked-fixed is fixed-only in current scope.
+
+Therefore:
+- it must NOT inherit awning_handle
+- it must NOT silently behave like an operable awning category
+- it must not pull hardware defaults that do not belong to a fixed-only item
+
+Implement the minimum safe correction so that:
+- raked-fixed has no incorrect handle fallback
+- hardware-related fields for this category behave consistently with fixed-only semantics
+- existing rectangular/awning categories remain unchanged
+
+Important:
+- do not widen this into a general hardware-model redesign
+- do not add operable logic to raked-fixed
+- do not break nullable-dropdown behavior already implemented elsewhere
+
+==================================================
+PHASE C — REPLACE APPROXIMATE RECTANGULAR PERIMETER WITH TRUE RAKED PERIMETER
+==================================================
+
+Where liner/profile/perimeter-based pricing is currently using a bounding-rectangle approximation for raked-fixed items, replace it with the correct geometric perimeter needed for this phase.
+
+Use the actual raked shape:
+- bottom width
+- left side height
+- right side height
+- sloping top edge derived from those values
+
+Implement the minimum safe perimeter correction for raked-fixed items only.
+
+Requirements:
+- do not redesign the broader pricing engine
+- do not change rectangular-item perimeter behavior
+- do not introduce manufacturing logic
+- ensure the corrected perimeter flows only where perimeter-based pricing already applies
+
+If any affected pricing component should intentionally remain approximate in current repo truth, report that explicitly rather than guessing.
+
+==================================================
+PHASE D — VERIFY PERSISTENCE CONTRACT CLEARLY
+==================================================
+
+Before this phase can be signed off for live release, explicitly verify and report:
+
+- where rakedLeftHeight, rakedRightHeight, rakedSplitEnabled, and rakedSplitPosition are stored
+- whether any database migration was introduced
+- whether old records remain compatible
+- whether existing saved raked items load correctly after this hardening pass
+- whether existing rectangular items remain unaffected
+
+Be concrete.
+Do not use vague wording like “first-class fields” without explaining the actual storage contract.
+
+==================================================
+PHASE E — REGRESSION CHECK AFTER HARDENING
+==================================================
+
+Explicitly verify:
+
+1. raked fixed items still render correctly
+2. left-rake and right-rake still work
+3. split/no-split still work
+4. save/edit roundtrip still works
+5. raked pricing still uses trapezoidal area correctly
+6. perimeter-based pricing now uses corrected raked perimeter where applicable
+7. rectangular items are unchanged
+8. no touched route returns 404
+
+==================================================
+PHASE F — TRUTHFUL RELEASE READINESS CALL
+==================================================
+
+At the end of the report, make a truthful release-readiness statement:
+
+- either “ready for live publish”
+or
+- “safe for branch push only, not live yet”
+
+Do NOT claim live readiness unless:
+- hardware semantics are corrected
+- perimeter pricing is corrected
+- persistence behavior is explicitly verified
+- regression checks support the claim
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what release blockers were fixed
+- confirm whether incorrect hardware fallback was removed
+- confirm whether approximate rectangular perimeter was replaced where required
+- confirm whether persistence contract is now explicitly verified
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. BLOCKER AUDIT RESULT
+- where the incorrect hardware fallback existed
+- where approximate perimeter logic existed
+- how persistence was actually implemented before this pass
+
+4. HARDWARE SEMANTICS RESULT
+- exact fix applied for raked-fixed hardware behavior
+- confirm raked-fixed no longer behaves like awning hardware logic
+- confirm existing other categories remain unchanged
+
+5. PERIMETER PRICING RESULT
+- exact perimeter formula now used for raked-fixed items
+- what pricing components now use that corrected perimeter
+- confirm rectangular-item perimeter behavior is unchanged
+
+6. PERSISTENCE CONTRACT RESULT
+- exact storage path for raked fields
+- whether migration was required
+- backward compatibility result for old records
+- load/save result for current raked items
+
+7. REGRESSION VERIFICATION RESULT
+Explicitly verify:
+- left-rake works
+- right-rake works
+- split works
+- no-split works
+- save/update works
+- trapezoidal area pricing still works
+- corrected perimeter pricing works
+- rectangular items still render correctly
+- rectangular pricing still works
+- no touched route returns 404
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing rectangular quote-builder items
+- quote editing
+- revision flow
+- preview/PDF structure
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- fixed only for now
+- awning-in-raked support not implemented
+- manufacturing outputs not implemented
+- any remaining geometry caveat outside this scope
+
+10. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+11. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+12. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside this raked fixed-window phase
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform release hardening pass.
+
+Do not broaden the phase.
+Do not over-claim readiness.
+Do not leave ambiguous pricing or hardware semantics in place.
+
+Resolve the known blockers cleanly and report with enough precision that release readiness can be judged confidently.

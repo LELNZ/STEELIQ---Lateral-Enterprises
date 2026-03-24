@@ -3,6 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { type QuoteItem, type JobItem, type LibraryEntry, type ConfigurationProfile } from "@shared/schema";
 import { DOOR_CATEGORIES } from "@shared/item-options";
+import { calcRakedPerimeterM } from "@/lib/pricing";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -11,26 +12,31 @@ import {
 } from "@/components/ui/table";
 import { ArrowLeftCircle, FileText, Settings2 } from "lucide-react";
 
-function calcSqm(width: number, height: number, quantity: number): number {
+function calcSqm(width: number, height: number, quantity: number, item?: QuoteItem): number {
+  if (item && item.category === "raked-fixed") {
+    const lh = (item as any).rakedLeftHeight || item.height;
+    const rh = (item as any).rakedRightHeight || item.height;
+    return (width * ((lh + rh) / 2) * quantity) / 1_000_000;
+  }
   return (width * height * quantity) / 1_000_000;
 }
 
 function calcItemPrice(item: QuoteItem): number {
-  return calcSqm(item.width, item.height, item.quantity || 1) * (item.pricePerSqm || 500);
+  return calcSqm(item.width, item.height, item.quantity || 1, item) * (item.pricePerSqm || 500);
 }
 
 function formatPrice(amount: number): string {
   return amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function calcProfileLength(widthMm: number, heightMm: number, formula: string): number {
+function calcProfileLength(widthMm: number, heightMm: number, formula: string, perimeterOverrideM?: number): number {
   const wM = widthMm / 1000;
   const hM = heightMm / 1000;
   switch (formula) {
-    case "perimeter": return 2 * (wM + hM);
+    case "perimeter": return perimeterOverrideM != null && perimeterOverrideM > 0 ? perimeterOverrideM : 2 * (wM + hM);
     case "width": return wM;
     case "height": return hM;
-    default: return 2 * (wM + hM);
+    default: return perimeterOverrideM != null && perimeterOverrideM > 0 ? perimeterOverrideM : 2 * (wM + hM);
   }
 }
 
@@ -40,12 +46,15 @@ function calcItemWeight(
   masterProfileMap: Map<string, any>
 ): number {
   if (!profiles.length) return 0;
+  const perimOverride = item.category === "raked-fixed"
+    ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0)
+    : undefined;
   let totalKg = 0;
   for (const p of profiles) {
     const master = masterProfileMap.get(p.mouldNumber);
     const kgPerM = parseFloat(master?.kgPerMetre ?? p.kgPerMetre) || 0;
     const formula = master?.lengthFormula ?? p.lengthFormula ?? "perimeter";
-    const length = calcProfileLength(item.width, item.height, formula);
+    const length = calcProfileLength(item.width, item.height, formula, perimOverride);
     const qty = (p.quantityPerSet || 1) * (item.quantity || 1);
     totalKg += length * qty * kgPerM;
   }
@@ -62,6 +71,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   "bifold-door": "Bifold Door",
   "stacker-door": "Stacker Door",
   "bay-window": "Bay Window",
+  "raked-fixed": "Raked/Triangular Fixed",
 };
 
 interface JobData {
@@ -141,7 +151,9 @@ export default function QuoteSummary() {
     const items = job.items.map((ji) => ji.config as QuoteItem);
     let total = 0;
     for (const item of items) {
-      const unitSqm = (item.width * item.height) / 1_000_000;
+      const unitSqm = item.category === "raked-fixed"
+        ? calcSqm(item.width, item.height, 1, item)
+        : (item.width * item.height) / 1_000_000;
       const isDoor = DOOR_CATEGORIES.includes(item.category);
       const itemCat = isDoor ? "door" : "window";
       const catGroups = new Map<string, typeof installationRates>();
@@ -164,7 +176,12 @@ export default function QuoteSummary() {
           const basis = matchedRate.pricingBasis || "per_item";
           const qty = item.quantity || 1;
           if (basis === "per_m2") total += sell * unitSqm * qty;
-          else if (basis === "per_lm") total += sell * (2 * (item.width + item.height) / 1000) * qty;
+          else if (basis === "per_lm") {
+            const perimLm = item.category === "raked-fixed"
+              ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0)
+              : 2 * (item.width + item.height) / 1000;
+            total += sell * perimLm * qty;
+          }
           else total += sell * qty;
         }
       }
@@ -222,7 +239,7 @@ export default function QuoteSummary() {
   }
 
   const items = job.items.map((ji) => ji.config as QuoteItem);
-  const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1), 0);
+  const totalSqm = items.reduce((sum, item) => sum + calcSqm(item.width, item.height, item.quantity || 1, item), 0);
   const totalWeight = itemWeights.reduce((sum, w) => sum + w, 0);
   const itemsSubtotal = items.reduce((sum, item) => sum + calcItemPrice(item), 0);
   const hasInstallation = !!job.installationEnabled && installSellTotal > 0;
@@ -284,7 +301,7 @@ export default function QuoteSummary() {
             </TableHeader>
             <TableBody>
               {items.map((item, index) => {
-                const sqm = calcSqm(item.width, item.height, item.quantity || 1);
+                const sqm = calcSqm(item.width, item.height, item.quantity || 1, item);
                 const price = calcItemPrice(item);
                 const weightKg = itemWeights[index] || 0;
                 return (

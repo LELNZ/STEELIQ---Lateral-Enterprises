@@ -6,7 +6,7 @@ export interface FrameTypeOption {
 }
 
 export const FRAME_TYPES: FrameTypeOption[] = [
-  { value: "ES52-Window", label: "ES52 Window", categories: ["windows-standard"], pricePerKg: null },
+  { value: "ES52-Window", label: "ES52 Window", categories: ["windows-standard", "raked-fixed"], pricePerKg: null },
   { value: "ES52-HingeDoor", label: "ES52 Hinge Door", categories: ["hinge-door"], pricePerKg: null },
   { value: "EntranceDoor", label: "Entrance Door", categories: ["entrance-door"], pricePerKg: null },
   { value: "FrenchDoor", label: "French Door", categories: ["french-door"], pricePerKg: null },
@@ -108,10 +108,13 @@ const CATEGORY_TO_HANDLE_TYPE: Record<string, string> = {
   "sliding-door": "sliding_door_handle",
   "bifold-door": "bifold_door_handle",
   "stacker-door": "stacker_door_handle",
+  "raked-fixed": "none",
 };
 
 export function getHandleTypeForCategory(category: string): string {
-  return CATEGORY_TO_HANDLE_TYPE[category] || "awning_handle";
+  const mapped = CATEGORY_TO_HANDLE_TYPE[category];
+  if (mapped === "none") return "none";
+  return mapped || "awning_handle";
 }
 
 export function getFrameTypesForCategory(category: string): FrameTypeOption[] {
@@ -119,10 +122,11 @@ export function getFrameTypesForCategory(category: string): FrameTypeOption[] {
 }
 
 export const DOOR_CATEGORIES = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door", "sliding-door"];
-export const WINDOW_CATEGORIES = ["windows-standard", "sliding-window", "bay-window"];
+export const WINDOW_CATEGORIES = ["windows-standard", "sliding-window", "bay-window", "raked-fixed"];
 
 export function getHandlesForCategory(category: string): HandleOption[] {
   const handleType = getHandleTypeForCategory(category);
+  if (handleType === "none") return [];
   const cat = HANDLE_CATEGORIES.find((c) => c.type === handleType);
   if (cat) return cat.defaults;
   if (DOOR_CATEGORIES.includes(category)) return DOOR_HANDLES;

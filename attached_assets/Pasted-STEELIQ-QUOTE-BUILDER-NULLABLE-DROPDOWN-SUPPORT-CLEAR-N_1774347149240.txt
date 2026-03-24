@@ -1,0 +1,187 @@
+STEELIQ QUOTE BUILDER — NULLABLE DROPDOWN SUPPORT (CLEAR / NONE / UNSELECT)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on a live production system. This is a narrow usability and data-integrity phase for Quote Builder dropdown behavior.
+
+Non-negotiable rules:
+- Do not redesign architecture
+- Do not change pricing logic
+- Do not change QuoteDocument / render pipeline
+- Do not introduce schema creep unless absolutely required
+- Do not perform hidden refactors
+- Do not break existing saved data
+- Keep changes minimal and consistent
+
+--------------------------------------------------
+
+PROBLEM
+
+In Quote Builder, dropdown fields (e.g. Handle, Lock) cannot be cleared once selected.
+
+This causes:
+- invalid configurations (e.g. fixed window with handle)
+- incorrect pricing
+- poor UX
+
+--------------------------------------------------
+
+OBJECTIVE
+
+Implement a consistent system-wide pattern for nullable dropdowns.
+
+Users must be able to:
+- select a value
+- revert back to “no selection”
+
+--------------------------------------------------
+
+PHASE A — IDENTIFY TARGET FIELDS
+
+Audit Quote Builder and identify all dropdown/select inputs where:
+- the field is optional
+- a null/empty state is valid
+
+At minimum include:
+- Handle
+- Lock
+- Hardware-related dropdowns
+
+Do not assume — use repo truth.
+
+--------------------------------------------------
+
+PHASE B — IMPLEMENT “NONE” OPTION
+
+For each applicable dropdown:
+
+Add a first option:
+- label: "None"
+- value: null (or existing null-equivalent if already standardized)
+
+Rules:
+- Must integrate cleanly with existing Select component
+- Must not break controlled input behavior
+- Must not require schema change if null is already supported
+
+--------------------------------------------------
+
+PHASE C — NORMALIZE EXISTING INCONSISTENCIES
+
+If any dropdown uses:
+- "__none__"
+- "N/A"
+- empty string
+
+Normalize behavior so UI consistently shows:
+→ "None"
+
+But:
+- do not migrate historical data
+- only normalize UI + input handling
+
+--------------------------------------------------
+
+PHASE D — STATE HANDLING
+
+Ensure:
+
+Selecting "None":
+- sets field value to null
+- updates UI immediately
+- removes any dependent pricing contribution if applicable
+
+Do NOT change pricing logic — only ensure null flows through correctly.
+
+--------------------------------------------------
+
+PHASE E — DEPENDENCY SAFETY (CRITICAL)
+
+Where repo truth supports product-type logic:
+
+If configuration changes make a field invalid:
+Example:
+- changing to Fixed Window
+- handle/lock becomes irrelevant
+
+Then:
+- automatically clear that field (set to null)
+
+Only implement where safe and already logically supported.
+
+--------------------------------------------------
+
+PHASE F — UI CONSISTENCY
+
+Ensure:
+- "None" appears visually consistent across all dropdowns
+- no duplicate "None" options
+- no visual clutter
+
+Do NOT:
+- add separate clear buttons unless already supported globally
+
+--------------------------------------------------
+
+PHASE G — PRESERVE ALL EXISTING BEHAVIOR
+
+Must remain unchanged:
+- quote building flow
+- pricing calculations
+- preview/PDF pipeline
+- revision system
+- navigation
+
+--------------------------------------------------
+
+REQUIRED DELIVERABLE FORMAT
+
+1. SUMMARY
+- what dropdowns were updated
+- confirm users can now clear selections
+
+2. FILES CHANGED
+- list + reason
+
+3. BEFORE STATE
+- why dropdowns could not be cleared
+
+4. IMPLEMENTATION DETAILS
+- how "None" is handled in code
+- how value maps to null
+
+5. RUNTIME VERIFICATION
+- confirm:
+  - selecting value works
+  - selecting "None" clears it
+  - UI updates correctly
+
+6. COMPATIBILITY CHECK
+- confirm no impact to:
+  - pricing
+  - PDF output
+  - revisions
+
+7. KNOWN LIMITS
+- any dropdowns not updated and why
+
+8. NEXT PHASE (ONE ONLY)
+- must be narrow
+
+9. OPEN RISKS / WATCH ITEMS
+Include:
+- app freeze after inactivity
+- accessory pricing scaling
+- PDF polish
+- navigation drift
+
+--------------------------------------------------
+
+FINAL EXECUTION STANDARD
+
+This is a system usability correction.
+
+Goal:
+Allow users to cleanly select and unselect optional configuration fields without breaking pricing or workflow.
+
+Keep it minimal, consistent, and production-safe.

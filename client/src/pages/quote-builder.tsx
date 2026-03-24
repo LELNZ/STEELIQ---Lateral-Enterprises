@@ -6,7 +6,7 @@ import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue 
 import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory, getLockTypeForCategory, getLocksForCategory, isDoorCategory } from "@shared/item-options";
 import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
 import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
-import { calculatePricing, type PricingBreakdown, type ItemGeometry, type GlazingBandEntry } from "@/lib/pricing";
+import { calculatePricing, calcRakedPerimeterM, type PricingBreakdown, type ItemGeometry, type GlazingBandEntry } from "@/lib/pricing";
 import { deriveConfigSignature, findMatchingConfiguration, deriveGroupedGeometryMetrics, type ConfigSignature } from "@/lib/config-signature";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
@@ -63,6 +63,7 @@ const CATEGORY_OPTIONS = [
   { value: "bifold-door", label: "Bi-folding Door" },
   { value: "stacker-door", label: "Stacker Door" },
   { value: "bay-window", label: "Bay Window" },
+  { value: "raked-fixed", label: "Raked / Triangular Fixed" },
 ];
 
 function getCategoryLabel(cat: string) {
@@ -118,6 +119,13 @@ function getLayoutSummary(config: QuoteItem) {
     return `${config.panels} Panels`;
   }
   if (cat === "bay-window") return "Bay (3 Panel)";
+  if (cat === "raked-fixed") {
+    const lh = (config as any).rakedLeftHeight || 0;
+    const rh = (config as any).rakedRightHeight || 0;
+    if (lh > rh) return "Left Rake";
+    if (rh > lh) return "Right Rake";
+    return "Raked Fixed";
+  }
   return "Standard";
 }
 
@@ -161,6 +169,10 @@ const defaultValues: InsertQuoteItem = {
   category: "windows-standard",
   width: 1200,
   height: 1500,
+  rakedLeftHeight: 0,
+  rakedRightHeight: 0,
+  rakedSplitEnabled: false,
+  rakedSplitPosition: 0,
   layout: "standard",
   windowType: "fixed",
   hingeSide: "left",
@@ -731,7 +743,9 @@ export default function QuoteBuilder() {
     if (!hasConfigData) return null;
     const oMode = w.overrideMode || "none";
     const oVal = w.overrideValue ?? null;
-    const sqmForPricing = ((w.width || 0) * (w.height || 0) * (w.quantity || 1)) / 1_000_000;
+    const sqmForPricing = w.category === "raked-fixed"
+      ? calcRakedAreaSqm(w as any)
+      : ((w.width || 0) * (w.height || 0) * (w.quantity || 1)) / 1_000_000;
     const salePriceOverride = oMode === "total_sell" && oVal ? oVal
       : oMode === "per_sqm" && oVal ? oVal * sqmForPricing
       : null;
@@ -761,7 +775,7 @@ export default function QuoteBuilder() {
       w.width || 0, w.height || 0, w.quantity || 1,
       configProfiles, configAccessories, configLabor,
       usdToNzdRate, w.pricePerSqm || 500,
-      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined },
+      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined, sqmOverride: w.category === "raked-fixed" ? (((w as any).rakedLeftHeight || w.height || 0) + ((w as any).rakedRightHeight || w.height || 0)) / 2 * (w.width || 0) / 1_000_000 : undefined, perimeterOverrideM: w.category === "raked-fixed" ? calcRakedPerimeterM(w.width || 0, (w as any).rakedLeftHeight || w.height || 0, (w as any).rakedRightHeight || w.height || 0) : undefined },
       { masterProfiles, masterAccessories, masterLabour },
       itemGeometry,
       glazingBands
@@ -839,6 +853,19 @@ export default function QuoteBuilder() {
     form.setValue("frenchDoorRightRows", [...defaultEntranceDoorRows]);
     form.setValue("panelRows", []);
     form.setValue("customColumns", makeDefaultColumns(2));
+    if (category === "raked-fixed") {
+      form.setValue("rakedLeftHeight", 1500);
+      form.setValue("rakedRightHeight", 1000);
+      form.setValue("rakedSplitEnabled", false);
+      form.setValue("rakedSplitPosition", 0);
+      form.setValue("height", 1500);
+      form.setValue("pricePerSqm", 650);
+    } else {
+      form.setValue("rakedLeftHeight", 0);
+      form.setValue("rakedRightHeight", 0);
+      form.setValue("rakedSplitEnabled", false);
+      form.setValue("rakedSplitPosition", 0);
+    }
     if (category === "bifold-door") {
       form.setValue("panels", 3);
       form.setValue("bifoldLeftCount", 1);
@@ -924,7 +951,8 @@ export default function QuoteBuilder() {
   const isFrench = category === "french-door";
   const isBifold = category === "bifold-door";
   const isStacker = category === "stacker-door";
-  const noCustomCategories = isEntrance || isHingeDoor || isFrench || isBifold || isStacker;
+  const isRaked = category === "raked-fixed";
+  const noCustomCategories = isEntrance || isHingeDoor || isFrench || isBifold || isStacker || isRaked;
   const isCustom = layout === "custom" && !noCustomCategories;
   const isSlidingCategory = ["sliding-window", "sliding-door"].includes(category);
   const isFrenchDoorCategory = ["french-door"].includes(category);
@@ -1708,12 +1736,24 @@ export default function QuoteBuilder() {
     }
   }
 
-  function calcSqm(width: number, height: number, quantity: number): string {
+  function calcRakedAreaSqm(item: QuoteItem | InsertQuoteItem): number {
+    if (item.category === "raked-fixed") {
+      const lh = (item as any).rakedLeftHeight || item.height;
+      const rh = (item as any).rakedRightHeight || item.height;
+      return (item.width * ((lh + rh) / 2) * (item.quantity || 1)) / 1_000_000;
+    }
+    return (item.width * item.height * (item.quantity || 1)) / 1_000_000;
+  }
+
+  function calcSqm(width: number, height: number, quantity: number, item?: QuoteItem | InsertQuoteItem): string {
+    if (item && item.category === "raked-fixed") {
+      return calcRakedAreaSqm(item).toFixed(2);
+    }
     return ((width * height * quantity) / 1_000_000).toFixed(2);
   }
 
   function calcItemPrice(item: QuoteItem | InsertQuoteItem): number {
-    const sqm = (item.width * item.height * (item.quantity || 1)) / 1_000_000;
+    const sqm = calcRakedAreaSqm(item);
     const oMode = (item as any).overrideMode || "none";
     const oVal = (item as any).overrideValue ?? null;
     if (oMode === "total_sell" && oVal) return oVal;
@@ -1726,7 +1766,7 @@ export default function QuoteBuilder() {
   }
 
   const totalSqm = useMemo(() => items.reduce((sum, iwp) => {
-    return sum + (iwp.item.width * iwp.item.height * (iwp.item.quantity || 1)) / 1_000_000;
+    return sum + calcRakedAreaSqm(iwp.item);
   }, 0).toFixed(2), [items]);
 
   const totalPrice = useMemo(() => items.reduce((sum, iwp) => sum + calcItemPrice(iwp.item), 0), [items]);
@@ -2181,29 +2221,110 @@ export default function QuoteBuilder() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label htmlFor="width" className="text-xs">Width (mm)</Label>
-                    <Input id="width" type="number" inputMode="decimal" min={200}
-                      {...form.register("width", { valueAsNumber: true })}
-                      onFocus={handleConfigFieldFocus}
-                      data-testid="input-width" />
+                {isRaked ? (
+                  <>
+                    <div>
+                      <Label htmlFor="width" className="text-xs">Overall Width (mm)</Label>
+                      <Input id="width" type="number" inputMode="decimal" min={200}
+                        {...form.register("width", {
+                          valueAsNumber: true,
+                          onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                            const v = e.target.value ? parseInt(e.target.value) : 0;
+                            if (w.rakedSplitEnabled && w.rakedSplitPosition && v > 0 && w.rakedSplitPosition >= v - 100) {
+                              form.setValue("rakedSplitPosition", Math.max(100, Math.round(v / 2)));
+                            }
+                          }
+                        })}
+                        onFocus={handleConfigFieldFocus}
+                        data-testid="input-width" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Left Height (mm)</Label>
+                        <Input type="number" inputMode="decimal" min={200}
+                          value={w.rakedLeftHeight || ""}
+                          onChange={(e) => {
+                            const v = e.target.value ? parseInt(e.target.value) : 0;
+                            form.setValue("rakedLeftHeight", v);
+                            form.setValue("height", Math.max(v, w.rakedRightHeight || 0));
+                          }}
+                          onFocus={handleConfigFieldFocus}
+                          data-testid="input-raked-left-height" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Right Height (mm)</Label>
+                        <Input type="number" inputMode="decimal" min={200}
+                          value={w.rakedRightHeight || ""}
+                          onChange={(e) => {
+                            const v = e.target.value ? parseInt(e.target.value) : 0;
+                            form.setValue("rakedRightHeight", v);
+                            form.setValue("height", Math.max(w.rakedLeftHeight || 0, v));
+                          }}
+                          onFocus={handleConfigFieldFocus}
+                          data-testid="input-raked-right-height" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <Checkbox id="rakedSplitEnabled" checked={w.rakedSplitEnabled || false}
+                        onCheckedChange={(v) => {
+                          form.setValue("rakedSplitEnabled", !!v);
+                          if (v && !w.rakedSplitPosition) {
+                            form.setValue("rakedSplitPosition", Math.round((w.width || 1200) / 2));
+                          }
+                        }}
+                        data-testid="checkbox-raked-split" />
+                      <Label htmlFor="rakedSplitEnabled" className="text-xs cursor-pointer">
+                        Panel Split
+                      </Label>
+                    </div>
+                    {w.rakedSplitEnabled && (
+                      <div>
+                        <Label className="text-xs">Split Position from Left (mm)</Label>
+                        <Input type="number" inputMode="decimal" min={100} max={(w.width || 1200) - 100}
+                          value={w.rakedSplitPosition || ""}
+                          onChange={(e) => {
+                            const v = e.target.value ? parseInt(e.target.value) : 0;
+                            const maxPos = (w.width || 1200) - 100;
+                            form.setValue("rakedSplitPosition", Math.min(Math.max(0, v), maxPos));
+                          }}
+                          onFocus={handleConfigFieldFocus}
+                          data-testid="input-raked-split-position" />
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          Left panel: {w.rakedSplitPosition || 0}mm · Right panel: {(w.width || 0) - (w.rakedSplitPosition || 0)}mm
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="width" className="text-xs">Width (mm)</Label>
+                      <Input id="width" type="number" inputMode="decimal" min={200}
+                        {...form.register("width", { valueAsNumber: true })}
+                        onFocus={handleConfigFieldFocus}
+                        data-testid="input-width" />
+                    </div>
+                    <div>
+                      <Label htmlFor="height" className="text-xs">Height (mm)</Label>
+                      <Input id="height" type="number" inputMode="decimal" min={200}
+                        {...form.register("height", { valueAsNumber: true })}
+                        onFocus={handleConfigFieldFocus}
+                        data-testid="input-height" />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="height" className="text-xs">Height (mm)</Label>
-                    <Input id="height" type="number" inputMode="decimal" min={200}
-                      {...form.register("height", { valueAsNumber: true })}
-                      onFocus={handleConfigFieldFocus}
-                      data-testid="input-height" />
-                  </div>
-                </div>
+                )}
                 <div className="flex gap-2">
                   <Badge variant="outline" className="text-xs" data-testid="badge-frame-size">
                     {frameSize}mm Frame
                   </Badge>
                   <Badge variant="outline" className="text-xs" data-testid="badge-live-sqm">
-                    {calcSqm(w.width || 0, w.height || 0, w.quantity || 1)} m²
+                    {calcSqm(w.width || 0, w.height || 0, w.quantity || 1, isRaked ? w as any : undefined)} m²
                   </Badge>
+                  {isRaked && (
+                    <Badge variant="outline" className="text-xs text-blue-600" data-testid="badge-raked-orientation">
+                      {(w.rakedLeftHeight || 0) > (w.rakedRightHeight || 0) ? "Left Rake" : (w.rakedRightHeight || 0) > (w.rakedLeftHeight || 0) ? "Right Rake" : "Level"}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
@@ -3055,9 +3176,10 @@ export default function QuoteBuilder() {
                     {isSpecVisible("windZone") && (
                     <div>
                       <Label className="text-xs">Wind Zone</Label>
-                      <Select value={w.windZone || ""} onValueChange={(v) => form.setValue("windZone", v)}>
+                      <Select value={w.windZone || "__none__"} onValueChange={(v) => form.setValue("windZone", v === "__none__" ? "" : v)}>
                         <SelectTrigger data-testid="select-wind-zone"><SelectValue placeholder="Select wind zone" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
                           {WIND_ZONES.map((wz) => (
                             <SelectItem key={wz} value={wz}>{wz}</SelectItem>
                           ))}
@@ -3106,9 +3228,10 @@ export default function QuoteBuilder() {
                   <div className="space-y-2">
                     <div>
                       <Label className="text-xs">Liner Type</Label>
-                      <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
+                      <Select value={w.linerType || "__none__"} onValueChange={(v) => form.setValue("linerType", v === "__none__" ? "" : v)}>
                         <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
                           {libLinerOptions.map((lt) => (
                             <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
                           ))}
@@ -3130,9 +3253,10 @@ export default function QuoteBuilder() {
                     {isSpecVisible("handleSet") && (
                     <div>
                       <Label className="text-xs">Handle</Label>
-                      <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
+                      <Select value={w.handleType || "__none__"} onValueChange={(v) => form.setValue("handleType", v === "__none__" ? "" : v)}>
                         <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
                           {(libCategoryHandles.length > 0
                             ? libCategoryHandles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
                             : libHandlesForCategoryLegacy(w.category || "windows-standard")
@@ -3274,7 +3398,7 @@ export default function QuoteBuilder() {
                         <span className="font-medium">
                           {(w.overrideMode || "none") !== "none"
                             ? `Override: $${calcItemPrice(w as any).toFixed(2)}`
-                            : `Sale: $${((w.pricePerSqm || 500) * parseFloat(calcSqm(w.width || 0, w.height || 0, w.quantity || 1))).toFixed(2)}`
+                            : `Sale: $${((w.pricePerSqm || 500) * parseFloat(calcSqm(w.width || 0, w.height || 0, w.quantity || 1, isRaked ? w as any : undefined))).toFixed(2)}`
                           }
                         </span>
                         <span>$750</span>
@@ -3404,7 +3528,7 @@ export default function QuoteBuilder() {
                     Size: {w.width || 0} × {w.height || 0}mm
                   </Badge>
                   <Badge variant="outline" className="text-xs" data-testid="badge-live-sqm-specifics">
-                    {calcSqm(w.width || 0, w.height || 0, w.quantity || 1)} m²
+                    {calcSqm(w.width || 0, w.height || 0, w.quantity || 1, isRaked ? w as any : undefined)} m²
                   </Badge>
                 </div>
                 )}
@@ -3570,7 +3694,7 @@ export default function QuoteBuilder() {
                         </TableCell>
                         <TableCell className="font-mono text-sm">{iwp.item.width} x {iwp.item.height}</TableCell>
                         <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.uiId}`}>
-                          {calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity)}
+                          {calcSqm(iwp.item.width, iwp.item.height, iwp.item.quantity, iwp.item)}
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm" data-testid={`text-price-${iwp.uiId}`}>
                           ${formatPrice(calcItemPrice(iwp.item))}

@@ -1,0 +1,242 @@
+STEELIQ COMMERCIAL CONTROL-SURFACE COMPLETION — ESTIMATE STATUS + SIGNAL HIERARCHY HARDENING
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live, production-oriented system. This is a narrow completion phase to finish the estimate list as a proper commercial control surface.
+
+Non-negotiable rules:
+- Do not redesign the architecture.
+- Do not redesign estimate, quote, or revision models.
+- Do not modify pricing logic.
+- Do not modify lifecycle templates.
+- Do not introduce schema changes unless absolutely required.
+- Do not perform hidden refactors.
+- Do not change QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline.
+- Do not break estimate -> quote linking.
+- Do not change accepted quote protections.
+- Do not widen scope beyond this table.
+- Preserve backward compatibility fully.
+
+Treat current repo/runtime as truth.
+
+--------------------------------------------------
+
+CURRENT STATE (VERIFIED)
+
+The estimate list currently shows:
+- Quote status (Draft / Sent / Accepted / etc.)
+- Revision signal (Rev N)
+- Linked quote number with navigation
+- “No quote” state
+
+BUT it is missing:
+- Explicit estimate status per row
+- Clear separation between estimate state and quote state
+
+This prevents the table from being a true enterprise control surface.
+
+--------------------------------------------------
+
+PRIMARY OBJECTIVE
+
+Complete the estimate list so it clearly communicates THREE distinct signals:
+
+1. ESTIMATE STATUS (PRIMARY)
+2. LINKED QUOTE STATUS (SECONDARY)
+3. REVISION SIGNAL (TERTIARY)
+
+These must be visually distinct and not conflated.
+
+--------------------------------------------------
+
+PHASE A — ESTIMATE STATUS MODEL (STRICT, MINIMAL)
+
+Implement explicit estimate status at row level.
+
+Rules:
+- Use ONLY what repo truth supports
+- Do NOT invent new lifecycle states
+
+Minimum required:
+- Active
+- Archived
+
+If repo supports additional states safely (e.g. Draft/Converted), use them.
+Otherwise:
+- Active = default for non-archived estimates
+- Archived = already exists
+
+--------------------------------------------------
+
+PHASE B — TABLE COLUMN STRUCTURE (HIERARCHY FIX)
+
+Rework table columns WITHOUT increasing complexity.
+
+Target structure:
+
+[ NAME | ADDRESS | DATE | ITEMS | M² | ESTIMATE STATUS | QUOTE | ACTIONS ]
+
+Key rules:
+
+- ESTIMATE STATUS = primary badge column
+- QUOTE column = contains:
+    - quote status badge
+    - revision signal
+    - quote number link
+- Do NOT create separate columns for quote + revision (keep compact)
+
+--------------------------------------------------
+
+PHASE C — VISUAL HIERARCHY RULES
+
+Enforce strict signal hierarchy:
+
+1. ESTIMATE STATUS (PRIMARY)
+- Solid badge
+- Always visible
+- Example:
+    Active (neutral)
+    Archived (grey)
+
+2. QUOTE STATUS (SECONDARY)
+- Smaller badge inside Quote column
+- Only shown if quote exists
+
+3. REVISION SIGNAL (TERTIARY)
+- Inline text: “Rev 2”
+- Visually lighter than status badges
+
+4. NO QUOTE STATE
+- “No quote” in muted/italic
+- Must not visually compete with real statuses
+
+--------------------------------------------------
+
+PHASE D — DO NOT CHANGE PRIMARY QUOTE SELECTION LOGIC
+
+Current logic:
+- Uses most recent quote (ORDER BY created_at DESC)
+
+Keep this EXACTLY as is.
+
+Do NOT:
+- introduce “latest accepted” logic
+- introduce heuristics
+- introduce ranking systems
+
+--------------------------------------------------
+
+PHASE E — INTERACTION RULES
+
+Maintain:
+
+- Click estimate row → opens estimate (unchanged)
+- Click quote number → opens quote (existing route helper)
+- Action buttons (Open / Archive) unchanged
+
+Do NOT:
+- remove existing actions
+- introduce dropdown complexity
+
+--------------------------------------------------
+
+PHASE F — SCANNABILITY GUARDRAILS
+
+Ensure:
+
+- Table remains readable at a glance
+- No column overload
+- No stacked badges beyond 2 levels
+- No wrapping chaos in rows
+
+If layout becomes dense:
+- prioritize clarity over adding more information
+
+--------------------------------------------------
+
+PHASE G — PRESERVE ALL EXISTING BEHAVIOR
+
+Must remain unchanged:
+
+- estimate creation
+- estimate archive/unarchive
+- quote generation
+- quote revisions
+- preview/PDF pipeline
+- accepted quote protections
+- lifecycle behavior
+- invoice/project/Xero behavior
+
+--------------------------------------------------
+
+REQUIRED DELIVERABLE FORMAT
+
+Return your report EXACTLY in this structure:
+
+1. SUMMARY
+- what was implemented
+- confirm estimate status is now visible per row
+- confirm signal hierarchy (estimate vs quote vs revision) is clean
+
+2. FILES CHANGED
+- file list + one-line reason
+
+3. BEFORE STATE (TRUTHFUL)
+- how estimate status was missing or implicit
+- how quote signal dominated the table
+
+4. IMPLEMENTATION DETAILS
+- how estimate status is determined (exact logic)
+- how it is rendered
+- how quote + revision signals are grouped
+
+5. UI RESULT
+Describe final row structure:
+- what user sees in one row
+- how quickly they can scan state
+
+6. RUNTIME VERIFICATION
+Explicitly confirm:
+- table renders correctly
+- badges render correctly
+- quote links still work
+- no navigation breaks
+
+7. COMPATIBILITY CHECK
+Confirm ALL remain unchanged:
+- estimate behavior
+- quote behavior
+- PDF pipeline
+- lifecycle
+- governance rules
+
+8. KNOWN LIMITS
+- any remaining limitations
+- confirm no schema redesign was done
+
+9. NEXT PHASE (ONE ONLY)
+- must be narrow
+- must not overlap this phase
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- accessory pricing scaling gap
+- PDF polish
+- navigation contract drift outside this page
+- lifecycle UX limitations (if any)
+
+--------------------------------------------------
+
+FINAL EXECUTION STANDARD
+
+This is NOT a redesign.
+This is a precision completion pass.
+
+Goal:
+Turn the estimate list from “good” into “enterprise-grade clean control surface” by clearly separating:
+- estimate state
+- quote state
+- revision signal
+
+Do it cleanly, minimally, and safely.

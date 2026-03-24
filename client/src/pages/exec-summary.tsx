@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type QuoteItem, type JobItem, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor, type FrameConfiguration, type LibraryEntry } from "@shared/schema";
-import { calculatePricing, type PricingBreakdown } from "@/lib/pricing";
+import { calculatePricing, calcRakedPerimeterM, type PricingBreakdown } from "@/lib/pricing";
 import { deriveConfigSignature } from "@/lib/config-signature";
 import { getGlassPrice, getGlassRValue } from "@shared/glass-library";
 import { LINER_TYPES, DOOR_CATEGORIES, getHandlesForCategory, getHandleTypeForCategory, getLocksForCategory, getLockTypeForCategory, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES, isDoorCategory } from "@shared/item-options";
@@ -40,7 +40,12 @@ import LifecyclePanel from "@/components/lifecycle-panel";
 import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions, type ScopeFields } from "@/lib/subcontractor-pdf";
 import { svgToPngBlob } from "@/lib/export-png";
 
-function calcSqm(width: number, height: number, quantity: number): number {
+function calcSqm(width: number, height: number, quantity: number, item?: any): number {
+  if (item && item.category === "raked-fixed") {
+    const lh = item.rakedLeftHeight || item.height || height;
+    const rh = item.rakedRightHeight || item.height || height;
+    return (width * ((lh + rh) / 2) * quantity) / 1_000_000;
+  }
   return (width * height * quantity) / 1_000_000;
 }
 
@@ -58,6 +63,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   "bifold-door": "Bi-fold Door",
   "stacker-door": "Stacker Door",
   "bay-window": "Bay Window",
+  "raked-fixed": "Raked/Triangular Fixed",
 };
 
 interface JobData {
@@ -350,7 +356,7 @@ export default function ExecSummary() {
     if (!job) return [];
     return job.items.map((ji: any) => {
       const item = ji.config as QuoteItem;
-      const sqm = calcSqm(item.width, item.height, item.quantity || 1);
+      const sqm = calcSqm(item.width, item.height, item.quantity || 1, item);
       const overrideMode = item.overrideMode || "none";
       const overrideVal = item.overrideValue ?? null;
       const salePriceOverride = overrideMode === "total_sell" && overrideVal ? overrideVal
@@ -387,6 +393,8 @@ export default function ExecSummary() {
               openingPanelCount: openingPanels,
               wanzBar: wanzBarInput,
               salePriceOverride: salePriceOverride ?? undefined,
+              sqmOverride: item.category === "raked-fixed" ? (((item as any).rakedLeftHeight || item.height || 0) + ((item as any).rakedRightHeight || item.height || 0)) / 2 * item.width / 1_000_000 : undefined,
+              perimeterOverrideM: item.category === "raked-fixed" ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0) : undefined,
             },
             { masterProfiles, masterAccessories, masterLabour }
           );
@@ -430,11 +438,15 @@ export default function ExecSummary() {
   const deriveBasisQty = useCallback((basis: string, item: { width: number; height: number; quantity: number }) => {
     const qty = item.quantity || 1;
     if (basis === "per_m2") {
-      const areaSqm = (item.width * item.height) / 1_000_000;
+      const areaSqm = (item as any).category === "raked-fixed"
+        ? calcSqm(item.width, item.height, 1, item as any)
+        : (item.width * item.height) / 1_000_000;
       return { basisQty: areaSqm, totalMultiplier: areaSqm * qty, label: `${areaSqm.toFixed(2)} m²` };
     }
     if (basis === "per_lm") {
-      const perimeterLm = 2 * (item.width + item.height) / 1000;
+      const perimeterLm = (item as any).category === "raked-fixed"
+        ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0)
+        : 2 * (item.width + item.height) / 1000;
       return { basisQty: perimeterLm, totalMultiplier: perimeterLm * qty, label: `${perimeterLm.toFixed(2)} l/m` };
     }
     return { basisQty: 1, totalMultiplier: qty, label: `${qty} item${qty !== 1 ? "s" : ""}` };
@@ -449,7 +461,9 @@ export default function ExecSummary() {
       pricingBasis: string; basisQtyLabel: string; basisQty: number;
     }> = [];
     for (const ip of itemPricings) {
-      const unitSqm = (ip.item.width * ip.item.height) / 1_000_000;
+      const unitSqm = ip.item.category === "raked-fixed"
+        ? calcSqm(ip.item.width, ip.item.height, 1, ip.item)
+        : (ip.item.width * ip.item.height) / 1_000_000;
       const qty = ip.item.quantity || 1;
       const matched = getMatchingRates(installationRates, ip.item.category, unitSqm);
       if (matched.length === 0) {
@@ -518,7 +532,9 @@ export default function ExecSummary() {
       pricingBasis: string; basisQtyLabel: string; basisQty: number;
     }> = [];
     for (const ip of itemPricings) {
-      const unitSqm = (ip.item.width * ip.item.height) / 1_000_000;
+      const unitSqm = ip.item.category === "raked-fixed"
+        ? calcSqm(ip.item.width, ip.item.height, 1, ip.item)
+        : (ip.item.width * ip.item.height) / 1_000_000;
       const qty = ip.item.quantity || 1;
       const matched = getMatchingRates(removalRates, ip.item.category, unitSqm);
       if (matched.length === 0) {

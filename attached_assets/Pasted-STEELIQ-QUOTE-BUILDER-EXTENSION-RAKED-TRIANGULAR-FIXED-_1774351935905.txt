@@ -1,0 +1,282 @@
+STEELIQ QUOTE BUILDER EXTENSION — RAKED / TRIANGULAR FIXED WINDOW SUPPORT (LEFT / RIGHT ORIENTATION)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow controlled extension phase for Quote Builder.
+
+This is NOT:
+- a full quote builder redesign
+- a full geometry-engine rewrite
+- a manufacturing pack phase
+- an awning implementation phase
+- a broad non-rectangular-shapes program
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign the quote/estimate/revision model.
+- Do not introduce schema creep unless absolutely required and explicitly justified.
+- Do not perform hidden refactors.
+- Do not widen scope beyond fixed raked / triangular windows.
+- Do not alter QuoteDocument -> QuoteRenderModel -> Preview/PDF structure.
+- Do not mix this phase with rectangular ES52 geometry hardening.
+- Do not build manufacturing pack outputs.
+- Preserve backward compatibility for existing quote builder items.
+- Treat current repo/runtime as truth.
+
+==================================================
+CURRENT BUSINESS TRUTH TO FOLLOW
+==================================================
+
+The user needs Quote Builder support for client-facing raked / triangular windows like the attached examples.
+
+Current confirmed requirements:
+
+1. Inputs required:
+- overall width
+- left height
+- right height
+- optional panel split if requested
+
+2. Panel split behavior:
+- must support both:
+  - manual split input
+  - automatic calculation when appropriate
+
+3. Pricing basis:
+- total m² rate
+- allow for default sale price slider set to $650 p/sqm
+
+4. Scope for now:
+- fixed glass only
+- awning support is later, not now
+
+5. Drawing goal:
+- produce a client-facing visual that aligns with the future geometry-accuracy direction
+- do not build a fake rectangle representation
+- do not overbuild workshop/manufacturing outputs in this phase
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Add controlled Quote Builder support for fixed raked / triangular window items so users can quote and visually represent left- and right-raked windows safely.
+
+The result must allow:
+- entry of overall width
+- entry of left and right heights
+- optional split handling
+- left/right orientation support
+- accurate client-facing raked drawing behavior
+- area-based pricing continuity
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+- fixed raked window support
+- left-rake and right-rake variants
+- optional 2-panel split support
+- client-facing drawing support in Quote Builder
+- pricing continuity using total m² approach
+- default sale price slider behavior at $650 p/sqm where applicable
+
+Do NOT widen into:
+- awning-in-raked sections
+- hardware logic for these shapes
+- manufacturing cut lists
+- BOM outputs
+- all polygon types
+- circular/arched windows
+- full geometry unification across the app
+
+==================================================
+PHASE A — AUDIT CURRENT REPO TRUTH
+==================================================
+
+Audit and report:
+
+1. how current Quote Builder item/category/layout logic works
+2. where the current drawing system assumes rectangular geometry
+3. where a safe insertion point exists for raked fixed-window support
+4. how current pricing area is calculated and where it should adapt for raked geometry
+
+Do not assume.
+Use actual repo truth.
+
+==================================================
+PHASE B — DEFINE THE RAKED WINDOW CONTRACT
+==================================================
+
+Implement a strict geometry/data contract for this phase.
+
+Required supported inputs:
+- overall width
+- left height
+- right height
+- orientation (left rake / right rake) if not already implied by input order
+- optional panel split
+
+Behavior rules:
+- system must support both manually entered split and automatic/default split behavior
+- if no split is used, a single fixed raked window must still draw correctly
+- if split is used, panel boundary must be placed correctly inside the raked frame
+
+Important:
+- keep the meaning of each dimension explicit
+- do not pretend a raked item is rectangular
+- do not hide slope logic behind approximate visuals
+
+==================================================
+PHASE C — DRAWING / VISUAL SUPPORT
+==================================================
+
+Implement a client-facing Quote Builder drawing for these raked fixed windows.
+
+Requirements:
+- left-rake and right-rake must both render correctly
+- slope line must reflect left/right height difference
+- frame outline must reflect the true raked shape
+- optional split must be drawn correctly
+- fixed glass visual treatment must remain consistent with existing style where possible
+
+Do NOT:
+- render a simplified rectangle placeholder
+- add manufacturing-only annotations
+- overload the UI with workshop detail
+
+The result should be visually trustworthy for quoting.
+
+==================================================
+PHASE D — AREA / PRICING CONTINUITY
+==================================================
+
+Preserve pricing discipline while supporting this new shape.
+
+Requirements:
+- use total m² pricing approach
+- confirm how area is calculated for raked geometry
+- ensure pricing is based on the correct geometric area, not an incorrect bounding rectangle unless current business truth explicitly requires that
+- support default sale price slider behavior at $650 p/sqm
+
+If current repo pricing assumes rectangular area only, report that clearly and implement the minimum safe correction needed for this phase.
+
+Do NOT redesign the broader pricing engine.
+
+==================================================
+PHASE E — SPLIT HANDLING
+==================================================
+
+Support both:
+- manual split input
+- automatic/default split behavior
+
+Rules:
+- split must remain within total width
+- left/right panel proportions must be visually correct under the raked head
+- do not widen into full mullion/transom engineering logic
+- keep it safe and client-facing
+
+==================================================
+PHASE F — PRESERVE EXISTING BEHAVIOR
+==================================================
+
+Must remain unchanged unless directly required for this feature:
+
+- normal rectangular item behavior
+- quote builder save/update flow
+- revision behavior
+- preview/PDF structure
+- navigation
+- estimate/quote linking
+- lifecycle/governance protections
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm left/right raked fixed window support was added
+- confirm this phase did NOT add awning support
+- confirm this phase did NOT build manufacturing outputs
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- how the builder worked before
+- where rectangular assumptions prevented this feature
+- where the safe insertion point was
+
+4. RAKED WINDOW CONTRACT RESULT
+- exact supported inputs
+- how left/right orientation is represented
+- how split handling works
+- how area is interpreted for pricing
+
+5. DRAWING RESULT
+- how the left/right raked visuals now render
+- how split behavior appears
+- how the visual remains client-facing and trustworthy
+
+6. PRICING RESULT
+- how area is calculated
+- how m² pricing now works for this shape
+- how the default sale price slider behavior is handled
+
+7. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- left-rake item renders correctly
+- right-rake item renders correctly
+- split/no-split both work
+- save/update still works
+- no touched route returns 404
+- rectangular items are not broken
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing rectangular quote builder items
+- quote editing
+- revision flow
+- preview/PDF structure
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- fixed only for now
+- awning-in-raked support not implemented
+- manufacturing outputs not implemented
+- any remaining geometry caveat outside this scope
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- accessory pricing visibility/transparency gap if still relevant
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside this raked fixed-window phase
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform extension.
+
+Do not try to solve every geometry problem at once.
+Do not widen into manufacturing.
+Do not fake the shape with rectangles.
+
+Your job is to safely add fixed raked / triangular client-facing quote-builder support with correct input meaning, correct left/right orientation, correct split behavior, and sound area-based pricing continuity.

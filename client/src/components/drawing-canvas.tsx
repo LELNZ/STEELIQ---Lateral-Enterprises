@@ -655,6 +655,74 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     return <g>{elements}</g>;
   }
 
+  if (category === "raked-fixed") {
+    const leftH = (config as any).rakedLeftHeight || H;
+    const rightH = (config as any).rakedRightHeight || H;
+    const splitEnabled = (config as any).rakedSplitEnabled || false;
+    const splitPos = (config as any).rakedSplitPosition || 0;
+    const inset = frameSize * 0.7;
+
+    const topLeft = { x: 0, y: H - leftH };
+    const topRight = { x: W, y: H - rightH };
+    const botLeft = { x: 0, y: H };
+    const botRight = { x: W, y: H };
+
+    const framePoints = `${topLeft.x},${topLeft.y} ${topRight.x},${topRight.y} ${botRight.x},${botRight.y} ${botLeft.x},${botLeft.y}`;
+
+    const slopeAtX = (xPos: number) => {
+      const t = xPos / W;
+      return topLeft.y + t * (topRight.y - topLeft.y);
+    };
+
+    const glassTopLeftY = topLeft.y + inset;
+    const glassTopRightY = topRight.y + inset;
+    const glassBot = H - inset;
+    const glassLeft = inset;
+    const glassRight = W - inset;
+
+    const glassSlopeAtX = (xPos: number) => {
+      const t = (xPos - glassLeft) / (glassRight - glassLeft);
+      return glassTopLeftY + t * (glassTopRightY - glassTopLeftY);
+    };
+
+    const elements: JSX.Element[] = [];
+
+    elements.push(
+      <polygon key="frame" points={framePoints}
+        fill="#fafafa" stroke="#2d2d2d" strokeWidth={2.5 * ss} />
+    );
+
+    if (splitEnabled && splitPos > 0 && splitPos < W) {
+      const splitTopY = slopeAtX(splitPos);
+      const glassSplitLeft = Math.max(glassLeft, splitPos - inset * 0.5);
+      const glassSplitRight = Math.min(glassRight, splitPos + inset * 0.5);
+
+      const leftGlassPoints = `${glassLeft},${glassTopLeftY} ${glassSplitLeft},${glassSlopeAtX(glassSplitLeft)} ${glassSplitLeft},${glassBot} ${glassLeft},${glassBot}`;
+      const rightGlassPoints = `${glassSplitRight},${glassSlopeAtX(glassSplitRight)} ${glassRight},${glassTopRightY} ${glassRight},${glassBot} ${glassSplitRight},${glassBot}`;
+
+      elements.push(
+        <polygon key="glass-left" points={leftGlassPoints}
+          fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * ss} />
+      );
+      elements.push(
+        <polygon key="glass-right" points={rightGlassPoints}
+          fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * ss} />
+      );
+      elements.push(
+        <line key="split-line" x1={splitPos} y1={splitTopY} x2={splitPos} y2={H}
+          stroke="#2d2d2d" strokeWidth={2.5 * ss} />
+      );
+    } else {
+      const glassPoints = `${glassLeft},${glassTopLeftY} ${glassRight},${glassTopRightY} ${glassRight},${glassBot} ${glassLeft},${glassBot}`;
+      elements.push(
+        <polygon key="glass" points={glassPoints}
+          fill="#dce8f5" stroke="#2d2d2d" strokeWidth={1 * ss} />
+      );
+    }
+
+    return <g>{elements}</g>;
+  }
+
   if (category === "bay-window") {
     const cw = clamp(centerWidth > 0 ? centerWidth : W * 0.6, minPane, W - minPane * 2);
     const sideW = (W - cw) / 2;
@@ -675,6 +743,11 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
 
 const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ config }, ref) => {
   const { width: W, height: H, name, quantity, category, layout, customColumns } = config;
+  const isRaked = category === "raked-fixed";
+  const rakedLeftH = isRaked ? ((config as any).rakedLeftHeight || H) : H;
+  const rakedRightH = isRaked ? ((config as any).rakedRightHeight || H) : H;
+  const rakedSplitEnabled = isRaked ? ((config as any).rakedSplitEnabled || false) : false;
+  const rakedSplitPos = isRaked ? ((config as any).rakedSplitPosition || 0) : 0;
   const frameSize = getFrameSize(category);
 
   const noCustomCatsSet = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"];
@@ -694,7 +767,7 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
   const textGap = maxDim * 0.1;
   const padLeft = maxDim * 0.16;
   const padBottom = maxDim * 0.16;
-  const padRight = maxDim * 0.05;
+  const padRight = isRaked ? maxDim * 0.16 : maxDim * 0.05;
   const padTop = maxDim * 0.1;
 
   const fontSize = Math.max(maxDim * 0.028, 14);
@@ -787,20 +860,79 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
         </text>
       </g>
 
-      <g data-testid="dimension-height">
-        <line x1={-2} y1={0} x2={-dimGap - tickLen} y2={0} stroke="#555" strokeWidth={extStroke} />
-        <line x1={-2} y1={H} x2={-dimGap - tickLen} y2={H} stroke="#555" strokeWidth={extStroke} />
-        <line x1={-dimGap} y1={0} x2={-dimGap} y2={H} stroke="#555" strokeWidth={dimStroke} />
-        <line x1={-dimGap - tickLen} y1={tickLen} x2={-dimGap + tickLen} y2={-tickLen}
-          stroke="#555" strokeWidth={dimStroke} />
-        <line x1={-dimGap - tickLen} y1={H + tickLen} x2={-dimGap + tickLen} y2={H - tickLen}
-          stroke="#555" strokeWidth={dimStroke} />
-        <text x={-textGap} y={H / 2} textAnchor="middle"
-          fontSize={fontSize} fontWeight="bold" fill="#2d2d2d" fontFamily="sans-serif"
-          transform={`rotate(-90, ${-textGap}, ${H / 2})`}>
-          {H}
-        </text>
-      </g>
+      {isRaked ? (
+        <>
+          <g data-testid="dimension-left-height">
+            <line x1={-2} y1={H - rakedLeftH} x2={-dimGap - tickLen} y2={H - rakedLeftH} stroke="#555" strokeWidth={extStroke} />
+            <line x1={-2} y1={H} x2={-dimGap - tickLen} y2={H} stroke="#555" strokeWidth={extStroke} />
+            <line x1={-dimGap} y1={H - rakedLeftH} x2={-dimGap} y2={H} stroke="#555" strokeWidth={dimStroke} />
+            <line x1={-dimGap - tickLen} y1={H - rakedLeftH + tickLen} x2={-dimGap + tickLen} y2={H - rakedLeftH - tickLen}
+              stroke="#555" strokeWidth={dimStroke} />
+            <line x1={-dimGap - tickLen} y1={H + tickLen} x2={-dimGap + tickLen} y2={H - tickLen}
+              stroke="#555" strokeWidth={dimStroke} />
+            <text x={-textGap} y={H - rakedLeftH / 2} textAnchor="middle"
+              fontSize={fontSize} fontWeight="bold" fill="#2d2d2d" fontFamily="sans-serif"
+              transform={`rotate(-90, ${-textGap}, ${H - rakedLeftH / 2})`}>
+              {rakedLeftH}
+            </text>
+          </g>
+          <g data-testid="dimension-right-height">
+            <line x1={W + 2} y1={H - rakedRightH} x2={W + dimGap + tickLen} y2={H - rakedRightH} stroke="#555" strokeWidth={extStroke} />
+            <line x1={W + 2} y1={H} x2={W + dimGap + tickLen} y2={H} stroke="#555" strokeWidth={extStroke} />
+            <line x1={W + dimGap} y1={H - rakedRightH} x2={W + dimGap} y2={H} stroke="#555" strokeWidth={dimStroke} />
+            <line x1={W + dimGap - tickLen} y1={H - rakedRightH + tickLen} x2={W + dimGap + tickLen} y2={H - rakedRightH - tickLen}
+              stroke="#555" strokeWidth={dimStroke} />
+            <line x1={W + dimGap - tickLen} y1={H + tickLen} x2={W + dimGap + tickLen} y2={H - tickLen}
+              stroke="#555" strokeWidth={dimStroke} />
+            <text x={W + textGap} y={H - rakedRightH / 2} textAnchor="middle"
+              fontSize={fontSize} fontWeight="bold" fill="#2d2d2d" fontFamily="sans-serif"
+              transform={`rotate(90, ${W + textGap}, ${H - rakedRightH / 2})`}>
+              {rakedRightH}
+            </text>
+          </g>
+          {rakedSplitEnabled && rakedSplitPos > 0 && rakedSplitPos < W && (
+            <g data-testid="dimension-raked-split">
+              {(() => {
+                const secY = H + dimGap + textGap * 0.6;
+                const leftW = Math.round(rakedSplitPos);
+                const rightW = W - leftW;
+                return (
+                  <>
+                    <line x1={0} y1={secY - tickLen * 0.8} x2={0} y2={secY + tickLen * 0.8} stroke="#888" strokeWidth={extStroke * 0.7} />
+                    <line x1={rakedSplitPos} y1={secY - tickLen * 0.8} x2={rakedSplitPos} y2={secY + tickLen * 0.8} stroke="#888" strokeWidth={extStroke * 0.7} />
+                    <line x1={W} y1={secY - tickLen * 0.8} x2={W} y2={secY + tickLen * 0.8} stroke="#888" strokeWidth={extStroke * 0.7} />
+                    <line x1={0} y1={secY} x2={rakedSplitPos} y2={secY} stroke="#888" strokeWidth={dimStroke * 0.7} />
+                    <line x1={rakedSplitPos} y1={secY} x2={W} y2={secY} stroke="#888" strokeWidth={dimStroke * 0.7} />
+                    <text x={rakedSplitPos / 2} y={secY + textGap * 0.4} textAnchor="middle"
+                      fontSize={fontSize * 0.75} fontWeight="500" fill="#666" fontFamily="sans-serif">
+                      {leftW}
+                    </text>
+                    <text x={rakedSplitPos + rightW / 2} y={secY + textGap * 0.4} textAnchor="middle"
+                      fontSize={fontSize * 0.75} fontWeight="500" fill="#666" fontFamily="sans-serif">
+                      {rightW}
+                    </text>
+                  </>
+                );
+              })()}
+            </g>
+          )}
+        </>
+      ) : (
+        <g data-testid="dimension-height">
+          <line x1={-2} y1={0} x2={-dimGap - tickLen} y2={0} stroke="#555" strokeWidth={extStroke} />
+          <line x1={-2} y1={H} x2={-dimGap - tickLen} y2={H} stroke="#555" strokeWidth={extStroke} />
+          <line x1={-dimGap} y1={0} x2={-dimGap} y2={H} stroke="#555" strokeWidth={dimStroke} />
+          <line x1={-dimGap - tickLen} y1={tickLen} x2={-dimGap + tickLen} y2={-tickLen}
+            stroke="#555" strokeWidth={dimStroke} />
+          <line x1={-dimGap - tickLen} y1={H + tickLen} x2={-dimGap + tickLen} y2={H - tickLen}
+            stroke="#555" strokeWidth={dimStroke} />
+          <text x={-textGap} y={H / 2} textAnchor="middle"
+            fontSize={fontSize} fontWeight="bold" fill="#2d2d2d" fontFamily="sans-serif"
+            transform={`rotate(-90, ${-textGap}, ${H / 2})`}>
+            {H}
+          </text>
+        </g>
+      )}
 
       {hasColHeightOverrides && gridMetrics && (
         <g data-testid="dimension-col-heights">
