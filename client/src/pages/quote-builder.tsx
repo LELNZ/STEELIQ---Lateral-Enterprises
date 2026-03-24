@@ -3055,9 +3055,10 @@ export default function QuoteBuilder() {
                     {isSpecVisible("windZone") && (
                     <div>
                       <Label className="text-xs">Wind Zone</Label>
-                      <Select value={w.windZone || ""} onValueChange={(v) => form.setValue("windZone", v)}>
+                      <Select value={w.windZone || "__none__"} onValueChange={(v) => form.setValue("windZone", v === "__none__" ? "" : v)}>
                         <SelectTrigger data-testid="select-wind-zone"><SelectValue placeholder="Select wind zone" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
                           {WIND_ZONES.map((wz) => (
                             <SelectItem key={wz} value={wz}>{wz}</SelectItem>
                           ))}
@@ -3106,9 +3107,10 @@ export default function QuoteBuilder() {
                   <div className="space-y-2">
                     <div>
                       <Label className="text-xs">Liner Type</Label>
-                      <Select value={w.linerType || ""} onValueChange={(v) => form.setValue("linerType", v)}>
+                      <Select value={w.linerType || "__none__"} onValueChange={(v) => form.setValue("linerType", v === "__none__" ? "" : v)}>
                         <SelectTrigger data-testid="select-liner-type"><SelectValue placeholder="Select liner" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
                           {libLinerOptions.map((lt) => (
                             <SelectItem key={lt.value} value={lt.value}>{lt.label}</SelectItem>
                           ))}
@@ -3130,9 +3132,10 @@ export default function QuoteBuilder() {
                     {isSpecVisible("handleSet") && (
                     <div>
                       <Label className="text-xs">Handle</Label>
-                      <Select value={w.handleType || ""} onValueChange={(v) => form.setValue("handleType", v)}>
+                      <Select value={w.handleType || "__none__"} onValueChange={(v) => form.setValue("handleType", v === "__none__" ? "" : v)}>
                         <SelectTrigger data-testid="select-handle"><SelectValue placeholder="Select handle" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
                           {(libCategoryHandles.length > 0
                             ? libCategoryHandles.map((e) => ({ value: (e.data as any).value, label: (e.data as any).label }))
                             : libHandlesForCategoryLegacy(w.category || "windows-standard")
