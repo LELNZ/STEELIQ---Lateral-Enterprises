@@ -695,11 +695,15 @@ export default function ExecSummary() {
         wanzBarSource: item.wanzBarSource || "",
       };
 
+      const isRaked = item.category === "raked-fixed";
+      const rakedLH = isRaked ? (item.rakedLeftHeight || item.height || 0) : 0;
+      const rakedRH = isRaked ? (item.rakedRightHeight || item.height || 0) : 0;
+
       const resolvedSpecs: Record<string, string> = {
         itemRef: item.name,
         configuration: ip.configName,
         itemCategory: CATEGORY_LABELS[item.category] || item.category,
-        overallSize: `${item.width} x ${item.height}mm`,
+        overallSize: isRaked ? `${item.width} x ${rakedLH}/${rakedRH}mm` : `${item.width} x ${item.height}mm`,
         quantity: String(item.quantity || 1),
         width: `${item.width}mm`,
         height: `${item.height}mm`,
@@ -735,6 +739,7 @@ export default function ExecSummary() {
         quantity: item.quantity || 1,
         width: item.width,
         height: item.height,
+        ...(isRaked ? { category: "raked-fixed", rakedLeftHeight: rakedLH, rakedRightHeight: rakedRH } : {}),
         drawingImageKey,
         photos: ip.photos ?? [],
         specValues,

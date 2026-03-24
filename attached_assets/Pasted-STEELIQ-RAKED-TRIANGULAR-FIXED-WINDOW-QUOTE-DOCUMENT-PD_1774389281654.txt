@@ -1,0 +1,291 @@
+STEELIQ RAKED / TRIANGULAR FIXED WINDOW — QUOTE DOCUMENT / PDF RENDERING PHASE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow document-rendering phase for the already-implemented raked / triangular fixed-window feature.
+
+This is NOT:
+- a quote builder redesign
+- a geometry-engine rewrite
+- a pricing-engine redesign
+- a manufacturing/BOM/cut-list phase
+- an awning-in-raked phase
+- a broad PDF overhaul
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models.
+- Do not introduce schema creep unless absolutely required and explicitly justified.
+- Do not perform hidden refactors.
+- Do not widen scope beyond Quote Document / Preview / PDF rendering for current raked-fixed items.
+- Do not alter the core QuoteDocument -> QuoteRenderModel -> Preview/PDF contract unless strictly required for this feature and kept minimal.
+- Do not widen into manufacturing outputs.
+- Do not widen into sash/operable geometry logic.
+- Preserve backward compatibility for all existing rectangular items and current quote documents.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED STATE
+==================================================
+
+Current platform truth:
+
+- raked / triangular fixed-window support now exists in Quote Builder
+- left-rake and right-rake work
+- split and no-split work
+- trapezoidal area pricing is implemented
+- perimeter pricing is hardened for current raked-fixed frame roles
+- feature is fixed-only for now
+- builder visuals are in place
+
+Current remaining gap:
+
+- Quote Document / Preview / PDF output may not yet correctly render raked items
+- printed/client-facing quote schedule must catch up to builder/runtime truth
+
+This phase exists to make Quote Document / Preview / PDF correctly support current raked-fixed items.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Ensure current raked / triangular fixed-window items render correctly in:
+
+1. Quote Preview
+2. Quote Document / QuoteRenderModel
+3. PDF output
+
+The result must be client-facing, trustworthy, and consistent with current builder truth.
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY what is needed so that current raked-fixed items are correctly represented in preview/document/PDF output.
+
+This includes:
+- raked shape rendering
+- left/right orientation correctness
+- split/no-split visual correctness where current document style supports it
+- correct displayed dimensions/labels where already appropriate
+- correct area/schedule presentation if applicable to the existing document model
+
+Do NOT widen into:
+- new builder features
+- pricing changes
+- manufacturing annotations
+- workshop cut sizes
+- awning-in-raked support
+- all future non-rectangular shapes
+- a full redesign of the quote document layout
+
+==================================================
+PHASE A — AUDIT CURRENT DOCUMENT / PDF TRUTH
+==================================================
+
+Audit and report:
+
+1. how raked items currently flow from Quote Builder into QuoteDocument / QuoteRenderModel
+2. whether raked-specific fields are already present in the render path
+3. where Preview currently assumes rectangular geometry
+4. where PDF/document rendering currently assumes rectangular geometry
+5. what the minimum safe insertion point is to support raked-fixed rendering without breaking the locked QuoteDocument -> QuoteRenderModel -> Preview/PDF contract
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE DOCUMENT RENDER CONTRACT FOR RAKED-FIXED
+==================================================
+
+Implement a minimal, explicit render contract for current raked-fixed items.
+
+For this phase, the document/render contract must support:
+- category = raked-fixed
+- left height
+- right height
+- orientation implied by left/right heights
+- split enabled / split position where applicable
+- trapezoidal/raked visual representation
+
+Important:
+- do not blur builder geometry with manufacturing geometry
+- do not add workshop-only detail
+- do not invent unsupported dimension semantics
+- keep document rendering aligned with current quote-builder truth
+
+==================================================
+PHASE C — PREVIEW RENDERING
+==================================================
+
+Ensure Quote Preview correctly renders raked-fixed items.
+
+Requirements:
+- left-rake renders correctly
+- right-rake renders correctly
+- split/no-split render correctly
+- visual matches current builder meaning
+- no fallback rectangle placeholder for supported raked items
+
+Do NOT over-decorate.
+The preview should remain commercially readable and consistent with existing style.
+
+==================================================
+PHASE D — PDF / DOCUMENT RENDERING
+==================================================
+
+Ensure PDF/document rendering correctly represents current raked-fixed items.
+
+Requirements:
+- raked item shape is correctly represented in the item drawing/diagram area
+- left/right slope orientation is correct
+- split/no-split is reflected where current document style supports internal divisions
+- any displayed dimensions/labels remain semantically correct
+- printed result is client-facing appropriate
+
+Important:
+- do not try to create a full shop drawing
+- do not expose cut-list values
+- do not widen into manufacturing detail
+- keep it aligned with quote/schedule communication, not workshop output
+
+==================================================
+PHASE E — DIMENSION / LABEL DISCIPLINE
+==================================================
+
+If dimensions or labels are shown in preview/PDF:
+
+- overall dimensions must remain truthful
+- raked heights must be represented correctly
+- do not label glass size as outer frame size
+- do not show ambiguous dimensions
+- if the current document system cannot safely show all raked dimensions, show fewer dimensions rather than wrong ones
+
+Meaning correctness is more important than maximum detail.
+
+==================================================
+PHASE F — PRESERVE EXISTING RECTANGULAR OUTPUTS
+==================================================
+
+Must remain unchanged:
+- rectangular preview rendering
+- rectangular PDF/document rendering
+- quote totals
+- pricing
+- revision behavior
+- navigation
+- lifecycle/governance protections
+
+This phase must not regress existing quote output.
+
+==================================================
+PHASE G — KEEP THE LOCKED PIPELINE INTACT
+==================================================
+
+The QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked and must not be casually changed.
+
+If support for raked-fixed requires small additions, keep them:
+- minimal
+- explicit
+- backward-compatible
+- isolated to current raked-fixed rendering needs
+
+Do not redesign the document pipeline.
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm raked-fixed now renders in Quote Preview
+- confirm raked-fixed now renders in PDF/document output
+- confirm no manufacturing outputs were added
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- how preview/document behaved before
+- where rectangular assumptions existed
+- what insertion point was used for the safe fix
+
+4. DOCUMENT RENDER CONTRACT RESULT
+- what raked-fixed data now flows through the render pipeline
+- how left/right orientation is represented
+- how split/no-split is represented
+- how the change remained backward-compatible
+
+5. PREVIEW RESULT
+- how preview now renders left-rake
+- how preview now renders right-rake
+- how split/no-split appears
+- confirm no rectangle placeholder is used for supported raked items
+
+6. PDF / DOCUMENT RESULT
+- how the PDF/document now renders raked-fixed items
+- what dimensions/labels are shown
+- how the output remains client-facing and not manufacturing-grade
+
+7. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- left-rake preview works
+- right-rake preview works
+- split preview works
+- no-split preview works
+- PDF/document renders raked-fixed items correctly
+- rectangular preview is unchanged
+- rectangular PDF output is unchanged
+- no touched route returns 404
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing rectangular quote-builder items
+- quote editing
+- revision flow
+- pricing engine
+- preview/PDF structure for non-raked items
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- fixed only for now
+- awning-in-raked support not implemented
+- manufacturing outputs not implemented
+- any remaining PDF/document caveat still outside this scope
+
+10. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+11. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+12. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current raked-fixed support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform rendering phase.
+
+Do not broaden the phase.
+Do not redesign the locked document pipeline.
+Do not fake raked items with rectangular placeholders in supported paths.
+
+Your job is to make current raked-fixed items render truthfully and cleanly in Quote Preview and PDF/document output, while preserving the existing locked QuoteDocument -> QuoteRenderModel -> Preview/PDF architecture.
