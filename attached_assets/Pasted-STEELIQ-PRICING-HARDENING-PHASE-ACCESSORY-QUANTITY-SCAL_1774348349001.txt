@@ -1,0 +1,200 @@
+STEELIQ PRICING HARDENING PHASE — ACCESSORY QUANTITY SCALING (PER-UNIT HARDWARE)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on a live production system.
+
+This is a narrow pricing-correction phase.
+
+This is NOT:
+- a pricing engine redesign
+- a manufacturing system
+- a BOM system
+- a schema redesign
+
+NON-NEGOTIABLE RULES
+
+- Do not redesign architecture
+- Do not modify QuoteDocument → QuoteRenderModel → PDF pipeline structure
+- Do not introduce schema changes unless absolutely required
+- Do not perform hidden refactors
+- Do not mix this with lifecycle or navigation changes
+- Do not widen into manufacturing logic
+- Preserve backward compatibility
+- Treat current repo/runtime as truth
+
+--------------------------------------------------
+
+PROBLEM
+
+Hardware (e.g. handles, locks) is currently treated as a single selection per configuration.
+
+However, configurations have quantity (e.g. 2–10 units), and hardware should scale accordingly.
+
+Example:
+- 1 awning → 1 handle ✅
+- 3 awnings → should be 3 handles ❌ currently incorrect
+
+This causes:
+- underpricing
+- incorrect commercial output
+- incorrect real-world requirements
+
+--------------------------------------------------
+
+OBJECTIVE
+
+Ensure hardware pricing correctly scales with configuration quantity.
+
+Hardware must be treated as:
+→ per-unit accessory × quantity
+
+--------------------------------------------------
+
+PHASE A — AUDIT CURRENT PRICING FLOW
+
+You must identify:
+
+- where handle/lock pricing is calculated
+- how configuration quantity is represented
+- how totals are aggregated into QuoteDocument
+
+Explicitly report:
+- whether hardware is currently treated as flat cost
+- where quantity is ignored
+
+Do not assume — use repo truth.
+
+--------------------------------------------------
+
+PHASE B — DEFINE SCALING RULE (MINIMAL)
+
+Implement the following rule ONLY:
+
+IF:
+- a hardware item is selected (handle, lock, etc.)
+
+THEN:
+- total hardware cost = unit hardware cost × configuration quantity
+
+Do NOT:
+- introduce per-product variation rules
+- introduce tiered logic
+- introduce conditional pricing logic
+
+Keep it deterministic.
+
+--------------------------------------------------
+
+PHASE C — IMPLEMENT PRICING ADJUSTMENT
+
+Update pricing calculation so that:
+
+- handle cost scales with quantity
+- lock cost scales with quantity
+
+Requirements:
+- use existing quantity field
+- do not duplicate logic across files
+- integrate into existing pricing flow cleanly
+
+--------------------------------------------------
+
+PHASE D — UI / DISPLAY CONSISTENCY
+
+Ensure:
+
+- Quote Builder totals reflect scaled pricing
+- Quote Preview / PDF reflects correct totals
+
+DO NOT:
+- redesign UI
+- add new columns
+- expose internal calculation details
+
+--------------------------------------------------
+
+PHASE E — BACKWARD COMPATIBILITY
+
+Ensure:
+
+- existing saved quotes do not break
+- if recalculated, they reflect correct pricing
+- no migration required
+
+--------------------------------------------------
+
+PHASE F — DO NOT TOUCH THESE
+
+- QuoteDocument structure
+- render pipeline
+- revision system
+- lifecycle
+- navigation
+
+--------------------------------------------------
+
+REQUIRED DELIVERABLE FORMAT
+
+1. SUMMARY
+- what hardware now scales
+- confirm pricing now reflects quantity
+
+2. FILES CHANGED
+- list + reason
+
+3. CURRENT STATE ANALYSIS
+- how hardware pricing worked before
+- where quantity was ignored
+
+4. IMPLEMENTATION DETAILS
+- exact formula used
+- where logic was added
+
+5. RUNTIME VERIFICATION
+
+Confirm:
+- 1 unit → 1 handle cost
+- 3 units → 3 × handle cost
+- totals match expectations
+
+6. COMPATIBILITY CHECK
+
+Confirm no impact to:
+- PDF output structure
+- revisions
+- navigation
+- lifecycle
+
+7. KNOWN LIMITS
+
+- no per-product rules yet
+- no manufacturing output yet
+
+8. NEXT PHASE (ONE ONLY)
+
+- must be narrow
+
+9. OPEN RISKS / WATCH ITEMS
+
+Include:
+- accessory scaling still simplistic
+- app freeze after inactivity
+- PDF polish
+- navigation contract drift
+
+--------------------------------------------------
+
+FINAL EXECUTION STANDARD
+
+This is a pricing correctness phase.
+
+Goal:
+Ensure accessory costs reflect real-world quantities.
+
+Do it:
+- minimally
+- deterministically
+- safely
+
+Do not redesign — correct the calculation.
