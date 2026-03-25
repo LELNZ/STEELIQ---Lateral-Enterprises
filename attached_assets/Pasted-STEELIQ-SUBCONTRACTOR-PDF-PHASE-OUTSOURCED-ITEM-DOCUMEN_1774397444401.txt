@@ -1,0 +1,293 @@
+STEELIQ SUBCONTRACTOR PDF PHASE — OUTSOURCED ITEM DOCUMENT FOR THIRD-PARTY SUPPLIER COMMUNICATION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow subcontractor-document phase.
+
+This is NOT:
+- a client-facing quote PDF redesign
+- a procurement system redesign
+- a supplier-management module
+- a manufacturing pack phase
+- a BOM/cut-list generation phase
+- a broad document architecture rewrite
+- a lifecycle/workflow redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond subcontractor-facing PDF support for outsourced items.
+- Do not change the client-facing QuoteDocument -> QuoteRenderModel -> Preview/PDF contract except where strictly necessary to keep separation clean.
+- Do not expose internal executive-summary data in the client-facing quote PDF.
+- Do not mix manufacturing-pack logic into this phase.
+- Do not redesign navigation or lifecycle behavior.
+- Preserve backward compatibility for existing quotes/items and existing client-facing PDFs.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED STATE
+==================================================
+
+Current platform truth:
+
+- items can now be marked as outsourced
+- outsourced cost and outsourced sell can be entered per item
+- executive summary totals and margin handling are commercially safe
+- outsourced handling is currently internal-commercial only
+- client-facing quote PDFs remain separate and unchanged
+- subcontractor PDF / subcontractor-facing document path still needs polish and/or structured support
+
+Business need now:
+- create a subcontractor-facing PDF/document path for outsourced items
+- support communication with third-party suppliers/fabricators
+- keep this separate from the client-facing quote PDF and internal executive-summary-only commercial data
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Add or harden a subcontractor-facing PDF/document output for outsourced items so that SteelIQ can generate a usable supplier/subcontractor document for third-party pricing/production communication.
+
+The document must:
+- be based on outsourced items
+- be operationally usable
+- avoid leaking inappropriate internal-only commercial fields unless explicitly intended for this subcontractor context
+- remain clearly separate from the client-facing quote PDF
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY what is needed for a subcontractor-facing PDF/document for outsourced items.
+
+This phase may include:
+- selecting outsourced items for inclusion
+- rendering those outsourced items cleanly in a subcontractor PDF
+- including item geometry / schedule / dimensions already available in current system truth
+- including subcontractor-facing commercial fields only if appropriate for this document type
+- improving branding/polish of the subcontractor PDF if it already exists
+
+Do NOT widen into:
+- full procurement workflow
+- supplier quote comparison tools
+- purchase orders
+- manufacturing pack generation
+- BOM/cut-list exports
+- client-facing quote document redesign
+- broad PDF template overhaul across all document types
+
+==================================================
+PHASE A — AUDIT CURRENT SUBCONTRACTOR DOCUMENT PATH
+==================================================
+
+Audit and report:
+
+1. whether a subcontractor PDF/document path already exists
+2. how it is currently generated
+3. what data it currently includes
+4. whether outsourced items currently flow into it at all
+5. how it is currently separated from client-facing quote PDF generation
+6. what the minimum safe insertion point is for outsourced-item subcontractor output
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE SUBCONTRACTOR DOCUMENT CONTRACT
+==================================================
+
+Implement a clear document contract for this phase.
+
+The subcontractor PDF/document should be:
+- clearly subcontractor/supplier facing
+- distinct from the client-facing quote PDF
+- distinct from the internal executive summary
+
+For outsourced items, determine and implement the minimum appropriate document content.
+
+At minimum include what is operationally required, such as:
+- item identification
+- category/type
+- key dimensions
+- drawing/preview image where supported
+- quantity
+- relevant notes/specs already available in current truth
+
+Commercial data:
+- be careful and explicit
+- include subcontractor-facing buy/target/request values only if appropriate to this document’s purpose
+- do NOT blindly expose all internal commercial fields
+- if current business purpose is “send to subcontractor for them to quote/build,” structure the content accordingly and report exactly what was included
+
+If there is ambiguity, prefer a minimal supplier-facing schedule over exposing internal-only data.
+
+==================================================
+PHASE C — OUTSOURCED ITEM FILTERING / SELECTION
+==================================================
+
+Implement safe subcontractor-document selection behavior.
+
+At minimum:
+- outsourced items must be identifiable for inclusion
+- in-house items must not accidentally appear in the subcontractor PDF unless explicitly intended by current repo truth
+- if the current UX already has a subcontractor document trigger, reuse it cleanly
+- if minimal UI is required to generate the document for outsourced items, keep it narrow and operationally usable
+
+Do NOT build a full document-management UI.
+
+==================================================
+PHASE D — DOCUMENT RENDERING
+==================================================
+
+Ensure subcontractor-facing PDF/document output renders outsourced items cleanly.
+
+Requirements:
+- dimensions and geometry must remain truthful
+- raked items, if already supported in current rendering paths, should render correctly here too
+- document should be readable and professional
+- branding/polish should be improved where the current subcontractor path is visibly weak
+
+Do NOT:
+- turn this into a workshop pack
+- expose cut-list details unless they already exist and are clearly intended for this document type
+- redesign the whole PDF engine
+
+==================================================
+PHASE E — COMMERCIAL SEPARATION
+==================================================
+
+Maintain strict separation between:
+- client-facing quote document
+- internal executive summary
+- subcontractor-facing document
+
+Rules:
+- client-facing quote PDF must remain unchanged unless absolutely required by a shared harmless fix
+- internal margin/cost breakdown must not leak into the wrong document
+- subcontractor-facing document should include only the commercial data appropriate for that purpose
+
+If the subcontractor PDF is intended to request supplier pricing:
+- do not include internal profit/margin
+- do not include internal executive-summary-only breakdowns
+
+Report exactly what commercial fields the subcontractor PDF now includes and why.
+
+==================================================
+PHASE F — PRESERVE EXISTING BEHAVIOR
+==================================================
+
+Must remain unchanged unless directly required for this phase:
+
+- existing client-facing quote PDF/document behavior
+- executive summary behavior
+- in-house item pricing behavior
+- outsourced executive-summary commercial logic
+- quote builder save/update flow
+- revision behavior
+- lifecycle/governance protections
+- navigation
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm subcontractor-facing PDF/document support for outsourced items
+- confirm client-facing quote PDF remains separate
+- confirm internal executive-summary-only data is not improperly leaked
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- what subcontractor document path existed before
+- what it included before
+- what was missing before
+- what insertion point was used for the safe fix
+
+4. SUBCONTRACTOR DOCUMENT CONTRACT RESULT
+- what outsourced items now contribute to the subcontractor PDF
+- what dimensions/drawings/specs are included
+- what commercial fields are included
+- why those commercial fields are appropriate for this document type
+
+5. FILTER / SELECTION RESULT
+- how outsourced items are selected/included
+- how in-house items are excluded or separated
+- what UI/trigger behavior is used
+
+6. DOCUMENT RENDER RESULT
+- how subcontractor PDF output now looks/behaves
+- how outsourced items render
+- whether raked items render correctly if applicable
+- what branding/polish improvements were made
+
+7. COMMERCIAL SEPARATION RESULT
+- confirm client-facing quote PDF is unchanged
+- confirm executive summary remains internal
+- confirm subcontractor document does not leak internal-only margin/profit data
+
+8. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- outsourced items appear correctly in subcontractor PDF
+- in-house items are not incorrectly included
+- subcontractor PDF renders correctly
+- raked outsourced items render correctly if supported
+- client-facing quote PDF remains unchanged
+- executive summary remains unchanged
+- no touched route returns 404
+
+9. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing in-house quote items
+- quote editing
+- revision flow
+- pricing engine
+- client-facing QuoteDocument / Preview / PDF structure
+- executive summary internal-commercial behavior
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+10. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- what subcontractor document still does NOT do
+- whether manufacturing outputs are still out of scope
+- whether procurement workflow is still out of scope
+- any remaining subcontractor-document caveat still outside this phase
+
+11. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+12. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+13. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- any remaining subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform subcontractor-document phase.
+
+Do not broaden the phase.
+Do not blur client-facing, internal, and subcontractor-facing documents together.
+Do not leak internal-only commercial data into the wrong output.
+
+Your job is to create or harden a clean subcontractor-facing PDF/document path for outsourced items that is operationally useful, commercially disciplined, and clearly separated from client-facing and internal document flows.

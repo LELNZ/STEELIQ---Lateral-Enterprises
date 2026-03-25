@@ -37,7 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
 import LifecyclePanel from "@/components/lifecycle-panel";
-import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions, type ScopeFields } from "@/lib/subcontractor-pdf";
+import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions, type ScopeFields, type ItemFilter } from "@/lib/subcontractor-pdf";
 import { svgToPngBlob } from "@/lib/export-png";
 
 function calcSqm(width: number, height: number, quantity: number, item?: any): number {
@@ -132,6 +132,7 @@ export default function ExecSummary() {
   const [subconIncludeDrawings, setSubconIncludeDrawings] = useState(true);
   const [subconIncludeSitePhotos, setSubconIncludeSitePhotos] = useState(true);
   const [subconIncludePricingReturn, setSubconIncludePricingReturn] = useState(true);
+  const [subconItemFilter, setSubconItemFilter] = useState<ItemFilter>("all");
   const [subconGenerating, setSubconGenerating] = useState(false);
   const [subconScopeFields, setSubconScopeFields] = useState<ScopeFields>({
     sealant: "included",
@@ -948,6 +949,9 @@ export default function ExecSummary() {
           notes: ip.item.notes || undefined,
           drawingDataUrl,
           photoDataUrls: photoDataUrls.length > 0 ? photoDataUrls : undefined,
+          fulfilmentSource: (ip.item as any).fulfilmentSource || "in-house",
+          rakedLeftHeight: ip.item.category === "raked-fixed" ? ((ip.item as any).rakedLeftHeight || ip.item.height || 0) : undefined,
+          rakedRightHeight: ip.item.category === "raked-fixed" ? ((ip.item as any).rakedRightHeight || ip.item.height || 0) : undefined,
         });
       }
 
@@ -961,6 +965,7 @@ export default function ExecSummary() {
         dateIssued: new Date().toLocaleDateString("en-NZ"),
         preparedBy: undefined,
         items: pdfItems,
+        itemFilter: subconItemFilter,
         includeDrawings: subconIncludeDrawings,
         includeSitePhotos: subconIncludeSitePhotos,
         includePricingReturn: subconIncludePricingReturn,
@@ -968,7 +973,8 @@ export default function ExecSummary() {
 
       const pdf = await generateSubcontractorPdf(opts);
       const scopeLabel = subconScopeMode === "renovation" ? "Renovation" : "NewBuild";
-      const filename = `${(job.name || "Job").replace(/[^a-zA-Z0-9_-]/g, "_")}_SubconScope_${scopeLabel}.pdf`;
+      const filterSuffix = subconItemFilter === "outsourced_only" ? "_Outsourced" : subconItemFilter === "in_house_only" ? "_InHouse" : "";
+      const filename = `${(job.name || "Job").replace(/[^a-zA-Z0-9_-]/g, "_")}_SubconScope_${scopeLabel}${filterSuffix}.pdf`;
       pdf.save(filename);
       toast({ title: "Subcontractor PDF downloaded successfully" });
       setSubconDialogOpen(false);
@@ -1137,6 +1143,31 @@ export default function ExecSummary() {
                   <Label htmlFor="wp-io" className="cursor-pointer text-sm">Install only</Label>
                 </div>
               </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Item Filter</Label>
+              <RadioGroup value={subconItemFilter} onValueChange={(v) => setSubconItemFilter(v as ItemFilter)} className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="all" id="filter-all" data-testid="radio-filter-all" />
+                  <Label htmlFor="filter-all" className="cursor-pointer text-sm">All items</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="outsourced_only" id="filter-outsourced" data-testid="radio-filter-outsourced" />
+                  <Label htmlFor="filter-outsourced" className="cursor-pointer text-sm">Outsourced items only</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="in_house_only" id="filter-inhouse" data-testid="radio-filter-inhouse" />
+                  <Label htmlFor="filter-inhouse" className="cursor-pointer text-sm">In-house items only</Label>
+                </div>
+              </RadioGroup>
+              <p className="text-xs text-muted-foreground">
+                {subconItemFilter === "outsourced_only"
+                  ? "Only outsourced items will appear in the subcontractor document"
+                  : subconItemFilter === "in_house_only"
+                    ? "Only in-house items will appear in the document"
+                    : "All items will be included regardless of fulfilment source"}
+              </p>
             </div>
 
             <div className="space-y-3">
