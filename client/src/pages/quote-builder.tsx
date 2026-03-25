@@ -70,6 +70,76 @@ function getCategoryLabel(cat: string) {
   return CATEGORY_OPTIONS.find((c) => c.value === cat)?.label || cat;
 }
 
+type OpeningDirectionValue = "open-in" | "open-out" | "sliding-left" | "sliding-right" | "fold-left" | "fold-right" | "none";
+
+function getOpeningDirectionOptions(category: string): { value: OpeningDirectionValue; label: string }[] {
+  if (["entrance-door", "hinge-door", "french-door"].includes(category)) {
+    return [
+      { value: "open-in", label: "Open In" },
+      { value: "open-out", label: "Open Out" },
+    ];
+  }
+  if (["sliding-window", "sliding-door"].includes(category)) {
+    return [
+      { value: "sliding-left", label: "Sliding Left" },
+      { value: "sliding-right", label: "Sliding Right" },
+    ];
+  }
+  if (category === "bifold-door") {
+    return [
+      { value: "fold-left", label: "Fold Left" },
+      { value: "fold-right", label: "Fold Right" },
+    ];
+  }
+  if (category === "stacker-door") {
+    return [
+      { value: "sliding-left", label: "Sliding Left" },
+      { value: "sliding-right", label: "Sliding Right" },
+    ];
+  }
+  return [];
+}
+
+function hasOpeningDirection(category: string, windowType?: string): boolean {
+  if (category === "windows-standard") {
+    return windowType !== "fixed";
+  }
+  return getOpeningDirectionOptions(category).length > 0;
+}
+
+function getOpeningDirectionOptionsForWindow(category: string, windowType?: string): { value: OpeningDirectionValue; label: string }[] {
+  if (category === "windows-standard" && windowType && windowType !== "fixed") {
+    return [
+      { value: "open-in", label: "Open In" },
+      { value: "open-out", label: "Open Out" },
+    ];
+  }
+  return getOpeningDirectionOptions(category);
+}
+
+function getOpeningDirectionLabel(value: string): string {
+  const map: Record<string, string> = {
+    "open-in": "Open In",
+    "open-out": "Open Out",
+    "sliding-left": "Sliding Left",
+    "sliding-right": "Sliding Right",
+    "fold-left": "Fold Left",
+    "fold-right": "Fold Right",
+  };
+  return map[value] || "";
+}
+
+function getDefaultOpeningDirection(category: string, windowType?: string): OpeningDirectionValue {
+  if (category === "windows-standard") {
+    return windowType && windowType !== "fixed" ? "open-out" : "none";
+  }
+  if (category === "entrance-door") return "open-in";
+  if (["hinge-door", "french-door"].includes(category)) return "open-out";
+  if (["sliding-window", "sliding-door", "stacker-door"].includes(category)) return "sliding-right";
+  if (category === "bifold-door") return "fold-left";
+  return "none";
+}
+
 function getLayoutSummary(config: QuoteItem) {
   if (config.layout === "custom") {
     const cols = config.customColumns || [];
@@ -177,6 +247,7 @@ const defaultValues: InsertQuoteItem = {
   windowType: "fixed",
   hingeSide: "left",
   openDirection: "out",
+  openingDirection: "none",
   halfSolid: false,
   panels: 3,
   sidelightWidth: 400,
@@ -458,7 +529,7 @@ export default function QuoteBuilder() {
 
   const specGroups = useMemo(() => {
     const groups: Record<string, SpecDictionaryEntry[]> = {};
-    const layoutKeys = new Set(["layout","windowType","hingeSide","openDirection","halfSolid","panels",
+    const layoutKeys = new Set(["layout","windowType","hingeSide","openDirection","openingDirection","halfSolid","panels",
       "sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"]);
     for (const spec of specDictionary) {
       if (layoutKeys.has(spec.key)) continue;
@@ -469,7 +540,7 @@ export default function QuoteBuilder() {
   }, [specDictionary]);
 
   const isSpecVisible = (key: string) => showAllSpecs || defaultSpecKeys.includes(key);
-  const hiddenSpecCount = specDictionary.filter(s => !defaultSpecKeys.includes(s.key) && !["layout","windowType","hingeSide","openDirection","halfSolid","panels","sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"].includes(s.key)).length;
+  const hiddenSpecCount = specDictionary.filter(s => !defaultSpecKeys.includes(s.key) && !["layout","windowType","hingeSide","openDirection","openingDirection","halfSolid","panels","sidelightEnabled","sidelightSide","sidelightWidth","doorSplit","doorSplitHeight","bifoldLeftCount","showLegend"].includes(s.key)).length;
 
   const libFrameTypesForCategory = useCallback((cat: string) => {
     const fromDb = libFrameTypes.filter((e) => {
@@ -841,6 +912,7 @@ export default function QuoteBuilder() {
     form.setValue("windowType", "fixed");
     form.setValue("hingeSide", "left");
     form.setValue("openDirection", category === "entrance-door" ? "in" : "out");
+    form.setValue("openingDirection", getDefaultOpeningDirection(category));
     form.setValue("halfSolid", false);
     form.setValue("sidelightWidth", 400);
     form.setValue("sidelightEnabled", true);
@@ -889,6 +961,16 @@ export default function QuoteBuilder() {
     form.setValue("lockType", "");
     form.setValue("configurationId", "");
   }, [category]);
+
+  const prevWindowTypeRef = useRef(w.windowType);
+  useEffect(() => {
+    if (skipCategoryResetRef.current) return;
+    if (prevWindowTypeRef.current === w.windowType) return;
+    prevWindowTypeRef.current = w.windowType;
+    if (category === "windows-standard") {
+      form.setValue("openingDirection", getDefaultOpeningDirection("windows-standard", w.windowType));
+    }
+  }, [w.windowType, category]);
 
   useEffect(() => {
     // When library data arrives, re-validate the current frameType against
@@ -2397,6 +2479,20 @@ export default function QuoteBuilder() {
                   </div>
                 )}
 
+                {hasOpeningDirection(category, w.windowType) && !isCustom && (
+                  <div>
+                    <Label className="text-xs">Opening</Label>
+                    <Select value={w.openingDirection || "none"} onValueChange={(v) => form.setValue("openingDirection", v as any)}>
+                      <SelectTrigger data-testid="select-opening-direction"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {getOpeningDirectionOptionsForWindow(category, w.windowType).map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 {isEntrance && (
                   <div className="flex items-center gap-2 pt-1">
                     <Checkbox id="sidelightEnabled" checked={w.sidelightEnabled}
@@ -3659,10 +3755,15 @@ export default function QuoteBuilder() {
         <div className={isLargeScreen
           ? `flex-1 min-h-0 flex flex-col ${quoteListPosition === "right" ? "lg:flex-row" : "lg:flex-col"} overflow-hidden`
           : "flex-1 min-h-0 flex flex-col overflow-hidden"}>
-          <div className="flex-1 flex items-center justify-center p-4 sm:p-6 min-h-0 bg-muted/30 dark:bg-muted/10">
-            <div className="w-full h-full max-w-3xl max-h-[600px] rounded-lg overflow-hidden shadow-sm ring-1 ring-border/50 bg-background" data-testid="drawing-preview">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 min-h-0 bg-muted/30 dark:bg-muted/10">
+            <div className="w-full flex-1 max-w-3xl max-h-[600px] rounded-lg overflow-hidden shadow-sm ring-1 ring-border/50 bg-background" data-testid="drawing-preview">
               <DrawingCanvas ref={drawingRef} config={drawingConfig} />
             </div>
+            {hasOpeningDirection(category, w.windowType) && w.openingDirection && w.openingDirection !== "none" && (
+              <p className="mt-2 text-sm font-medium text-muted-foreground" data-testid="text-opening-direction-label">
+                Opening: {getOpeningDirectionLabel(w.openingDirection)}
+              </p>
+            )}
           </div>
 
           {!isLargeScreen && (
@@ -3756,6 +3857,9 @@ export default function QuoteBuilder() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {getLayoutSummary(iwp.item)}
+                          {iwp.item.openingDirection && iwp.item.openingDirection !== "none" && hasOpeningDirection(iwp.item.category, iwp.item.windowType) && (
+                            <span className="ml-1 text-primary/70">• {getOpeningDirectionLabel(iwp.item.openingDirection)}</span>
+                          )}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{iwp.item.width} x {iwp.item.height}</TableCell>
                         <TableCell className="text-center font-mono text-sm" data-testid={`text-sqm-${iwp.uiId}`}>

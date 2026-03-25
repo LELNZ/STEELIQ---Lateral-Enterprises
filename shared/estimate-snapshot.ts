@@ -18,6 +18,7 @@ const snapshotItemSchema = z.object({
   category: z.string().optional(),
   rakedLeftHeight: z.number().optional(),
   rakedRightHeight: z.number().optional(),
+  openingDirection: z.string().optional(),
   drawingImageKey: z.string().optional(),
   photos: z.array(snapshotPhotoSchema).optional().default([]),
   specValues: z.record(z.string(), z.any()).default({}),

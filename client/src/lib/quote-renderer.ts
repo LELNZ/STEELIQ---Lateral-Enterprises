@@ -81,6 +81,7 @@ export interface RenderScheduleItem {
   title: string;
   dimensionLabel: string;
   quantityLabel: string;
+  openingDirectionLabel?: string;
   visibleSpecs: RenderSpecEntry[];
   media: RenderItemMedia;
 }
@@ -188,6 +189,17 @@ function buildScheduleItem(
 
   const drawingUrl = item.drawingImageKey ? `/api/drawing-images/${item.drawingImageKey}` : null;
 
+  const openingDirMap: Record<string, string> = {
+    "open-in": "Open In",
+    "open-out": "Open Out",
+    "sliding-left": "Sliding Left",
+    "sliding-right": "Sliding Right",
+    "fold-left": "Fold Left",
+    "fold-right": "Fold Right",
+  };
+  const odVal = item.openingDirection;
+  const openingDirectionLabel = odVal && odVal !== "none" && openingDirMap[odVal] ? openingDirMap[odVal] : undefined;
+
   return {
     index,
     itemNumber: item.itemNumber || index + 1,
@@ -197,6 +209,7 @@ function buildScheduleItem(
       ? `${item.width}mm W × ${item.rakedLeftHeight}/${item.rakedRightHeight}mm H (L/R)`
       : `${item.width}mm x ${item.height}mm`,
     quantityLabel: `Qty: ${item.quantity || 1}`,
+    openingDirectionLabel,
     visibleSpecs,
     media: {
       drawingUrl,

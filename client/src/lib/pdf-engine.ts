@@ -985,7 +985,7 @@ async function renderScheduleItem(
   pdf.setTextColor(COLOR_BLACK);
   pdf.text(item.title, LEFT_MARGIN + pad, y + 3.5);
 
-  const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}`;
+  const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}${item.openingDirectionLabel ? `  \u00B7  ${item.openingDirectionLabel}` : ""}`;
   pdf.setFont(FONT_NORMAL, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(COLOR_MUTED);
