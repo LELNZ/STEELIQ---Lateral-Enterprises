@@ -135,6 +135,7 @@ export default function ExecSummary() {
   const [subconItemFilter, setSubconItemFilter] = useState<ItemFilter>("all");
   const [subconDocPurpose, setSubconDocPurpose] = useState<DocumentPurpose>("install_scope");
   const [subconGenerating, setSubconGenerating] = useState(false);
+  const [subconProgress, setSubconProgress] = useState("");
   const [subconScopeFields, setSubconScopeFields] = useState<ScopeFields>({
     sealant: "included",
     flashings: "included",
@@ -600,6 +601,7 @@ export default function ExecSummary() {
     let outsourcedSellTotal = 0;
     let outsourcedCount = 0;
     let outsourcedIncompleteCount = 0;
+    let gosRevenueTotal = 0;
 
     for (const ip of itemPricings) {
       const isOutsourced = (ip.item.fulfilmentSource || "in-house") === "outsourced";
@@ -625,6 +627,9 @@ export default function ExecSummary() {
           totalLabor += ip.pricing.laborCostNzd;
           totalWeight += ip.pricing.totalWeightKg;
           totalLaborHours += ip.pricing.laborHours;
+          if (ip.pricing.gosSellNzd > 0) {
+            gosRevenueTotal += ip.pricing.gosSellNzd;
+          }
         }
       }
     }
@@ -655,6 +660,7 @@ export default function ExecSummary() {
       delivCost, delivSell, removalCost, removalSell, rubbishCost, rubbishSell,
       grandTotalCost, totalSaleExGst, gstAmount, totalSaleIncGst,
       outsourcedCostTotal, outsourcedSellTotal, outsourcedCount, outsourcedIncompleteCount,
+      gosRevenueTotal,
     };
   }, [itemPricings, installEnabled, installationTotals, deliveryTotals, removalEnabled, removalTotals, rubbishEnabled, rubbishTotals, gstRate]);
 
@@ -886,13 +892,19 @@ export default function ExecSummary() {
   };
 
   const handleSubcontractorPdf = async () => {
-    if (!job || itemPricings.length === 0) return;
+    if (!job || itemPricings.length === 0 || subconGenerating) return;
     setSubconGenerating(true);
+    setSubconProgress("");
     toast({ title: subconDocPurpose === "supply_rfq" ? "Generating Supply / Fabrication RFQ PDF..." : "Generating Subcontractor Install Scope PDF..." });
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
     try {
       const pdfItems: SubcontractorPdfItem[] = [];
       for (let i = 0; i < itemPricings.length; i++) {
         const ip = itemPricings[i];
+        setSubconProgress(`Preparing item ${i + 1} of ${itemPricings.length}...`);
+        if (i > 0 && i % 2 === 0) {
+          await new Promise((r) => setTimeout(r, 0));
+        }
         let drawingDataUrl: string | null = null;
         if (subconIncludeDrawings) {
           try {
@@ -979,7 +991,7 @@ export default function ExecSummary() {
         includePricingReturn: subconIncludePricingReturn,
       };
 
-      const pdf = await generateSubcontractorPdf(opts);
+      const pdf = await generateSubcontractorPdf(opts, setSubconProgress);
       const purposeLabel = subconDocPurpose === "supply_rfq" ? "SupplyRFQ" : "InstallScope";
       const scopeLabel = subconDocPurpose === "install_scope" ? `_${subconScopeMode === "renovation" ? "Renovation" : "NewBuild"}` : "";
       const filterSuffix = subconItemFilter === "outsourced_only" ? "_Outsourced" : subconItemFilter === "in_house_only" ? "_InHouse" : "";
@@ -1076,7 +1088,7 @@ export default function ExecSummary() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setSubconDialogOpen(true)} disabled={itemPricings.length === 0} data-testid="menu-subcontractor-pdf">
                 <HardHat className="w-4 h-4 mr-2" />
-                Subcontractor Install Scope (PDF)
+                Subcontractor Document (PDF)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1124,11 +1136,11 @@ export default function ExecSummary() {
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Document Purpose</Label>
               <RadioGroup value={subconDocPurpose} onValueChange={(v) => setSubconDocPurpose(v as DocumentPurpose)} className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 border ${subconDocPurpose === "install_scope" ? "border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/30" : "border-transparent"}`}>
                   <RadioGroupItem value="install_scope" id="purpose-install" data-testid="radio-purpose-install" />
-                  <Label htmlFor="purpose-install" className="cursor-pointer text-sm">Install Scope</Label>
+                  <Label htmlFor="purpose-install" className="cursor-pointer text-sm">Subcontractor Install Scope</Label>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 border ${subconDocPurpose === "supply_rfq" ? "border-violet-300 bg-violet-50/50 dark:border-violet-700 dark:bg-violet-950/30" : "border-transparent"}`}>
                   <RadioGroupItem value="supply_rfq" id="purpose-rfq" data-testid="radio-purpose-rfq" />
                   <Label htmlFor="purpose-rfq" className="cursor-pointer text-sm">Supply / Fabrication RFQ</Label>
                 </div>
@@ -1296,11 +1308,24 @@ export default function ExecSummary() {
               </div>}
             </div>
           </div>
+          <div className={`rounded-md border p-3 text-xs space-y-1 ${subconDocPurpose === "supply_rfq" ? "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800" : "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800"}`} data-testid="subcon-purpose-summary">
+            <p className={`font-semibold text-sm ${subconDocPurpose === "supply_rfq" ? "text-violet-700 dark:text-violet-400" : "text-blue-700 dark:text-blue-400"}`}>
+              {subconDocPurpose === "supply_rfq" ? "Supply / Fabrication RFQ" : "Subcontractor Install Scope"}
+            </p>
+            <p className="text-muted-foreground">
+              {subconDocPurpose === "supply_rfq"
+                ? "This document requests pricing from a supplier or fabricator. It does NOT include installation scope, removal, or site work details."
+                : `Installation scope document (${subconScopeMode === "renovation" ? "Renovation" : "New Build"}) — ${subconWorkPackage === "removal_disposal_install" ? "removal + disposal + install" : "install only"}. No commercial pricing is disclosed.`}
+            </p>
+            <p className="text-muted-foreground">
+              Items: {subconItemFilter === "outsourced_only" ? "Outsourced only" : subconItemFilter === "in_house_only" ? "In-house only" : "All items"}
+            </p>
+          </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setSubconDialogOpen(false)} data-testid="button-subcon-cancel">Cancel</Button>
-            <Button size="sm" onClick={handleSubcontractorPdf} disabled={subconGenerating} data-testid="button-subcon-generate">
+            <Button size="sm" onClick={handleSubcontractorPdf} disabled={subconGenerating} data-testid="button-subcon-generate" className={subconDocPurpose === "supply_rfq" ? "bg-violet-600 hover:bg-violet-700" : ""}>
               <Download className="w-4 h-4 mr-1.5" />
-              {subconGenerating ? "Generating..." : "Generate PDF"}
+              {subconGenerating ? (subconProgress || "Generating...") : subconDocPurpose === "supply_rfq" ? "Generate Supply RFQ" : "Generate Install Scope PDF"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1378,6 +1403,14 @@ export default function ExecSummary() {
                   </TableCell>
                   <TableCell className="text-right text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="text-outsourced-cost">${fmt(totals.outsourcedCostTotal)}</TableCell>
                   <TableCell className="text-right text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="text-outsourced-sell">${fmt(totals.outsourcedSellTotal)}</TableCell>
+                </TableRow>
+              )}
+              {totals.gosRevenueTotal > 0 && (
+                <TableRow className="bg-green-50/50 dark:bg-green-950/10" data-testid="row-gos-revenue-total">
+                  <TableCell className="text-sm font-medium text-green-700 dark:text-green-400" colSpan={3}>
+                    GOS Revenue (incl. in Sale Total above)
+                  </TableCell>
+                  <TableCell className="text-right text-sm font-medium text-green-700 dark:text-green-400" data-testid="text-gos-revenue-total">${fmt(totals.gosRevenueTotal)}</TableCell>
                 </TableRow>
               )}
               <TableRow data-testid="row-installation">
@@ -2085,7 +2118,12 @@ export default function ExecSummary() {
                         <TableCell className="text-right text-xs">{ip.item.width}×{ip.item.height}</TableCell>
                         <TableCell className="text-right">{ip.sqm.toFixed(2)}</TableCell>
                         <TableCell className="text-right font-medium">{outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(netCost)}`}</TableCell>
-                        <TableCell className="text-right font-medium text-primary">{outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(salePrice)}`}</TableCell>
+                        <TableCell className="text-right font-medium text-primary">
+                          {outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(salePrice)}`}
+                          {!isOutsourced && ip.pricing && ip.pricing.gosSellNzd > 0 && (
+                            <span className="block text-[10px] text-green-600 dark:text-green-400 font-normal" data-testid={`text-gos-revenue-${idx}`}>incl. GOS ${fmt(ip.pricing.gosSellNzd)}</span>
+                          )}
+                        </TableCell>
                         <TableCell className={`text-right font-bold ${marginColor}`}>
                           {outsourcedIncomplete ? "Incomplete" : hasPricing ? `$${fmt(margin)} (${marginPct.toFixed(1)}%)` : "N/A"}
                         </TableCell>
@@ -2150,6 +2188,12 @@ export default function ExecSummary() {
                                 <div>
                                   <span className="text-muted-foreground block">Wanz Bar (NZD)</span>
                                   <span className="font-medium">${fmt(ip.pricing.wanzBarCostNzd)}</span>
+                                </div>
+                              )}
+                              {ip.pricing.gosSellNzd > 0 && (
+                                <div data-testid={`detail-gos-sell-${idx}`}>
+                                  <span className="text-muted-foreground block">GOS Revenue (NZD)</span>
+                                  <span className="font-medium text-green-600 dark:text-green-400">${fmt(ip.pricing.gosSellNzd)}</span>
                                 </div>
                               )}
                               <div>

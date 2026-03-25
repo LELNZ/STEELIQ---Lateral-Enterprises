@@ -11,7 +11,7 @@ export interface PricingBreakdown {
   handleCostNzd: number;
   lockCostNzd: number;
   wanzBarCostNzd: number;
-  gosCostNzd: number;
+  gosSellNzd: number;
   totalWeightKg: number;
   laborHours: number;
   netCostNzd: number;
@@ -410,12 +410,13 @@ export function calculatePricing(
 
   const profilesCostNzd = profilesCostUsd * usdToNzdRate;
   const accessoriesCostNzd = accessoriesCostUsd * usdToNzdRate;
-  const gosCostNzd = (extras?.gosChargeNzd != null && extras.gosChargeNzd > 0) ? extras.gosChargeNzd : 0;
-  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + lockCostNzd + wanzBarCostNzd + gosCostNzd;
+  const gosSellNzd = (extras?.gosChargeNzd != null && extras.gosChargeNzd > 0) ? extras.gosChargeNzd : 0;
+  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + lockCostNzd + wanzBarCostNzd;
   const actualCostPerSqm = sqm > 0 ? netCostNzd / sqm : 0;
-  const salePriceNzd = (extras?.salePriceOverride != null && extras.salePriceOverride > 0)
+  const baseSalePriceNzd = (extras?.salePriceOverride != null && extras.salePriceOverride > 0)
     ? extras.salePriceOverride
     : salePricePerSqm * sqm;
+  const salePriceNzd = baseSalePriceNzd + gosSellNzd;
   const marginNzd = salePriceNzd - netCostNzd;
   const marginPercent = salePriceNzd > 0 ? (marginNzd / salePriceNzd) * 100 : 0;
 
@@ -430,7 +431,7 @@ export function calculatePricing(
     handleCostNzd,
     lockCostNzd,
     wanzBarCostNzd,
-    gosCostNzd,
+    gosSellNzd,
     totalWeightKg,
     laborHours,
     netCostNzd,

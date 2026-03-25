@@ -462,6 +462,7 @@ export default function QuoteBuilder() {
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
+  const [downloadGenerating, setDownloadGenerating] = useState(false);
   const skipCategoryResetRef = useRef(false);
   const expectedFrameTypeRef = useRef<string>("");
   const savedItemBaselineRef = useRef<{ signature: string; configurationId: string } | null>(null);
@@ -1660,35 +1661,40 @@ export default function QuoteBuilder() {
   }
 
   async function handleDownloadAllPngs() {
-    if (items.length === 0) {
-      toast({ title: "No items to download", variant: "destructive" });
-      return;
-    }
+    if (items.length === 0 || downloadGenerating) return;
+    setDownloadGenerating(true);
     toast({ title: `Downloading ${items.length} item(s)...` });
-    for (const iwp of items) {
-      try {
-        const blob = await renderOffscreenAndCapture(iwp.item);
-        downloadBlob(blob, buildFilename(iwp.item.name || "", iwp.item.id));
-        await new Promise((r) => setTimeout(r, 100));
-      } catch {
-        toast({ title: `Failed to download ${iwp.item.name || "item"}`, variant: "destructive" });
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
+    try {
+      for (const iwp of items) {
+        try {
+          const blob = await renderOffscreenAndCapture(iwp.item);
+          downloadBlob(blob, buildFilename(iwp.item.name || "", iwp.item.id));
+          await new Promise((r) => setTimeout(r, 100));
+        } catch {
+          toast({ title: `Failed to download ${iwp.item.name || "item"}`, variant: "destructive" });
+        }
       }
+    } finally {
+      setDownloadGenerating(false);
     }
   }
 
   async function handleDownloadPdf() {
-    if (items.length === 0) {
-      toast({ title: "No items to download", variant: "destructive" });
-      return;
-    }
+    if (items.length === 0 || downloadGenerating) return;
+    setDownloadGenerating(true);
     toast({ title: `Generating PDF with ${items.length} item(s)...` });
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
     try {
       const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
       for (let i = 0; i < items.length; i++) {
-        if (i > 0) pdf.addPage();
+        if (i > 0) {
+          pdf.addPage();
+          await new Promise((r) => setTimeout(r, 0));
+        }
         const iwp = items[i];
         const blob = await renderOffscreenAndCapture(iwp.item);
         const dataUrl = await new Promise<string>((resolve) => {
@@ -1727,6 +1733,8 @@ export default function QuoteBuilder() {
       toast({ title: "PDF downloaded successfully" });
     } catch {
       toast({ title: "Failed to generate PDF", variant: "destructive" });
+    } finally {
+      setDownloadGenerating(false);
     }
   }
 
@@ -1946,11 +1954,11 @@ export default function QuoteBuilder() {
                       Current Drawing (PNG)
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-download-all-pngs">
-                      All Items (Individual PNGs)
+                    <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0 || downloadGenerating} data-testid="menu-download-all-pngs">
+                      {downloadGenerating ? "Generating..." : "All Items (Individual PNGs)"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-download-pdf">
-                      All Items (PDF)
+                    <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0 || downloadGenerating} data-testid="menu-download-pdf">
+                      {downloadGenerating ? "Generating..." : "All Items (PDF)"}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1976,11 +1984,11 @@ export default function QuoteBuilder() {
                   <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-mobile-download-png">
                     <Download className="w-4 h-4 mr-2" /> Current Drawing (PNG)
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-mobile-download-all">
-                    <Download className="w-4 h-4 mr-2" /> All Items (PNGs)
+                  <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0 || downloadGenerating} data-testid="menu-mobile-download-all">
+                    <Download className="w-4 h-4 mr-2" /> {downloadGenerating ? "Generating..." : "All Items (PNGs)"}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-mobile-download-pdf">
-                    <Download className="w-4 h-4 mr-2" /> All Items (PDF)
+                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0 || downloadGenerating} data-testid="menu-mobile-download-pdf">
+                    <Download className="w-4 h-4 mr-2" /> {downloadGenerating ? "Generating..." : "All Items (PDF)"}
                   </DropdownMenuItem>
                   {savedJobId && items.length > 0 && (
                     <>
@@ -3626,19 +3634,21 @@ export default function QuoteBuilder() {
                         <div className="space-y-1.5">
                           <p className="text-[10px] text-blue-700 dark:text-blue-400 italic">Glaze on site due to size and weight</p>
                           <div>
-                            <Label className="text-[10px] text-muted-foreground">GOS Charge (NZD)</Label>
+                            <Label className="text-[10px] text-muted-foreground">GOS Charge — Sell (NZD)</Label>
                             <Input
                               type="number"
                               className="h-7 text-xs"
-                              placeholder="Enter charge or leave blank"
+                              placeholder="Customer sell charge"
                               min={0}
                               value={w.gosChargeNzd ?? ""}
                               onChange={(e) => form.setValue("gosChargeNzd", e.target.value ? parseFloat(e.target.value) : null)}
                               data-testid="input-gos-charge"
                             />
-                            {(w.gosChargeNzd == null || w.gosChargeNzd === 0) && (
-                              <p className="text-[10px] text-muted-foreground mt-0.5">No charge entered — GOS flag only.</p>
-                            )}
+                            <p className="text-[10px] text-muted-foreground mt-0.5" data-testid="text-gos-hint">
+                              {(w.gosChargeNzd == null || w.gosChargeNzd === 0)
+                                ? "⚠ No sell charge entered — GOS flag only, no revenue added."
+                                : "This amount is added to the item sell price."}
+                            </p>
                           </div>
                         </div>
                       )}
@@ -3719,12 +3729,6 @@ export default function QuoteBuilder() {
                               <span className="text-right font-medium" data-testid="text-wanz-bar-cost">${currentPricing.wanzBarCostNzd.toFixed(2)}</span>
                             </>
                           )}
-                          {currentPricing.gosCostNzd > 0 && (
-                            <>
-                              <span className="text-muted-foreground">GOS Charge (NZD)</span>
-                              <span className="text-right font-medium" data-testid="text-gos-cost">${currentPricing.gosCostNzd.toFixed(2)}</span>
-                            </>
-                          )}
                         </div>
                         <Separator />
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -3734,6 +3738,12 @@ export default function QuoteBuilder() {
                           <span className="text-right font-medium" data-testid="text-actual-cost-sqm">${currentPricing.actualCostPerSqm.toFixed(0)}/m²</span>
                           <span className="text-muted-foreground font-semibold">Sale Price</span>
                           <span className="text-right font-bold text-primary" data-testid="text-sale-price">${currentPricing.salePriceNzd.toFixed(2)}</span>
+                          {currentPricing.gosSellNzd > 0 && (
+                            <>
+                              <span className="text-muted-foreground text-[10px] pl-2">incl. GOS Sell</span>
+                              <span className="text-right font-medium text-green-700 dark:text-green-400" data-testid="text-gos-sell">${currentPricing.gosSellNzd.toFixed(2)}</span>
+                            </>
+                          )}
                         </div>
                         <Separator />
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
