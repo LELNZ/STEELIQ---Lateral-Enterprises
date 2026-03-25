@@ -938,7 +938,7 @@ async function renderSchedule(
 
   pdf.setFont(FONT_NORMAL, "italic");
   pdf.setFontSize(7.5);
-  pdf.setTextColor(COLOR_BODY);
+  pdf.setTextColor(COLOR_BLACK);
   pdf.text("All joinery is viewed from outside.", LEFT_MARGIN, y + 3);
   y += 6;
 

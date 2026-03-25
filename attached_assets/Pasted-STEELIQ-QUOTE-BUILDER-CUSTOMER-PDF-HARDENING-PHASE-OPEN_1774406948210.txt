@@ -1,0 +1,276 @@
+STEELIQ QUOTE BUILDER / CUSTOMER PDF HARDENING PHASE — OPENING DIRECTION CONSOLIDATION + PDF EXPORT FIX
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow corrective hardening phase.
+
+This is NOT:
+- a quote builder redesign
+- a geometry-engine rewrite
+- a pricing-engine redesign
+- a GOS feature phase
+- a manufacturing/BOM/cut-list phase
+- a broad PDF redesign
+- a lifecycle/workflow redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond:
+  1. consolidating opening-direction controls into one coherent item-level control surface
+  2. fixing the customer-facing quote preview/PDF export regression
+  3. ensuring the global orientation note appears correctly in both preview and exported customer PDF
+- Do not change subcontractor PDF behavior in this phase.
+- Do not mix GOS logic into this phase.
+- Do not mix pricing logic into this phase.
+- Preserve backward compatibility for existing quote items wherever possible.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED PROBLEMS
+==================================================
+
+Runtime truth now shows the following issues:
+
+1. Duplicate opening-direction controls exist in Quote Builder
+- one existing direction/opening selector such as "Out (Solid Line)"
+- one new structured opening-direction selector such as "Open Out"
+This creates duplicated meaning and UI ambiguity.
+
+2. Customer quote preview/PDF path is inconsistent
+- preview now shows the global note "All joinery is viewed from outside."
+- exported customer PDF is not yet reliably reflecting that same result
+- the export is currently failing with runtime error:
+  "COLOR_BODY is not defined"
+
+3. The current exported PDF path and preview path are not yet aligned enough to sign off.
+
+This phase exists to correct those issues cleanly before any GOS feature work proceeds.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Make opening direction and customer-facing PDF behavior coherent and production-safe by:
+
+1. eliminating duplicate opening-direction controls
+2. defining and using one canonical opening-direction source of truth
+3. fixing the customer quote export regression (`COLOR_BODY is not defined`)
+4. ensuring the exact global note:
+   "All joinery is viewed from outside."
+   appears correctly in both customer-facing preview and exported customer PDF
+5. preserving current arrows and relevant under-drawing direction labels
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+- opening-direction control consolidation
+- customer PDF export regression fix
+- preview/PDF consistency fix for the global orientation note
+- safe propagation of opening-direction display where already implemented
+
+Do NOT widen into:
+- GOS toggle/tag/note/charges
+- cat door option
+- pricing changes
+- manufacturing outputs
+- subcontractor PDF changes
+- broader document redesign
+- geometry redesign
+
+==================================================
+PHASE A — AUDIT CURRENT DIRECTION / PDF TRUTH
+==================================================
+
+Audit and report precisely:
+
+1. what the old/existing opening-direction control currently represents
+   - e.g. direction + line style?
+   - direction only?
+   - drawing-only semantics?
+2. what the new openingDirection field currently represents
+3. where the duplication is happening in Quote Builder
+4. which control should become canonical for current repo/runtime truth
+5. where `COLOR_BODY is not defined` is coming from in the customer quote preview/PDF path
+6. why preview and exported PDF are currently inconsistent for the global note
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — CONSOLIDATE OPENING DIRECTION TO ONE CANONICAL CONTROL
+==================================================
+
+Implement one coherent opening-direction system.
+
+Requirements:
+- users must not see two overlapping controls for the same concept
+- one canonical field/control must drive the item
+- arrows must remain correct
+- under-drawing human-readable direction label must remain correct
+- backward compatibility must be preserved where possible
+
+Important:
+- if the old control carries extra meaning (such as line-style semantics) that still matters for drawing behavior, preserve that meaning safely without forcing users to manage two separate direction controls
+- if mapping/translation is needed between legacy control semantics and new openingDirection semantics, implement the minimum safe mapping
+- do not leave both controls exposed for the same item
+
+==================================================
+PHASE C — FIX CUSTOMER PDF EXPORT REGRESSION
+==================================================
+
+Fix the runtime/export error:
+- `COLOR_BODY is not defined`
+
+Requirements:
+- customer-facing quote preview must render correctly
+- exported customer PDF must generate successfully
+- the fix must be narrow and explicit
+- do not redesign the render pipeline
+
+If the issue comes from a missing style/token import or shared constant mismatch, fix it cleanly and report the exact root cause.
+
+==================================================
+PHASE D — PREVIEW / PDF CONSISTENCY FOR GLOBAL ORIENTATION NOTE
+==================================================
+
+Ensure the exact note:
+
+All joinery is viewed from outside.
+
+appears correctly in:
+- customer-facing quote preview
+- exported customer-facing quote PDF
+
+Rules:
+- wording must be exact
+- note must be global, not repeated per item
+- note must remain client-facing only
+- subcontractor PDF must remain unchanged in this phase
+
+==================================================
+PHASE E — PRESERVE CURRENT DIRECTION DISPLAY BENEFITS
+==================================================
+
+After consolidation, preserve:
+- arrows on the drawing
+- under-drawing text label where relevant
+- any safe schedule/PDF opening-direction text already added
+
+But:
+- do not reintroduce duplicated UI
+- do not create conflicting terminology between controls, labels, and PDF text
+
+==================================================
+PHASE F — BACKWARD COMPATIBILITY
+==================================================
+
+Must remain unchanged unless directly required for this correction:
+
+- geometry logic
+- pricing logic
+- outsourced-item commercial logic
+- subcontractor PDF behavior
+- revision flow
+- lifecycle/governance protections
+- navigation
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was corrected
+- confirm duplicate opening-direction controls were resolved
+- confirm customer PDF export now works
+- confirm the global note now appears in both preview and exported customer PDF
+- confirm subcontractor PDF was not changed
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. AUDIT RESULT
+- what the old direction control represented
+- what the new openingDirection field represented
+- where the duplication occurred
+- what became the canonical control
+- exact root cause of `COLOR_BODY is not defined`
+
+4. OPENING DIRECTION CONSOLIDATION RESULT
+- how the duplicated controls were resolved
+- how arrows still work
+- how the under-drawing text still works
+- how backward compatibility was preserved
+
+5. CUSTOMER PDF FIX RESULT
+- exact export bug fix
+- how preview and exported PDF are now aligned
+- how the global orientation note is now rendered consistently
+
+6. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- only one opening-direction control remains where relevant
+- hinged/sliding/bifold direction behavior still works
+- fixed items do not show irrelevant direction controls
+- customer preview renders correctly
+- customer PDF exports correctly
+- global note appears in preview
+- global note appears in exported PDF
+- subcontractor PDF remains unchanged
+- no touched route returns 404
+
+7. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing quote items
+- pricing engine
+- outsourced-item commercial logic
+- subcontractor PDF behavior
+- revision flow
+- lifecycle/governance protections
+- navigation
+
+8. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- GOS is still not implemented
+- cat door option is still not implemented
+- any remaining opening-direction caveat still outside this scope
+- any remaining customer-PDF caveat still outside this scope
+
+9. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+10. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+11. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- any remaining subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform corrective hardening phase.
+
+Do not broaden the phase.
+Do not leave duplicate opening-direction controls in place.
+Do not leave preview/PDF mismatch unresolved.
+Do not leave the customer PDF export broken.
+
+Your job is to make opening-direction control coherent, restore customer PDF export, and ensure the exact global orientation note appears consistently in both preview and exported customer PDF without affecting subcontractor PDFs.

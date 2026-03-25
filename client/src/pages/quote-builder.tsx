@@ -973,6 +973,15 @@ export default function QuoteBuilder() {
   }, [w.windowType, category]);
 
   useEffect(() => {
+    if (!w.openingDirection || w.openingDirection === "none") return;
+    if (w.openingDirection === "open-in" && w.openDirection !== "in") {
+      form.setValue("openDirection", "in");
+    } else if (w.openingDirection === "open-out" && w.openDirection !== "out") {
+      form.setValue("openDirection", "out");
+    }
+  }, [w.openingDirection]);
+
+  useEffect(() => {
     // When library data arrives, re-validate the current frameType against
     // the (now DB-backed) options for the current category. This handles the
     // race where the category useEffect ran with the static fallback before
@@ -1077,7 +1086,7 @@ export default function QuoteBuilder() {
   const showPanels = ["bifold-door", "stacker-door"].includes(category);
   const showBifoldSplit = category === "bifold-door";
   const showCenterWidth = !isCustom && category === "bay-window";
-  const showOpenDirection = !isCustom && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category);
+  const showOpenDirection = !isCustom && !["windows-standard", "sliding-window", "sliding-door", "stacker-door"].includes(category) && !hasOpeningDirection(category, w.windowType);
   const showLayoutSelect = !noCustomCategories;
   const showGrid = isCustom;
 
