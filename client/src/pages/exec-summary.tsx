@@ -600,6 +600,7 @@ export default function ExecSummary() {
     let outsourcedSellTotal = 0;
     let outsourcedCount = 0;
     let outsourcedIncompleteCount = 0;
+    let gosRevenueTotal = 0;
 
     for (const ip of itemPricings) {
       const isOutsourced = (ip.item.fulfilmentSource || "in-house") === "outsourced";
@@ -625,6 +626,9 @@ export default function ExecSummary() {
           totalLabor += ip.pricing.laborCostNzd;
           totalWeight += ip.pricing.totalWeightKg;
           totalLaborHours += ip.pricing.laborHours;
+          if (ip.pricing.gosSellNzd > 0) {
+            gosRevenueTotal += ip.pricing.gosSellNzd;
+          }
         }
       }
     }
@@ -655,6 +659,7 @@ export default function ExecSummary() {
       delivCost, delivSell, removalCost, removalSell, rubbishCost, rubbishSell,
       grandTotalCost, totalSaleExGst, gstAmount, totalSaleIncGst,
       outsourcedCostTotal, outsourcedSellTotal, outsourcedCount, outsourcedIncompleteCount,
+      gosRevenueTotal,
     };
   }, [itemPricings, installEnabled, installationTotals, deliveryTotals, removalEnabled, removalTotals, rubbishEnabled, rubbishTotals, gstRate]);
 
@@ -1380,6 +1385,14 @@ export default function ExecSummary() {
                   <TableCell className="text-right text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="text-outsourced-sell">${fmt(totals.outsourcedSellTotal)}</TableCell>
                 </TableRow>
               )}
+              {totals.gosRevenueTotal > 0 && (
+                <TableRow className="bg-green-50/50 dark:bg-green-950/10" data-testid="row-gos-revenue-total">
+                  <TableCell className="text-sm font-medium text-green-700 dark:text-green-400" colSpan={3}>
+                    GOS Revenue (incl. in Sale Total above)
+                  </TableCell>
+                  <TableCell className="text-right text-sm font-medium text-green-700 dark:text-green-400" data-testid="text-gos-revenue-total">${fmt(totals.gosRevenueTotal)}</TableCell>
+                </TableRow>
+              )}
               <TableRow data-testid="row-installation">
                 <TableCell className="text-sm font-medium">Installation</TableCell>
                 <TableCell className="text-right text-sm text-muted-foreground">{installEnabled ? (installationTotals.isOverride ? "Override" : "Per-unit") : "Disabled"}</TableCell>
@@ -2085,7 +2098,12 @@ export default function ExecSummary() {
                         <TableCell className="text-right text-xs">{ip.item.width}×{ip.item.height}</TableCell>
                         <TableCell className="text-right">{ip.sqm.toFixed(2)}</TableCell>
                         <TableCell className="text-right font-medium">{outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(netCost)}`}</TableCell>
-                        <TableCell className="text-right font-medium text-primary">{outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(salePrice)}`}</TableCell>
+                        <TableCell className="text-right font-medium text-primary">
+                          {outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(salePrice)}`}
+                          {!isOutsourced && ip.pricing && ip.pricing.gosSellNzd > 0 && (
+                            <span className="block text-[10px] text-green-600 dark:text-green-400 font-normal" data-testid={`text-gos-revenue-${idx}`}>incl. GOS ${fmt(ip.pricing.gosSellNzd)}</span>
+                          )}
+                        </TableCell>
                         <TableCell className={`text-right font-bold ${marginColor}`}>
                           {outsourcedIncomplete ? "Incomplete" : hasPricing ? `$${fmt(margin)} (${marginPct.toFixed(1)}%)` : "N/A"}
                         </TableCell>
@@ -2150,6 +2168,12 @@ export default function ExecSummary() {
                                 <div>
                                   <span className="text-muted-foreground block">Wanz Bar (NZD)</span>
                                   <span className="font-medium">${fmt(ip.pricing.wanzBarCostNzd)}</span>
+                                </div>
+                              )}
+                              {ip.pricing.gosSellNzd > 0 && (
+                                <div data-testid={`detail-gos-sell-${idx}`}>
+                                  <span className="text-muted-foreground block">GOS Revenue (NZD)</span>
+                                  <span className="font-medium text-green-600 dark:text-green-400">${fmt(ip.pricing.gosSellNzd)}</span>
                                 </div>
                               )}
                               <div>
