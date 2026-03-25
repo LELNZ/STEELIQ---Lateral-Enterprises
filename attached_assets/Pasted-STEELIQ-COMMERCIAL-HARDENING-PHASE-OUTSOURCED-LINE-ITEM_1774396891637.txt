@@ -1,0 +1,289 @@
+STEELIQ COMMERCIAL HARDENING PHASE — OUTSOURCED LINE-ITEM VALIDATION & SAFETY CORRECTION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow commercial-safety hardening phase for the already-implemented outsourced line-item feature.
+
+This is NOT:
+- a pricing-engine redesign
+- a procurement workflow redesign
+- a subcontractor PDF phase
+- a quote document redesign
+- a lifecycle redesign
+- a broad schema redesign
+- a UI redesign of the whole quote builder
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond outsourced-item validation and commercial safety corrections.
+- Do not change QuoteDocument -> QuoteRenderModel -> Preview/PDF client-facing structure in this phase.
+- Do not mix manufacturing logic into this phase.
+- Do not mix lifecycle or navigation changes into this phase.
+- Preserve backward compatibility for existing quotes/items.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED PROBLEM
+==================================================
+
+The outsourced line-item feature is directionally correct, but it is not yet commercially safe enough for live release because of the following issues:
+
+1. Toggling an item from outsourced back to in-house currently clears outsourced cost/sell values.
+   - This is unsafe and can destroy commercial data accidentally.
+
+2. Incomplete outsourced items (missing cost or missing sell) are currently only warned about, not safely enforced.
+   - This risks misleading totals, profit, and margin.
+
+3. The calculation contract for partial outsourced overrides is not explicit enough.
+   - The system must not silently guess what to do when only one of cost/sell is present.
+
+This phase exists to harden that feature into a financially safe internal-commercial control.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Make the outsourced line-item feature commercially safe by:
+
+1. preserving outsourced values when toggling off
+2. enforcing complete outsourced commercial inputs
+3. preventing silent invalid totals/profit/margin when outsourced data is incomplete
+4. making the executive summary and item editing flow truthfully reflect incomplete/valid outsourced state
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+- preserve outsourced values on toggle off
+- enforce outsourced completeness rules
+- enforce safe total/profit/margin behavior for incomplete outsourced items
+- make UI/internal summary behavior explicit and safe
+
+Do NOT widen into:
+- subcontractor PDF generation
+- procurement workflow
+- supplier management
+- broad pricing-engine redesign
+- client-facing quote PDF changes
+- manufacturing logic
+- status/lifecycle redesign
+
+==================================================
+PHASE A — AUDIT CURRENT OUTSOURCED SAFETY GAPS
+==================================================
+
+Audit and report precisely:
+
+1. where outsourced cost/sell values are currently cleared on toggle-off
+2. how executive summary currently behaves when outsourced cost or sell is missing
+3. whether incomplete outsourced items currently still contribute to totals
+4. what the current calculation rule is when only one override value exists
+5. what the minimum safe insertion point is for enforcing commercial completeness
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — PRESERVE DATA ON TOGGLE OFF
+==================================================
+
+Correct the outsourced toggle behavior so that:
+
+- switching an item from outsourced -> in-house does NOT erase outsourcedCostNzd
+- switching an item from outsourced -> in-house does NOT erase outsourcedSellNzd
+- those values are simply inactive while fulfilmentSource = "in-house"
+- if the user switches back to outsourced, previous values are still available
+
+Important:
+- do not silently destroy commercial data
+- do not redesign the whole form state system
+- implement the minimum safe correction only
+
+==================================================
+PHASE C — DEFINE THE COMPLETENESS CONTRACT
+==================================================
+
+Implement an explicit rule for outsourced items:
+
+If fulfilmentSource = "outsourced", then:
+- outsourcedCostNzd MUST be present
+- outsourcedSellNzd MUST be present
+
+No partial outsourced commercial state is acceptable for totals/margin purposes.
+
+Rules:
+- both present = valid outsourced item
+- one missing = incomplete outsourced item
+- both missing = incomplete outsourced item
+
+Do NOT guess or silently fall back to in-house logic for an outsourced item.
+
+==================================================
+PHASE D — ENFORCE SAFE TOTALS / PROFIT / MARGIN BEHAVIOR
+==================================================
+
+When an outsourced item is incomplete:
+
+- the system must NOT silently produce misleading final commercial totals
+- profit/margin must not look valid if required outsourced values are missing
+
+Implement the minimum safe handling.
+
+Preferred behavior for this phase:
+- clearly flag the item as incomplete
+- clearly flag the executive summary as commercially incomplete
+- prevent incomplete outsourced values from being treated as valid totals
+- make the invalid/incomplete state obvious rather than guessing
+
+If the current summary design requires a specific implementation choice, report it explicitly.
+
+Important:
+- do not hide the problem
+- do not auto-fill missing values
+- do not silently substitute in-house pricing once outsourced mode is selected
+
+==================================================
+PHASE E — UI / OPERATIONAL SAFETY
+==================================================
+
+The quote item editing flow must now behave safely.
+
+Requirements:
+- outsourced toggle remains operationally usable
+- outsourced cost/sell fields remain visible only when relevant
+- incomplete outsourced state is clearly visible
+- users understand why totals/margin are incomplete when required values are missing
+- previous outsourced values remain available after toggle off/on
+
+Do NOT:
+- clutter the form unnecessarily
+- redesign the whole pricing section
+- hide warnings where operators can miss them
+
+==================================================
+PHASE F — EXECUTIVE SUMMARY SAFETY
+==================================================
+
+The executive summary must now truthfully represent outsourced completeness.
+
+At minimum:
+- outsourced items with missing values must be clearly flagged
+- totals/profit/margin must not pretend to be final/valid if incomplete outsourced items exist
+- if a "commercially incomplete" state is introduced, it must be visually obvious and operationally usable
+
+Do not redesign the whole executive summary layout.
+Use the minimum safe correction.
+
+==================================================
+PHASE G — BACKWARD COMPATIBILITY
+==================================================
+
+Must remain unchanged unless directly required for this feature:
+
+- existing in-house item pricing behavior
+- existing rectangular and raked item geometry behavior
+- quote builder save/update flow
+- revision behavior
+- client-facing QuoteDocument / Preview / PDF structure
+- navigation
+- lifecycle/governance protections
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what commercial safety issues were fixed
+- confirm outsourced values are no longer cleared on toggle-off
+- confirm incomplete outsourced items are now handled safely
+- confirm totals/profit/margin no longer silently mislead when outsourced data is incomplete
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. SAFETY AUDIT RESULT
+- where toggle-off clearing existed
+- how incomplete outsourced items behaved before
+- what risk existed before this pass
+
+4. COMPLETENESS CONTRACT RESULT
+- exact rule now used for outsourced item validity
+- confirm no partial outsourced override is treated as valid
+- explain how the system behaves for valid vs incomplete outsourced items
+
+5. UI RESULT
+- how toggle behavior now works
+- how outsourced values are preserved
+- how incomplete outsourced state is shown in the item editing flow
+
+6. EXECUTIVE SUMMARY RESULT
+- how incomplete outsourced items are shown
+- how totals/cost/sell/profit/margin behave when outsourced data is complete
+- how totals/cost/sell/profit/margin behave when outsourced data is incomplete
+- confirm no silent misleading totals remain
+
+7. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- outsourced item can be created
+- outsourced item can be toggled off without data loss
+- toggling back on restores prior outsourced values
+- valid outsourced item rolls into totals correctly
+- incomplete outsourced item is clearly blocked/flagged from valid totals behavior
+- in-house items remain unchanged
+- no touched route returns 404
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing in-house quote items
+- quote editing
+- revision flow
+- pricing engine for normal items
+- QuoteDocument / Preview / PDF client-facing structure
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- outsourced handling remains internal-commercial only
+- no subcontractor PDF generation was added
+- no procurement workflow was added
+- any remaining commercial caveat still outside this scope
+
+10. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+11. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+12. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform commercial safety hardening phase.
+
+Do not broaden the phase.
+Do not leave ambiguous or misleading commercial totals in place.
+Do not destroy outsourced values on toggle changes.
+
+Your job is to make outsourced line-item overrides operationally safe, commercially explicit, and trustworthy for internal executive-summary use without contaminating client-facing outputs.

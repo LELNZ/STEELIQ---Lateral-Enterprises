@@ -191,6 +191,9 @@ export const quoteItemSchema = z.object({
   lockType: z.string().default(""),
   configurationId: z.string().default(""),
   cachedWeightKg: z.number().default(0),
+  fulfilmentSource: z.enum(["in-house", "outsourced"]).default("in-house"),
+  outsourcedCostNzd: z.number().nullable().optional(),
+  outsourcedSellNzd: z.number().nullable().optional(),
 });
 
 export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });

@@ -1,0 +1,308 @@
+STEELIQ COMMERCIAL HARDENING PHASE — OUTSOURCED LINE-ITEM COST / SELL OVERRIDE IN EXECUTIVE SUMMARY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow internal commercial-control phase.
+
+This is NOT:
+- a pricing-engine redesign
+- a manufacturing engine phase
+- a subcontractor PDF phase
+- a quote document redesign
+- a lifecycle redesign
+- a broad schema redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond internal outsourced line-item commercial handling.
+- Do not change QuoteDocument -> QuoteRenderModel -> Preview/PDF client-facing structure in this phase.
+- Do not mix manufacturing logic into this phase.
+- Do not mix lifecycle or navigation changes into this phase.
+- Preserve backward compatibility for existing quotes/items.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT BUSINESS NEED
+==================================================
+
+The user needs a way to mark certain quote items as outsourced rather than in-house.
+
+Examples:
+- stacker door outsourced
+- raked window outsourced
+- any line item outsourced to another supplier/fabricator
+
+For these items, the system must support internal commercial control of:
+- outsourced cost (buy cost)
+- outsourced sell price
+
+This must flow into internal commercial totals so the executive summary shows accurate:
+- total cost
+- total sell
+- profit
+- margin
+
+This is an INTERNAL commercial feature first.
+It should not automatically redesign client-facing quote PDFs in this phase.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Add a narrow outsourced-item commercial override workflow so that an individual line item can be treated as outsourced and use internal override values for:
+
+- cost
+- sell
+
+These values must roll up correctly into executive summary totals and margin calculations.
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+1. line-item fulfilment mode / sourcing flag
+2. outsourced cost override
+3. outsourced sell override
+4. executive summary / internal totals integration
+5. minimal UI/admin surface in the Quote Builder / item editing flow so the feature is operationally usable
+
+Do NOT widen into:
+- subcontractor PDF generation
+- manufacturing/BOM logic
+- client-facing quote document changes
+- broad pricing engine redesign
+- procurement workflow redesign
+- supplier management system
+- status/lifecycle redesign
+
+==================================================
+PHASE A — AUDIT CURRENT COMMERCIAL FLOW
+==================================================
+
+Audit and report:
+
+1. how item cost is currently calculated
+2. how item sell is currently calculated
+3. how executive summary totals are currently aggregated
+4. what the minimum safe insertion point is for outsourced per-item override behavior
+5. whether item-level custom fields already exist in JSON/blob form that can safely hold this data
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE OUTSOURCED ITEM COMMERCIAL CONTRACT
+==================================================
+
+Implement a clean internal commercial contract for quote items.
+
+Required item-level fields/behavior for this phase:
+
+1. Fulfilment mode / sourcing mode
+- in-house
+- outsourced
+
+2. Outsourced cost override
+- internal buy cost for that outsourced item
+
+3. Outsourced sell override
+- internal sell price for that outsourced item
+
+Rules:
+- these are internal commercial values
+- they must not automatically appear on the client-facing quote PDF in this phase
+- when item is in-house, existing calculation behavior remains unchanged
+- when item is outsourced, executive summary commercial totals must use the outsourced override values where provided
+
+Important:
+- do not invent unnecessary workflow states
+- do not redesign all pricing rules
+- keep this narrow and explicit
+
+==================================================
+PHASE C — UI / OPERATIONAL SURFACE
+==================================================
+
+Add the minimum operationally usable UI in the quote item editing flow.
+
+Requirements:
+- user can clearly mark an item as outsourced
+- user can enter outsourced cost
+- user can enter outsourced sell price
+- fields are hidden/disabled when item is not outsourced
+- the feature is usable in practice, not backend-only
+
+Do NOT:
+- build a full procurement module
+- add clutter across the whole builder
+- overload the main item interface
+
+This should be a clean commercial control surface.
+
+==================================================
+PHASE D — EXECUTIVE SUMMARY INTEGRATION
+==================================================
+
+Update the internal executive summary so that outsourced items are commercially visible and totals are correct.
+
+At minimum:
+- outsourced line items should be identifiable
+- executive summary totals should reflect outsourced cost and outsourced sell where applicable
+- total cost, total sell, profit, and margin must update correctly
+
+If current executive summary already has line-item breakdown sections, reuse them cleanly.
+Do not redesign the whole executive summary layout.
+
+==================================================
+PHASE E — COMMERCIAL CALCULATION RULES
+==================================================
+
+Implement the minimum safe calculation behavior.
+
+Suggested rule for this phase:
+- In-house item:
+  - use current system cost/sell logic unchanged
+- Outsourced item:
+  - cost = outsourced cost override
+  - sell = outsourced sell override
+  - executive summary totals use these override values
+
+If an outsourced item is marked but one of the override fields is missing:
+- report and handle safely using the minimum clear rule
+- do not guess silently
+- preferably make incomplete outsourced commercial state obvious in UI
+
+Do NOT:
+- redesign the broader pricing engine
+- introduce hybrid mixed-cost formulas
+- change client-facing quote PDF totals in this phase unless current internal sell total is already directly coupled and must be updated for consistency; if so, report that explicitly
+
+==================================================
+PHASE F — BACKWARD COMPATIBILITY
+==================================================
+
+Must remain unchanged unless directly required for this feature:
+
+- existing in-house item pricing behavior
+- existing rectangular and raked item geometry behavior
+- quote builder save/update flow
+- revision behavior
+- client-facing QuoteDocument / Preview / PDF structure
+- navigation
+- lifecycle/governance protections
+
+==================================================
+PHASE G — KEEP CLIENT-FACING OUTPUT SEPARATE
+==================================================
+
+This phase is internal-commercial first.
+
+Do NOT automatically expose:
+- outsourced cost
+- outsourced margin
+- internal sourcing flags
+
+on the client-facing quote PDF.
+
+If any current coupling forces a visible client-facing effect, report it clearly.
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm items can now be marked outsourced
+- confirm outsourced cost and sell can be entered
+- confirm executive summary totals now reflect outsourced items correctly
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- how item cost/sell worked before
+- how executive summary totals worked before
+- what insertion point was used for the safe fix
+
+4. COMMERCIAL CONTRACT RESULT
+- exact item-level outsourced fields/flags added
+- how in-house vs outsourced is represented
+- how backward compatibility was preserved
+
+5. UI RESULT
+- where the outsourced controls now appear
+- how a user marks an item outsourced
+- how outsourced cost/sell inputs behave
+- how incomplete outsourced input is handled
+
+6. EXECUTIVE SUMMARY RESULT
+- how outsourced items now appear
+- how total cost is calculated
+- how total sell is calculated
+- how profit/margin are calculated
+- confirm outsourced values are internal only in this phase
+
+7. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- in-house items still behave unchanged
+- outsourced item can be created/edited/saved
+- outsourced cost rolls into totals correctly
+- outsourced sell rolls into totals correctly
+- profit/margin update correctly
+- no touched route returns 404
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing in-house quote items
+- quote editing
+- revision flow
+- pricing engine for normal items
+- QuoteDocument / Preview / PDF client-facing structure
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- outsourced handling is internal-commercial only in this phase
+- no subcontractor PDF generation was added
+- no procurement workflow was added
+- any remaining commercial caveat still outside this scope
+
+10. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+11. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+12. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform commercial hardening phase.
+
+Do not broaden the phase.
+Do not hide the feature in backend-only fields.
+Do not redesign the whole pricing system.
+
+Your job is to add a clean, operationally usable outsourced line-item commercial override so the executive summary can show accurate internal cost, sell, profit, and margin without contaminating client-facing quote outputs.

@@ -45,7 +45,12 @@ export interface SubcontractorPdfItem {
   notes?: string;
   drawingDataUrl?: string | null;
   photoDataUrls?: string[];
+  fulfilmentSource?: "in-house" | "outsourced";
+  rakedLeftHeight?: number;
+  rakedRightHeight?: number;
 }
+
+export type ItemFilter = "all" | "outsourced_only" | "in_house_only";
 
 export interface SubcontractorPdfOptions {
   scopeMode: ScopeMode;
@@ -57,6 +62,7 @@ export interface SubcontractorPdfOptions {
   dateIssued: string;
   preparedBy?: string;
   items: SubcontractorPdfItem[];
+  itemFilter?: ItemFilter;
   includeDrawings: boolean;
   includeSitePhotos: boolean;
   includePricingReturn: boolean;
@@ -117,6 +123,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   "bifold-door": "Bi-fold Door",
   "stacker-door": "Stacker Door",
   "bay-window": "Bay Window",
+  "raked-fixed": "Raked Fixed Window",
 };
 
 const MAKING_GOOD_LABELS: Record<string, string> = {
@@ -125,24 +132,40 @@ const MAKING_GOOD_LABELS: Record<string, string> = {
   excluded: "Excluded",
 };
 
+function applyItemFilter(items: SubcontractorPdfItem[], filter: ItemFilter): SubcontractorPdfItem[] {
+  if (filter === "outsourced_only") return items.filter(it => (it.fulfilmentSource || "in-house") === "outsourced");
+  if (filter === "in_house_only") return items.filter(it => (it.fulfilmentSource || "in-house") === "in-house");
+  return items;
+}
+
+function formatDimension(item: SubcontractorPdfItem): string {
+  if (item.category === "raked-fixed" && item.rakedLeftHeight && item.rakedRightHeight) {
+    return `${item.width}W \u00D7 ${item.rakedLeftHeight}/${item.rakedRightHeight}H (L/R)`;
+  }
+  return `${item.width}\u00D7${item.height}`;
+}
+
 export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions): Promise<jsPDF> {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   pageCountRef = { count: 0 };
 
-  let y = renderPageOne(pdf, opts);
+  const filter = opts.itemFilter || "all";
+  const filteredOpts = { ...opts, items: applyItemFilter(opts.items, filter) };
 
-  y = renderScopeDetails(pdf, opts, y);
+  let y = renderPageOne(pdf, filteredOpts);
 
-  y = renderItemSchedule(pdf, opts, y);
+  y = renderScopeDetails(pdf, filteredOpts, y);
 
-  if (opts.includeDrawings || opts.includeSitePhotos) {
-    await renderDrawingGrid(pdf, opts);
+  y = renderItemSchedule(pdf, filteredOpts, y);
+
+  if (filteredOpts.includeDrawings || filteredOpts.includeSitePhotos) {
+    await renderDrawingGrid(pdf, filteredOpts);
   }
 
-  if (opts.includePricingReturn) {
+  if (filteredOpts.includePricingReturn) {
     pdf.addPage();
     drawFooter(pdf);
-    renderPricingReturn(pdf, opts);
+    renderPricingReturn(pdf, filteredOpts);
   }
 
   return pdf;
@@ -185,7 +208,24 @@ function renderPageOne(pdf: jsPDF, opts: SubcontractorPdfOptions): number {
   pdf.roundedRect(wpX, y - 4, wpW, 7, 1.5, 1.5, "F");
   pdf.setTextColor("#166534");
   pdf.text(wpLabel, wpX + 4, y);
+
+  const filter = opts.itemFilter || "all";
+  if (filter !== "all") {
+    const filterLabel = filter === "outsourced_only" ? "OUTSOURCED ITEMS" : "IN-HOUSE ITEMS";
+    const filterX = wpX + wpW + 4;
+    const filterW = pdf.getTextWidth(filterLabel) + 8;
+    pdf.setFillColor(filter === "outsourced_only" ? "#fef2f2" : "#f0fdf4");
+    pdf.roundedRect(filterX, y - 4, filterW, 7, 1.5, 1.5, "F");
+    pdf.setTextColor(filter === "outsourced_only" ? "#991b1b" : "#166534");
+    pdf.text(filterLabel, filterX + 4, y);
+  }
   y += 8;
+
+  const itemCountLabel = filter === "outsourced_only"
+    ? `${opts.items.length} outsourced item${opts.items.length !== 1 ? "s" : ""}`
+    : filter === "in_house_only"
+      ? `${opts.items.length} in-house item${opts.items.length !== 1 ? "s" : ""}`
+      : `${opts.items.length} item${opts.items.length !== 1 ? "s" : ""}`;
 
   const leftFields: [string, string | undefined][] = [
     ["Project", opts.projectName],
@@ -195,7 +235,7 @@ function renderPageOne(pdf: jsPDF, opts: SubcontractorPdfOptions): number {
   const rightFields: [string, string | undefined][] = [
     ["Date Issued", opts.dateIssued],
     ["Prepared By", opts.preparedBy],
-    ["Items", `${opts.items.length} item${opts.items.length !== 1 ? "s" : ""}`],
+    ["Items", itemCountLabel],
   ];
 
   pdf.setFontSize(8);
@@ -477,7 +517,7 @@ function renderItemSchedule(pdf: jsPDF, opts: SubcontractorPdfOptions, startY: n
       item.location || "\u2014",
       CATEGORY_LABELS[item.category] || item.category,
       item.layout || "\u2014",
-      `${item.width}\u00D7${item.height}`,
+      formatDimension(item),
       String(item.quantity || 1),
       ...(includePriceCol ? [""] : []),
       item.notes || "",
@@ -579,7 +619,7 @@ async function renderDrawingGrid(pdf: jsPDF, opts: SubcontractorPdfOptions) {
     pdf.setFontSize(6);
     pdf.setTextColor(CLR_MUTED);
     const catLabel = CATEGORY_LABELS[item.category] || item.category;
-    pdf.text(`${catLabel}  ${item.width}\u00D7${item.height}  Qty: ${item.quantity || 1}`, x + 2, y + 7.5);
+    pdf.text(`${catLabel}  ${formatDimension(item)}  Qty: ${item.quantity || 1}`, x + 2, y + 7.5);
     if (item.location) {
       pdf.text(pdf.splitTextToSize(item.location, cellW - 4)[0] || "", x + 2, y + 11);
     }

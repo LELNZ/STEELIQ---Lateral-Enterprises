@@ -97,6 +97,9 @@ export interface QuoteDocumentItem {
   quantity: number;
   width: number;
   height: number;
+  category?: string;
+  rakedLeftHeight?: number;
+  rakedRightHeight?: number;
   drawingImageKey?: string;
   photos: QuoteDocumentItemPhoto[];
   specValues: Record<string, unknown>;
@@ -161,6 +164,9 @@ function mapSnapshotItem(si: SnapshotItem): QuoteDocumentItem {
     quantity: si.quantity,
     width: si.width,
     height: si.height,
+    category: si.category,
+    rakedLeftHeight: si.rakedLeftHeight,
+    rakedRightHeight: si.rakedRightHeight,
     drawingImageKey: si.drawingImageKey,
     photos: (si.photos || []).map(p => ({
       key: p.key,

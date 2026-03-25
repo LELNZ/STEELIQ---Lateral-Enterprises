@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { type QuoteItem, type JobItem, type LibraryEntry, type ConfigurationProfile } from "@shared/schema";
 import { DOOR_CATEGORIES } from "@shared/item-options";
-import { calcRakedPerimeterM } from "@/lib/pricing";
+import { calcRakedPerimeterM, isFramePerimeterRole } from "@/lib/pricing";
 import { useSettings } from "@/lib/settings-context";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -46,7 +46,7 @@ function calcItemWeight(
   masterProfileMap: Map<string, any>
 ): number {
   if (!profiles.length) return 0;
-  const perimOverride = item.category === "raked-fixed"
+  const rakedPerim = item.category === "raked-fixed"
     ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0)
     : undefined;
   let totalKg = 0;
@@ -54,7 +54,9 @@ function calcItemWeight(
     const master = masterProfileMap.get(p.mouldNumber);
     const kgPerM = parseFloat(master?.kgPerMetre ?? p.kgPerMetre) || 0;
     const formula = master?.lengthFormula ?? p.lengthFormula ?? "perimeter";
-    const length = calcProfileLength(item.width, item.height, formula, perimOverride);
+    const role = (p as any).role || "";
+    const rolePerimOverride = isFramePerimeterRole(role) ? rakedPerim : undefined;
+    const length = calcProfileLength(item.width, item.height, formula, rolePerimOverride);
     const qty = (p.quantityPerSet || 1) * (item.quantity || 1);
     totalKg += length * qty * kgPerM;
   }
