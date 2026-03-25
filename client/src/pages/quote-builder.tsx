@@ -3636,7 +3636,7 @@ export default function QuoteBuilder() {
                               onChange={(e) => form.setValue("gosChargeNzd", e.target.value ? parseFloat(e.target.value) : null)}
                               data-testid="input-gos-charge"
                             />
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                            <p className="text-[10px] text-muted-foreground mt-0.5" data-testid="text-gos-hint">
                               {(w.gosChargeNzd == null || w.gosChargeNzd === 0)
                                 ? "⚠ No sell charge entered — GOS flag only, no revenue added."
                                 : "This amount is added to the item sell price."}

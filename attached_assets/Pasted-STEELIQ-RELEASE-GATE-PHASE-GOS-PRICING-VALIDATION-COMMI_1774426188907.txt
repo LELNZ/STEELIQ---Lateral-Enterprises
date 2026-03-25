@@ -1,0 +1,375 @@
+STEELIQ RELEASE GATE PHASE — GOS PRICING VALIDATION, COMMIT CLEANUP, AND RELEASE EVIDENCE
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented commercial-operational system.
+
+This is a release-gate validation phase for an already-implemented narrow commercial correction.
+
+This is NOT:
+
+a pricing engine redesign
+a quote builder redesign
+a schema phase
+a manufacturing/BOM phase
+a lifecycle/workflow phase
+a navigation phase
+a document redesign phase
+a feature expansion phase
+
+NON-NEGOTIABLE RULES
+
+Do not redesign the architecture.
+Do not redesign the pricing engine broadly.
+Do not introduce schema creep.
+Do not perform hidden refactors.
+Do not widen scope beyond validation, cleanup, and evidence capture.
+Do not change unrelated pricing logic.
+Do not change subcontractor PDF behavior.
+Do not change document structure or templates except where existing corrected totals naturally flow through.
+Do not change route handling.
+Do not change lifecycle/workflow behavior.
+Preserve backward compatibility for existing quotes.
+Treat current repo/runtime truth as the baseline.
+Do not report “complete,” “verified,” or “all tests pass” unless you provide concrete runtime evidence in the required report format.
+Do not include prompt artifacts, pasted instruction files, or other non-production files in the final commit.
+SYSTEM CONTINUITY / PLATFORM SAFETY CONTEXT
+
+SteelIQ is a live continuity-sensitive platform. This phase must preserve the following operating truth:
+
+QuoteDocument -> QuoteRenderModel -> Preview/PDF pipeline is locked and must not be casually changed.
+Navigation contract is being standardized and must not drift.
+Commercial/financial truth must remain above lifecycle/workflow content in the UI hierarchy.
+Revision persistence and quote continuity must remain stable.
+Pricing, workflow, navigation, documents, and manufacturing concerns must remain separated.
+Manufacturing/output engine is later scope and is not part of this phase.
+CURRENT VERIFIED TRUTH
+
+The latest narrow GOS correction appears to have changed GOS from cost-side treatment to sell-side treatment.
+
+That is directionally correct.
+
+However, release approval is currently blocked because:
+
+runtime evidence is not yet to release standard
+report language over-claims verification
+a non-production prompt artifact may have been committed
+PDF/preview parity was claimed but not proven in an evidence-grade way
+
+This phase exists to convert a plausible fix into a release-safe, evidence-backed, production-clean change set.
+
+PHASE OBJECTIVE
+
+Produce a release-quality validation outcome for the GOS pricing correction.
+
+At the end of this phase, the repo/report must prove:
+
+GOS is treated as SELL, not cost
+net cost is unchanged by GOS
+total sell increases correctly when GOS is applied
+profit/margin increase correctly
+no double counting exists
+UI clearly communicates sell-side intent
+quote preview/PDF still behaves correctly
+no unrelated behavior has changed
+no non-production artifacts remain in the commit
+IN SCOPE ONLY
+
+This phase is limited to:
+
+removing non-production commit artifacts
+validating actual runtime behavior for GOS pricing
+validating exec summary / totals behavior
+validating preview/PDF behavior
+correcting report language to match actual evidence
+making only the smallest code adjustments needed to achieve truthful validation and release cleanliness
+EXPLICITLY OUT OF SCOPE
+
+Do NOT do any of the following:
+
+no pricing engine expansion
+no additional pricing features
+no new GOS fields
+no cost-side GOS tracking
+no auto-GOS rules
+no UI redesign
+no document redesign
+no quote-builder restructure
+no lifecycle changes
+no outsourced logic changes
+no glass library changes
+no accessory pricing redesign
+no navigation cleanup rollout
+no manufacturing logic
+no BOM logic
+no phase bundling
+PHASE A — REPO CLEANUP (MANDATORY)
+
+Identify and remove any non-production artifacts introduced by the prior agent work.
+
+This includes:
+
+pasted prompt files
+attached instruction text files
+.txt prompt artifacts
+any agent-generated file that is not part of runtime, build, documentation, or operational source truth
+
+Examples of the type of artifact to remove if present:
+
+files under attached_assets/ that contain pasted prompt content
+agent prompt dump files
+temporary instruction capture files
+
+Do NOT remove legitimate assets or docs that are part of product/runtime truth.
+
+PHASE B — CODE TRUTH AUDIT (MANDATORY)
+
+Audit the current implementation and report the exact code truth for GOS.
+
+You must explicitly identify:
+
+where gosChargeNzd enters pricing
+whether GOS affects:
+netCostNzd
+salePriceNzd
+marginNzd
+marginPercent
+where GOS is shown in:
+quote builder UI
+pricing breakdown
+executive summary / quote totals
+preview / PDF flow
+whether any double counting path exists
+
+Use actual code and actual runtime behavior.
+Do not infer from intent.
+
+PHASE C — CONTROLLED RUNTIME VALIDATION (MANDATORY)
+
+You must perform real runtime validation and capture actual values.
+
+Use one controlled in-house test item.
+
+Use a stable item configuration and keep everything else unchanged across tests.
+
+TEST 1 — BASELINE (GOS OFF)
+
+Set:
+
+gosRequired = false
+gosChargeNzd = 0 or empty
+
+Capture and report actual values for:
+
+netCostNzd
+salePriceNzd
+marginNzd
+marginPercent
+TEST 2 — GOS ON WITH VALUE
+
+Set:
+
+gosRequired = true
+gosChargeNzd = 200
+
+Capture and report actual values for:
+
+netCostNzd
+salePriceNzd
+marginNzd
+marginPercent
+
+You must explicitly confirm:
+
+netCostNzd is unchanged from baseline
+salePriceNzd increases by exactly 200
+marginNzd increases by exactly 200
+marginPercent updates correctly from the new sell total
+TEST 3 — TOGGLE BACK OFF
+
+Disable GOS again.
+
+Confirm all values return exactly to baseline.
+
+TEST 4 — ZERO / EMPTY WARNING CASE
+
+Set:
+
+gosRequired = true
+gosChargeNzd = 0 or blank
+
+Confirm:
+
+warning is shown
+no crash occurs
+no silent sell increase occurs
+no silent cost increase occurs
+PHASE D — EXEC SUMMARY / COMMERCIAL VISIBILITY VALIDATION
+
+Validate the exec/commercial summary behavior.
+
+You must explicitly verify:
+
+GOS-adjusted sell is represented in totals
+GOS is not counted twice
+GOS is not hidden as cost
+operator can understand from the UI/reporting path that GOS contributes commercially
+
+If visibility is currently implicit rather than explicit, report that truth clearly.
+Do not overstate clarity if the value is only indirectly reflected through total sell.
+
+PHASE E — PREVIEW / PDF VALIDATION
+
+Generate and validate:
+
+quote preview
+customer-facing PDF path
+
+You must confirm:
+
+no rendering errors
+totals match UI/runtime truth
+GOS is not omitted
+GOS is not double counted
+no regression to the locked document pipeline contract
+
+Do not redesign documents.
+Do not restructure templates.
+This is validation only unless a very small correction is absolutely required to preserve truthful totals.
+
+PHASE F — NO SIDE EFFECT CHECK
+
+Explicitly confirm unchanged behavior for:
+
+outsourced items
+opening direction logic
+glass pricing behavior
+accessories pricing outside GOS
+revision persistence
+route handling / navigation
+document generation structure
+subcontractor PDF behavior
+
+If anything cannot be fully verified, say so clearly.
+
+IMPLEMENTATION RULES IF A SMALL FIX IS NEEDED
+
+If validation reveals a narrow defect, you may make the smallest targeted correction needed only if all of the following are true:
+
+it is directly required to make GOS release-safe
+it does not widen scope
+it does not redesign the architecture
+it does not change unrelated pricing behavior
+it does not alter navigation or document contracts
+
+If you make such a correction, report it precisely and do not bundle any opportunistic cleanup.
+
+REQUIRED DELIVERABLE FORMAT
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+what was validated
+what was cleaned up
+whether any additional narrow correction was required
+confirm whether GOS is now proven sell-side
+2. FILES CHANGED
+every file changed
+one-line reason for each
+explicitly identify any files removed from the commit
+3. CLEANUP RESULT
+list all non-production artifacts removed
+confirm whether the repo is now production-clean
+4. CODE TRUTH AUDIT RESULT
+where GOS is applied
+whether it affects cost, sell, margin
+where it appears in UI/totals/documents
+whether any double counting path exists
+5. RUNTIME VALIDATION RESULT
+TEST 1 — BASELINE
+netCostNzd
+salePriceNzd
+marginNzd
+marginPercent
+TEST 2 — GOS ON WITH 200
+netCostNzd
+salePriceNzd
+marginNzd
+marginPercent
+exact delta from baseline
+TEST 3 — TOGGLE OFF AGAIN
+confirm exact return to baseline
+TEST 4 — ZERO / EMPTY CASE
+warning behavior
+totals behavior
+crash/no crash
+6. EXEC SUMMARY RESULT
+how GOS affects totals
+whether commercial contribution is visible
+whether there is any ambiguity left
+confirm no double counting
+7. PREVIEW / PDF RESULT
+preview status
+PDF status
+totals parity status
+any omission/duplication findings
+8. UI RESULT
+exact current label text
+exact warning text
+whether the field is now commercially clear to an operator
+9. SIDE EFFECT CHECK
+
+Explicit YES/NO for each:
+
+outsourced logic unchanged
+pricing engine unchanged outside GOS
+opening direction unchanged
+glass behavior unchanged
+accessories logic unchanged outside GOS
+revision system unchanged
+navigation unchanged
+subcontractor PDF unchanged
+locked document pipeline preserved
+10. FINAL VALIDATION STATEMENT
+
+You must explicitly state:
+
+whether GOS is 100% sell-side
+whether cost leakage exists or not
+whether totals are correct
+whether margin is correct
+whether double counting exists or not
+whether the repo is production-clean
+11. RELEASE READINESS
+
+State exactly one of the following:
+
+Ready for GitHub push only
+Ready for GitHub push and live publish
+Not ready for GitHub push
+Not ready for live publish
+
+You must support this with reasons.
+
+12. NEXT PHASE
+one narrow phase only
+13. OPEN RISKS
+
+Must include:
+
+app freeze after inactivity
+PDF performance / UI blocking risk
+navigation contract rollout gaps
+pricing edge-case coverage gaps
+geometry coverage gaps if still applicable
+FINAL EXECUTION STANDARD
+
+This is a release-gate evidence phase.
+
+Do not give a confidence-based report.
+Do not give a “sounds correct” report.
+Do not give a broad summary without values.
+Do not claim verification without actual evidence.
+Do not leave the commit dirty.
+Do not widen scope.
+
+Your job is to produce a production-safe, evidence-backed answer on whether the GOS correction is truly ready for GitHub push and/or live publish.
