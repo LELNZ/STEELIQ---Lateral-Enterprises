@@ -1,0 +1,314 @@
+STEELIQ SUBCONTRACTOR PDF PHASE — DOCUMENT PURPOSE SELECTOR (INSTALL SCOPE VS SUPPLY / FABRICATION RFQ)
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow subcontractor-document hardening phase.
+
+This is NOT:
+- a client-facing quote PDF redesign
+- a procurement system redesign
+- a supplier-management module
+- a manufacturing/BOM/cut-list phase
+- a broad document architecture rewrite
+- a lifecycle/workflow redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond adding a document-purpose selector to the existing subcontractor PDF path.
+- Do not change the client-facing QuoteDocument -> QuoteRenderModel -> Preview/PDF contract except where strictly necessary to keep separation clean.
+- Do not expose internal executive-summary data in the client-facing quote PDF.
+- Do not mix manufacturing-pack logic into this phase.
+- Do not redesign navigation or lifecycle behavior.
+- Preserve backward compatibility for existing quotes/items and existing subcontractor/client-facing PDFs.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED STATE
+==================================================
+
+Current platform truth:
+
+- subcontractor PDF generation exists
+- item filtering exists (all / outsourced only / in-house only)
+- outsourced-only PDF generation works
+- client-facing quote PDF remains separate
+- internal executive-summary commercial data is not leaking into the subcontractor PDF
+
+Current remaining business problem:
+
+The current subcontractor PDF is still fundamentally an "Install Scope" style document.
+
+That is suitable when the external party is pricing installation work, but it is not suitable when the external party is being asked to price:
+- supply only
+- fabrication only
+- third-party manufacture of joinery
+- outsourced special windows/doors for Lateral to buy in
+
+This phase exists to make the subcontractor PDF generator purpose-aware without splitting into multiple disconnected systems.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Add an explicit subcontractor document purpose selector so the same subcontractor PDF generator can produce either:
+
+1. Install Scope
+OR
+2. Supply / Fabrication RFQ
+
+The selected purpose must control the document wording, headings, scope language, and return fields appropriately, while preserving the existing item filtering behavior.
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+1. document purpose selector in the subcontractor PDF flow
+2. purpose-specific wording/layout block switching
+3. preservation of item filtering behavior
+4. strict separation from client-facing and internal-only documents
+
+Do NOT widen into:
+- full procurement workflow
+- supplier quote comparison tools
+- purchase orders
+- manufacturing pack generation
+- BOM/cut-list exports
+- client-facing quote document redesign
+- broad PDF template overhaul across all document types
+
+==================================================
+PHASE A — AUDIT CURRENT SUBCONTRACTOR PDF TEMPLATE
+==================================================
+
+Audit and report:
+
+1. which parts of the current subcontractor PDF are install-specific
+2. which parts are generic and can be reused for both purposes
+3. which parts need purpose-specific switching:
+   - title
+   - cover-page wording
+   - inclusions/exclusions
+   - assumptions
+   - return/pricing section
+   - notes/checklists
+4. what the minimum safe insertion point is for a purpose selector without rewriting the entire template
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE DOCUMENT PURPOSE CONTRACT
+==================================================
+
+Implement an explicit purpose selector with exactly these options:
+
+- Install Scope
+- Supply / Fabrication RFQ
+
+Rules:
+- selector must be visible in the subcontractor PDF generation flow
+- selector must not be hidden behind defaults only
+- current existing behavior should remain backward compatible, with a sensible default (report what default was chosen and why)
+
+Purpose meanings:
+
+1. Install Scope
+Use when the external party is pricing installation/removal/site work.
+This version may include:
+- install scope language
+- removal/disposal where current template already supports it
+- site/access/install assumptions
+- installation-focused return section
+
+2. Supply / Fabrication RFQ
+Use when the external party is pricing supply/fabrication/manufacture only.
+This version should include:
+- item schedule
+- drawings
+- quantities
+- dimensions/specs already available in current truth
+- supplier/fabricator pricing request language
+- lead-time / inclusions / exclusions response area
+
+This version must NOT be framed as an installation-scope document.
+
+==================================================
+PHASE C — IMPLEMENT PURPOSE-SPECIFIC CONTENT SWITCHING
+==================================================
+
+Use the selected purpose to control the document output.
+
+At minimum, switch appropriately:
+- document title
+- subtitle / issue statement
+- purpose-specific cover-page wording
+- scope notes / assumptions
+- pricing return section labels
+- any install-specific checklist content
+
+Requirements:
+- generic content (project details, item schedule, drawings) should be reused where appropriate
+- install-specific content must not appear in Supply / Fabrication RFQ mode
+- fabrication/supply RFQ content must not imply install responsibilities
+
+Do NOT:
+- duplicate the whole generator unnecessarily
+- create two entirely separate systems unless absolutely required
+- mix install and fabrication language in the same document
+
+==================================================
+PHASE D — PRESERVE ITEM FILTERING
+==================================================
+
+The existing item filter behavior must remain intact:
+
+- All items
+- Outsourced only
+- In-house only
+
+Requirements:
+- document purpose selector must work cleanly alongside item filter selector
+- outsourced only + Supply / Fabrication RFQ should produce the most common supplier-facing document
+- existing filtering logic should not regress
+
+==================================================
+PHASE E — COMMERCIAL SEPARATION
+==================================================
+
+Maintain strict separation between:
+- client-facing quote PDF
+- internal executive summary
+- subcontractor document
+
+Rules:
+- no internal sell, cost, margin, or executive-summary-only breakdowns should leak into either purpose mode unless explicitly intended and justified for subcontractor use
+- supplier/fabrication RFQ mode should remain appropriate for asking the subcontractor to price the work back to Lateral
+- install scope mode should remain appropriate for installation pricing requests
+
+If any commercial fields are included in the subcontractor PDF, report exactly what they are and why they are appropriate.
+
+==================================================
+PHASE F — PRESERVE EXISTING BEHAVIOR
+==================================================
+
+Must remain unchanged unless directly required for this phase:
+
+- existing client-facing quote PDF/document behavior
+- executive summary behavior
+- in-house item pricing behavior
+- outsourced executive-summary commercial logic
+- quote builder save/update flow
+- revision behavior
+- lifecycle/governance protections
+- navigation
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm subcontractor PDF now supports purpose selection
+- confirm Install Scope and Supply / Fabrication RFQ are distinct outputs
+- confirm client-facing quote PDF remains separate and unchanged
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- what in the existing subcontractor PDF was install-specific
+- what was reusable/generic
+- what insertion point was used for the safe fix
+
+4. DOCUMENT PURPOSE CONTRACT RESULT
+- exact selector options added
+- default option and why
+- how purpose is represented in the generator flow
+
+5. INSTALL SCOPE RESULT
+- what the Install Scope version now contains
+- what wording/sections remain install-specific
+- how existing install behavior was preserved
+
+6. SUPPLY / FABRICATION RFQ RESULT
+- what the Supply / Fabrication RFQ version now contains
+- what install-specific content was removed/replaced
+- how the RFQ return section now asks the supplier to price the work back to Lateral
+
+7. FILTER / PURPOSE COMBINATION RESULT
+- how item filter and purpose selector now work together
+- confirm outsourced-only + Supply / Fabrication RFQ works correctly
+- confirm existing filter behavior remains intact
+
+8. COMMERCIAL SEPARATION RESULT
+- confirm client-facing quote PDF is unchanged
+- confirm executive summary remains internal
+- confirm subcontractor PDF does not leak internal-only cost/sell/margin data
+
+9. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- Install Scope PDF generates correctly
+- Supply / Fabrication RFQ PDF generates correctly
+- outsourced-only filter still works
+- in-house/all filters still work
+- raked outsourced items render correctly if supported
+- client-facing quote PDF remains unchanged
+- executive summary remains unchanged
+- no touched route returns 404
+
+10. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing in-house quote items
+- quote editing
+- revision flow
+- pricing engine
+- client-facing QuoteDocument / Preview / PDF structure
+- executive summary internal-commercial behavior
+- lifecycle/governance protections
+- estimate/quote linking
+- navigation
+
+11. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- what the subcontractor document still does NOT do
+- whether manufacturing outputs are still out of scope
+- whether procurement workflow is still out of scope
+- any remaining subcontractor-document caveat still outside this phase
+
+12. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+13. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+14. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- any remaining subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform subcontractor-document hardening phase.
+
+Do not broaden the phase.
+Do not blur client-facing, internal, and subcontractor-facing documents together.
+Do not mix install-scope and fabrication-RFQ language in the same output.
+
+Your job is to make the existing subcontractor PDF generator purpose-aware so it can produce either an Install Scope document or a Supply / Fabrication RFQ document cleanly, professionally, and with correct separation from client-facing and internal-commercial outputs.

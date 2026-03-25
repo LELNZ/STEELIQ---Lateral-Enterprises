@@ -51,11 +51,13 @@ export interface SubcontractorPdfItem {
 }
 
 export type ItemFilter = "all" | "outsourced_only" | "in_house_only";
+export type DocumentPurpose = "install_scope" | "supply_rfq";
 
 export interface SubcontractorPdfOptions {
   scopeMode: ScopeMode;
   workPackage: WorkPackage;
   scopeFields: ScopeFields;
+  documentPurpose?: DocumentPurpose;
   projectName: string;
   siteAddress?: string;
   clientName?: string;
@@ -70,6 +72,7 @@ export interface SubcontractorPdfOptions {
 }
 
 let pageCountRef = { count: 0 };
+let activePurpose: DocumentPurpose = "install_scope";
 
 function ensureSpace(pdf: jsPDF, y: number, needed: number): number {
   if (y + needed > MAX_Y) {
@@ -85,7 +88,10 @@ function drawFooter(pdf: jsPDF) {
   pdf.setFont(FONT, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(CLR_MUTED);
-  pdf.text("Subcontractor Install Scope \u2014 Issued for pricing only. Not a contract document.", LM, PH - 10);
+  const footerText = activePurpose === "supply_rfq"
+    ? "Supply / Fabrication RFQ \u2014 Issued for supplier pricing only. Not a contract or purchase order."
+    : "Subcontractor Install Scope \u2014 Issued for pricing only. Not a contract document.";
+  pdf.text(footerText, LM, PH - 10);
   pdf.text(`Page ${pageCountRef.count}`, PW - RM, PH - 10, { align: "right" });
 }
 
@@ -148,24 +154,36 @@ function formatDimension(item: SubcontractorPdfItem): string {
 export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions): Promise<jsPDF> {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   pageCountRef = { count: 0 };
+  const purpose = opts.documentPurpose || "install_scope";
+  activePurpose = purpose;
 
   const filter = opts.itemFilter || "all";
   const filteredOpts = { ...opts, items: applyItemFilter(opts.items, filter) };
 
-  let y = renderPageOne(pdf, filteredOpts);
-
-  y = renderScopeDetails(pdf, filteredOpts, y);
-
-  y = renderItemSchedule(pdf, filteredOpts, y);
-
-  if (filteredOpts.includeDrawings || filteredOpts.includeSitePhotos) {
-    await renderDrawingGrid(pdf, filteredOpts);
-  }
-
-  if (filteredOpts.includePricingReturn) {
-    pdf.addPage();
-    drawFooter(pdf);
-    renderPricingReturn(pdf, filteredOpts);
+  if (purpose === "supply_rfq") {
+    let y = renderRfqPageOne(pdf, filteredOpts);
+    y = renderRfqRequirements(pdf, filteredOpts, y);
+    y = renderItemSchedule(pdf, filteredOpts, y);
+    if (filteredOpts.includeDrawings || filteredOpts.includeSitePhotos) {
+      await renderDrawingGrid(pdf, filteredOpts);
+    }
+    if (filteredOpts.includePricingReturn) {
+      pdf.addPage();
+      drawFooter(pdf);
+      renderRfqPricingReturn(pdf, filteredOpts);
+    }
+  } else {
+    let y = renderPageOne(pdf, filteredOpts);
+    y = renderScopeDetails(pdf, filteredOpts, y);
+    y = renderItemSchedule(pdf, filteredOpts, y);
+    if (filteredOpts.includeDrawings || filteredOpts.includeSitePhotos) {
+      await renderDrawingGrid(pdf, filteredOpts);
+    }
+    if (filteredOpts.includePricingReturn) {
+      pdf.addPage();
+      drawFooter(pdf);
+      renderPricingReturn(pdf, filteredOpts);
+    }
   }
 
   return pdf;
@@ -809,6 +827,249 @@ function renderPricingReturn(pdf: jsPDF, opts: SubcontractorPdfOptions) {
     y += perCol * 4.5 + 4;
   }
 
+  y = ensureSpace(pdf, y, 12);
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(8);
+  pdf.setTextColor(CLR_MUTED);
+  pdf.text("Signature: ________________________    Date: ________________________", LM, y);
+}
+
+function renderRfqPageOne(pdf: jsPDF, opts: SubcontractorPdfOptions): number {
+  drawFooter(pdf);
+  let y = TM;
+
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(14);
+  pdf.setTextColor(CLR_ACCENT);
+  pdf.text("SUPPLY / FABRICATION RFQ", LM, y);
+  y += 3;
+
+  pdf.setDrawColor(CLR_ACCENT);
+  pdf.setLineWidth(0.8);
+  pdf.line(LM, y, LM + 50, y);
+  y += 6;
+
+  pdf.setFont(FONT, "italic");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(CLR_MUTED);
+  pdf.text("Request for quotation \u2014 supply and/or fabrication pricing. This is not a purchase order.", LM, y);
+  y += 7;
+
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(7.5);
+  const rfqBadge = "SUPPLY / FABRICATION";
+  const rfqBadgeW = pdf.getTextWidth(rfqBadge) + 8;
+  pdf.setFillColor("#ede9fe");
+  pdf.roundedRect(LM, y - 4, rfqBadgeW, 7, 1.5, 1.5, "F");
+  pdf.setTextColor("#5b21b6");
+  pdf.text(rfqBadge, LM + 4, y);
+
+  const filter = opts.itemFilter || "all";
+  if (filter !== "all") {
+    const filterLabel = filter === "outsourced_only" ? "OUTSOURCED ITEMS" : "IN-HOUSE ITEMS";
+    const filterX = LM + rfqBadgeW + 4;
+    const filterW = pdf.getTextWidth(filterLabel) + 8;
+    pdf.setFillColor(filter === "outsourced_only" ? "#fef2f2" : "#f0fdf4");
+    pdf.roundedRect(filterX, y - 4, filterW, 7, 1.5, 1.5, "F");
+    pdf.setTextColor(filter === "outsourced_only" ? "#991b1b" : "#166534");
+    pdf.text(filterLabel, filterX + 4, y);
+  }
+  y += 8;
+
+  const itemCountLabel = filter === "outsourced_only"
+    ? `${opts.items.length} outsourced item${opts.items.length !== 1 ? "s" : ""}`
+    : filter === "in_house_only"
+      ? `${opts.items.length} in-house item${opts.items.length !== 1 ? "s" : ""}`
+      : `${opts.items.length} item${opts.items.length !== 1 ? "s" : ""}`;
+
+  const leftFields: [string, string | undefined][] = [
+    ["Project", opts.projectName],
+    ["Site Address", opts.siteAddress],
+    ["Client / Builder", opts.clientName],
+  ];
+  const rightFields: [string, string | undefined][] = [
+    ["Date Issued", opts.dateIssued],
+    ["Prepared By", opts.preparedBy],
+    ["Items", itemCountLabel],
+  ];
+
+  pdf.setFontSize(8);
+  const halfW = CW / 2;
+  const fieldRowH = 5.5;
+  const startFieldY = y;
+  for (const [label, value] of leftFields) {
+    if (!value) continue;
+    pdf.setFont(FONT, "bold");
+    pdf.setTextColor(CLR_MUTED);
+    pdf.text(`${label}:`, LM, y);
+    pdf.setFont(FONT, "normal");
+    pdf.setTextColor(CLR);
+    const wrapped = wrapText(pdf, value, halfW - 30);
+    pdf.text(wrapped[0], LM + 28, y);
+    y += fieldRowH;
+  }
+  let ry = startFieldY;
+  const rx = LM + halfW + 4;
+  for (const [label, value] of rightFields) {
+    if (!value) continue;
+    pdf.setFont(FONT, "bold");
+    pdf.setTextColor(CLR_MUTED);
+    pdf.text(`${label}:`, rx, ry);
+    pdf.setFont(FONT, "normal");
+    pdf.setTextColor(CLR);
+    pdf.text(value, rx + 25, ry);
+    ry += fieldRowH;
+  }
+  y = Math.max(y, ry) + 4;
+
+  drawLine(pdf, y);
+  y += 5;
+
+  return y;
+}
+
+function renderRfqRequirements(pdf: jsPDF, opts: SubcontractorPdfOptions, startY: number): number {
+  let y = startY;
+
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(9);
+  pdf.setTextColor(CLR);
+  pdf.text("REQUEST DETAILS", LM, y);
+  y += 5;
+
+  const includes: string[] = [
+    "Supply and/or fabrication of joinery items as scheduled below",
+    "All items manufactured to specified dimensions and configurations",
+    "Quality to meet NZS 4211 or as otherwise specified",
+    "Packaging suitable for transport to site or nominated delivery point",
+  ];
+  y = renderBulletList(pdf, y, "Supplier To Provide", includes);
+
+  const excludes: string[] = [
+    "Site installation, fixing, sealing, or commissioning",
+    "Site delivery unless specifically included in your quotation",
+    "Building consent applications or inspections",
+    "On-site measurement \u2014 dimensions as per schedule",
+  ];
+  y = renderBulletList(pdf, y, "Excludes (Unless Otherwise Agreed)", excludes);
+
+  const responseReqs: string[] = [
+    "Unit price per item and total supply price (excl. GST)",
+    "Estimated lead time from order confirmation to dispatch",
+    "Any minimum order quantities or surcharges",
+    "Confirm compliance with specified dimensions and configurations",
+    "Note any substitutions, alternatives, or deviations from schedule",
+  ];
+  y = renderBulletList(pdf, y, "Response Requirements", responseReqs);
+
+  return y;
+}
+
+function renderRfqPricingReturn(pdf: jsPDF, opts: SubcontractorPdfOptions) {
+  let y = TM;
+
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(11);
+  pdf.setTextColor(CLR);
+  pdf.text("SUPPLIER PRICING RETURN", LM, y);
+  y += 2;
+  pdf.setFont(FONT, "italic");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(CLR_MUTED);
+  pdf.text("Supplier to complete and return this page with their quotation for supply/fabrication.", LM, y);
+  y += 2;
+  drawLine(pdf, y);
+  y += 6;
+
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(9);
+  pdf.setTextColor(CLR_ACCENT);
+  pdf.text("Supply Pricing", LM, y);
+  y += 6;
+
+  const pricingFields = [
+    "Total Supply Price (excl. GST):",
+    "GST:",
+    "Total Supply Price (incl. GST):",
+    "Lead Time (weeks from order):",
+    "Delivery Method / Cost:",
+  ];
+
+  pdf.setFontSize(8.5);
+  for (const field of pricingFields) {
+    pdf.setFont(FONT, "normal");
+    pdf.setTextColor(CLR);
+    pdf.text(field, LM, y);
+    pdf.setDrawColor(CLR_BORDER);
+    pdf.setLineWidth(0.3);
+    pdf.line(LM + 60, y + 0.5, PW - RM, y + 0.5);
+    y += 7;
+  }
+
+  y += 3;
+  const contactFields = ["Company:", "Contact:", "Phone:", "Email:"];
+  for (const field of contactFields) {
+    pdf.setFont(FONT, "normal");
+    pdf.setTextColor(CLR);
+    pdf.text(field, LM, y);
+    pdf.setDrawColor(CLR_BORDER);
+    pdf.setLineWidth(0.3);
+    pdf.line(LM + 22, y + 0.5, LM + CW / 2, y + 0.5);
+    y += 7;
+  }
+
+  y += 4;
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(9);
+  pdf.setTextColor(CLR_ACCENT);
+  pdf.text("Supplier Notes", LM, y);
+  y += 2;
+  pdf.setFont(FONT, "italic");
+  pdf.setFontSize(7);
+  pdf.setTextColor(CLR_MUTED);
+  pdf.text("Note any lead time assumptions, material substitutions, minimum orders, or delivery conditions.", LM, y);
+  y += 5;
+
+  pdf.setDrawColor(CLR_BORDER);
+  pdf.setLineWidth(0.3);
+  const boxH = 32;
+  pdf.rect(LM, y, CW, boxH);
+  y += boxH + 6;
+
+  y += 4;
+  pdf.setFont(FONT, "bold");
+  pdf.setFontSize(9);
+  pdf.setTextColor(CLR_ACCENT);
+  pdf.text("Compliance & Deviations", LM, y);
+  y += 2;
+  pdf.setFont(FONT, "italic");
+  pdf.setFontSize(7);
+  pdf.setTextColor(CLR_MUTED);
+  pdf.text("Confirm compliance or note any deviations from the item schedule.", LM, y);
+  y += 5;
+
+  const complianceChecks = [
+    "All items can be manufactured to specified dimensions",
+    "Materials and finishes as specified",
+    "Hardware as specified (where applicable)",
+    "Glass specification as noted (where applicable)",
+    "No substitutions required",
+  ];
+
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(CLR);
+  for (const item of complianceChecks) {
+    y = ensureSpace(pdf, y, 5);
+    const cx = LM;
+    pdf.setDrawColor(CLR_BORDER);
+    pdf.setLineWidth(0.25);
+    pdf.rect(cx + 1, y - 2.5, 3, 3);
+    pdf.setFont(FONT, "normal");
+    pdf.text(item, cx + 6, y);
+    y += 4.5;
+  }
+
+  y += 6;
   y = ensureSpace(pdf, y, 12);
   pdf.setFont(FONT, "bold");
   pdf.setFontSize(8);
