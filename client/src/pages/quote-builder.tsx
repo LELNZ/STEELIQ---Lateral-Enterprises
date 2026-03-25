@@ -462,6 +462,7 @@ export default function QuoteBuilder() {
   const drawingRef = useRef<SVGSVGElement>(null);
   const offscreenDrawingRef = useRef<SVGSVGElement>(null);
   const [offscreenConfig, setOffscreenConfig] = useState<InsertQuoteItem | null>(null);
+  const [downloadGenerating, setDownloadGenerating] = useState(false);
   const skipCategoryResetRef = useRef(false);
   const expectedFrameTypeRef = useRef<string>("");
   const savedItemBaselineRef = useRef<{ signature: string; configurationId: string } | null>(null);
@@ -1660,28 +1661,30 @@ export default function QuoteBuilder() {
   }
 
   async function handleDownloadAllPngs() {
-    if (items.length === 0) {
-      toast({ title: "No items to download", variant: "destructive" });
-      return;
-    }
+    if (items.length === 0 || downloadGenerating) return;
+    setDownloadGenerating(true);
     toast({ title: `Downloading ${items.length} item(s)...` });
-    for (const iwp of items) {
-      try {
-        const blob = await renderOffscreenAndCapture(iwp.item);
-        downloadBlob(blob, buildFilename(iwp.item.name || "", iwp.item.id));
-        await new Promise((r) => setTimeout(r, 100));
-      } catch {
-        toast({ title: `Failed to download ${iwp.item.name || "item"}`, variant: "destructive" });
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
+    try {
+      for (const iwp of items) {
+        try {
+          const blob = await renderOffscreenAndCapture(iwp.item);
+          downloadBlob(blob, buildFilename(iwp.item.name || "", iwp.item.id));
+          await new Promise((r) => setTimeout(r, 100));
+        } catch {
+          toast({ title: `Failed to download ${iwp.item.name || "item"}`, variant: "destructive" });
+        }
       }
+    } finally {
+      setDownloadGenerating(false);
     }
   }
 
   async function handleDownloadPdf() {
-    if (items.length === 0) {
-      toast({ title: "No items to download", variant: "destructive" });
-      return;
-    }
+    if (items.length === 0 || downloadGenerating) return;
+    setDownloadGenerating(true);
     toast({ title: `Generating PDF with ${items.length} item(s)...` });
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
     try {
       const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
@@ -1727,6 +1730,8 @@ export default function QuoteBuilder() {
       toast({ title: "PDF downloaded successfully" });
     } catch {
       toast({ title: "Failed to generate PDF", variant: "destructive" });
+    } finally {
+      setDownloadGenerating(false);
     }
   }
 
@@ -1946,11 +1951,11 @@ export default function QuoteBuilder() {
                       Current Drawing (PNG)
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-download-all-pngs">
-                      All Items (Individual PNGs)
+                    <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0 || downloadGenerating} data-testid="menu-download-all-pngs">
+                      {downloadGenerating ? "Generating..." : "All Items (Individual PNGs)"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-download-pdf">
-                      All Items (PDF)
+                    <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0 || downloadGenerating} data-testid="menu-download-pdf">
+                      {downloadGenerating ? "Generating..." : "All Items (PDF)"}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1976,11 +1981,11 @@ export default function QuoteBuilder() {
                   <DropdownMenuItem onClick={handleDownloadCurrentPng} data-testid="menu-mobile-download-png">
                     <Download className="w-4 h-4 mr-2" /> Current Drawing (PNG)
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0} data-testid="menu-mobile-download-all">
-                    <Download className="w-4 h-4 mr-2" /> All Items (PNGs)
+                  <DropdownMenuItem onClick={handleDownloadAllPngs} disabled={items.length === 0 || downloadGenerating} data-testid="menu-mobile-download-all">
+                    <Download className="w-4 h-4 mr-2" /> {downloadGenerating ? "Generating..." : "All Items (PNGs)"}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0} data-testid="menu-mobile-download-pdf">
-                    <Download className="w-4 h-4 mr-2" /> All Items (PDF)
+                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={items.length === 0 || downloadGenerating} data-testid="menu-mobile-download-pdf">
+                    <Download className="w-4 h-4 mr-2" /> {downloadGenerating ? "Generating..." : "All Items (PDF)"}
                   </DropdownMenuItem>
                   {savedJobId && items.length > 0 && (
                     <>

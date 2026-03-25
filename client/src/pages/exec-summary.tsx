@@ -891,9 +891,10 @@ export default function ExecSummary() {
   };
 
   const handleSubcontractorPdf = async () => {
-    if (!job || itemPricings.length === 0) return;
+    if (!job || itemPricings.length === 0 || subconGenerating) return;
     setSubconGenerating(true);
     toast({ title: subconDocPurpose === "supply_rfq" ? "Generating Supply / Fabrication RFQ PDF..." : "Generating Subcontractor Install Scope PDF..." });
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
     try {
       const pdfItems: SubcontractorPdfItem[] = [];
       for (let i = 0; i < itemPricings.length; i++) {
