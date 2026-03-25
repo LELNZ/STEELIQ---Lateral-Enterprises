@@ -146,7 +146,7 @@ export default function QuotePreview() {
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
 
   return (
-    <div className="mx-auto print:max-w-none" style={{ maxWidth: "794px" }} data-testid="quote-preview-page">
+    <div className="mx-auto print:max-w-none print:shadow-none" style={{ maxWidth: "794px", boxShadow: "0 1px 6px rgba(0,0,0,0.08)", background: "#fff" }} data-testid="quote-preview-page">
       <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden border-b">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteDetail(quoteId!))} data-testid="button-back-to-quote">
@@ -753,7 +753,7 @@ function ScheduleItemCard({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div style={{ display: "grid", gridTemplateColumns: media.drawingUrl ? "45% 1fr" : "1fr", gap: "16px" }}>
             {media.drawingUrl && (
               <div className="flex items-center justify-center">
                 <div

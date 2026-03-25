@@ -2043,13 +2043,30 @@ export async function registerRoutes(
   const DRAWING_DIR = path.resolve("uploads/drawing-images");
   fs.mkdirSync(DRAWING_DIR, { recursive: true });
 
+  (async () => {
+    try {
+      const files = fs.readdirSync(DRAWING_DIR).filter(f => /^[a-f0-9-]+\.png$/.test(f));
+      let migrated = 0;
+      for (const file of files) {
+        const existing = await storage.getItemPhoto(file);
+        if (!existing) {
+          const data = fs.readFileSync(path.resolve(DRAWING_DIR, file));
+          if (data.length > 100) {
+            await storage.saveItemPhoto(file, data, "image/png");
+            migrated++;
+          }
+        }
+      }
+      if (migrated > 0) {
+        console.log(`[drawing-migration] Migrated ${migrated} drawing images from filesystem to database`);
+      }
+    } catch (e) {
+      console.warn("[drawing-migration] Failed to migrate filesystem drawings:", e);
+    }
+  })();
+
   const drawingUpload = multer({
-    storage: multer.diskStorage({
-      destination: DRAWING_DIR,
-      filename: (_req, _file, cb) => {
-        cb(null, `${crypto.randomUUID()}.png`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       if (file.mimetype === "image/png") cb(null, true);
@@ -2057,25 +2074,61 @@ export async function registerRoutes(
     },
   });
 
-  app.post("/api/drawing-images", drawingUpload.single("file"), (req, res) => {
+  const drawingCache = new Map<string, Buffer>();
+  const DRAWING_CACHE_MAX = 100;
+
+  function drawingCacheSet(key: string, data: Buffer) {
+    if (drawingCache.size >= DRAWING_CACHE_MAX) {
+      const oldest = drawingCache.keys().next().value;
+      if (oldest) drawingCache.delete(oldest);
+    }
+    drawingCache.set(key, data);
+  }
+
+  app.post("/api/drawing-images", drawingUpload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    res.json({ key: req.file.filename });
+    try {
+      const key = `${crypto.randomUUID()}.png`;
+      const data = req.file.buffer;
+      await storage.saveItemPhoto(key, data, "image/png");
+      drawingCacheSet(key, data);
+      try {
+        const filePath = path.resolve(DRAWING_DIR, key);
+        fs.writeFileSync(filePath, data);
+      } catch (fsErr) {
+        console.warn(`[drawing-upload] Filesystem mirror failed for ${key}, DB write succeeded:`, fsErr);
+      }
+      res.json({ key });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to save drawing" });
+    }
   });
 
-  app.get("/api/drawing-images/:key", (req, res) => {
+  app.get("/api/drawing-images/:key", async (req, res) => {
     const key = req.params.key;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
       return res.status(400).json({ error: "Invalid key" });
     }
+    const cached = drawingCache.get(key);
+    if (cached) {
+      return res.type("image/png").send(cached);
+    }
+    const dbDrawing = await storage.getItemPhoto(key);
+    if (dbDrawing) {
+      drawingCacheSet(key, dbDrawing.data);
+      return res.type("image/png").send(dbDrawing.data);
+    }
     const filePath = path.resolve(DRAWING_DIR, key);
     const resolvedDir = path.resolve(DRAWING_DIR);
-    if (!filePath.startsWith(resolvedDir)) {
-      return res.status(400).json({ error: "Invalid key" });
+    if (filePath.startsWith(resolvedDir) && fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath);
+      if (data.length > 100) {
+        drawingCacheSet(key, data);
+        storage.saveItemPhoto(key, data, "image/png").catch(() => {});
+        return res.type("image/png").send(data);
+      }
     }
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: "Image not found" });
-    }
-    res.type("image/png").sendFile(filePath);
+    return res.status(404).json({ error: "Image not found" });
   });
 
   app.get("/api/quotes/:id/preview-data", async (req, res) => {
