@@ -761,6 +761,10 @@ export default function ExecSummary() {
         flashingSize: item.flashingSize ? `${item.flashingSize}mm` : "",
         wallThickness: item.wallThickness ? `${item.wallThickness}mm` : "",
         heightFromFloor: item.heightFromFloor ? `${item.heightFromFloor}mm` : "",
+        ...(item.category === "bay-window" ? {
+          bayAngle: `${item.bayAngle || 135}°`,
+          bayDepth: (item.bayDepth || 0) > 0 ? `${item.bayDepth}mm` : "",
+        } : {}),
       };
 
       return {
@@ -772,6 +776,7 @@ export default function ExecSummary() {
         height: item.height,
         category: item.category,
         ...(isRaked ? { rakedLeftHeight: rakedLH, rakedRightHeight: rakedRH } : {}),
+        ...(item.category === "bay-window" ? { bayAngle: item.bayAngle || 135, bayDepth: item.bayDepth || 0 } : {}),
         openingDirection: item.openingDirection || undefined,
         gosRequired: item.gosRequired || false,
         gosChargeNzd: item.gosChargeNzd ?? undefined,
