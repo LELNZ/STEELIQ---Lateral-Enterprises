@@ -788,7 +788,7 @@ function ScheduleItemCard({
           <div className="space-y-0.5" data-testid={`item-notes-${item.index}`}>
             {item.gosNote && (
               <p className="text-xs italic font-medium" style={{ color: template.colors.accent }} data-testid={`text-gos-note-${item.index}`}>
-                ⚠ {item.gosNote}
+                [GOS] {item.gosNote}
               </p>
             )}
             {item.catDoorNote && (

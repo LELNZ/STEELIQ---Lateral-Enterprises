@@ -602,10 +602,15 @@ export default function ExecSummary() {
     let outsourcedCount = 0;
     let outsourcedIncompleteCount = 0;
     let gosRevenueTotal = 0;
+    let gosItemCount = 0;
 
     for (const ip of itemPricings) {
       const isOutsourced = (ip.item.fulfilmentSource || "in-house") === "outsourced";
       totalSqm += ip.sqm;
+
+      if (ip.item.gosRequired) {
+        gosItemCount++;
+      }
 
       if (isOutsourced) {
         outsourcedCount++;
@@ -660,7 +665,7 @@ export default function ExecSummary() {
       delivCost, delivSell, removalCost, removalSell, rubbishCost, rubbishSell,
       grandTotalCost, totalSaleExGst, gstAmount, totalSaleIncGst,
       outsourcedCostTotal, outsourcedSellTotal, outsourcedCount, outsourcedIncompleteCount,
-      gosRevenueTotal,
+      gosRevenueTotal, gosItemCount,
     };
   }, [itemPricings, installEnabled, installationTotals, deliveryTotals, removalEnabled, removalTotals, rubbishEnabled, rubbishTotals, gstRate]);
 
@@ -1349,6 +1354,15 @@ export default function ExecSummary() {
         <SummaryCard label="USD → NZD Rate" value={`${usdToNzdRate}`} testId="text-usd-rate" />
       </div>
 
+      {totals.gosItemCount > 0 && (
+        <div className="order-1 rounded-md border border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-950/20 px-4 py-2.5 flex items-center gap-2" data-testid="banner-gos-job">
+          <span className="text-sm font-semibold text-green-700 dark:text-green-400">[GOS]</span>
+          <span className="text-sm text-green-700 dark:text-green-400">
+            This job requires Glaze On Site for {totals.gosItemCount} item{totals.gosItemCount !== 1 ? "s" : ""} — additional revenue ${fmt(totals.gosRevenueTotal)}
+          </span>
+        </div>
+      )}
+
       <div className="order-1 flex items-center justify-end gap-2 print:hidden" data-testid="section-collapse-controls">
         <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={allCollapsed ? expandAll : collapseAll} data-testid="button-toggle-all-sections">
           {allCollapsed ? "Expand All" : "Collapse All"}
@@ -1410,10 +1424,10 @@ export default function ExecSummary() {
                   <TableCell className="text-right text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="text-outsourced-sell">${fmt(totals.outsourcedSellTotal)}</TableCell>
                 </TableRow>
               )}
-              {totals.gosRevenueTotal > 0 && (
+              {totals.gosItemCount > 0 && (
                 <TableRow className="bg-green-50/50 dark:bg-green-950/10" data-testid="row-gos-revenue-total">
                   <TableCell className="text-sm font-medium text-green-700 dark:text-green-400" colSpan={3}>
-                    GOS Revenue (incl. in Sale Total above)
+                    <div className="flex items-center gap-1">[GOS] Glaze On Site — {totals.gosItemCount} item{totals.gosItemCount !== 1 ? "s" : ""} (revenue incl. in Sale Total above)</div>
                   </TableCell>
                   <TableCell className="text-right text-sm font-medium text-green-700 dark:text-green-400" data-testid="text-gos-revenue-total">${fmt(totals.gosRevenueTotal)}</TableCell>
                 </TableRow>
@@ -2118,6 +2132,7 @@ export default function ExecSummary() {
                           <Badge variant="outline" className="text-xs">{CATEGORY_LABELS[ip.item.category] || ip.item.category}</Badge>
                           {isOutsourced && <Badge variant="secondary" className="text-[10px] ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" data-testid={`badge-outsourced-${idx}`}><Package className="h-2.5 w-2.5 mr-0.5" />Outsourced</Badge>}
                           {outsourcedIncomplete && <Badge variant="destructive" className="text-[10px] ml-1" data-testid={`badge-outsourced-incomplete-${idx}`}>Incomplete</Badge>}
+                          {ip.item.gosRequired && <Badge variant="secondary" className="text-[10px] ml-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" data-testid={`badge-gos-${idx}`}>GOS</Badge>}
                           {ip.configName && <span className="text-xs text-muted-foreground ml-1.5" data-testid={`text-config-name-${idx}`}>{ip.configName}</span>}
                         </TableCell>
                         <TableCell className="text-right text-xs">{ip.item.width}×{ip.item.height}</TableCell>
