@@ -936,6 +936,12 @@ async function renderSchedule(
   pdf.text("SCHEDULE OF ITEMS", LEFT_MARGIN, y + 4);
   y += 8;
 
+  pdf.setFont(FONT_NORMAL, "italic");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(COLOR_BLACK);
+  pdf.text("All joinery is viewed from outside.", LEFT_MARGIN, y + 3);
+  y += 6;
+
   for (let si = 0; si < model.scheduleItems.length; si++) {
     const item = model.scheduleItems[si];
     onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
@@ -985,7 +991,7 @@ async function renderScheduleItem(
   pdf.setTextColor(COLOR_BLACK);
   pdf.text(item.title, LEFT_MARGIN + pad, y + 3.5);
 
-  const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}`;
+  const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}${item.openingDirectionLabel ? `  \u00B7  ${item.openingDirectionLabel}` : ""}`;
   pdf.setFont(FONT_NORMAL, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(COLOR_MUTED);
@@ -1046,6 +1052,20 @@ async function renderScheduleItem(
   }
 
   y += 2;
+
+  if (item.gosNote || item.catDoorNote) {
+    pdf.setFont(FONT_NORMAL, "italic");
+    pdf.setFontSize(7);
+    pdf.setTextColor(COLOR_ACCENT);
+    if (item.gosNote) {
+      pdf.text(`\u26A0  ${item.gosNote}`, LEFT_MARGIN + pad, y + 2.5);
+      y += 4;
+    }
+    if (item.catDoorNote) {
+      pdf.text(`\u2022  ${item.catDoorNote}`, LEFT_MARGIN + pad, y + 2.5);
+      y += 4;
+    }
+  }
 
   if (hasPhotos) {
     const renderedPhotosResult = await tryRenderPhotos(pdf, y, loadablePhotos, imageCache, item.title, pad, startY, itemStartPage);

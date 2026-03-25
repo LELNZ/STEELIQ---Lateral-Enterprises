@@ -1,0 +1,312 @@
+STEELIQ QUOTE BUILDER HARDENING PHASE — GLAZE ON SITE (GOS) + CAT DOOR OPTION
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow quote-builder and internal commercial-control phase.
+
+This is NOT:
+- a quote builder redesign
+- a geometry-engine rewrite
+- a pricing-engine redesign
+- a manufacturing/BOM/cut-list phase
+- a broad PDF redesign
+- a lifecycle/workflow redesign
+- a broad options-library rewrite
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond:
+  1. GOS (Glaze On Site) flagging/annotation
+  2. optional GOS charge handling
+  3. safe oversize auto-flag support only if repo/business truth supports a clear rule
+  4. cat door option as a builder option with safe placeholder pricing behavior
+- Do not mix manufacturing-pack logic into this phase.
+- Do not redesign the client-facing QuoteDocument -> QuoteRenderModel -> Preview/PDF architecture.
+- Preserve backward compatibility for existing quote items.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT BUSINESS NEED
+==================================================
+
+The system now needs support for Glaze On Site (GOS) and Cat Door option handling in the quote workflow.
+
+Business needs for GOS:
+- user can mark an item as GOS when required
+- image/drawing should show GOS annotation/tag on relevant glass/item image
+- line-item note under the image should say:
+  "Glaze on site due to size and weight"
+- a GOS charge must be supported
+- later, oversized units may auto-flag GOS if a clear business rule exists
+
+Business need for Cat Door:
+- cat door must exist as an option in Quote Builder
+- pricing is not yet known, so the system must not invent a fake price
+- the option must be operationally usable without corrupting pricing
+
+This phase is about controlled workflow support, not full manufacturing logic.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Add a controlled GOS workflow and Cat Door option so that:
+
+1. GOS can be selected per relevant item
+2. GOS annotation appears clearly in the builder/drawing and as a line-item note
+3. GOS charge can be handled safely
+4. Cat Door can be selected as an option without guessed pricing
+5. existing quote totals and document flow remain stable
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+- GOS flag/field
+- GOS note under image
+- GOS visual tag on image/drawing where appropriate
+- GOS charge support
+- optional oversize auto-flagging only if the threshold/business rule is already clearly defined in repo truth or explicitly implemented as a simple admin/business constant in this phase
+- Cat Door option with safe placeholder/no-default-price behavior
+
+Do NOT widen into:
+- full glazing rule engine
+- manufacturing pack outputs
+- glass-weight engineering engine
+- full accessory/options overhaul
+- pet-door pricing engine redesign
+- broad product option library redesign
+- procurement/subcontractor workflow changes
+
+==================================================
+PHASE A — AUDIT CURRENT REPO TRUTH
+==================================================
+
+Audit and report:
+
+1. where line-item options/flags currently live
+2. where image/drawing annotations under the drawing are currently rendered
+3. where item-level notes currently flow into preview/PDF if they do
+4. how optional per-item charges are currently handled
+5. whether a current oversize threshold/business rule already exists anywhere in repo/runtime truth
+6. what the safest insertion point is for:
+   - GOS flag
+   - GOS charge
+   - Cat Door option
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE GOS CONTRACT
+==================================================
+
+Implement a clean item-level GOS contract.
+
+At minimum support:
+- gosRequired (boolean or equivalent)
+- gosChargeNzd (number or nullable number as appropriate)
+- GOS note display
+- GOS image/drawing tag
+
+Business behavior:
+- when GOS is selected, the item should visibly communicate it
+- note text under the image should read exactly:
+  "Glaze on site due to size and weight"
+- GOS should be an item-level workflow/commercial flag, not a manufacturing-pack feature in this phase
+
+Do NOT invent broad glass-engine semantics beyond what is needed for this feature.
+
+==================================================
+PHASE C — GOS CHARGE HANDLING
+==================================================
+
+Implement safe GOS charge behavior.
+
+Requirements:
+- user can enter or apply a GOS charge for the item
+- charge must roll into internal/item commercial totals correctly
+- charge handling must be explicit and not guessed
+- if a default value exists in current repo/business truth, use it
+- if no default exists, allow manual entry and report that clearly
+
+Do NOT:
+- guess a GOS charge amount if none is defined
+- bury the charge in an unclear pricing component
+- redesign the broader pricing engine
+
+==================================================
+PHASE D — OPTIONAL OVERSIZE AUTO-FLAGGING
+==================================================
+
+Only implement oversize auto-flagging if there is a clear rule available.
+
+Examples of acceptable rule sources:
+- existing repo truth
+- explicit constant/threshold introduced narrowly in this phase with clear reporting
+
+If implemented:
+- oversize item auto-flags GOS
+- note/tag appears automatically
+- user can still see and understand why it happened
+
+If no safe threshold rule exists:
+- report that clearly
+- keep this phase manual-GOS only
+
+Do NOT invent a complicated engineering rule engine.
+
+==================================================
+PHASE E — GOS VISUALS / NOTE
+==================================================
+
+Implement clear visual communication.
+
+Requirements:
+- GOS tag/indicator appears on or near the item image/drawing where appropriate
+- line-item note appears under the image
+- note must use exact wording:
+  "Glaze on site due to size and weight"
+- presentation should be clear, professional, and not cluttered
+
+Do NOT:
+- overload the drawing with too much text
+- add manufacturing detail
+- repeat the same note excessively in every surface unless current design supports it cleanly
+
+==================================================
+PHASE F — CAT DOOR OPTION
+==================================================
+
+Add Cat Door as an item option in Quote Builder.
+
+Requirements:
+- Cat Door can be selected
+- it is operationally usable now
+- if pricing is unknown, system must not invent a default price
+- if manual pricing/input is required, make that behavior explicit
+- if Cat Door should show a note/flag in the item label or description, implement the minimum safe behavior only
+
+Do NOT:
+- guess pricing
+- hide unknown pricing behind false assumptions
+- redesign the broader options model
+
+==================================================
+PHASE G — BACKWARD COMPATIBILITY
+==================================================
+
+Must remain unchanged unless directly required for this phase:
+
+- existing geometry logic
+- opening-direction logic
+- customer-facing quote PDF structure except where GOS note/tag safely propagates if already appropriate
+- subcontractor PDF behavior
+- outsourced-item commercial logic
+- revision flow
+- lifecycle/governance protections
+- navigation
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm GOS can now be selected
+- confirm GOS note/tag now appears
+- confirm GOS charge handling is implemented or clearly limited
+- confirm Cat Door option now exists
+- confirm no fake/default Cat Door pricing was invented if none was known
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. AUDIT RESULT
+- where GOS/option fields were inserted
+- where GOS note/tag was inserted
+- how charge handling was integrated
+- whether a safe oversize auto-flag rule existed
+
+4. GOS CONTRACT RESULT
+- exact item-level fields/flags added
+- exact note wording used
+- where the GOS tag appears
+- whether GOS is manual only or also auto-flagged
+
+5. GOS CHARGE RESULT
+- how GOS charge is entered or applied
+- whether a default exists or not
+- how totals are affected
+- what happens if GOS is selected but no charge is entered
+
+6. CAT DOOR RESULT
+- how Cat Door appears in the builder
+- how its pricing/no-pricing behavior works
+- how it is shown in the item if selected
+
+7. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- GOS can be toggled/selected
+- GOS note appears under the image
+- GOS tag appears on/near the drawing where intended
+- GOS charge affects totals correctly if entered/applied
+- Cat Door can be selected
+- Cat Door does not silently invent a price
+- no touched route returns 404
+
+8. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing quote items
+- pricing engine outside GOS handling
+- opening-direction logic
+- outsourced-item commercial logic
+- subcontractor PDF behavior
+- revision flow
+- lifecycle/governance protections
+- navigation
+
+9. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- whether oversize auto-flagging was implemented or deferred
+- whether Cat Door pricing remains manual/undefined
+- any remaining GOS/document propagation caveat still outside this scope
+
+10. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+11. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+12. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- any remaining subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform workflow and commercial hardening phase.
+
+Do not broaden the phase.
+Do not guess charges or pricing that are not known.
+Do not hide GOS in backend-only logic.
+Do not invent a complex oversize rule engine.
+
+Your job is to add a clean, operationally usable GOS workflow and Cat Door option so the quote builder can truthfully represent glaze-on-site requirements and Cat Door selection without corrupting pricing or system clarity.

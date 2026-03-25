@@ -1,0 +1,298 @@
+STEELIQ QUOTE BUILDER PHASE — OPENING DIRECTION FIELD + TEXT LABEL UNDER DRAWING
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow configuration-clarity phase for Quote Builder.
+
+This is NOT:
+- a quote builder redesign
+- a geometry-engine rewrite
+- a pricing-engine redesign
+- a manufacturing/BOM/cut-list phase
+- a broad schema redesign
+- a lifecycle/workflow redesign
+- a document-system redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond opening-direction data + display clarity.
+- Do not change QuoteDocument -> QuoteRenderModel -> Preview/PDF structure except where strictly necessary to surface the new label safely.
+- Do not mix pricing logic into this phase.
+- Do not mix manufacturing logic into this phase.
+- Preserve backward compatibility for existing quote items.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT BUSINESS NEED
+==================================================
+
+The current builder already uses arrows on sliding / stacking / bifold doors / sliding windows and similar items.
+
+However, arrows alone are not sufficient for unambiguous client-facing and operational clarity.
+
+The system now needs explicit human-readable opening-direction text under the drawing, for example:
+- Open In
+- Open Out
+- Sliding Left
+- Sliding Right
+
+This must be implemented as structured item data, not as ad-hoc text only.
+
+The preferred presentation is:
+- text label under the drawing
+- not cluttering the drawing itself
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Add a structured opening-direction field to relevant quote items and display a clean human-readable direction label under the drawing.
+
+The system must:
+- store opening direction as structured data
+- allow it to be set in Quote Builder where relevant
+- show a clean text label under the drawing
+- preserve existing arrow behavior
+- avoid invalid direction/category combinations where safely possible
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+1. openingDirection field/contract
+2. Quote Builder UI to set it where relevant
+3. label under drawing
+4. safe propagation into schedule/preview/PDF only where already appropriate and minimally required
+
+Do NOT widen into:
+- pricing changes
+- manufacturing mapping
+- automatic direction inference redesign
+- full layout logic redesign
+- lifecycle/workflow changes
+- broad document template redesign
+
+==================================================
+PHASE A — AUDIT CURRENT REPO TRUTH
+==================================================
+
+Audit and report:
+
+1. which categories currently already imply direction visually via arrows
+2. where current direction meaning is derived from today (if anywhere)
+3. where the safest insertion point is for a structured openingDirection field
+4. how current drawing labels under the image are rendered
+5. what minimum safe propagation path is for preview/PDF/schedule if touched
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE OPENING DIRECTION CONTRACT
+==================================================
+
+Implement a structured openingDirection contract.
+
+Use a constrained value set appropriate to current repo truth. At minimum support relevant values such as:
+- in
+- out
+- left
+- right
+- none / fixed where appropriate
+
+You may refine labels per category in presentation, for example:
+- in -> Open In
+- out -> Open Out
+- left -> Sliding Left
+- right -> Sliding Right
+
+Important:
+- do NOT use free text
+- do NOT invent a large future-state enum set unless current scope needs it
+- keep it minimal and safe
+
+==================================================
+PHASE C — CATEGORY RELEVANCE / GUARDRAILS
+==================================================
+
+Show and use openingDirection only where it is relevant.
+
+Examples:
+- hinged doors: in / out
+- sliding doors/windows: left / right
+- fixed items: no direction label
+- raked fixed: no direction label
+
+Implement the minimum safe guardrails so invalid or irrelevant direction states do not clutter the UI.
+
+Do NOT build a huge rule engine.
+Do NOT widen into all future category logic.
+Use a minimal category mapping consistent with current repo truth.
+
+==================================================
+PHASE D — QUOTE BUILDER UI
+==================================================
+
+Add the minimum operationally usable UI in Quote Builder.
+
+Requirements:
+- relevant items can set opening direction via dropdown/select/radio control as appropriate
+- irrelevant items do not show the control
+- existing arrow visuals remain unchanged
+- the control is placed cleanly and does not clutter the form
+
+Do NOT:
+- add free-text direction entry
+- overload the builder with too many new controls
+- redesign the whole configuration panel
+
+==================================================
+PHASE E — LABEL UNDER DRAWING
+==================================================
+
+Display a clean human-readable label under the drawing.
+
+Examples:
+- Opening: Open In
+- Opening: Open Out
+- Opening: Sliding Left
+- Opening: Sliding Right
+
+Rules:
+- place the label UNDER the drawing, not on top of it
+- keep arrows as they are
+- only show the label when direction is relevant
+- fixed/non-directional items should not show a meaningless label
+
+This is the preferred presentation for client/operator clarity.
+
+==================================================
+PHASE F — SAFE PROPAGATION
+==================================================
+
+Where current repo/runtime truth safely supports it, propagate the label into downstream views minimally and safely.
+
+Possible surfaces if already appropriate:
+- quote builder item card/list
+- preview/schedule label
+- document/PDF line item text
+
+Only do this where it is low-risk and consistent with current rendering paths.
+Do NOT redesign document layouts in this phase.
+
+==================================================
+PHASE G — BACKWARD COMPATIBILITY
+==================================================
+
+Must remain unchanged unless directly required for this phase:
+
+- existing geometry logic
+- pricing logic
+- outsourced-item logic
+- client-facing quote totals
+- revision behavior
+- navigation
+- lifecycle/governance protections
+
+If schema additions are required, keep them minimal, backward-compatible, and clearly justified.
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm openingDirection is now structured data
+- confirm relevant items can set direction in Quote Builder
+- confirm the text label now appears under the drawing where relevant
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- which categories already implied direction via arrows
+- where the safe insertion point was
+- what drawing/label path was used
+
+4. OPENING DIRECTION CONTRACT RESULT
+- exact allowed values implemented
+- how values map to user-facing labels
+- how backward compatibility was preserved
+
+5. UI RESULT
+- where the direction control now appears
+- which categories show it
+- how irrelevant categories are excluded
+
+6. DRAWING LABEL RESULT
+- exactly how the under-drawing label now appears
+- which labels are supported
+- confirm arrows remain unchanged
+
+7. SAFE PROPAGATION RESULT
+- whether the label was propagated beyond the builder
+- where it now appears
+- what was intentionally left untouched
+
+8. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- hinged open-in/open-out items work
+- sliding left/right items work
+- fixed items do not show irrelevant direction labels
+- save/update works
+- no touched route returns 404
+- pricing remains unchanged
+
+9. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing quote items
+- pricing engine
+- outsourced-item commercial logic
+- revision flow
+- client-facing QuoteDocument / Preview / PDF structure unless minimally touched
+- lifecycle/governance protections
+- navigation
+
+10. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any categories not yet covered
+- whether automatic direction inference is still out of scope
+- whether manufacturing mapping is still out of scope
+
+11. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+12. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+13. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- any remaining subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform configuration-clarity phase.
+
+Do not broaden the phase.
+Do not rely on arrows alone.
+Do not use unstructured free text.
+
+Your job is to add a minimal, structured opening-direction field and a clear human-readable label under the drawing so that client-facing and operational interpretation is less ambiguous while preserving the current system architecture.

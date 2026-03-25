@@ -340,6 +340,7 @@ export default function QuotePreview() {
         {isSectionVisible(T, "schedule") && (
           <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
             <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
+            <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
             {liveScheduleItems.length === 0 && (
               <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
             )}
@@ -780,6 +781,21 @@ function ScheduleItemCard({
             <div>
               <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
             </div>
+          </div>
+        )}
+
+        {(item.gosNote || item.catDoorNote) && (
+          <div className="space-y-0.5" data-testid={`item-notes-${item.index}`}>
+            {item.gosNote && (
+              <p className="text-xs italic font-medium" style={{ color: template.colors.accent }} data-testid={`text-gos-note-${item.index}`}>
+                ⚠ {item.gosNote}
+              </p>
+            )}
+            {item.catDoorNote && (
+              <p className="text-xs italic" style={{ color: template.colors.accent }} data-testid={`text-catdoor-note-${item.index}`}>
+                • {item.catDoorNote}
+              </p>
+            )}
           </div>
         )}
 

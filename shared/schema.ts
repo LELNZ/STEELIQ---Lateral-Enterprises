@@ -150,6 +150,7 @@ export const quoteItemSchema = z.object({
   windowType: z.enum(["fixed", "awning", "french-left", "french-right", "french-pair"]).default("fixed"),
   hingeSide: z.enum(["left", "right"]).default("left"),
   openDirection: z.enum(["in", "out"]).default("out"),
+  openingDirection: z.enum(["open-in", "open-out", "sliding-left", "sliding-right", "fold-left", "fold-right", "none"]).default("none"),
   halfSolid: z.boolean().default(false),
   panels: z.number().int().min(2).max(8).default(3),
   sidelightWidth: z.number().default(400),
@@ -194,6 +195,9 @@ export const quoteItemSchema = z.object({
   fulfilmentSource: z.enum(["in-house", "outsourced"]).default("in-house"),
   outsourcedCostNzd: z.number().nullable().optional(),
   outsourcedSellNzd: z.number().nullable().optional(),
+  gosRequired: z.boolean().default(false),
+  gosChargeNzd: z.number().nullable().optional(),
+  catDoorEnabled: z.boolean().default(false),
 });
 
 export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });

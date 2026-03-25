@@ -37,7 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
 import LifecyclePanel from "@/components/lifecycle-panel";
-import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions, type ScopeFields, type ItemFilter } from "@/lib/subcontractor-pdf";
+import { generateSubcontractorPdf, type SubcontractorPdfItem, type SubcontractorPdfOptions, type ScopeFields, type ItemFilter, type DocumentPurpose } from "@/lib/subcontractor-pdf";
 import { svgToPngBlob } from "@/lib/export-png";
 
 function calcSqm(width: number, height: number, quantity: number, item?: any): number {
@@ -133,6 +133,7 @@ export default function ExecSummary() {
   const [subconIncludeSitePhotos, setSubconIncludeSitePhotos] = useState(true);
   const [subconIncludePricingReturn, setSubconIncludePricingReturn] = useState(true);
   const [subconItemFilter, setSubconItemFilter] = useState<ItemFilter>("all");
+  const [subconDocPurpose, setSubconDocPurpose] = useState<DocumentPurpose>("install_scope");
   const [subconGenerating, setSubconGenerating] = useState(false);
   const [subconScopeFields, setSubconScopeFields] = useState<ScopeFields>({
     sealant: "included",
@@ -396,6 +397,7 @@ export default function ExecSummary() {
               salePriceOverride: salePriceOverride ?? undefined,
               sqmOverride: item.category === "raked-fixed" ? (((item as any).rakedLeftHeight || item.height || 0) + ((item as any).rakedRightHeight || item.height || 0)) / 2 * item.width / 1_000_000 : undefined,
               perimeterOverrideM: item.category === "raked-fixed" ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0) : undefined,
+              gosChargeNzd: item.gosRequired ? (item.gosChargeNzd ?? undefined) : undefined,
             },
             { masterProfiles, masterAccessories, masterLabour }
           );
@@ -762,7 +764,12 @@ export default function ExecSummary() {
         quantity: item.quantity || 1,
         width: item.width,
         height: item.height,
-        ...(isRaked ? { category: "raked-fixed", rakedLeftHeight: rakedLH, rakedRightHeight: rakedRH } : {}),
+        category: item.category,
+        ...(isRaked ? { rakedLeftHeight: rakedLH, rakedRightHeight: rakedRH } : {}),
+        openingDirection: item.openingDirection || undefined,
+        gosRequired: item.gosRequired || false,
+        gosChargeNzd: item.gosChargeNzd ?? undefined,
+        catDoorEnabled: item.catDoorEnabled || false,
         drawingImageKey,
         photos: ip.photos ?? [],
         specValues,
@@ -881,7 +888,7 @@ export default function ExecSummary() {
   const handleSubcontractorPdf = async () => {
     if (!job || itemPricings.length === 0) return;
     setSubconGenerating(true);
-    toast({ title: `Generating Subcontractor Install Scope PDF...` });
+    toast({ title: subconDocPurpose === "supply_rfq" ? "Generating Supply / Fabrication RFQ PDF..." : "Generating Subcontractor Install Scope PDF..." });
     try {
       const pdfItems: SubcontractorPdfItem[] = [];
       for (let i = 0; i < itemPricings.length; i++) {
@@ -959,6 +966,7 @@ export default function ExecSummary() {
         scopeMode: subconScopeMode,
         workPackage: subconWorkPackage,
         scopeFields: subconScopeFields,
+        documentPurpose: subconDocPurpose,
         projectName: job.name || "Untitled Project",
         siteAddress: job.address || undefined,
         clientName: (job as any).clientName || undefined,
@@ -972,9 +980,10 @@ export default function ExecSummary() {
       };
 
       const pdf = await generateSubcontractorPdf(opts);
-      const scopeLabel = subconScopeMode === "renovation" ? "Renovation" : "NewBuild";
+      const purposeLabel = subconDocPurpose === "supply_rfq" ? "SupplyRFQ" : "InstallScope";
+      const scopeLabel = subconDocPurpose === "install_scope" ? `_${subconScopeMode === "renovation" ? "Renovation" : "NewBuild"}` : "";
       const filterSuffix = subconItemFilter === "outsourced_only" ? "_Outsourced" : subconItemFilter === "in_house_only" ? "_InHouse" : "";
-      const filename = `${(job.name || "Job").replace(/[^a-zA-Z0-9_-]/g, "_")}_SubconScope_${scopeLabel}${filterSuffix}.pdf`;
+      const filename = `${(job.name || "Job").replace(/[^a-zA-Z0-9_-]/g, "_")}_${purposeLabel}${scopeLabel}${filterSuffix}.pdf`;
       pdf.save(filename);
       toast({ title: "Subcontractor PDF downloaded successfully" });
       setSubconDialogOpen(false);
@@ -1108,42 +1117,64 @@ export default function ExecSummary() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <HardHat className="h-5 w-5" />
-              Subcontractor Install Scope PDF
+              {subconDocPurpose === "supply_rfq" ? "Supply / Fabrication RFQ" : "Subcontractor Install Scope PDF"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-5 py-2">
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Scope Type</Label>
-              <RadioGroup value={subconScopeMode} onValueChange={(v) => setSubconScopeMode(v as "renovation" | "new_build")} className="flex gap-4">
+              <Label className="text-sm font-semibold">Document Purpose</Label>
+              <RadioGroup value={subconDocPurpose} onValueChange={(v) => setSubconDocPurpose(v as DocumentPurpose)} className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <RadioGroupItem value="renovation" id="scope-renovation" data-testid="radio-scope-renovation" />
-                  <Label htmlFor="scope-renovation" className="cursor-pointer">Renovation</Label>
+                  <RadioGroupItem value="install_scope" id="purpose-install" data-testid="radio-purpose-install" />
+                  <Label htmlFor="purpose-install" className="cursor-pointer text-sm">Install Scope</Label>
                 </div>
                 <div className="flex items-center gap-2">
-                  <RadioGroupItem value="new_build" id="scope-new-build" data-testid="radio-scope-new-build" />
-                  <Label htmlFor="scope-new-build" className="cursor-pointer">New Build</Label>
+                  <RadioGroupItem value="supply_rfq" id="purpose-rfq" data-testid="radio-purpose-rfq" />
+                  <Label htmlFor="purpose-rfq" className="cursor-pointer text-sm">Supply / Fabrication RFQ</Label>
                 </div>
               </RadioGroup>
               <p className="text-xs text-muted-foreground">
-                {subconScopeMode === "renovation"
-                  ? "Includes removal, disposal, and installation scope"
-                  : "Includes installation to prepared openings only"}
+                {subconDocPurpose === "supply_rfq"
+                  ? "Request for pricing from a supplier or fabricator — supply/manufacture only, no installation"
+                  : "Installation pricing scope for a subcontractor — removal, install, and site work"}
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Work Package</Label>
-              <RadioGroup value={subconWorkPackage} onValueChange={(v) => setSubconWorkPackage(v as "install_only" | "removal_disposal_install")} className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="removal_disposal_install" id="wp-rdi" data-testid="radio-wp-removal" />
-                  <Label htmlFor="wp-rdi" className="cursor-pointer text-sm">Removal + disposal + install</Label>
+            {subconDocPurpose === "install_scope" && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Scope Type</Label>
+                  <RadioGroup value={subconScopeMode} onValueChange={(v) => setSubconScopeMode(v as "renovation" | "new_build")} className="flex gap-4">
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="renovation" id="scope-renovation" data-testid="radio-scope-renovation" />
+                      <Label htmlFor="scope-renovation" className="cursor-pointer">Renovation</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="new_build" id="scope-new-build" data-testid="radio-scope-new-build" />
+                      <Label htmlFor="scope-new-build" className="cursor-pointer">New Build</Label>
+                    </div>
+                  </RadioGroup>
+                  <p className="text-xs text-muted-foreground">
+                    {subconScopeMode === "renovation"
+                      ? "Includes removal, disposal, and installation scope"
+                      : "Includes installation to prepared openings only"}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="install_only" id="wp-io" data-testid="radio-wp-install-only" />
-                  <Label htmlFor="wp-io" className="cursor-pointer text-sm">Install only</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Work Package</Label>
+                  <RadioGroup value={subconWorkPackage} onValueChange={(v) => setSubconWorkPackage(v as "install_only" | "removal_disposal_install")} className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="removal_disposal_install" id="wp-rdi" data-testid="radio-wp-removal" />
+                      <Label htmlFor="wp-rdi" className="cursor-pointer text-sm">Removal + disposal + install</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="install_only" id="wp-io" data-testid="radio-wp-install-only" />
+                      <Label htmlFor="wp-io" className="cursor-pointer text-sm">Install only</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
-              </RadioGroup>
-            </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Item Filter</Label>
@@ -1170,6 +1201,7 @@ export default function ExecSummary() {
               </p>
             </div>
 
+            {subconDocPurpose === "install_scope" && (
             <div className="space-y-3">
               <Label className="text-sm font-semibold">Scope Definition</Label>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -1242,6 +1274,7 @@ export default function ExecSummary() {
                 </div>
               </div>
             </div>
+            )}
 
             <div className="space-y-3">
               <Label className="text-sm font-semibold">Include in PDF</Label>
@@ -1257,10 +1290,10 @@ export default function ExecSummary() {
                 <Checkbox id="subcon-pricing" checked={subconIncludePricingReturn} onCheckedChange={(v) => setSubconIncludePricingReturn(!!v)} data-testid="checkbox-include-pricing" />
                 <Label htmlFor="subcon-pricing" className="cursor-pointer text-sm">Pricing return section</Label>
               </div>
-              <div className="flex items-center gap-2">
+              {subconDocPurpose === "install_scope" && <div className="flex items-center gap-2">
                 <Checkbox id="subcon-variations" checked={subconScopeFields.includeVariationChecklist} onCheckedChange={(v) => setSubconScopeFields(p => ({ ...p, includeVariationChecklist: !!v }))} data-testid="checkbox-include-variations" />
                 <Label htmlFor="subcon-variations" className="cursor-pointer text-sm">Variation checklist</Label>
-              </div>
+              </div>}
             </div>
           </div>
           <DialogFooter>

@@ -11,6 +11,7 @@ export interface PricingBreakdown {
   handleCostNzd: number;
   lockCostNzd: number;
   wanzBarCostNzd: number;
+  gosCostNzd: number;
   totalWeightKg: number;
   laborHours: number;
   netCostNzd: number;
@@ -45,6 +46,7 @@ export interface PricingExtras {
   salePriceOverride?: number | null;
   sqmOverride?: number | null;
   perimeterOverrideM?: number | null;
+  gosChargeNzd?: number | null;
 }
 
 export interface ItemGeometry {
@@ -408,7 +410,8 @@ export function calculatePricing(
 
   const profilesCostNzd = profilesCostUsd * usdToNzdRate;
   const accessoriesCostNzd = accessoriesCostUsd * usdToNzdRate;
-  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + lockCostNzd + wanzBarCostNzd;
+  const gosCostNzd = (extras?.gosChargeNzd != null && extras.gosChargeNzd > 0) ? extras.gosChargeNzd : 0;
+  const netCostNzd = profilesCostNzd + accessoriesCostNzd + laborCostNzd + glassCostNzd + linerCostNzd + handleCostNzd + lockCostNzd + wanzBarCostNzd + gosCostNzd;
   const actualCostPerSqm = sqm > 0 ? netCostNzd / sqm : 0;
   const salePriceNzd = (extras?.salePriceOverride != null && extras.salePriceOverride > 0)
     ? extras.salePriceOverride
@@ -427,6 +430,7 @@ export function calculatePricing(
     handleCostNzd,
     lockCostNzd,
     wanzBarCostNzd,
+    gosCostNzd,
     totalWeightKg,
     laborHours,
     netCostNzd,
