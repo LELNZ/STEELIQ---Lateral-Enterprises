@@ -3626,19 +3626,21 @@ export default function QuoteBuilder() {
                         <div className="space-y-1.5">
                           <p className="text-[10px] text-blue-700 dark:text-blue-400 italic">Glaze on site due to size and weight</p>
                           <div>
-                            <Label className="text-[10px] text-muted-foreground">GOS Charge (NZD)</Label>
+                            <Label className="text-[10px] text-muted-foreground">GOS Charge — Sell (NZD)</Label>
                             <Input
                               type="number"
                               className="h-7 text-xs"
-                              placeholder="Enter charge or leave blank"
+                              placeholder="Customer sell charge"
                               min={0}
                               value={w.gosChargeNzd ?? ""}
                               onChange={(e) => form.setValue("gosChargeNzd", e.target.value ? parseFloat(e.target.value) : null)}
                               data-testid="input-gos-charge"
                             />
-                            {(w.gosChargeNzd == null || w.gosChargeNzd === 0) && (
-                              <p className="text-[10px] text-muted-foreground mt-0.5">No charge entered — GOS flag only.</p>
-                            )}
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {(w.gosChargeNzd == null || w.gosChargeNzd === 0)
+                                ? "⚠ No sell charge entered — GOS flag only, no revenue added."
+                                : "This amount is added to the item sell price."}
+                            </p>
                           </div>
                         </div>
                       )}
@@ -3719,12 +3721,6 @@ export default function QuoteBuilder() {
                               <span className="text-right font-medium" data-testid="text-wanz-bar-cost">${currentPricing.wanzBarCostNzd.toFixed(2)}</span>
                             </>
                           )}
-                          {currentPricing.gosCostNzd > 0 && (
-                            <>
-                              <span className="text-muted-foreground">GOS Charge (NZD)</span>
-                              <span className="text-right font-medium" data-testid="text-gos-cost">${currentPricing.gosCostNzd.toFixed(2)}</span>
-                            </>
-                          )}
                         </div>
                         <Separator />
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -3734,6 +3730,12 @@ export default function QuoteBuilder() {
                           <span className="text-right font-medium" data-testid="text-actual-cost-sqm">${currentPricing.actualCostPerSqm.toFixed(0)}/m²</span>
                           <span className="text-muted-foreground font-semibold">Sale Price</span>
                           <span className="text-right font-bold text-primary" data-testid="text-sale-price">${currentPricing.salePriceNzd.toFixed(2)}</span>
+                          {currentPricing.gosSellNzd > 0 && (
+                            <>
+                              <span className="text-muted-foreground text-[10px] pl-2">incl. GOS Sell</span>
+                              <span className="text-right font-medium text-green-700 dark:text-green-400" data-testid="text-gos-sell">${currentPricing.gosSellNzd.toFixed(2)}</span>
+                            </>
+                          )}
                         </div>
                         <Separator />
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">

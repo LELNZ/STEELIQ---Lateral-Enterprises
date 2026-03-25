@@ -1,0 +1,261 @@
+STEELIQ COMMERCIAL HARDENING PHASE — GOS (GLAZE ON SITE) PRICING CLARITY
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow commercial-correction phase.
+
+This is NOT:
+- a quote builder redesign
+- a pricing engine rewrite
+- a GOS feature expansion phase
+- a manufacturing/BOM phase
+- a document redesign phase
+- a lifecycle/workflow redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign the pricing engine broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond correcting GOS commercial behavior.
+- Do not change unrelated pricing logic.
+- Do not change subcontractor PDF behavior.
+- Preserve backward compatibility for existing quotes.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT VERIFIED RISK
+==================================================
+
+GOS (Glaze On Site) has been implemented with:
+
+- gosRequired flag
+- gosChargeNzd input
+- visual tags and notes
+- snapshot + PDF propagation
+
+However:
+
+The current implementation treats GOS charge as a "cost line" only.
+
+This creates a high commercial risk:
+- cost may be added without corresponding sell
+- margin may be incorrect or inflated
+- totals may not reflect real customer charge
+
+This phase exists to eliminate that ambiguity.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Make GOS pricing behavior explicit, correct, and commercially safe.
+
+After this phase:
+- GOS must have a clearly defined pricing role
+- totals must be correct
+- margin must be correct
+- no silent cost-only leakage is allowed
+
+==================================================
+COMMERCIAL CONTRACT (MANDATORY)
+==================================================
+
+GOS must behave as:
+
+👉 A SELLABLE LINE ITEM (not cost-only)
+
+Implementation rule:
+
+- GOS charge represents a SELL price applied to the customer
+- It must contribute to:
+  - total sell
+  - profit
+  - margin calculations
+
+Optional:
+- If cost tracking is required later, it must be a separate field (NOT in this phase)
+
+==================================================
+PHASE A — AUDIT CURRENT IMPLEMENTATION
+==================================================
+
+Audit and report:
+
+1. where gosChargeNzd is currently applied
+2. whether it affects:
+   - cost
+   - sell
+   - both
+   - neither correctly
+3. where it appears in:
+   - quote builder
+   - exec summary
+   - totals
+4. whether margin is currently impacted correctly or incorrectly
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — CORRECT GOS PRICING BEHAVIOR
+==================================================
+
+Implement the correct behavior:
+
+1. GOS charge must be treated as SELL
+
+- it adds to item sell price OR total sell
+- it must NOT silently increase cost only
+
+2. Totals must reflect:
+
+Total Sell =
+- item sell
+- + GOS sell
+- + all other components
+
+3. Profit must be:
+
+Profit = Total Sell - Total Cost
+
+4. Margin must be correct
+
+==================================================
+PHASE C — EXEC SUMMARY INTEGRATION
+==================================================
+
+Ensure GOS is clearly visible in executive summary.
+
+Requirements:
+- GOS must appear as a separate identifiable line OR clearly included in item totals
+- operator must be able to see that GOS is contributing to revenue
+
+Do NOT:
+- hide GOS inside an unclear total
+- double-count GOS
+
+==================================================
+PHASE D — UI CLARITY (CRITICAL)
+==================================================
+
+Update Quote Builder UI minimally to remove ambiguity.
+
+Requirements:
+- rename label if needed to clarify meaning, e.g.:
+  "GOS Charge (Sell NZD)"
+- user must understand this is what the customer is charged
+- no suggestion that this is cost-only
+
+Do NOT:
+- redesign UI broadly
+- add unnecessary fields
+
+==================================================
+PHASE E — VALIDATION / SAFETY
+==================================================
+
+Implement basic safeguards:
+
+If:
+- GOS is enabled
+- but charge is empty or zero
+
+Then:
+- show warning (non-blocking)
+- do NOT silently assume $0
+
+==================================================
+PHASE F — PRESERVE EVERYTHING ELSE
+==================================================
+
+Must remain unchanged:
+- base pricing engine logic
+- outsourced item logic
+- opening direction logic
+- document rendering (except reflecting corrected totals)
+- snapshot/revision system
+- navigation
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was corrected
+- confirm GOS is now treated as SELL (not cost-only)
+- confirm totals and margin are now correct
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. AUDIT RESULT
+- how GOS behaved before
+- what the risk was
+- where it was incorrectly applied
+
+4. FIX RESULT
+- how GOS is now applied
+- how totals changed
+- how profit/margin are now calculated
+
+5. EXEC SUMMARY RESULT
+- how GOS appears in totals
+- whether it is visible and understandable
+
+6. UI RESULT
+- how the GOS input is labeled
+- how user understanding is improved
+
+7. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- GOS adds to sell
+- totals increase correctly
+- margin updates correctly
+- no double counting
+- no route errors
+
+8. COMPATIBILITY RESULT
+Confirm unchanged:
+- existing quote items
+- pricing engine outside GOS
+- outsourced logic
+- PDF behavior
+- revision flow
+- navigation
+
+9. KNOWN LIMITS
+- confirm no cost-side tracking yet (if true)
+- confirm no auto-GOS rule yet
+
+10. RELEASE READINESS
+State:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only
+
+11. NEXT PHASE
+- one narrow phase only
+
+12. OPEN RISKS
+Must include:
+- app freeze after inactivity
+- any remaining PDF polish gaps
+- navigation contract drift
+- geometry coverage gaps
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+This is a commercial correctness phase.
+
+Do not allow ambiguity.
+Do not leave GOS as cost-only.
+Do not hide GOS impact inside totals.
+
+Your job is to ensure GOS is treated as a clear, intentional revenue component so the system reflects real-world quoting and protects margin.
