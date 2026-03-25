@@ -145,225 +145,281 @@ export default function QuotePreview() {
   const activeModel = liveRenderModel ?? renderModel;
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
 
+  const ITEMS_PER_PAGE = 3;
+  const schedulePages: RenderScheduleItem[][] = [];
+  if (isSectionVisible(T, "schedule") && liveScheduleItems.length > 0) {
+    for (let i = 0; i < liveScheduleItems.length; i += ITEMS_PER_PAGE) {
+      schedulePages.push(liveScheduleItems.slice(i, i + ITEMS_PER_PAGE));
+    }
+  }
+
+  const hasLegalOrAcceptance = isSectionVisible(T, "legal") || isSectionVisible(T, "acceptance");
+
+  const pageStyle: React.CSSProperties = {
+    maxWidth: "794px",
+    width: "100%",
+    margin: "0 auto",
+    background: "#fff",
+    boxShadow: "0 1px 8px rgba(0,0,0,0.10), 0 0 1px rgba(0,0,0,0.08)",
+    borderRadius: "2px",
+  };
+
+  const pageContentStyle: React.CSSProperties = {
+    padding: "40px 40px 48px 40px",
+    display: "flex",
+    flexDirection: "column",
+    gap: `${Math.round(T.spacing.sectionGapMm * 3.78)}px`,
+    minHeight: "1050px",
+  };
+
+  const sectionGap = `${Math.round(T.spacing.sectionGapMm * 3.78)}px`;
+
   return (
-    <div className="mx-auto print:max-w-none print:shadow-none" style={{ maxWidth: "794px", boxShadow: "0 1px 6px rgba(0,0,0,0.08)", background: "#fff" }} data-testid="quote-preview-page">
-      <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden border-b">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteDetail(quoteId!))} data-testid="button-back-to-quote">
-            <ArrowLeftCircle className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-bold">Customer Quote Preview</h1>
-            <p className="text-sm text-muted-foreground">{header.quoteNumber} &middot; Revision {header.revisionVersion}</p>
+    <div style={{ background: "#e8e8ec" }} className="print:!bg-white" data-testid="quote-preview-page">
+      <div className="mx-auto print:max-w-none" style={{ maxWidth: "794px" }}>
+        <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden" style={{ background: "#fff", borderBottom: "1px solid #e2e2e5" }}>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteDetail(quoteId!))} data-testid="button-back-to-quote">
+              <ArrowLeftCircle className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-lg font-bold">Customer Quote Preview</h1>
+              <p className="text-sm text-muted-foreground">{header.quoteNumber} &middot; Revision {header.revisionVersion}</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Sheet open={specSheetOpen} onOpenChange={setSpecSheetOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="button-edit-spec-display">
-                <Settings2 className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Edit </span>Spec Display
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="w-[420px] overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle>Quote Display Settings</SheetTitle>
-              </SheetHeader>
-              <div className="mt-4 space-y-6">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Sheet open={specSheetOpen} onOpenChange={setSpecSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="button-edit-spec-display">
+                  <Settings2 className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Edit </span>Spec Display
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[420px] overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Quote Display Settings</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 space-y-6">
 
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Totals Lines Visibility</p>
-                  <p className="text-xs text-muted-foreground mb-3">The final total is always shown. Toggle individual breakdown lines on or off for the customer-facing quote.</p>
-                  <div className="space-y-2.5">
-                    {([
-                      { key: "showItemsSubtotal", label: "Items Subtotal" },
-                      { key: "showInstallation", label: "Installation" },
-                      { key: "showDelivery", label: "Delivery" },
-                      { key: "showRemoval", label: "Old Window/Door Removal" },
-                      { key: "showRubbish", label: "Rubbish / Waste Removal" },
-                      { key: "showSubtotal", label: "Subtotal (excl. GST)" },
-                      { key: "showGst", label: "GST (15%)" },
-                    ] as { key: keyof TotalsDisplayConfig; label: string }[]).map(({ key, label }) => (
-                      <div key={key} className="flex items-center justify-between gap-3">
-                        <Label htmlFor={`totals-${key}`} className="text-sm cursor-pointer">{label}</Label>
-                        <Switch
-                          id={`totals-${key}`}
-                          checked={effectiveTotalsConfig[key]}
-                          onCheckedChange={() => toggleTotalsField(key)}
-                          data-testid={`switch-totals-${key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Details Box</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Shows a dedicated &quot;Details&quot; section below Quote Summary.</p>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Totals Lines Visibility</p>
+                    <p className="text-xs text-muted-foreground mb-3">The final total is always shown. Toggle individual breakdown lines on or off for the customer-facing quote.</p>
+                    <div className="space-y-2.5">
+                      {([
+                        { key: "showItemsSubtotal", label: "Items Subtotal" },
+                        { key: "showInstallation", label: "Installation" },
+                        { key: "showDelivery", label: "Delivery" },
+                        { key: "showRemoval", label: "Old Window/Door Removal" },
+                        { key: "showRubbish", label: "Rubbish / Waste Removal" },
+                        { key: "showSubtotal", label: "Subtotal (excl. GST)" },
+                        { key: "showGst", label: "GST (15%)" },
+                      ] as { key: keyof TotalsDisplayConfig; label: string }[]).map(({ key, label }) => (
+                        <div key={key} className="flex items-center justify-between gap-3">
+                          <Label htmlFor={`totals-${key}`} className="text-sm cursor-pointer">{label}</Label>
+                          <Switch
+                            id={`totals-${key}`}
+                            checked={effectiveTotalsConfig[key]}
+                            onCheckedChange={() => toggleTotalsField(key)}
+                            data-testid={`switch-totals-${key}`}
+                          />
+                        </div>
+                      ))}
                     </div>
-                    <Switch
-                      id="totals-showCommercialRemarks"
-                      checked={effectiveTotalsConfig.showCommercialRemarks ?? true}
-                      onCheckedChange={() => toggleTotalsField("showCommercialRemarks")}
-                      data-testid="switch-totals-showCommercialRemarks"
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Details Box</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Shows a dedicated &quot;Details&quot; section below Quote Summary.</p>
+                      </div>
+                      <Switch
+                        id="totals-showCommercialRemarks"
+                        checked={effectiveTotalsConfig.showCommercialRemarks ?? true}
+                        onCheckedChange={() => toggleTotalsField("showCommercialRemarks")}
+                        data-testid="switch-totals-showCommercialRemarks"
+                      />
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-3">Customer-facing details text</p>
+                    <Textarea
+                      value={effectiveRemarks}
+                      onChange={e => setLocalRemarks(e.target.value)}
+                      placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
+                      rows={5}
+                      className="text-sm"
+                      data-testid="textarea-commercial-remarks"
                     />
                   </div>
-                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-3">Customer-facing details text</p>
-                  <Textarea
-                    value={effectiveRemarks}
-                    onChange={e => setLocalRemarks(e.target.value)}
-                    placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
-                    rows={5}
-                    className="text-sm"
-                    data-testid="textarea-commercial-remarks"
-                  />
-                </div>
 
-                <Separator />
+                  <Separator />
 
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Item Spec Columns</p>
-                  <div className="space-y-4">
-                    {Object.entries(doc.specDisplay.specDictionaryGrouped).map(([group, specs]) => (
-                      <div key={group}>
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">{group}</p>
-                        <div className="space-y-1.5">
-                          {specs.filter(s => s.customerVisibleAllowed).map(spec => (
-                            <div key={spec.key} className="flex items-center gap-2">
-                              <Checkbox
-                                id={`spec-${spec.key}`}
-                                checked={effectiveKeys.includes(spec.key)}
-                                onCheckedChange={() => toggleSpecKey(spec.key)}
-                                data-testid={`checkbox-spec-${spec.key}`}
-                              />
-                              <Label htmlFor={`spec-${spec.key}`} className="text-sm">{spec.label}</Label>
-                            </div>
-                          ))}
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Item Spec Columns</p>
+                    <div className="space-y-4">
+                      {Object.entries(doc.specDisplay.specDictionaryGrouped).map(([group, specs]) => (
+                        <div key={group}>
+                          <p className="text-xs font-medium text-muted-foreground mb-1.5">{group}</p>
+                          <div className="space-y-1.5">
+                            {specs.filter(s => s.customerVisibleAllowed).map(spec => (
+                              <div key={spec.key} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`spec-${spec.key}`}
+                                  checked={effectiveKeys.includes(spec.key)}
+                                  onCheckedChange={() => toggleSpecKey(spec.key)}
+                                  data-testid={`checkbox-spec-${spec.key}`}
+                                />
+                                <Label htmlFor={`spec-${spec.key}`} className="text-sm">{spec.label}</Label>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <Button
-                  onClick={() => saveSpecDisplayMutation.mutate()}
-                  disabled={saveSpecDisplayMutation.isPending || !hasUnsavedChanges}
-                  className="w-full"
-                  data-testid="button-save-spec-display"
-                >
-                  {saveSpecDisplayMutation.isPending ? "Saving..." : "Save Display Settings"}
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
-          <Button
-            variant="default"
-            size="sm"
-            disabled={pdfExporting}
-            onClick={async () => {
-              setPdfExporting(true);
-              try {
-                await generateQuotePdf(activeModel);
-                toast({ title: "PDF exported successfully" });
-              } catch (err: any) {
-                toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
-              } finally {
-                setPdfExporting(false);
-              }
-            }}
-            data-testid="button-export-pdf"
-          >
-            <Download className="h-4 w-4 mr-1" /> {pdfExporting ? "Exporting..." : "Export PDF"}
-          </Button>
+                  <Button
+                    onClick={() => saveSpecDisplayMutation.mutate()}
+                    disabled={saveSpecDisplayMutation.isPending || !hasUnsavedChanges}
+                    className="w-full"
+                    data-testid="button-save-spec-display"
+                  >
+                    {saveSpecDisplayMutation.isPending ? "Saving..." : "Save Display Settings"}
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Button
+              variant="default"
+              size="sm"
+              disabled={pdfExporting}
+              onClick={async () => {
+                setPdfExporting(true);
+                try {
+                  await generateQuotePdf(activeModel);
+                  toast({ title: "PDF exported successfully" });
+                } catch (err: any) {
+                  toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
+                } finally {
+                  setPdfExporting(false);
+                }
+              }}
+              data-testid="button-export-pdf"
+            >
+              <Download className="h-4 w-4 mr-1" /> {pdfExporting ? "Exporting..." : "Export PDF"}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
+      <div className="mx-auto print:max-w-none print:!p-0" style={{ maxWidth: "794px" }}>
+        <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
+      </div>
 
-      <div className="bg-white p-6 sm:p-10 print:p-4" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.spacing.sectionGapMm * 3.78)}px` }}>
-        {isSectionVisible(T, "header") && (
-          <div className="space-y-3">
-            <HeaderSection branding={branding} orgContact={orgContact} template={T} />
-            <Separator style={{ borderColor: T.colors.border }} />
-          </div>
-        )}
+      <div style={{ padding: "32px 16px 48px", display: "flex", flexDirection: "column", gap: "28px" }} className="print:!p-0 print:!gap-0">
 
-        <h2 className="text-lg font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
-          {T.documentMode === "tender" ? "TENDER" : activeModel.documentLabel.toUpperCase()}
-        </h2>
-
-        {isSectionVisible(T, "disclaimer") && (
-          <div data-testid="text-preliminary-disclaimer">
-            <RichTextRenderer
-              text={disclaimerText}
-              color={T.colors.headingMuted}
-              className="space-y-0.5 text-sm italic"
-            />
-          </div>
-        )}
-
-        {isSectionVisible(T, "customerProject") && (
-          <CustomerProjectSection header={header} customerProject={customerProject} template={T} />
-        )}
-
-        {isSectionVisible(T, "totals") && (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Quote Summary</p>
-            <TotalsSection totals={totals} template={T} />
-          </div>
-        )}
-
-        {activeModel.commercialRemarks && (
-          <div
-            data-testid="commercial-remarks-block"
-            style={{
-              border: `1px solid ${T.colors.border}`,
-              borderRadius: 6,
-              padding: "12px 16px",
-            }}
-          >
-            <p
-              className="text-xs font-semibold uppercase tracking-wider mb-2"
-              style={{ color: T.colors.headingMuted }}
-            >
-              Details
-            </p>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: T.colors.bodyText }}>
-              {activeModel.commercialRemarks}
-            </p>
-          </div>
-        )}
-
-        {isSectionVisible(T, "schedule") && (
-          <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
-            <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
-            <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
-            {liveScheduleItems.length === 0 && (
-              <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
+        <div style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid="preview-page-1">
+          <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
+            {isSectionVisible(T, "header") && (
+              <div className="space-y-3">
+                <HeaderSection branding={branding} orgContact={orgContact} template={T} />
+                <Separator style={{ borderColor: T.colors.border }} />
+              </div>
             )}
-            {liveScheduleItems.map((item) => (
-              <ScheduleItemCard
-                key={item.index}
-                item={item}
-                template={T}
-              />
-            ))}
+
+            <h2 className="text-lg font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
+              {T.documentMode === "tender" ? "TENDER" : activeModel.documentLabel.toUpperCase()}
+            </h2>
+
+            {isSectionVisible(T, "disclaimer") && (
+              <div data-testid="text-preliminary-disclaimer">
+                <RichTextRenderer
+                  text={disclaimerText}
+                  color={T.colors.headingMuted}
+                  className="space-y-0.5 text-sm italic"
+                />
+              </div>
+            )}
+
+            {isSectionVisible(T, "customerProject") && (
+              <CustomerProjectSection header={header} customerProject={customerProject} template={T} />
+            )}
+
+            {isSectionVisible(T, "totals") && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Quote Summary</p>
+                <TotalsSection totals={totals} template={T} />
+              </div>
+            )}
+
+            {activeModel.commercialRemarks && (
+              <div
+                data-testid="commercial-remarks-block"
+                style={{
+                  border: `1px solid ${T.colors.border}`,
+                  borderRadius: 6,
+                  padding: "12px 16px",
+                }}
+              >
+                <p
+                  className="text-xs font-semibold uppercase tracking-wider mb-2"
+                  style={{ color: T.colors.headingMuted }}
+                >
+                  Details
+                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: T.colors.bodyText }}>
+                  {activeModel.commercialRemarks}
+                </p>
+              </div>
+            )}
+
+            {isSectionVisible(T, "schedule") && liveScheduleItems.length === 0 && (
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
+                <p className="text-sm mt-2" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {schedulePages.map((pageItems, pageIdx) => (
+          <div key={`schedule-page-${pageIdx}`} style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid={`preview-schedule-page-${pageIdx}`}>
+            <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
+              {pageIdx === 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: sectionGap }}>
+                  <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
+                  <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+                {pageItems.map((item) => (
+                  <ScheduleItemCard
+                    key={item.index}
+                    item={item}
+                    template={T}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {hasLegalOrAcceptance && (
+          <div style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid="preview-page-legal">
+            <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
+              {isSectionVisible(T, "legal") && (
+                <div>
+                  <LegalSection legal={legal} template={T} />
+                </div>
+              )}
+
+              {isSectionVisible(T, "acceptance") && (
+                <AcceptanceSection template={T} quoteNumber={header.quoteNumber} />
+              )}
+            </div>
           </div>
         )}
 
-        {isSectionVisible(T, "legal") && (
-          <div className="pt-2">
-            <Separator style={{ borderColor: T.colors.border }} className="mb-5" />
-            <LegalSection legal={legal} template={T} />
-          </div>
-        )}
-
-        {isSectionVisible(T, "acceptance") && (
-          <AcceptanceSection template={T} quoteNumber={header.quoteNumber} />
-        )}
       </div>
     </div>
   );
