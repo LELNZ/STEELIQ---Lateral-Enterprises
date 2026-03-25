@@ -1,0 +1,211 @@
+STEELIQ CUSTOMER QUOTE PDF PHASE — GLOBAL ORIENTATION CONVENTION NOTE
+
+AGENT CONTROL HEADER — MUST FOLLOW EXACTLY
+
+You are working on an existing live production-oriented system.
+
+This is a narrow customer-facing document-clarity phase.
+
+This is NOT:
+- a quote builder redesign
+- a geometry-engine rewrite
+- a pricing-engine redesign
+- a manufacturing/BOM/cut-list phase
+- a broad client PDF redesign
+- a subcontractor PDF phase
+- a lifecycle/workflow redesign
+
+NON-NEGOTIABLE RULES
+- Do not redesign the architecture.
+- Do not redesign quote/estimate/revision models broadly.
+- Do not perform hidden refactors.
+- Do not widen scope beyond adding a standard orientation-convention note to the customer-facing quote PDF / preview path.
+- Do not change subcontractor PDF behavior in this phase.
+- Do not change internal executive-summary behavior in this phase.
+- Do not mix pricing logic into this phase.
+- Do not mix manufacturing logic into this phase.
+- Preserve backward compatibility for existing quote documents.
+- Treat current repo/runtime truth as the baseline.
+
+==================================================
+CURRENT BUSINESS NEED
+==================================================
+
+The customer-facing quote PDF now includes per-item opening-direction labels for relevant items.
+
+To remove ambiguity in how joinery orientation is interpreted, the quote document now also needs a clear global viewing-convention note:
+
+"All joinery is viewed from outside."
+
+This note must appear in the client-facing quote preview/PDF in a visible and professional location so clients are not confused about orientation.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Add the exact standard note:
+
+"All joinery is viewed from outside."
+
+to the customer-facing quote preview / PDF in the correct location and style so it improves orientation clarity without cluttering the document.
+
+==================================================
+STRICT SCOPE
+==================================================
+
+Implement ONLY:
+
+1. audit of the best insertion point in the current customer-facing quote preview/PDF path
+2. add the standard orientation-convention note
+3. ensure the note appears cleanly and consistently in both preview and generated PDF if they share the same render path
+
+Do NOT widen into:
+- new direction logic
+- new geometry logic
+- client PDF template redesign
+- subcontractor PDF changes
+- pricing changes
+- executive-summary changes
+- manufacturing annotations
+
+==================================================
+PHASE A — AUDIT CURRENT CUSTOMER-FACING PDF / PREVIEW PATH
+==================================================
+
+Audit and report:
+
+1. where the customer-facing quote preview renders the schedule / drawings / item interpretation content
+2. where the customer-facing PDF renders the same
+3. what the safest insertion point is for a global orientation-convention note
+4. whether preview and PDF already share the same render model/location for such a note
+
+Do not assume.
+Use actual repo/runtime truth.
+
+==================================================
+PHASE B — DEFINE THE NOTE CONTRACT
+==================================================
+
+Implement the exact wording below with no paraphrasing:
+
+All joinery is viewed from outside.
+
+Rules:
+- wording must be exact
+- note must be client-facing
+- note must be global, not repeated under every item
+- note must not be buried in legal fine print
+- note must not appear in subcontractor PDFs in this phase unless already shared by mistake and explicitly reported
+
+==================================================
+PHASE C — PLACE THE NOTE CORRECTLY
+==================================================
+
+Place the note in the most appropriate current customer-facing document location.
+
+Preferred behavior:
+- near the schedule/drawing section where orientation is interpreted
+- clearly visible but not visually dominant
+- professionally styled to match the document
+
+Do NOT:
+- place it so low on the page that clients miss it
+- repeat it excessively
+- clutter item rows with the same statement
+
+==================================================
+PHASE D — PRESERVE EXISTING DOCUMENT BEHAVIOR
+==================================================
+
+Must remain unchanged:
+- per-item direction labels already implemented
+- item drawings
+- pricing/totals
+- subcontractor PDF behavior
+- executive summary behavior
+- revision flow
+- quote document pipeline structure
+
+Do not redesign the document pipeline.
+Use the minimum safe change.
+
+==================================================
+REQUIRED DELIVERABLE FORMAT
+==================================================
+
+Return your completion report in this exact structure:
+
+1. SUMMARY
+- what was implemented
+- confirm the exact note was added
+- confirm it appears in the customer-facing quote preview/PDF
+- confirm subcontractor PDF was not changed in this phase
+
+2. FILES CHANGED
+- every file changed
+- one-line reason for each
+
+3. CURRENT-STATE AUDIT RESULT
+- where the note was inserted
+- why that was the safest/best location
+- whether preview/PDF share the same render path for this note
+
+4. NOTE IMPLEMENTATION RESULT
+- confirm the exact wording used
+- explain how it is styled/placed
+- confirm it is global and not repeated per item
+
+5. RUNTIME VERIFICATION RESULT
+Explicitly verify:
+- note appears in customer-facing preview
+- note appears in customer-facing PDF
+- per-item opening-direction labels still work
+- subcontractor PDF remains unchanged
+- no touched route returns 404
+
+6. COMPATIBILITY RESULT
+Confirm specifically whether these remain unchanged:
+- existing quote items
+- pricing engine
+- opening-direction data/labels
+- client-facing QuoteDocument / Preview / PDF structure except for the added note
+- subcontractor PDF behavior
+- executive summary behavior
+- revision flow
+- lifecycle/governance protections
+- navigation
+
+7. KNOWN LIMITS AFTER THIS PHASE
+Must explicitly state:
+- any customer document orientation caveat still outside this scope
+- whether any additional document clarity work remains for later
+- confirm no broader PDF redesign was done
+
+8. RELEASE READINESS CALL
+State ONE of:
+- Ready for GitHub push and live publish
+OR
+- Ready for GitHub push only, not live publish yet
+
+9. RECOMMENDED NEXT PHASE
+- one narrow next phase only
+- no branching roadmap
+
+10. OPEN RISKS / WATCH ITEMS
+Must include:
+- app freeze after inactivity
+- any remaining subcontractor PDF polish/branding gap
+- any remaining navigation contract drift outside this phase
+- geometry-family coverage gap outside current support
+
+==================================================
+FINAL EXECUTION STANDARD
+==================================================
+
+Treat this as a live enterprise-platform customer-document clarity phase.
+
+Do not broaden the phase.
+Do not bury the note in fine print.
+Do not redesign the document system.
+
+Your job is to add the exact global note "All joinery is viewed from outside." to the customer-facing quote preview/PDF in a clean, visible, professional location while preserving the rest of the document behavior unchanged.

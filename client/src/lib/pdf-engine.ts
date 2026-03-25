@@ -936,6 +936,12 @@ async function renderSchedule(
   pdf.text("SCHEDULE OF ITEMS", LEFT_MARGIN, y + 4);
   y += 8;
 
+  pdf.setFont(FONT_NORMAL, "italic");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(COLOR_BODY);
+  pdf.text("All joinery is viewed from outside.", LEFT_MARGIN, y + 3);
+  y += 6;
+
   for (let si = 0; si < model.scheduleItems.length; si++) {
     const item = model.scheduleItems[si];
     onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
