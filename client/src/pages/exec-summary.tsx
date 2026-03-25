@@ -135,6 +135,7 @@ export default function ExecSummary() {
   const [subconItemFilter, setSubconItemFilter] = useState<ItemFilter>("all");
   const [subconDocPurpose, setSubconDocPurpose] = useState<DocumentPurpose>("install_scope");
   const [subconGenerating, setSubconGenerating] = useState(false);
+  const [subconProgress, setSubconProgress] = useState("");
   const [subconScopeFields, setSubconScopeFields] = useState<ScopeFields>({
     sealant: "included",
     flashings: "included",
@@ -893,12 +894,17 @@ export default function ExecSummary() {
   const handleSubcontractorPdf = async () => {
     if (!job || itemPricings.length === 0 || subconGenerating) return;
     setSubconGenerating(true);
+    setSubconProgress("");
     toast({ title: subconDocPurpose === "supply_rfq" ? "Generating Supply / Fabrication RFQ PDF..." : "Generating Subcontractor Install Scope PDF..." });
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
     try {
       const pdfItems: SubcontractorPdfItem[] = [];
       for (let i = 0; i < itemPricings.length; i++) {
         const ip = itemPricings[i];
+        setSubconProgress(`Preparing item ${i + 1} of ${itemPricings.length}...`);
+        if (i > 0 && i % 2 === 0) {
+          await new Promise((r) => setTimeout(r, 0));
+        }
         let drawingDataUrl: string | null = null;
         if (subconIncludeDrawings) {
           try {
@@ -985,7 +991,7 @@ export default function ExecSummary() {
         includePricingReturn: subconIncludePricingReturn,
       };
 
-      const pdf = await generateSubcontractorPdf(opts);
+      const pdf = await generateSubcontractorPdf(opts, setSubconProgress);
       const purposeLabel = subconDocPurpose === "supply_rfq" ? "SupplyRFQ" : "InstallScope";
       const scopeLabel = subconDocPurpose === "install_scope" ? `_${subconScopeMode === "renovation" ? "Renovation" : "NewBuild"}` : "";
       const filterSuffix = subconItemFilter === "outsourced_only" ? "_Outsourced" : subconItemFilter === "in_house_only" ? "_InHouse" : "";
@@ -1319,7 +1325,7 @@ export default function ExecSummary() {
             <Button variant="outline" size="sm" onClick={() => setSubconDialogOpen(false)} data-testid="button-subcon-cancel">Cancel</Button>
             <Button size="sm" onClick={handleSubcontractorPdf} disabled={subconGenerating} data-testid="button-subcon-generate" className={subconDocPurpose === "supply_rfq" ? "bg-violet-600 hover:bg-violet-700" : ""}>
               <Download className="w-4 h-4 mr-1.5" />
-              {subconGenerating ? "Generating..." : subconDocPurpose === "supply_rfq" ? "Generate Supply RFQ" : "Generate Install Scope PDF"}
+              {subconGenerating ? (subconProgress || "Generating...") : subconDocPurpose === "supply_rfq" ? "Generate Supply RFQ" : "Generate Install Scope PDF"}
             </Button>
           </DialogFooter>
         </DialogContent>

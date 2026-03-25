@@ -151,7 +151,7 @@ function formatDimension(item: SubcontractorPdfItem): string {
   return `${item.width}\u00D7${item.height}`;
 }
 
-export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions): Promise<jsPDF> {
+export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions, onProgress?: (status: string) => void): Promise<jsPDF> {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   pageCountRef = { count: 0 };
   const purpose = opts.documentPurpose || "install_scope";
@@ -160,12 +160,16 @@ export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions): P
   const filter = opts.itemFilter || "all";
   const filteredOpts = { ...opts, items: applyItemFilter(opts.items, filter) };
 
+  onProgress?.("Building document structure...");
+
   if (purpose === "supply_rfq") {
     let y = renderRfqPageOne(pdf, filteredOpts);
     y = renderRfqRequirements(pdf, filteredOpts, y);
+    onProgress?.("Rendering item schedule...");
     y = renderItemSchedule(pdf, filteredOpts, y);
     if (filteredOpts.includeDrawings || filteredOpts.includeSitePhotos) {
-      await renderDrawingGrid(pdf, filteredOpts);
+      onProgress?.("Rendering drawings...");
+      await renderDrawingGrid(pdf, filteredOpts, onProgress);
     }
     if (filteredOpts.includePricingReturn) {
       pdf.addPage();
@@ -175,9 +179,11 @@ export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions): P
   } else {
     let y = renderPageOne(pdf, filteredOpts);
     y = renderScopeDetails(pdf, filteredOpts, y);
+    onProgress?.("Rendering item schedule...");
     y = renderItemSchedule(pdf, filteredOpts, y);
     if (filteredOpts.includeDrawings || filteredOpts.includeSitePhotos) {
-      await renderDrawingGrid(pdf, filteredOpts);
+      onProgress?.("Rendering drawings...");
+      await renderDrawingGrid(pdf, filteredOpts, onProgress);
     }
     if (filteredOpts.includePricingReturn) {
       pdf.addPage();
@@ -186,6 +192,7 @@ export async function generateSubcontractorPdf(opts: SubcontractorPdfOptions): P
     }
   }
 
+  onProgress?.("Finalizing...");
   return pdf;
 }
 
@@ -582,7 +589,7 @@ function loadImageDimensions(dataUrl: string): Promise<{ width: number; height: 
   });
 }
 
-async function renderDrawingGrid(pdf: jsPDF, opts: SubcontractorPdfOptions) {
+async function renderDrawingGrid(pdf: jsPDF, opts: SubcontractorPdfOptions, onProgress?: (status: string) => void) {
   const drawItems: { idx: number; item: SubcontractorPdfItem }[] = [];
   for (let i = 0; i < opts.items.length; i++) {
     const item = opts.items[i];
@@ -614,7 +621,12 @@ async function renderDrawingGrid(pdf: jsPDF, opts: SubcontractorPdfOptions) {
   y += 5;
 
   let col = 0;
-  for (const { idx, item } of drawItems) {
+  for (let di = 0; di < drawItems.length; di++) {
+    const { idx, item } = drawItems[di];
+    onProgress?.(`Drawing ${di + 1} of ${drawItems.length}...`);
+    if (di > 0 && di % 3 === 0) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
     if (col === 0) {
       y = ensureSpace(pdf, y, cellH + 2);
     }

@@ -945,6 +945,9 @@ async function renderSchedule(
   for (let si = 0; si < model.scheduleItems.length; si++) {
     const item = model.scheduleItems[si];
     onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
+    if (si > 0 && si % 2 === 0) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
 
     const loadablePhotoCount = item.media.customerPhotos.filter((p) => imageCache.has(p.key)).length;
     const hasItemDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);

@@ -1691,7 +1691,10 @@ export default function QuoteBuilder() {
       const pageHeight = pdf.internal.pageSize.getHeight();
 
       for (let i = 0; i < items.length; i++) {
-        if (i > 0) pdf.addPage();
+        if (i > 0) {
+          pdf.addPage();
+          await new Promise((r) => setTimeout(r, 0));
+        }
         const iwp = items[i];
         const blob = await renderOffscreenAndCapture(iwp.item);
         const dataUrl = await new Promise<string>((resolve) => {
