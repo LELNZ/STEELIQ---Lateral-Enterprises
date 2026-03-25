@@ -1081,7 +1081,7 @@ export default function ExecSummary() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setSubconDialogOpen(true)} disabled={itemPricings.length === 0} data-testid="menu-subcontractor-pdf">
                 <HardHat className="w-4 h-4 mr-2" />
-                Subcontractor Install Scope (PDF)
+                Subcontractor Document (PDF)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1129,11 +1129,11 @@ export default function ExecSummary() {
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Document Purpose</Label>
               <RadioGroup value={subconDocPurpose} onValueChange={(v) => setSubconDocPurpose(v as DocumentPurpose)} className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 border ${subconDocPurpose === "install_scope" ? "border-blue-300 bg-blue-50/50 dark:border-blue-700 dark:bg-blue-950/30" : "border-transparent"}`}>
                   <RadioGroupItem value="install_scope" id="purpose-install" data-testid="radio-purpose-install" />
-                  <Label htmlFor="purpose-install" className="cursor-pointer text-sm">Install Scope</Label>
+                  <Label htmlFor="purpose-install" className="cursor-pointer text-sm">Subcontractor Install Scope</Label>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 rounded-md px-2 py-1.5 border ${subconDocPurpose === "supply_rfq" ? "border-violet-300 bg-violet-50/50 dark:border-violet-700 dark:bg-violet-950/30" : "border-transparent"}`}>
                   <RadioGroupItem value="supply_rfq" id="purpose-rfq" data-testid="radio-purpose-rfq" />
                   <Label htmlFor="purpose-rfq" className="cursor-pointer text-sm">Supply / Fabrication RFQ</Label>
                 </div>
@@ -1301,11 +1301,24 @@ export default function ExecSummary() {
               </div>}
             </div>
           </div>
+          <div className={`rounded-md border p-3 text-xs space-y-1 ${subconDocPurpose === "supply_rfq" ? "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800" : "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800"}`} data-testid="subcon-purpose-summary">
+            <p className={`font-semibold text-sm ${subconDocPurpose === "supply_rfq" ? "text-violet-700 dark:text-violet-400" : "text-blue-700 dark:text-blue-400"}`}>
+              {subconDocPurpose === "supply_rfq" ? "Supply / Fabrication RFQ" : "Subcontractor Install Scope"}
+            </p>
+            <p className="text-muted-foreground">
+              {subconDocPurpose === "supply_rfq"
+                ? "This document requests pricing from a supplier or fabricator. It does NOT include installation scope, removal, or site work details."
+                : `Installation scope document (${subconScopeMode === "renovation" ? "Renovation" : "New Build"}) — ${subconWorkPackage === "removal_disposal_install" ? "removal + disposal + install" : "install only"}. No commercial pricing is disclosed.`}
+            </p>
+            <p className="text-muted-foreground">
+              Items: {subconItemFilter === "outsourced_only" ? "Outsourced only" : subconItemFilter === "in_house_only" ? "In-house only" : "All items"}
+            </p>
+          </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setSubconDialogOpen(false)} data-testid="button-subcon-cancel">Cancel</Button>
-            <Button size="sm" onClick={handleSubcontractorPdf} disabled={subconGenerating} data-testid="button-subcon-generate">
+            <Button size="sm" onClick={handleSubcontractorPdf} disabled={subconGenerating} data-testid="button-subcon-generate" className={subconDocPurpose === "supply_rfq" ? "bg-violet-600 hover:bg-violet-700" : ""}>
               <Download className="w-4 h-4 mr-1.5" />
-              {subconGenerating ? "Generating..." : "Generate PDF"}
+              {subconGenerating ? "Generating..." : subconDocPurpose === "supply_rfq" ? "Generate Supply RFQ" : "Generate Install Scope PDF"}
             </Button>
           </DialogFooter>
         </DialogContent>
