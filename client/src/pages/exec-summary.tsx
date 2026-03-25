@@ -32,7 +32,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat, ExternalLink, Package } from "lucide-react";
+import { ArrowLeftCircle, ChevronDown, ChevronRight, FileText, Image, ClipboardList, ArrowRight, Clock, Download, HardHat, ExternalLink, Package, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { EstimateSnapshot } from "@shared/estimate-snapshot";
 import DrawingCanvas from "@/components/drawing-canvas";
@@ -596,6 +596,7 @@ export default function ExecSummary() {
     let outsourcedCostTotal = 0;
     let outsourcedSellTotal = 0;
     let outsourcedCount = 0;
+    let outsourcedIncompleteCount = 0;
 
     for (const ip of itemPricings) {
       const isOutsourced = (ip.item.fulfilmentSource || "in-house") === "outsourced";
@@ -603,12 +604,16 @@ export default function ExecSummary() {
 
       if (isOutsourced) {
         outsourcedCount++;
-        const oCost = ip.item.outsourcedCostNzd ?? 0;
-        const oSell = ip.item.outsourcedSellNzd ?? 0;
-        outsourcedCostTotal += oCost;
-        outsourcedSellTotal += oSell;
-        totalManufCost += oCost;
-        itemSaleTotal += oSell;
+        const hasCost = ip.item.outsourcedCostNzd != null;
+        const hasSell = ip.item.outsourcedSellNzd != null;
+        if (hasCost && hasSell) {
+          outsourcedCostTotal += ip.item.outsourcedCostNzd!;
+          outsourcedSellTotal += ip.item.outsourcedSellNzd!;
+          totalManufCost += ip.item.outsourcedCostNzd!;
+          itemSaleTotal += ip.item.outsourcedSellNzd!;
+        } else {
+          outsourcedIncompleteCount++;
+        }
       } else {
         itemSaleTotal += ip.pricing?.salePriceNzd ?? ip.salePrice;
         if (ip.pricing) {
@@ -646,7 +651,7 @@ export default function ExecSummary() {
       avgCostPerSqm, avgSalePerSqm, installCost, installSell,
       delivCost, delivSell, removalCost, removalSell, rubbishCost, rubbishSell,
       grandTotalCost, totalSaleExGst, gstAmount, totalSaleIncGst,
-      outsourcedCostTotal, outsourcedSellTotal, outsourcedCount,
+      outsourcedCostTotal, outsourcedSellTotal, outsourcedCount, outsourcedIncompleteCount,
     };
   }, [itemPricings, installEnabled, installationTotals, deliveryTotals, removalEnabled, removalTotals, rubbishEnabled, rubbishTotals, gstRate]);
 
@@ -1458,6 +1463,16 @@ export default function ExecSummary() {
 
         <Separator />
 
+        {totals.outsourcedIncompleteCount > 0 && (
+          <div className="rounded-md border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/20 p-3 flex items-start gap-2" data-testid="banner-outsourced-incomplete">
+            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold text-red-700 dark:text-red-400">Commercially Incomplete</p>
+              <p className="text-red-600 dark:text-red-400 text-xs mt-0.5">{totals.outsourcedIncompleteCount} outsourced item{totals.outsourcedIncompleteCount !== 1 ? "s" : ""} missing cost or sell values. Totals, profit, and margin below do not include these items and may be misleading.</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div data-testid="text-gross-profit">
             <p className="text-sm text-muted-foreground">Gross Profit</p>
@@ -1980,13 +1995,13 @@ export default function ExecSummary() {
             {itemPricings.map((ip, idx) => {
               const isExpanded = expandedItems.has(idx);
               const isOutsourced = (ip.item.fulfilmentSource || "in-house") === "outsourced";
-              const hasPricing = isOutsourced || !!ip.pricing;
-              const netCost = isOutsourced ? (ip.item.outsourcedCostNzd ?? 0) : (ip.pricing?.netCostNzd ?? 0);
-              const salePrice = isOutsourced ? (ip.item.outsourcedSellNzd ?? 0) : (ip.pricing?.salePriceNzd ?? ip.salePrice);
+              const outsourcedIncomplete = isOutsourced && (ip.item.outsourcedCostNzd == null || ip.item.outsourcedSellNzd == null);
+              const hasPricing = (isOutsourced && !outsourcedIncomplete) || !!ip.pricing;
+              const netCost = isOutsourced ? (outsourcedIncomplete ? 0 : ip.item.outsourcedCostNzd!) : (ip.pricing?.netCostNzd ?? 0);
+              const salePrice = isOutsourced ? (outsourcedIncomplete ? 0 : ip.item.outsourcedSellNzd!) : (ip.pricing?.salePriceNzd ?? ip.salePrice);
               const margin = hasPricing ? salePrice - netCost : 0;
               const marginPct = hasPricing && salePrice > 0 ? (margin / salePrice) * 100 : (isOutsourced ? 0 : (ip.pricing?.marginPercent ?? 0));
-              const marginColor = !hasPricing ? "text-muted-foreground" : margin >= 0 ? "text-green-600" : "text-red-600";
-              const outsourcedIncomplete = isOutsourced && (ip.item.outsourcedCostNzd == null || ip.item.outsourcedSellNzd == null);
+              const marginColor = outsourcedIncomplete ? "text-red-600" : (!hasPricing ? "text-muted-foreground" : margin >= 0 ? "text-green-600" : "text-red-600");
 
               return (
                 <Collapsible key={idx} open={isExpanded} onOpenChange={() => toggleExpand(idx)} asChild>
@@ -2005,10 +2020,10 @@ export default function ExecSummary() {
                         </TableCell>
                         <TableCell className="text-right text-xs">{ip.item.width}×{ip.item.height}</TableCell>
                         <TableCell className="text-right">{ip.sqm.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium">${fmt(netCost)}</TableCell>
-                        <TableCell className="text-right font-medium text-primary">${fmt(salePrice)}</TableCell>
+                        <TableCell className="text-right font-medium">{outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(netCost)}`}</TableCell>
+                        <TableCell className="text-right font-medium text-primary">{outsourcedIncomplete ? <span className="text-red-500">—</span> : `$${fmt(salePrice)}`}</TableCell>
                         <TableCell className={`text-right font-bold ${marginColor}`}>
-                          {hasPricing ? `$${fmt(margin)} (${marginPct.toFixed(1)}%)` : "N/A"}
+                          {outsourcedIncomplete ? "Incomplete" : hasPricing ? `$${fmt(margin)} (${marginPct.toFixed(1)}%)` : "N/A"}
                         </TableCell>
                       </TableRow>
                     </CollapsibleTrigger>
@@ -2031,7 +2046,10 @@ export default function ExecSummary() {
                               </div>
                               <div>
                                 <span className="text-muted-foreground block">Margin</span>
-                                <span className={`font-medium ${margin >= 0 ? "text-green-600" : "text-red-600"}`}>${fmt(margin)} ({marginPct.toFixed(1)}%)</span>
+                                {outsourcedIncomplete
+                                  ? <span className="font-medium text-destructive">Incomplete — excluded from totals</span>
+                                  : <span className={`font-medium ${margin >= 0 ? "text-green-600" : "text-red-600"}`}>${fmt(margin)} ({marginPct.toFixed(1)}%)</span>
+                                }
                               </div>
                             </div>
                           ) : ip.pricing ? (

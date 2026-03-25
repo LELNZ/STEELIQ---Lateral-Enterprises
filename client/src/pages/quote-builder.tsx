@@ -3453,14 +3453,13 @@ export default function QuoteBuilder() {
                           checked={(w.fulfilmentSource || "in-house") === "outsourced"}
                           onCheckedChange={(checked) => {
                             form.setValue("fulfilmentSource", checked ? "outsourced" : "in-house");
-                            if (!checked) {
-                              form.setValue("outsourcedCostNzd", null);
-                              form.setValue("outsourcedSellNzd", null);
-                            }
                           }}
                           data-testid="switch-outsourced"
                         />
                       </div>
+                      {(w.fulfilmentSource || "in-house") === "in-house" && (w.outsourcedCostNzd != null || w.outsourcedSellNzd != null) && (
+                        <p className="text-[10px] text-muted-foreground italic">Previous outsourced values retained (Cost: {w.outsourcedCostNzd != null ? `$${w.outsourcedCostNzd}` : "—"}, Sell: {w.outsourcedSellNzd != null ? `$${w.outsourcedSellNzd}` : "—"}). Switch back to outsourced to use them.</p>
+                      )}
                       {(w.fulfilmentSource || "in-house") === "outsourced" && (
                         <div className="space-y-2">
                           <p className="text-[10px] text-amber-700 dark:text-amber-400">Cost and sell values override manufacturing pricing for this item.</p>
