@@ -195,6 +195,9 @@ export const quoteItemSchema = z.object({
   fulfilmentSource: z.enum(["in-house", "outsourced"]).default("in-house"),
   outsourcedCostNzd: z.number().nullable().optional(),
   outsourcedSellNzd: z.number().nullable().optional(),
+  gosRequired: z.boolean().default(false),
+  gosChargeNzd: z.number().nullable().optional(),
+  catDoorEnabled: z.boolean().default(false),
 });
 
 export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });
