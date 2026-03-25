@@ -1053,6 +1053,20 @@ async function renderScheduleItem(
 
   y += 2;
 
+  if (item.gosNote || item.catDoorNote) {
+    pdf.setFont(FONT_NORMAL, "italic");
+    pdf.setFontSize(7);
+    pdf.setTextColor(COLOR_ACCENT);
+    if (item.gosNote) {
+      pdf.text(`\u26A0  ${item.gosNote}`, LEFT_MARGIN + pad, y + 2.5);
+      y += 4;
+    }
+    if (item.catDoorNote) {
+      pdf.text(`\u2022  ${item.catDoorNote}`, LEFT_MARGIN + pad, y + 2.5);
+      y += 4;
+    }
+  }
+
   if (hasPhotos) {
     const renderedPhotosResult = await tryRenderPhotos(pdf, y, loadablePhotos, imageCache, item.title, pad, startY, itemStartPage);
     if (renderedPhotosResult.rendered) {

@@ -397,6 +397,7 @@ export default function ExecSummary() {
               salePriceOverride: salePriceOverride ?? undefined,
               sqmOverride: item.category === "raked-fixed" ? (((item as any).rakedLeftHeight || item.height || 0) + ((item as any).rakedRightHeight || item.height || 0)) / 2 * item.width / 1_000_000 : undefined,
               perimeterOverrideM: item.category === "raked-fixed" ? calcRakedPerimeterM(item.width, (item as any).rakedLeftHeight || item.height || 0, (item as any).rakedRightHeight || item.height || 0) : undefined,
+              gosChargeNzd: item.gosRequired ? (item.gosChargeNzd ?? undefined) : undefined,
             },
             { masterProfiles, masterAccessories, masterLabour }
           );
@@ -766,6 +767,9 @@ export default function ExecSummary() {
         category: item.category,
         ...(isRaked ? { rakedLeftHeight: rakedLH, rakedRightHeight: rakedRH } : {}),
         openingDirection: item.openingDirection || undefined,
+        gosRequired: item.gosRequired || false,
+        gosChargeNzd: item.gosChargeNzd ?? undefined,
+        catDoorEnabled: item.catDoorEnabled || false,
         drawingImageKey,
         photos: ip.photos ?? [],
         specValues,

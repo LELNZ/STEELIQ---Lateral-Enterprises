@@ -287,6 +287,9 @@ const defaultValues: InsertQuoteItem = {
   overrideMode: "none",
   overrideValue: null,
   fulfilmentSource: "in-house",
+  gosRequired: false,
+  gosChargeNzd: null,
+  catDoorEnabled: false,
   outsourcedCostNzd: null,
   outsourcedSellNzd: null,
 };
@@ -849,7 +852,7 @@ export default function QuoteBuilder() {
       w.width || 0, w.height || 0, w.quantity || 1,
       configProfiles, configAccessories, configLabor,
       usdToNzdRate, w.pricePerSqm || 500,
-      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined, sqmOverride: w.category === "raked-fixed" ? (((w as any).rakedLeftHeight || w.height || 0) + ((w as any).rakedRightHeight || w.height || 0)) / 2 * (w.width || 0) / 1_000_000 : undefined, perimeterOverrideM: w.category === "raked-fixed" ? calcRakedPerimeterM(w.width || 0, (w as any).rakedLeftHeight || w.height || 0, (w as any).rakedRightHeight || w.height || 0) : undefined },
+      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined, sqmOverride: w.category === "raked-fixed" ? (((w as any).rakedLeftHeight || w.height || 0) + ((w as any).rakedRightHeight || w.height || 0)) / 2 * (w.width || 0) / 1_000_000 : undefined, perimeterOverrideM: w.category === "raked-fixed" ? calcRakedPerimeterM(w.width || 0, (w as any).rakedLeftHeight || w.height || 0, (w as any).rakedRightHeight || w.height || 0) : undefined, gosChargeNzd: w.gosRequired ? (w.gosChargeNzd ?? undefined) : undefined },
       { masterProfiles, masterAccessories, masterLabour },
       itemGeometry,
       glazingBands
@@ -3604,6 +3607,59 @@ export default function QuoteBuilder() {
                       )}
                     </div>
 
+                    <div className="rounded-md border p-2 space-y-2 bg-blue-50 dark:bg-blue-950/20" data-testid="gos-section">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 text-blue-600" />
+                          <Label className="text-xs font-semibold">Glaze On Site (GOS)</Label>
+                        </div>
+                        <Switch
+                          checked={!!w.gosRequired}
+                          onCheckedChange={(checked) => {
+                            form.setValue("gosRequired", checked);
+                            if (!checked) form.setValue("gosChargeNzd", null);
+                          }}
+                          data-testid="switch-gos"
+                        />
+                      </div>
+                      {w.gosRequired && (
+                        <div className="space-y-1.5">
+                          <p className="text-[10px] text-blue-700 dark:text-blue-400 italic">Glaze on site due to size and weight</p>
+                          <div>
+                            <Label className="text-[10px] text-muted-foreground">GOS Charge (NZD)</Label>
+                            <Input
+                              type="number"
+                              className="h-7 text-xs"
+                              placeholder="Enter charge or leave blank"
+                              min={0}
+                              value={w.gosChargeNzd ?? ""}
+                              onChange={(e) => form.setValue("gosChargeNzd", e.target.value ? parseFloat(e.target.value) : null)}
+                              data-testid="input-gos-charge"
+                            />
+                            {(w.gosChargeNzd == null || w.gosChargeNzd === 0) && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5">No charge entered — GOS flag only.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-md border p-2 space-y-2 bg-muted/20" data-testid="catdoor-section">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Label className="text-xs font-semibold">Cat Door</Label>
+                        </div>
+                        <Switch
+                          checked={!!w.catDoorEnabled}
+                          onCheckedChange={(checked) => form.setValue("catDoorEnabled", checked)}
+                          data-testid="switch-catdoor"
+                        />
+                      </div>
+                      {w.catDoorEnabled && (
+                        <p className="text-[10px] text-muted-foreground italic">Cat door included. Pricing to be confirmed separately — no default price applied.</p>
+                      )}
+                    </div>
+
                     {currentPricing && (
                       <div className="rounded-md border p-3 space-y-2 bg-muted/30" data-testid="pricing-breakdown">
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -3661,6 +3717,12 @@ export default function QuoteBuilder() {
                             <>
                               <span className="text-muted-foreground">Wanz Bar (NZD)</span>
                               <span className="text-right font-medium" data-testid="text-wanz-bar-cost">${currentPricing.wanzBarCostNzd.toFixed(2)}</span>
+                            </>
+                          )}
+                          {currentPricing.gosCostNzd > 0 && (
+                            <>
+                              <span className="text-muted-foreground">GOS Charge (NZD)</span>
+                              <span className="text-right font-medium" data-testid="text-gos-cost">${currentPricing.gosCostNzd.toFixed(2)}</span>
                             </>
                           )}
                         </div>
@@ -3773,6 +3835,16 @@ export default function QuoteBuilder() {
                 Opening: {getOpeningDirectionLabel(w.openingDirection)}
               </p>
             )}
+            {w.gosRequired && (
+              <p className="mt-1 text-xs font-semibold text-blue-600 dark:text-blue-400" data-testid="text-gos-tag">
+                ⚠ GOS — Glaze on site due to size and weight
+              </p>
+            )}
+            {w.catDoorEnabled && (
+              <p className="mt-1 text-xs font-medium text-muted-foreground" data-testid="text-catdoor-tag">
+                Cat door included
+              </p>
+            )}
           </div>
 
           {!isLargeScreen && (
@@ -3863,6 +3935,8 @@ export default function QuoteBuilder() {
                         <TableCell className="text-sm">
                           {getCategoryLabel(iwp.item.category)}
                           {(iwp.item as any).fulfilmentSource === "outsourced" && <Badge variant="secondary" className="text-[9px] ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" data-testid={`badge-outsourced-${iwp.uiId}`}>Outsourced</Badge>}
+                          {iwp.item.gosRequired && <Badge variant="secondary" className="text-[9px] ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" data-testid={`badge-gos-${iwp.uiId}`}>GOS</Badge>}
+                          {iwp.item.catDoorEnabled && <Badge variant="secondary" className="text-[9px] ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" data-testid={`badge-catdoor-${iwp.uiId}`}>Cat Door</Badge>}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {getLayoutSummary(iwp.item)}
@@ -4006,6 +4080,8 @@ export default function QuoteBuilder() {
                             <span className="font-medium text-sm truncate">{iwp.item.name}</span>
                             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">{getCategoryLabel(iwp.item.category)}</Badge>
                             {(iwp.item as any).fulfilmentSource === "outsourced" && <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Outsourced</Badge>}
+                            {iwp.item.gosRequired && <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">GOS</Badge>}
+                            {iwp.item.catDoorEnabled && <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Cat Door</Badge>}
                           </div>
                           <div className="flex items-center gap-2 mt-1 text-sm font-semibold font-mono" data-testid={`text-card-dims-${iwp.uiId}`}>
                             {iwp.item.width} × {iwp.item.height}

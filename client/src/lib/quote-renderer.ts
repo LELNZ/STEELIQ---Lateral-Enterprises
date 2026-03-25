@@ -82,6 +82,8 @@ export interface RenderScheduleItem {
   dimensionLabel: string;
   quantityLabel: string;
   openingDirectionLabel?: string;
+  gosNote?: string;
+  catDoorNote?: string;
   visibleSpecs: RenderSpecEntry[];
   media: RenderItemMedia;
 }
@@ -200,6 +202,9 @@ function buildScheduleItem(
   const odVal = item.openingDirection;
   const openingDirectionLabel = odVal && odVal !== "none" && openingDirMap[odVal] ? openingDirMap[odVal] : undefined;
 
+  const gosNote = item.gosRequired ? "Glaze on site due to size and weight" : undefined;
+  const catDoorNote = item.catDoorEnabled ? "Cat door included" : undefined;
+
   return {
     index,
     itemNumber: item.itemNumber || index + 1,
@@ -210,6 +215,8 @@ function buildScheduleItem(
       : `${item.width}mm x ${item.height}mm`,
     quantityLabel: `Qty: ${item.quantity || 1}`,
     openingDirectionLabel,
+    gosNote,
+    catDoorNote,
     visibleSpecs,
     media: {
       drawingUrl,

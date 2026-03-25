@@ -101,6 +101,9 @@ export interface QuoteDocumentItem {
   rakedLeftHeight?: number;
   rakedRightHeight?: number;
   openingDirection?: string;
+  gosRequired?: boolean;
+  gosChargeNzd?: number;
+  catDoorEnabled?: boolean;
   drawingImageKey?: string;
   photos: QuoteDocumentItemPhoto[];
   specValues: Record<string, unknown>;
@@ -169,6 +172,9 @@ function mapSnapshotItem(si: SnapshotItem): QuoteDocumentItem {
     rakedLeftHeight: si.rakedLeftHeight,
     rakedRightHeight: si.rakedRightHeight,
     openingDirection: si.openingDirection,
+    gosRequired: si.gosRequired,
+    gosChargeNzd: si.gosChargeNzd,
+    catDoorEnabled: si.catDoorEnabled,
     drawingImageKey: si.drawingImageKey,
     photos: (si.photos || []).map(p => ({
       key: p.key,

@@ -784,6 +784,21 @@ function ScheduleItemCard({
           </div>
         )}
 
+        {(item.gosNote || item.catDoorNote) && (
+          <div className="space-y-0.5" data-testid={`item-notes-${item.index}`}>
+            {item.gosNote && (
+              <p className="text-xs italic font-medium" style={{ color: template.colors.accent }} data-testid={`text-gos-note-${item.index}`}>
+                ⚠ {item.gosNote}
+              </p>
+            )}
+            {item.catDoorNote && (
+              <p className="text-xs italic" style={{ color: template.colors.accent }} data-testid={`text-catdoor-note-${item.index}`}>
+                • {item.catDoorNote}
+              </p>
+            )}
+          </div>
+        )}
+
         {loadedPhotos.length > 0 && (
           <div data-testid={`photos-section-${item.index}`}>
             <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Site Photos</p>
