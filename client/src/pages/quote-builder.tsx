@@ -188,7 +188,11 @@ function getLayoutSummary(config: QuoteItem) {
     }
     return `${config.panels} Panels`;
   }
-  if (cat === "bay-window") return "Bay (3 Panel)";
+  if (cat === "bay-window") {
+    const angle = (config as any).bayAngle || 135;
+    const depth = (config as any).bayDepth || 0;
+    return `Bay (3 Panel)${angle !== 135 ? ` · ${angle}°` : ""}${depth > 0 ? ` · ${depth}mm` : ""}`;
+  }
   if (cat === "raked-fixed") {
     const lh = (config as any).rakedLeftHeight || 0;
     const rh = (config as any).rakedRightHeight || 0;
@@ -257,6 +261,8 @@ const defaultValues: InsertQuoteItem = {
   doorSplitHeight: 0,
   bifoldLeftCount: 0,
   centerWidth: 0,
+  bayAngle: 135,
+  bayDepth: 0,
   entranceDoorRows: [...defaultEntranceDoorRows],
   entranceSidelightRows: [...defaultEntranceDoorRows],
   entranceSidelightLeftRows: [...defaultEntranceDoorRows],
@@ -924,6 +930,8 @@ export default function QuoteBuilder() {
     form.setValue("doorSplit", false);
     form.setValue("doorSplitHeight", 0);
     form.setValue("centerWidth", 0);
+    form.setValue("bayAngle", 135);
+    form.setValue("bayDepth", 0);
     form.setValue("entranceDoorRows", [...defaultEntranceDoorRows]);
     form.setValue("entranceSidelightRows", [...defaultEntranceDoorRows]);
     form.setValue("entranceSidelightLeftRows", [...defaultEntranceDoorRows]);
@@ -2900,14 +2908,40 @@ export default function QuoteBuilder() {
                 )}
 
                 {showCenterWidth && (
-                  <div>
-                    <Label htmlFor="centerWidth" className="text-xs">Center Panel Width (mm)</Label>
-                    <Input id="centerWidth" type="number" min={0}
-                      placeholder="0 = 60% of total"
-                      {...form.register("centerWidth", { valueAsNumber: true })}
-                      data-testid="input-center-width" />
-                    <p className="text-xs text-muted-foreground mt-1">0 = default 60% of total width</p>
-                  </div>
+                  <>
+                    <div>
+                      <Label htmlFor="centerWidth" className="text-xs">Center Panel Width (mm)</Label>
+                      <Input id="centerWidth" type="number" min={0}
+                        placeholder="0 = 60% of total"
+                        {...form.register("centerWidth", { valueAsNumber: true })}
+                        data-testid="input-center-width" />
+                      <p className="text-xs text-muted-foreground mt-1">0 = default 60% of total width</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="bayAngle" className="text-xs">Bay Angle</Label>
+                      <Select
+                        value={String(form.watch("bayAngle") || 135)}
+                        onValueChange={(v) => form.setValue("bayAngle", Number(v))}
+                      >
+                        <SelectTrigger data-testid="select-bay-angle"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="90">90°</SelectItem>
+                          <SelectItem value="120">120°</SelectItem>
+                          <SelectItem value="135">135° (Standard)</SelectItem>
+                          <SelectItem value="150">150°</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">Angle between front and side panels</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="bayDepth" className="text-xs">Bay Depth / Projection (mm)</Label>
+                      <Input id="bayDepth" type="number" min={0}
+                        placeholder="0 = auto from angle"
+                        {...form.register("bayDepth", { valueAsNumber: true })}
+                        data-testid="input-bay-depth" />
+                      <p className="text-xs text-muted-foreground mt-1">How far the bay projects from the wall. 0 = derived from angle and side width.</p>
+                    </div>
+                  </>
                 )}
 
                 {showGrid && (

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ArrowLeftCircle, Download, Settings2, Info } from "lucide-react";
+import { ArrowLeftCircle, Download, Settings2, Info, Wrench } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
-import type { PreviewData, QuoteDocumentModel, TotalsDisplayConfig } from "@/lib/quote-document";
+import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem, TotalsDisplayConfig } from "@/lib/quote-document";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG } from "@/lib/quote-document";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/lib/quote-renderer";
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
@@ -21,6 +22,9 @@ import { generateQuotePdf } from "@/lib/pdf-engine";
 import { isSectionVisible } from "@/lib/quote-template";
 import { RichTextRenderer } from "@/components/ui/rich-text-renderer";
 import type { QuoteTemplate } from "@/lib/quote-template";
+import DrawingCanvas from "@/components/drawing-canvas";
+import type { InsertQuoteItem } from "@shared/schema";
+import { svgToPngBlob } from "@/lib/export-png";
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -28,9 +32,13 @@ export default function QuotePreview() {
   const params = paramsSingular || paramsPlural;
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const quoteId = params?.id;
   const [specSheetOpen, setSpecSheetOpen] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [drawingRepairState, setDrawingRepairState] = useState<"idle" | "checking" | "repairing" | "done">("idle");
+  const [repairProgress, setRepairProgress] = useState({ total: 0, done: 0, succeeded: 0 });
+  const isAdminOrOwner = user?.role === "admin" || user?.role === "owner";
 
   const { data: preview, isLoading } = useQuery<PreviewData>({
     queryKey: ["/api/quotes", quoteId, "preview-data"],
@@ -54,6 +62,83 @@ export default function QuotePreview() {
   useEffect(() => { setLocalKeys(null); setLocalTotalsConfig(null); setLocalRemarks(null); }, [quoteId]);
 
   const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
+
+  const handleRepairDrawings = useCallback(async () => {
+    if (!doc || drawingRepairState === "repairing" || drawingRepairState === "checking") return;
+    setDrawingRepairState("checking");
+    try {
+      const allKeys = doc.items
+        .map(item => item.drawingImageKey)
+        .filter((k): k is string => !!k);
+      if (allKeys.length === 0) {
+        toast({ title: "No drawings to check" });
+        setDrawingRepairState("idle");
+        return;
+      }
+      const checkRes = await fetch("/api/drawing-images/check-missing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keys: allKeys }),
+        credentials: "include",
+      });
+      if (!checkRes.ok) throw new Error(`Check failed: ${checkRes.status}`);
+      const { missing } = await checkRes.json();
+      if (!missing || missing.length === 0) {
+        toast({ title: "All drawings present", description: "No repair needed." });
+        setDrawingRepairState("done");
+        return;
+      }
+      setRepairProgress({ total: missing.length, done: 0, succeeded: 0 });
+      setDrawingRepairState("repairing");
+
+      const container = document.createElement("div");
+      container.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:600px;height:400px;overflow:hidden;";
+      document.body.appendChild(container);
+
+      let succeeded = 0;
+      for (let i = 0; i < missing.length; i++) {
+        const key = missing[i];
+        const docItem = doc.items.find(it => it.drawingImageKey === key);
+        if (!docItem) { setRepairProgress(p => ({ ...p, done: p.done + 1 })); continue; }
+        try {
+          const { createRoot } = await import("react-dom/client");
+          const wrapper = document.createElement("div");
+          container.appendChild(wrapper);
+          const config = docItemToDrawingConfig(docItem);
+          const root = createRoot(wrapper);
+          await new Promise<void>((resolve) => {
+            root.render(
+              <DrawingCanvas config={config} ref={(el: SVGSVGElement | null) => {
+                if (!el) return;
+                setTimeout(async () => {
+                  const ok = await regenerateDrawingForKey(el, key);
+                  if (ok) succeeded++;
+                  setRepairProgress(p => ({ ...p, done: p.done + 1, succeeded: p.succeeded + (ok ? 1 : 0) }));
+                  root.unmount();
+                  wrapper.remove();
+                  resolve();
+                }, 200);
+              }} />
+            );
+          });
+        } catch (err) {
+          console.warn(`[drawing-repair] Error repairing ${key}:`, err);
+          setRepairProgress(p => ({ ...p, done: p.done + 1 }));
+        }
+      }
+      container.remove();
+      toast({
+        title: "Drawing repair complete",
+        description: `${succeeded}/${missing.length} drawings regenerated.`,
+      });
+      setDrawingRepairState("done");
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "preview-data"] });
+    } catch (err: any) {
+      console.error("[drawing-repair] Error:", err);
+      toast({ title: "Drawing repair failed", description: err.message, variant: "destructive" });
+      setDrawingRepairState("idle");
+    }
+  }, [doc, drawingRepairState, toast, quoteId]);
 
   const autoExportTriggered = useRef(false);
   useEffect(() => {
@@ -145,225 +230,311 @@ export default function QuotePreview() {
   const activeModel = liveRenderModel ?? renderModel;
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
 
+  const ITEMS_FIRST_PAGE = 1;
+  const ITEMS_PER_PAGE = 3;
+  const hasSchedule = isSectionVisible(T, "schedule") && liveScheduleItems.length > 0;
+  const page1ScheduleItems = hasSchedule ? liveScheduleItems.slice(0, ITEMS_FIRST_PAGE) : [];
+  const overflowItems = hasSchedule ? liveScheduleItems.slice(ITEMS_FIRST_PAGE) : [];
+  const overflowPages: RenderScheduleItem[][] = [];
+  for (let i = 0; i < overflowItems.length; i += ITEMS_PER_PAGE) {
+    overflowPages.push(overflowItems.slice(i, i + ITEMS_PER_PAGE));
+  }
+
+  const hasLegalOrAcceptance = isSectionVisible(T, "legal") || isSectionVisible(T, "acceptance");
+
+  const pageStyle: React.CSSProperties = {
+    maxWidth: "794px",
+    width: "100%",
+    margin: "0 auto",
+    background: "#fff",
+    boxShadow: "0 1px 8px rgba(0,0,0,0.10), 0 0 1px rgba(0,0,0,0.08)",
+    borderRadius: "2px",
+  };
+
+  const pageContentStyle: React.CSSProperties = {
+    padding: "40px 40px 48px 40px",
+    display: "flex",
+    flexDirection: "column",
+    gap: `${Math.round(T.spacing.sectionGapMm * 3.78)}px`,
+    minHeight: "1050px",
+  };
+
+  const sectionGap = `${Math.round(T.spacing.sectionGapMm * 3.78)}px`;
+
   return (
-    <div className="mx-auto print:max-w-none" style={{ maxWidth: "794px" }} data-testid="quote-preview-page">
-      <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden border-b">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteDetail(quoteId!))} data-testid="button-back-to-quote">
-            <ArrowLeftCircle className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-bold">Customer Quote Preview</h1>
-            <p className="text-sm text-muted-foreground">{header.quoteNumber} &middot; Revision {header.revisionVersion}</p>
+    <div style={{ background: "#e8e8ec" }} className="print:!bg-white" data-testid="quote-preview-page">
+      <div className="mx-auto print:max-w-none" style={{ maxWidth: "794px" }}>
+        <div className="flex items-center justify-between flex-wrap gap-2 p-4 print:hidden" style={{ background: "#fff", borderBottom: "1px solid #e2e2e5" }}>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(routes.quoteDetail(quoteId!))} data-testid="button-back-to-quote">
+              <ArrowLeftCircle className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-lg font-bold">Customer Quote Preview</h1>
+              <p className="text-sm text-muted-foreground">{header.quoteNumber} &middot; Revision {header.revisionVersion}</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Sheet open={specSheetOpen} onOpenChange={setSpecSheetOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="button-edit-spec-display">
-                <Settings2 className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Edit </span>Spec Display
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="w-[420px] overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle>Quote Display Settings</SheetTitle>
-              </SheetHeader>
-              <div className="mt-4 space-y-6">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Sheet open={specSheetOpen} onOpenChange={setSpecSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="button-edit-spec-display">
+                  <Settings2 className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Edit </span>Spec Display
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[420px] overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Quote Display Settings</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4 space-y-6">
 
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Totals Lines Visibility</p>
-                  <p className="text-xs text-muted-foreground mb-3">The final total is always shown. Toggle individual breakdown lines on or off for the customer-facing quote.</p>
-                  <div className="space-y-2.5">
-                    {([
-                      { key: "showItemsSubtotal", label: "Items Subtotal" },
-                      { key: "showInstallation", label: "Installation" },
-                      { key: "showDelivery", label: "Delivery" },
-                      { key: "showRemoval", label: "Old Window/Door Removal" },
-                      { key: "showRubbish", label: "Rubbish / Waste Removal" },
-                      { key: "showSubtotal", label: "Subtotal (excl. GST)" },
-                      { key: "showGst", label: "GST (15%)" },
-                    ] as { key: keyof TotalsDisplayConfig; label: string }[]).map(({ key, label }) => (
-                      <div key={key} className="flex items-center justify-between gap-3">
-                        <Label htmlFor={`totals-${key}`} className="text-sm cursor-pointer">{label}</Label>
-                        <Switch
-                          id={`totals-${key}`}
-                          checked={effectiveTotalsConfig[key]}
-                          onCheckedChange={() => toggleTotalsField(key)}
-                          data-testid={`switch-totals-${key}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Details Box</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Shows a dedicated &quot;Details&quot; section below Quote Summary.</p>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Totals Lines Visibility</p>
+                    <p className="text-xs text-muted-foreground mb-3">The final total is always shown. Toggle individual breakdown lines on or off for the customer-facing quote.</p>
+                    <div className="space-y-2.5">
+                      {([
+                        { key: "showItemsSubtotal", label: "Items Subtotal" },
+                        { key: "showInstallation", label: "Installation" },
+                        { key: "showDelivery", label: "Delivery" },
+                        { key: "showRemoval", label: "Old Window/Door Removal" },
+                        { key: "showRubbish", label: "Rubbish / Waste Removal" },
+                        { key: "showSubtotal", label: "Subtotal (excl. GST)" },
+                        { key: "showGst", label: "GST (15%)" },
+                      ] as { key: keyof TotalsDisplayConfig; label: string }[]).map(({ key, label }) => (
+                        <div key={key} className="flex items-center justify-between gap-3">
+                          <Label htmlFor={`totals-${key}`} className="text-sm cursor-pointer">{label}</Label>
+                          <Switch
+                            id={`totals-${key}`}
+                            checked={effectiveTotalsConfig[key]}
+                            onCheckedChange={() => toggleTotalsField(key)}
+                            data-testid={`switch-totals-${key}`}
+                          />
+                        </div>
+                      ))}
                     </div>
-                    <Switch
-                      id="totals-showCommercialRemarks"
-                      checked={effectiveTotalsConfig.showCommercialRemarks ?? true}
-                      onCheckedChange={() => toggleTotalsField("showCommercialRemarks")}
-                      data-testid="switch-totals-showCommercialRemarks"
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Details Box</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Shows a dedicated &quot;Details&quot; section below Quote Summary.</p>
+                      </div>
+                      <Switch
+                        id="totals-showCommercialRemarks"
+                        checked={effectiveTotalsConfig.showCommercialRemarks ?? true}
+                        onCheckedChange={() => toggleTotalsField("showCommercialRemarks")}
+                        data-testid="switch-totals-showCommercialRemarks"
+                      />
+                    </div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-3">Customer-facing details text</p>
+                    <Textarea
+                      value={effectiveRemarks}
+                      onChange={e => setLocalRemarks(e.target.value)}
+                      placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
+                      rows={5}
+                      className="text-sm"
+                      data-testid="textarea-commercial-remarks"
                     />
                   </div>
-                  <p className="text-xs font-medium text-muted-foreground mb-1.5 mt-3">Customer-facing details text</p>
-                  <Textarea
-                    value={effectiveRemarks}
-                    onChange={e => setLocalRemarks(e.target.value)}
-                    placeholder="e.g. Price includes supply and installation. Payment: 50% deposit on acceptance, balance on completion."
-                    rows={5}
-                    className="text-sm"
-                    data-testid="textarea-commercial-remarks"
-                  />
-                </div>
 
-                <Separator />
+                  <Separator />
 
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Item Spec Columns</p>
-                  <div className="space-y-4">
-                    {Object.entries(doc.specDisplay.specDictionaryGrouped).map(([group, specs]) => (
-                      <div key={group}>
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">{group}</p>
-                        <div className="space-y-1.5">
-                          {specs.filter(s => s.customerVisibleAllowed).map(spec => (
-                            <div key={spec.key} className="flex items-center gap-2">
-                              <Checkbox
-                                id={`spec-${spec.key}`}
-                                checked={effectiveKeys.includes(spec.key)}
-                                onCheckedChange={() => toggleSpecKey(spec.key)}
-                                data-testid={`checkbox-spec-${spec.key}`}
-                              />
-                              <Label htmlFor={`spec-${spec.key}`} className="text-sm">{spec.label}</Label>
-                            </div>
-                          ))}
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Item Spec Columns</p>
+                    <div className="space-y-4">
+                      {Object.entries(doc.specDisplay.specDictionaryGrouped).map(([group, specs]) => (
+                        <div key={group}>
+                          <p className="text-xs font-medium text-muted-foreground mb-1.5">{group}</p>
+                          <div className="space-y-1.5">
+                            {specs.filter(s => s.customerVisibleAllowed).map(spec => (
+                              <div key={spec.key} className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`spec-${spec.key}`}
+                                  checked={effectiveKeys.includes(spec.key)}
+                                  onCheckedChange={() => toggleSpecKey(spec.key)}
+                                  data-testid={`checkbox-spec-${spec.key}`}
+                                />
+                                <Label htmlFor={`spec-${spec.key}`} className="text-sm">{spec.label}</Label>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <Button
-                  onClick={() => saveSpecDisplayMutation.mutate()}
-                  disabled={saveSpecDisplayMutation.isPending || !hasUnsavedChanges}
-                  className="w-full"
-                  data-testid="button-save-spec-display"
-                >
-                  {saveSpecDisplayMutation.isPending ? "Saving..." : "Save Display Settings"}
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
-          <Button
-            variant="default"
-            size="sm"
-            disabled={pdfExporting}
-            onClick={async () => {
-              setPdfExporting(true);
-              try {
-                await generateQuotePdf(activeModel);
-                toast({ title: "PDF exported successfully" });
-              } catch (err: any) {
-                toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
-              } finally {
-                setPdfExporting(false);
-              }
-            }}
-            data-testid="button-export-pdf"
-          >
-            <Download className="h-4 w-4 mr-1" /> {pdfExporting ? "Exporting..." : "Export PDF"}
-          </Button>
+                  <Button
+                    onClick={() => saveSpecDisplayMutation.mutate()}
+                    disabled={saveSpecDisplayMutation.isPending || !hasUnsavedChanges}
+                    className="w-full"
+                    data-testid="button-save-spec-display"
+                  >
+                    {saveSpecDisplayMutation.isPending ? "Saving..." : "Save Display Settings"}
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
+            {isAdminOrOwner && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={drawingRepairState === "checking" || drawingRepairState === "repairing"}
+                onClick={handleRepairDrawings}
+                data-testid="button-repair-drawings"
+              >
+                <Wrench className="h-4 w-4 mr-1" />
+                {drawingRepairState === "checking" ? "Checking..." :
+                 drawingRepairState === "repairing" ? `Repairing ${repairProgress.done}/${repairProgress.total}...` :
+                 drawingRepairState === "done" ? "Repair Complete" : "Repair Drawings"}
+              </Button>
+            )}
+            <Button
+              variant="default"
+              size="sm"
+              disabled={pdfExporting}
+              onClick={async () => {
+                setPdfExporting(true);
+                try {
+                  await generateQuotePdf(activeModel);
+                  toast({ title: "PDF exported successfully" });
+                } catch (err: any) {
+                  toast({ title: "PDF export failed", description: err.message, variant: "destructive" });
+                } finally {
+                  setPdfExporting(false);
+                }
+              }}
+              data-testid="button-export-pdf"
+            >
+              <Download className="h-4 w-4 mr-1" /> {pdfExporting ? "Exporting..." : "Export PDF"}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
+      <div className="mx-auto print:max-w-none print:!p-0" style={{ maxWidth: "794px" }}>
+        <SnapshotBanner revisionVersion={header.revisionVersion} sourceJobId={doc.project.sourceJobId} />
+      </div>
 
-      <div className="bg-white p-6 sm:p-10 print:p-4" style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.spacing.sectionGapMm * 3.78)}px` }}>
-        {isSectionVisible(T, "header") && (
-          <div className="space-y-3">
-            <HeaderSection branding={branding} orgContact={orgContact} template={T} />
-            <Separator style={{ borderColor: T.colors.border }} />
-          </div>
-        )}
+      <div style={{ padding: "32px 16px 48px", display: "flex", flexDirection: "column", gap: "28px" }} className="print:!p-0 print:!gap-0">
 
-        <h2 className="text-lg font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
-          {T.documentMode === "tender" ? "TENDER" : activeModel.documentLabel.toUpperCase()}
-        </h2>
-
-        {isSectionVisible(T, "disclaimer") && (
-          <div data-testid="text-preliminary-disclaimer">
-            <RichTextRenderer
-              text={disclaimerText}
-              color={T.colors.headingMuted}
-              className="space-y-0.5 text-sm italic"
-            />
-          </div>
-        )}
-
-        {isSectionVisible(T, "customerProject") && (
-          <CustomerProjectSection header={header} customerProject={customerProject} template={T} />
-        )}
-
-        {isSectionVisible(T, "totals") && (
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Quote Summary</p>
-            <TotalsSection totals={totals} template={T} />
-          </div>
-        )}
-
-        {activeModel.commercialRemarks && (
-          <div
-            data-testid="commercial-remarks-block"
-            style={{
-              border: `1px solid ${T.colors.border}`,
-              borderRadius: 6,
-              padding: "12px 16px",
-            }}
-          >
-            <p
-              className="text-xs font-semibold uppercase tracking-wider mb-2"
-              style={{ color: T.colors.headingMuted }}
-            >
-              Details
-            </p>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: T.colors.bodyText }}>
-              {activeModel.commercialRemarks}
-            </p>
-          </div>
-        )}
-
-        {isSectionVisible(T, "schedule") && (
-          <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
-            <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
-            <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
-            {liveScheduleItems.length === 0 && (
-              <p className="text-sm" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
+        <div style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid="preview-page-1">
+          <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
+            {isSectionVisible(T, "header") && (
+              <div className="space-y-3">
+                <HeaderSection branding={branding} orgContact={orgContact} template={T} />
+                <Separator style={{ borderColor: T.colors.border }} />
+              </div>
             )}
-            {liveScheduleItems.map((item) => (
-              <ScheduleItemCard
-                key={item.index}
-                item={item}
-                template={T}
-              />
-            ))}
+
+            <h2 className="text-lg font-bold uppercase tracking-wide" style={{ color: T.colors.accent }} data-testid="text-quotation-title">
+              {T.documentMode === "tender" ? "TENDER" : activeModel.documentLabel.toUpperCase()}
+            </h2>
+
+            {isSectionVisible(T, "disclaimer") && (
+              <div data-testid="text-preliminary-disclaimer">
+                <RichTextRenderer
+                  text={disclaimerText}
+                  color={T.colors.headingMuted}
+                  className="space-y-0.5 text-sm italic"
+                />
+              </div>
+            )}
+
+            {isSectionVisible(T, "customerProject") && (
+              <CustomerProjectSection header={header} customerProject={customerProject} template={T} />
+            )}
+
+            {isSectionVisible(T, "totals") && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.colors.headingMuted }}>Quote Summary</p>
+                <TotalsSection totals={totals} template={T} />
+              </div>
+            )}
+
+            {activeModel.commercialRemarks && (
+              <div
+                data-testid="commercial-remarks-block"
+                style={{
+                  border: `1px solid ${T.colors.border}`,
+                  borderRadius: 6,
+                  padding: "12px 16px",
+                }}
+              >
+                <p
+                  className="text-xs font-semibold uppercase tracking-wider mb-2"
+                  style={{ color: T.colors.headingMuted }}
+                >
+                  Details
+                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: T.colors.bodyText }}>
+                  {activeModel.commercialRemarks}
+                </p>
+              </div>
+            )}
+
+            {isSectionVisible(T, "schedule") && liveScheduleItems.length === 0 && (
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
+                <p className="text-sm mt-2" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
+              </div>
+            )}
+
+            {page1ScheduleItems.length > 0 && (
+              <div>
+                <div style={{ display: "flex", flexDirection: "column", gap: sectionGap, marginBottom: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+                  <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
+                  <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+                  {page1ScheduleItems.map((item) => (
+                    <ScheduleItemCard
+                      key={item.index}
+                      item={item}
+                      template={T}
+                      docItem={doc?.items[item.index]}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {overflowPages.map((pageItems, pageIdx) => (
+          <div key={`schedule-page-${pageIdx}`} style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid={`preview-schedule-page-${pageIdx}`}>
+            <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
+              <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+                {pageItems.map((item) => (
+                  <ScheduleItemCard
+                    key={item.index}
+                    item={item}
+                    template={T}
+                    docItem={doc?.items[item.index]}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {hasLegalOrAcceptance && (
+          <div style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid="preview-page-legal">
+            <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
+              {isSectionVisible(T, "legal") && (
+                <div>
+                  <LegalSection legal={legal} template={T} />
+                </div>
+              )}
+
+              {isSectionVisible(T, "acceptance") && (
+                <AcceptanceSection template={T} quoteNumber={header.quoteNumber} />
+              )}
+            </div>
           </div>
         )}
 
-        {isSectionVisible(T, "legal") && (
-          <div className="pt-2">
-            <Separator style={{ borderColor: T.colors.border }} className="mb-5" />
-            <LegalSection legal={legal} template={T} />
-          </div>
-        )}
-
-        {isSectionVisible(T, "acceptance") && (
-          <AcceptanceSection template={T} quoteNumber={header.quoteNumber} />
-        )}
       </div>
     </div>
   );
@@ -686,17 +857,104 @@ function SpecTable({ specs, itemIndex, template }: { specs: { key: string; label
   );
 }
 
+function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
+  const sv = di.specValues || {};
+  return {
+    name: di.itemRef || di.title || "",
+    width: di.width,
+    height: di.height,
+    quantity: di.quantity || 1,
+    category: (di.category || sv.itemCategory || "windows-standard") as any,
+    layout: (sv.layout || "standard") as any,
+    windowType: (sv.windowType || "fixed") as any,
+    hingeSide: (sv.hingeSide || "left") as any,
+    openDirection: (sv.openDirection || "out") as any,
+    openingDirection: (di.openingDirection || "none") as any,
+    panels: Number(sv.panels) || 3,
+    halfSolid: Boolean(sv.halfSolid),
+    rakedLeftHeight: di.rakedLeftHeight || 0,
+    rakedRightHeight: di.rakedRightHeight || 0,
+    rakedSplitEnabled: Boolean(sv.rakedSplitEnabled),
+    rakedSplitPosition: Number(sv.rakedSplitPosition) || 0,
+    sidelightEnabled: sv.sidelightEnabled ?? true,
+    sidelightSide: (sv.sidelightSide || "right") as any,
+    sidelightWidth: Number(sv.sidelightWidth) || 400,
+    bayAngle: Number(sv.bayAngle) || 135,
+    bayDepth: Number(sv.bayDepth) || 0,
+    bifoldLeftCount: Number(sv.bifoldLeftCount) || 0,
+    centerWidth: Number(sv.centerWidth) || 0,
+    doorSplit: Boolean(sv.doorSplit),
+    doorSplitHeight: Number(sv.doorSplitHeight) || 0,
+    customColumns: Array.isArray(sv.customColumns) ? sv.customColumns : [],
+    entranceDoorRows: Array.isArray(sv.entranceDoorRows) ? sv.entranceDoorRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    entranceSidelightRows: Array.isArray(sv.entranceSidelightRows) ? sv.entranceSidelightRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    entranceSidelightLeftRows: Array.isArray(sv.entranceSidelightLeftRows) ? sv.entranceSidelightLeftRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    hingeDoorRows: Array.isArray(sv.hingeDoorRows) ? sv.hingeDoorRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    frenchDoorLeftRows: Array.isArray(sv.frenchDoorLeftRows) ? sv.frenchDoorLeftRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    frenchDoorRightRows: Array.isArray(sv.frenchDoorRightRows) ? sv.frenchDoorRightRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    panelRows: Array.isArray(sv.panelRows) ? sv.panelRows : [],
+    showLegend: true,
+    pricePerSqm: Number(sv.pricePerSqm) || 500,
+    overrideMode: "none" as const,
+    overrideValue: null,
+    frameType: String(sv.frameSeries || ""),
+    frameColor: String(sv.frameColor || ""),
+    flashingSize: Number(sv.flashingSize) || 0,
+    windZone: String(sv.windZone || ""),
+    linerType: String(sv.linerType || ""),
+    glassIguType: String(sv.iguType || ""),
+    glassType: String(sv.glassType || ""),
+    glassThickness: String(sv.glassThickness || ""),
+    wanzBar: Boolean(sv.wanzBarEnabled),
+    wanzBarSource: (sv.wanzBarSource || "") as any,
+    wanzBarSize: String(sv.wanzBarSize || ""),
+    wallThickness: Number(sv.wallThickness) || 0,
+    heightFromFloor: Number(sv.heightFromFloor) || 0,
+    handleType: String(sv.handleSet || ""),
+    lockType: String(sv.lockSet || ""),
+    configurationId: String(sv.configurationId || ""),
+    cachedWeightKg: 0,
+    fulfilmentSource: "in-house" as const,
+    outsourcedCostNzd: null,
+    outsourcedSellNzd: null,
+    gosRequired: di.gosRequired || false,
+    gosChargeNzd: di.gosChargeNzd ?? null,
+    catDoorEnabled: di.catDoorEnabled || false,
+  };
+}
+
+async function regenerateDrawingForKey(svgEl: SVGSVGElement, drawingKey: string): Promise<boolean> {
+  try {
+    const blob = await svgToPngBlob(svgEl, 2);
+    const formData = new FormData();
+    formData.append("file", blob, "drawing.png");
+    const resp = await fetch(`/api/drawing-images/${drawingKey}`, { method: "PUT", body: formData, credentials: "include" });
+    if (resp.ok) {
+      console.log(`[drawing-repair] Regenerated ${drawingKey}`);
+      return true;
+    }
+    console.warn(`[drawing-repair] Server rejected ${drawingKey}: ${resp.status}`);
+    return false;
+  } catch (err) {
+    console.warn(`[drawing-repair] Failed ${drawingKey}:`, err);
+    return false;
+  }
+}
+
 function ScheduleItemCard({
   item,
   template,
+  docItem,
 }: {
   item: RenderScheduleItem;
   template: QuoteTemplate;
+  docItem?: QuoteDocumentItem;
 }) {
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("");
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
   const [drawingFailed, setDrawingFailed] = useState(false);
+  const drawingConfig = useMemo(() => (docItem && drawingFailed) ? docItemToDrawingConfig(docItem) : null, [docItem, drawingFailed]);
 
   const { visibleSpecs, media } = item;
   const loadedPhotos = media.customerPhotos.filter((p) => !failedPhotos.has(p.key));
@@ -726,26 +984,32 @@ function ScheduleItemCard({
           <div className="space-y-3">
             {media.drawingUrl && (
               <div className="flex items-center justify-center">
-                <div
-                  className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
-                  onClick={() => {
-                    if (!drawingFailed) {
-                      setViewerSrc(media.drawingUrl);
-                      setViewerTitle(media.drawingLabel);
-                    }
-                  }}
-                >
-                  <MediaImage
-                    src={media.drawingUrl}
-                    alt={`Drawing for item ${item.index + 1}`}
-                    style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
-                    className="w-full object-contain rounded"
-                    testId={`img-drawing-${item.index}`}
-                    fallbackTestId={`fallback-drawing-${item.index}`}
-                    fallbackText="Drawing unavailable"
-                    onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
-                  />
-                </div>
+                {drawingConfig ? (
+                  <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px`, width: "100%" }} data-testid={`recovered-drawing-${item.index}`}>
+                    <DrawingCanvas config={drawingConfig} />
+                  </div>
+                ) : (
+                  <div
+                    className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
+                    onClick={() => {
+                      if (!drawingFailed) {
+                        setViewerSrc(media.drawingUrl);
+                        setViewerTitle(media.drawingLabel);
+                      }
+                    }}
+                  >
+                    <MediaImage
+                      src={media.drawingUrl}
+                      alt={`Drawing for item ${item.index + 1}`}
+                      style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
+                      className="w-full object-contain rounded"
+                      testId={`img-drawing-${item.index}`}
+                      fallbackTestId={`fallback-drawing-${item.index}`}
+                      fallbackText="Drawing unavailable"
+                      onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
+                    />
+                  </div>
+                )}
               </div>
             )}
             <div>
@@ -753,29 +1017,35 @@ function ScheduleItemCard({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div style={{ display: "grid", gridTemplateColumns: media.drawingUrl ? "45% 1fr" : "1fr", gap: "16px" }}>
             {media.drawingUrl && (
               <div className="flex items-center justify-center">
-                <div
-                  className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
-                  onClick={() => {
-                    if (!drawingFailed) {
-                      setViewerSrc(media.drawingUrl!);
-                      setViewerTitle(media.drawingLabel);
-                    }
-                  }}
-                >
-                  <MediaImage
-                    src={media.drawingUrl}
-                    alt={`Drawing for item ${item.index + 1}`}
-                    style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
-                    className="object-contain rounded"
-                    testId={`img-drawing-${item.index}`}
-                    fallbackTestId={`fallback-drawing-${item.index}`}
-                    fallbackText="Drawing unavailable"
-                    onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
-                  />
-                </div>
+                {drawingConfig ? (
+                  <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }} data-testid={`recovered-drawing-${item.index}`}>
+                    <DrawingCanvas config={drawingConfig} />
+                  </div>
+                ) : (
+                  <div
+                    className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
+                    onClick={() => {
+                      if (!drawingFailed) {
+                        setViewerSrc(media.drawingUrl!);
+                        setViewerTitle(media.drawingLabel);
+                      }
+                    }}
+                  >
+                    <MediaImage
+                      src={media.drawingUrl}
+                      alt={`Drawing for item ${item.index + 1}`}
+                      style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
+                      className="object-contain rounded"
+                      testId={`img-drawing-${item.index}`}
+                      fallbackTestId={`fallback-drawing-${item.index}`}
+                      fallbackText="Drawing unavailable"
+                      onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
+                    />
+                  </div>
+                )}
               </div>
             )}
             <div>
@@ -788,7 +1058,7 @@ function ScheduleItemCard({
           <div className="space-y-0.5" data-testid={`item-notes-${item.index}`}>
             {item.gosNote && (
               <p className="text-xs italic font-medium" style={{ color: template.colors.accent }} data-testid={`text-gos-note-${item.index}`}>
-                ⚠ {item.gosNote}
+                [GOS] {item.gosNote}
               </p>
             )}
             {item.catDoorNote && (

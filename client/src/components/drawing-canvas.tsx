@@ -300,7 +300,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   const {
     width: W, height: H, category, layout, hingeSide,
     openDirection, panels, sidelightWidth, sidelightSide, doorSplit, doorSplitHeight,
-    bifoldLeftCount, centerWidth, windowType, customColumns
+    bifoldLeftCount, centerWidth, bayAngle, bayDepth, windowType, customColumns
   } = config;
   const minPane = frameSize * 2;
   const od = openDirection || "out";
@@ -756,14 +756,34 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   if (category === "bay-window") {
     const cw = clamp(centerWidth > 0 ? centerWidth : W * 0.6, minPane, W - minPane * 2);
     const sideW = (W - cw) / 2;
+    const angle = bayAngle || 135;
+    const depth = bayDepth || 0;
+    const angleRad = ((180 - angle) * Math.PI) / 180;
+    const sideSkew = depth > 0 ? Math.min(depth, sideW * 0.8) : Math.round(sideW * Math.sin(angleRad) * 0.4);
+    const skewClamp = Math.min(sideSkew, sideW * 0.8);
     return (
       <g>
-        <Pane x={0} y={0} w={sideW} h={H} frameSize={frameSize}
-          type="awning" openDirection={od} strokeScale={ss} />
+        <g transform={`skewY(${-(Math.atan2(skewClamp, H) * 180) / Math.PI})`}>
+          <Pane x={0} y={0} w={sideW} h={H} frameSize={frameSize}
+            type="awning" openDirection={od} strokeScale={ss} />
+        </g>
         <Pane x={sideW} y={0} w={cw} h={H} frameSize={frameSize}
           type="fixed" strokeScale={ss} />
-        <Pane x={sideW + cw} y={0} w={sideW} h={H} frameSize={frameSize}
-          type="awning" openDirection={od} strokeScale={ss} />
+        <g transform={`translate(${sideW + cw}, 0) skewY(${(Math.atan2(skewClamp, H) * 180) / Math.PI})`}>
+          <Pane x={0} y={0} w={sideW} h={H} frameSize={frameSize}
+            type="awning" openDirection={od} strokeScale={ss} />
+        </g>
+        {(depth > 0 || angle !== 135) && (
+          <text
+            x={W / 2}
+            y={H + frameSize * 1.5}
+            textAnchor="middle"
+            fontSize={Math.max(H * 0.025, 10)}
+            fill="#666"
+          >
+            {angle}° {depth > 0 ? `· ${depth}mm depth` : ""}
+          </text>
+        )}
       </g>
     );
   }
@@ -796,9 +816,10 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
   const dimGap = maxDim * 0.06;
   const textGap = maxDim * 0.1;
   const padLeft = maxDim * 0.16;
+  const isBay = category === "bay-window";
   const rakedHasSplit = isRaked && rakedSplitEnabled && rakedSplitPos > 0 && rakedSplitPos < W;
-  const padBottom = rakedHasSplit ? maxDim * 0.24 : maxDim * 0.16;
-  const padRight = isRaked ? maxDim * 0.16 : maxDim * 0.05;
+  const padBottom = rakedHasSplit ? maxDim * 0.24 : (isBay ? maxDim * 0.2 : maxDim * 0.16);
+  const padRight = isRaked ? maxDim * 0.16 : (isBay ? maxDim * 0.16 : maxDim * 0.05);
   const padTop = maxDim * 0.1;
 
   const fontSize = Math.max(maxDim * 0.028, 14);

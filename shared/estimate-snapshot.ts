@@ -18,6 +18,8 @@ const snapshotItemSchema = z.object({
   category: z.string().optional(),
   rakedLeftHeight: z.number().optional(),
   rakedRightHeight: z.number().optional(),
+  bayAngle: z.number().optional(),
+  bayDepth: z.number().optional(),
   openingDirection: z.string().optional(),
   gosRequired: z.boolean().optional(),
   gosChargeNzd: z.number().optional(),

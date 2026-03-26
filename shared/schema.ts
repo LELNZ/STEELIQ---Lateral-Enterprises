@@ -160,6 +160,8 @@ export const quoteItemSchema = z.object({
   doorSplitHeight: z.number().default(0),
   bifoldLeftCount: z.number().int().min(0).default(0),
   centerWidth: z.number().default(0),
+  bayAngle: z.number().min(0).max(180).default(135),
+  bayDepth: z.number().min(0).default(0),
   entranceDoorRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   entranceSidelightRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),
   entranceSidelightLeftRows: z.array(entranceDoorRowSchema).default([{ height: 0, type: "fixed" }]),

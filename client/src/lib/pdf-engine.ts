@@ -1061,7 +1061,7 @@ async function renderScheduleItem(
     pdf.setFontSize(7);
     pdf.setTextColor(COLOR_ACCENT);
     if (item.gosNote) {
-      pdf.text(`\u26A0  ${item.gosNote}`, LEFT_MARGIN + pad, y + 2.5);
+      pdf.text(`[GOS] ${item.gosNote}`, LEFT_MARGIN + pad, y + 2.5);
       y += 4;
     }
     if (item.catDoorNote) {

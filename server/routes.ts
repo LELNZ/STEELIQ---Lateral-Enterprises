@@ -2043,13 +2043,77 @@ export async function registerRoutes(
   const DRAWING_DIR = path.resolve("uploads/drawing-images");
   fs.mkdirSync(DRAWING_DIR, { recursive: true });
 
+  (async () => {
+    try {
+      const files = fs.readdirSync(DRAWING_DIR).filter(f => /^[a-f0-9-]+\.png$/.test(f));
+      let migrated = 0;
+      for (const file of files) {
+        const existing = await storage.getItemPhoto(file);
+        if (!existing) {
+          const data = fs.readFileSync(path.resolve(DRAWING_DIR, file));
+          if (data.length > 100) {
+            await storage.saveItemPhoto(file, data, "image/png");
+            migrated++;
+          }
+        }
+      }
+      if (migrated > 0) {
+        console.log(`[drawing-migration] Migrated ${migrated} drawing images from filesystem to database`);
+      }
+    } catch (e) {
+      console.warn("[drawing-migration] Failed to migrate filesystem drawings:", e);
+    }
+
+    try {
+      const client = await pool.connect();
+      try {
+        const { rows } = await client.query(`
+          SELECT DISTINCT val AS drawing_key
+          FROM quote_revisions,
+               jsonb_array_elements(snapshot_json::jsonb -> 'items') AS item,
+               jsonb_each_text(item) AS kv(k, val)
+          WHERE kv.k = 'drawingImageKey' AND val IS NOT NULL AND val != ''
+        `);
+        const referencedKeys: string[] = rows.map((r: any) => r.drawing_key);
+        let missing = 0;
+        const missingKeys: string[] = [];
+        const validKeyPattern = /^[a-f0-9-]+\.png$/;
+        const resolvedDrawingDir = path.resolve(DRAWING_DIR) + path.sep;
+        for (const key of referencedKeys) {
+          if (!validKeyPattern.test(key)) {
+            console.warn(`[drawing-integrity] Skipping invalid drawing key format: ${key}`);
+            continue;
+          }
+          const exists = await storage.getItemPhoto(key);
+          if (!exists) {
+            const filePath = path.resolve(DRAWING_DIR, key);
+            if (filePath.startsWith(resolvedDrawingDir) && fs.existsSync(filePath)) {
+              const data = fs.readFileSync(filePath);
+              if (data.length > 100) {
+                await storage.saveItemPhoto(key, data, "image/png");
+                console.log(`[drawing-integrity] Recovered drawing ${key} from filesystem`);
+                continue;
+              }
+            }
+            missing++;
+            missingKeys.push(key);
+          }
+        }
+        if (missing > 0) {
+          console.warn(`[drawing-integrity] ${missing} snapshot-referenced drawings not found in DB or filesystem: ${missingKeys.join(', ')}`);
+        } else if (referencedKeys.length > 0) {
+          console.log(`[drawing-integrity] All ${referencedKeys.length} snapshot-referenced drawings verified in DB`);
+        }
+      } finally {
+        client.release();
+      }
+    } catch (e) {
+      console.warn("[drawing-integrity] Snapshot drawing audit failed:", e);
+    }
+  })();
+
   const drawingUpload = multer({
-    storage: multer.diskStorage({
-      destination: DRAWING_DIR,
-      filename: (_req, _file, cb) => {
-        cb(null, `${crypto.randomUUID()}.png`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       if (file.mimetype === "image/png") cb(null, true);
@@ -2057,25 +2121,136 @@ export async function registerRoutes(
     },
   });
 
-  app.post("/api/drawing-images", drawingUpload.single("file"), (req, res) => {
+  const drawingCache = new Map<string, Buffer>();
+  const DRAWING_CACHE_MAX = 100;
+
+  function drawingCacheSet(key: string, data: Buffer) {
+    if (drawingCache.size >= DRAWING_CACHE_MAX) {
+      const oldest = drawingCache.keys().next().value;
+      if (oldest) drawingCache.delete(oldest);
+    }
+    drawingCache.set(key, data);
+  }
+
+  app.post("/api/drawing-images", drawingUpload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    res.json({ key: req.file.filename });
+    try {
+      const key = `${crypto.randomUUID()}.png`;
+      const data = req.file.buffer;
+      await storage.saveItemPhoto(key, data, "image/png");
+      const verify = await storage.getItemPhoto(key);
+      if (!verify) {
+        console.error(`[drawing-upload] DB write verification failed for ${key} — row not found after save`);
+        return res.status(500).json({ error: "Drawing persistence verification failed" });
+      }
+      drawingCacheSet(key, data);
+      try {
+        const filePath = path.resolve(DRAWING_DIR, key);
+        fs.writeFileSync(filePath, data);
+      } catch (fsErr) {
+        console.warn(`[drawing-upload] Filesystem mirror failed for ${key}, DB write succeeded:`, fsErr);
+      }
+      res.json({ key });
+    } catch (e: any) {
+      console.error(`[drawing-upload] Failed to save drawing:`, e);
+      res.status(500).json({ error: "Failed to save drawing" });
+    }
   });
 
-  app.get("/api/drawing-images/:key", (req, res) => {
+  const MAX_DRAWING_RECOVERY_SIZE = 5 * 1024 * 1024;
+  const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  app.put("/api/drawing-images/:key", requireAuth, drawingUpload.single("file"), async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Admin or owner role required" });
+    }
     const key = req.params.key;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
       return res.status(400).json({ error: "Invalid key" });
     }
-    const filePath = path.resolve(DRAWING_DIR, key);
-    const resolvedDir = path.resolve(DRAWING_DIR);
-    if (!filePath.startsWith(resolvedDir)) {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const data = req.file.buffer;
+    if (data.length > MAX_DRAWING_RECOVERY_SIZE) {
+      return res.status(400).json({ error: "File too large (max 5MB)" });
+    }
+    if (data.length < 100 || !data.subarray(0, 8).equals(PNG_HEADER)) {
+      return res.status(400).json({ error: "Invalid PNG file" });
+    }
+    try {
+      const existing = await storage.getItemPhoto(key);
+      if (existing) {
+        console.log(`[drawing-recover] Key ${key} already exists in DB, skipping overwrite`);
+        drawingCacheSet(key, existing.data);
+        return res.json({ ok: true, key, skipped: true });
+      }
+      await storage.saveItemPhoto(key, data, "image/png");
+      drawingCacheSet(key, data);
+      try {
+        const filePath = path.resolve(DRAWING_DIR, key);
+        fs.writeFileSync(filePath, data);
+      } catch (fsErr) {
+        console.warn(`[drawing-recover] Filesystem mirror failed for ${key}:`, fsErr);
+      }
+      console.log(`[drawing-recover] Recovered drawing ${key} (${data.length} bytes)`);
+      res.json({ ok: true, key });
+    } catch (e: any) {
+      console.error(`[drawing-recover] Failed to recover drawing ${key}:`, e);
+      res.status(500).json({ error: "Failed to recover drawing" });
+    }
+  });
+
+  app.post("/api/drawing-images/check-missing", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Admin or owner role required" });
+    }
+    try {
+      const { keys } = req.body;
+      if (!Array.isArray(keys)) return res.status(400).json({ error: "keys must be an array" });
+      const missing: string[] = [];
+      for (const key of keys) {
+        if (typeof key !== "string" || !/^[a-f0-9-]+\.png$/.test(key)) continue;
+        if (drawingCache.has(key)) continue;
+        const exists = await storage.getItemPhoto(key);
+        if (!exists) {
+          const filePath = path.resolve(DRAWING_DIR, key);
+          const resolvedDir = path.resolve(DRAWING_DIR);
+          if (!(filePath.startsWith(resolvedDir) && fs.existsSync(filePath))) {
+            missing.push(key);
+          }
+        }
+      }
+      res.json({ missing });
+    } catch (e: any) {
+      console.error("[drawing-check] Failed:", e);
+      res.status(500).json({ error: "Check failed" });
+    }
+  });
+
+  app.get("/api/drawing-images/:key", async (req, res) => {
+    const key = req.params.key;
+    if (!/^[a-f0-9-]+\.png$/.test(key)) {
       return res.status(400).json({ error: "Invalid key" });
     }
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: "Image not found" });
+    const cached = drawingCache.get(key);
+    if (cached) {
+      return res.type("image/png").send(cached);
     }
-    res.type("image/png").sendFile(filePath);
+    const dbDrawing = await storage.getItemPhoto(key);
+    if (dbDrawing) {
+      drawingCacheSet(key, dbDrawing.data);
+      return res.type("image/png").send(dbDrawing.data);
+    }
+    const filePath = path.resolve(DRAWING_DIR, key);
+    const resolvedDir = path.resolve(DRAWING_DIR);
+    if (filePath.startsWith(resolvedDir) && fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath);
+      if (data.length > 100) {
+        drawingCacheSet(key, data);
+        storage.saveItemPhoto(key, data, "image/png").catch(() => {});
+        return res.type("image/png").send(data);
+      }
+    }
+    return res.status(404).json({ error: "Image not found" });
   });
 
   app.get("/api/quotes/:id/preview-data", async (req, res) => {
