@@ -2161,6 +2161,9 @@ export async function registerRoutes(
   const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   app.put("/api/drawing-images/:key", requireAuth, drawingUpload.single("file"), async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Admin or owner role required" });
+    }
     const key = req.params.key;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
       return res.status(400).json({ error: "Invalid key" });
@@ -2197,6 +2200,9 @@ export async function registerRoutes(
   });
 
   app.post("/api/drawing-images/check-missing", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Admin or owner role required" });
+    }
     try {
       const { keys } = req.body;
       if (!Array.isArray(keys)) return res.status(400).json({ error: "keys must be an array" });

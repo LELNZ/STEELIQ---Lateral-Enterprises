@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { ArrowLeftCircle, Download, Settings2, Info } from "lucide-react";
+import { ArrowLeftCircle, Download, Settings2, Info, Wrench } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem, TotalsDisplayConfig } from "@/lib/quote-document";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG } from "@/lib/quote-document";
@@ -31,9 +32,13 @@ export default function QuotePreview() {
   const params = paramsSingular || paramsPlural;
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const quoteId = params?.id;
   const [specSheetOpen, setSpecSheetOpen] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [drawingRepairState, setDrawingRepairState] = useState<"idle" | "checking" | "repairing" | "done">("idle");
+  const [repairProgress, setRepairProgress] = useState({ total: 0, done: 0, succeeded: 0 });
+  const isAdminOrOwner = user?.role === "admin" || user?.role === "owner";
 
   const { data: preview, isLoading } = useQuery<PreviewData>({
     queryKey: ["/api/quotes", quoteId, "preview-data"],
@@ -57,6 +62,83 @@ export default function QuotePreview() {
   useEffect(() => { setLocalKeys(null); setLocalTotalsConfig(null); setLocalRemarks(null); }, [quoteId]);
 
   const effectiveKeys = localKeys ?? doc?.specDisplay.effectiveKeys ?? [];
+
+  const handleRepairDrawings = useCallback(async () => {
+    if (!doc || drawingRepairState === "repairing" || drawingRepairState === "checking") return;
+    setDrawingRepairState("checking");
+    try {
+      const allKeys = doc.items
+        .map(item => item.drawingImageKey)
+        .filter((k): k is string => !!k);
+      if (allKeys.length === 0) {
+        toast({ title: "No drawings to check" });
+        setDrawingRepairState("idle");
+        return;
+      }
+      const checkRes = await fetch("/api/drawing-images/check-missing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keys: allKeys }),
+        credentials: "include",
+      });
+      if (!checkRes.ok) throw new Error(`Check failed: ${checkRes.status}`);
+      const { missing } = await checkRes.json();
+      if (!missing || missing.length === 0) {
+        toast({ title: "All drawings present", description: "No repair needed." });
+        setDrawingRepairState("done");
+        return;
+      }
+      setRepairProgress({ total: missing.length, done: 0, succeeded: 0 });
+      setDrawingRepairState("repairing");
+
+      const container = document.createElement("div");
+      container.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:600px;height:400px;overflow:hidden;";
+      document.body.appendChild(container);
+
+      let succeeded = 0;
+      for (let i = 0; i < missing.length; i++) {
+        const key = missing[i];
+        const docItem = doc.items.find(it => it.drawingImageKey === key);
+        if (!docItem) { setRepairProgress(p => ({ ...p, done: p.done + 1 })); continue; }
+        try {
+          const { createRoot } = await import("react-dom/client");
+          const wrapper = document.createElement("div");
+          container.appendChild(wrapper);
+          const config = docItemToDrawingConfig(docItem);
+          const root = createRoot(wrapper);
+          await new Promise<void>((resolve) => {
+            root.render(
+              <DrawingCanvas config={config} ref={(el: SVGSVGElement | null) => {
+                if (!el) return;
+                setTimeout(async () => {
+                  const ok = await regenerateDrawingForKey(el, key);
+                  if (ok) succeeded++;
+                  setRepairProgress(p => ({ ...p, done: p.done + 1, succeeded: p.succeeded + (ok ? 1 : 0) }));
+                  root.unmount();
+                  wrapper.remove();
+                  resolve();
+                }, 200);
+              }} />
+            );
+          });
+        } catch (err) {
+          console.warn(`[drawing-repair] Error repairing ${key}:`, err);
+          setRepairProgress(p => ({ ...p, done: p.done + 1 }));
+        }
+      }
+      container.remove();
+      toast({
+        title: "Drawing repair complete",
+        description: `${succeeded}/${missing.length} drawings regenerated.`,
+      });
+      setDrawingRepairState("done");
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "preview-data"] });
+    } catch (err: any) {
+      console.error("[drawing-repair] Error:", err);
+      toast({ title: "Drawing repair failed", description: err.message, variant: "destructive" });
+      setDrawingRepairState("idle");
+    }
+  }, [doc, drawingRepairState, toast, quoteId]);
 
   const autoExportTriggered = useRef(false);
   useEffect(() => {
@@ -294,6 +376,20 @@ export default function QuotePreview() {
                 </div>
               </SheetContent>
             </Sheet>
+            {isAdminOrOwner && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={drawingRepairState === "checking" || drawingRepairState === "repairing"}
+                onClick={handleRepairDrawings}
+                data-testid="button-repair-drawings"
+              >
+                <Wrench className="h-4 w-4 mr-1" />
+                {drawingRepairState === "checking" ? "Checking..." :
+                 drawingRepairState === "repairing" ? `Repairing ${repairProgress.done}/${repairProgress.total}...` :
+                 drawingRepairState === "done" ? "Repair Complete" : "Repair Drawings"}
+              </Button>
+            )}
             <Button
               variant="default"
               size="sm"
@@ -827,32 +923,22 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
   };
 }
 
-function DrawingRecovery({ svgRef, drawingKey, onRecovered }: { svgRef: React.RefObject<SVGSVGElement | null>; drawingKey: string; onRecovered: () => void }) {
-  const attempted = useRef(false);
-  useEffect(() => {
-    if (attempted.current) return;
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-    attempted.current = true;
-    const timer = setTimeout(async () => {
-      try {
-        const blob = await svgToPngBlob(svgEl, 2);
-        const formData = new FormData();
-        formData.append("file", blob, "drawing.png");
-        const resp = await fetch(`/api/drawing-images/${drawingKey}`, { method: "PUT", body: formData, credentials: "include" });
-        if (resp.ok) {
-          console.log(`[drawing-recover] Successfully recovered ${drawingKey}`);
-          onRecovered();
-        } else {
-          console.warn(`[drawing-recover] Server rejected recovery for ${drawingKey}: ${resp.status}`);
-        }
-      } catch (err) {
-        console.warn(`[drawing-recover] Failed to recover ${drawingKey}:`, err);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [svgRef, drawingKey, onRecovered]);
-  return null;
+async function regenerateDrawingForKey(svgEl: SVGSVGElement, drawingKey: string): Promise<boolean> {
+  try {
+    const blob = await svgToPngBlob(svgEl, 2);
+    const formData = new FormData();
+    formData.append("file", blob, "drawing.png");
+    const resp = await fetch(`/api/drawing-images/${drawingKey}`, { method: "PUT", body: formData, credentials: "include" });
+    if (resp.ok) {
+      console.log(`[drawing-repair] Regenerated ${drawingKey}`);
+      return true;
+    }
+    console.warn(`[drawing-repair] Server rejected ${drawingKey}: ${resp.status}`);
+    return false;
+  } catch (err) {
+    console.warn(`[drawing-repair] Failed ${drawingKey}:`, err);
+    return false;
+  }
 }
 
 function ScheduleItemCard({
@@ -868,10 +954,7 @@ function ScheduleItemCard({
   const [viewerTitle, setViewerTitle] = useState("");
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
   const [drawingFailed, setDrawingFailed] = useState(false);
-  const [drawingRecovered, setDrawingRecovered] = useState(false);
-  const drawingSvgRef = useRef<SVGSVGElement>(null);
-  const drawingConfig = useMemo(() => (docItem && drawingFailed && !drawingRecovered) ? docItemToDrawingConfig(docItem) : null, [docItem, drawingFailed, drawingRecovered]);
-  const handleDrawingRecovered = useCallback(() => { setDrawingRecovered(true); setDrawingFailed(false); }, []);
+  const drawingConfig = useMemo(() => (docItem && drawingFailed) ? docItemToDrawingConfig(docItem) : null, [docItem, drawingFailed]);
 
   const { visibleSpecs, media } = item;
   const loadedPhotos = media.customerPhotos.filter((p) => !failedPhotos.has(p.key));
@@ -903,8 +986,7 @@ function ScheduleItemCard({
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
                   <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px`, width: "100%" }} data-testid={`recovered-drawing-${item.index}`}>
-                    <DrawingCanvas ref={drawingSvgRef} config={drawingConfig} />
-                    {media.drawingKey && <DrawingRecovery svgRef={drawingSvgRef} drawingKey={media.drawingKey} onRecovered={handleDrawingRecovered} />}
+                    <DrawingCanvas config={drawingConfig} />
                   </div>
                 ) : (
                   <div
@@ -940,8 +1022,7 @@ function ScheduleItemCard({
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
                   <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }} data-testid={`recovered-drawing-${item.index}`}>
-                    <DrawingCanvas ref={drawingSvgRef} config={drawingConfig} />
-                    {media.drawingKey && <DrawingRecovery svgRef={drawingSvgRef} drawingKey={media.drawingKey} onRecovered={handleDrawingRecovered} />}
+                    <DrawingCanvas config={drawingConfig} />
                   </div>
                 ) : (
                   <div
