@@ -2063,6 +2063,53 @@ export async function registerRoutes(
     } catch (e) {
       console.warn("[drawing-migration] Failed to migrate filesystem drawings:", e);
     }
+
+    try {
+      const client = await pool.connect();
+      try {
+        const { rows } = await client.query(`
+          SELECT DISTINCT val AS drawing_key
+          FROM quote_revisions,
+               jsonb_array_elements(snapshot_json::jsonb -> 'items') AS item,
+               jsonb_each_text(item) AS kv(k, val)
+          WHERE kv.k = 'drawingImageKey' AND val IS NOT NULL AND val != ''
+        `);
+        const referencedKeys: string[] = rows.map((r: any) => r.drawing_key);
+        let missing = 0;
+        const missingKeys: string[] = [];
+        const validKeyPattern = /^[a-f0-9-]+\.png$/;
+        const resolvedDrawingDir = path.resolve(DRAWING_DIR) + path.sep;
+        for (const key of referencedKeys) {
+          if (!validKeyPattern.test(key)) {
+            console.warn(`[drawing-integrity] Skipping invalid drawing key format: ${key}`);
+            continue;
+          }
+          const exists = await storage.getItemPhoto(key);
+          if (!exists) {
+            const filePath = path.resolve(DRAWING_DIR, key);
+            if (filePath.startsWith(resolvedDrawingDir) && fs.existsSync(filePath)) {
+              const data = fs.readFileSync(filePath);
+              if (data.length > 100) {
+                await storage.saveItemPhoto(key, data, "image/png");
+                console.log(`[drawing-integrity] Recovered drawing ${key} from filesystem`);
+                continue;
+              }
+            }
+            missing++;
+            missingKeys.push(key);
+          }
+        }
+        if (missing > 0) {
+          console.warn(`[drawing-integrity] ${missing} snapshot-referenced drawings not found in DB or filesystem: ${missingKeys.join(', ')}`);
+        } else if (referencedKeys.length > 0) {
+          console.log(`[drawing-integrity] All ${referencedKeys.length} snapshot-referenced drawings verified in DB`);
+        }
+      } finally {
+        client.release();
+      }
+    } catch (e) {
+      console.warn("[drawing-integrity] Snapshot drawing audit failed:", e);
+    }
   })();
 
   const drawingUpload = multer({
@@ -2091,6 +2138,11 @@ export async function registerRoutes(
       const key = `${crypto.randomUUID()}.png`;
       const data = req.file.buffer;
       await storage.saveItemPhoto(key, data, "image/png");
+      const verify = await storage.getItemPhoto(key);
+      if (!verify) {
+        console.error(`[drawing-upload] DB write verification failed for ${key} — row not found after save`);
+        return res.status(500).json({ error: "Drawing persistence verification failed" });
+      }
       drawingCacheSet(key, data);
       try {
         const filePath = path.resolve(DRAWING_DIR, key);
@@ -2100,6 +2152,7 @@ export async function registerRoutes(
       }
       res.json({ key });
     } catch (e: any) {
+      console.error(`[drawing-upload] Failed to save drawing:`, e);
       res.status(500).json({ error: "Failed to save drawing" });
     }
   });
