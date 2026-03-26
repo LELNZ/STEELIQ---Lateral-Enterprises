@@ -148,12 +148,14 @@ export default function QuotePreview() {
   const activeModel = liveRenderModel ?? renderModel;
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
 
+  const ITEMS_FIRST_PAGE = 1;
   const ITEMS_PER_PAGE = 3;
-  const schedulePages: RenderScheduleItem[][] = [];
-  if (isSectionVisible(T, "schedule") && liveScheduleItems.length > 0) {
-    for (let i = 0; i < liveScheduleItems.length; i += ITEMS_PER_PAGE) {
-      schedulePages.push(liveScheduleItems.slice(i, i + ITEMS_PER_PAGE));
-    }
+  const hasSchedule = isSectionVisible(T, "schedule") && liveScheduleItems.length > 0;
+  const page1ScheduleItems = hasSchedule ? liveScheduleItems.slice(0, ITEMS_FIRST_PAGE) : [];
+  const overflowItems = hasSchedule ? liveScheduleItems.slice(ITEMS_FIRST_PAGE) : [];
+  const overflowPages: RenderScheduleItem[][] = [];
+  for (let i = 0; i < overflowItems.length; i += ITEMS_PER_PAGE) {
+    overflowPages.push(overflowItems.slice(i, i + ITEMS_PER_PAGE));
   }
 
   const hasLegalOrAcceptance = isSectionVisible(T, "legal") || isSectionVisible(T, "acceptance");
@@ -382,18 +384,31 @@ export default function QuotePreview() {
                 <p className="text-sm mt-2" style={{ color: T.colors.headingMuted }}>No items in this quote snapshot. This may be a legacy quote — try generating a new revision from the estimator.</p>
               </div>
             )}
-          </div>
-        </div>
 
-        {schedulePages.map((pageItems, pageIdx) => (
-          <div key={`schedule-page-${pageIdx}`} style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid={`preview-schedule-page-${pageIdx}`}>
-            <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
-              {pageIdx === 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: sectionGap }}>
+            {page1ScheduleItems.length > 0 && (
+              <div>
+                <div style={{ display: "flex", flexDirection: "column", gap: sectionGap, marginBottom: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
                   <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
                   <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
                 </div>
-              )}
+                <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+                  {page1ScheduleItems.map((item) => (
+                    <ScheduleItemCard
+                      key={item.index}
+                      item={item}
+                      template={T}
+                      docItem={doc?.items[item.index]}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {overflowPages.map((pageItems, pageIdx) => (
+          <div key={`schedule-page-${pageIdx}`} style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid={`preview-schedule-page-${pageIdx}`}>
+            <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
               <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
                 {pageItems.map((item) => (
                   <ScheduleItemCard
