@@ -1,3 +1,4 @@
+import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import sharp from "sharp";
 import DrawingCanvas from "@/components/drawing-canvas";
@@ -129,7 +130,8 @@ export function snapshotItemToDrawingConfig(
 }
 
 export async function renderDrawingToPng(config: InsertQuoteItem, scale: number = 2): Promise<Buffer> {
-  let svgMarkup = renderToStaticMarkup(<DrawingCanvas config={config} />);
+  const element = React.createElement(DrawingCanvas, { config });
+  let svgMarkup = renderToStaticMarkup(element);
 
   if (!svgMarkup.includes('xmlns=')) {
     svgMarkup = svgMarkup.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');

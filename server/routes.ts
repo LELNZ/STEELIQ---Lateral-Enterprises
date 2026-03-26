@@ -2236,6 +2236,8 @@ export async function registerRoutes(
         return res.status(400).json({ error: "quoteId is required" });
       }
 
+      const React = (await import("react")).default;
+      (globalThis as any).React = React;
       const { snapshotItemToDrawingConfig, renderDrawingToPng, classifySnapshotDrawingSupport } = await import("./lib/drawing-regenerator.tsx");
 
       const revisions = await storage.getQuoteRevisions(quoteId);
@@ -2248,10 +2250,16 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid snapshot" });
       }
 
+      const VALID_KEY_RE = /^[a-f0-9-]+\.png$/;
+      const resolvedDir = path.resolve(DRAWING_DIR);
       const results: { key: string; status: string; classification: string }[] = [];
       for (const item of snapshot.items) {
         const key = item.drawingImageKey;
         if (!key) continue;
+        if (!VALID_KEY_RE.test(key)) {
+          console.warn(`[drawing-regen] Skipping invalid key: ${key}`);
+          continue;
+        }
 
         const existing = await storage.getItemPhoto(key);
         if (existing) {
@@ -2267,7 +2275,9 @@ export async function registerRoutes(
           drawingCacheSet(key, pngBuffer);
           try {
             const filePath = path.resolve(DRAWING_DIR, key);
-            fs.writeFileSync(filePath, pngBuffer);
+            if (filePath.startsWith(resolvedDir + path.sep)) {
+              fs.writeFileSync(filePath, pngBuffer);
+            }
           } catch {}
           console.log(`[drawing-regen] Regenerated ${key} (${pngBuffer.length} bytes, ${classification})`);
           results.push({ key, status: "regenerated", classification });
