@@ -2157,6 +2157,63 @@ export async function registerRoutes(
     }
   });
 
+  const MAX_DRAWING_RECOVERY_SIZE = 5 * 1024 * 1024;
+  const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  app.put("/api/drawing-images/:key", requireAuth, drawingUpload.single("file"), async (req, res) => {
+    const key = req.params.key;
+    if (!/^[a-f0-9-]+\.png$/.test(key)) {
+      return res.status(400).json({ error: "Invalid key" });
+    }
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const data = req.file.buffer;
+    if (data.length > MAX_DRAWING_RECOVERY_SIZE) {
+      return res.status(400).json({ error: "File too large (max 5MB)" });
+    }
+    if (data.length < 100 || !data.subarray(0, 8).equals(PNG_HEADER)) {
+      return res.status(400).json({ error: "Invalid PNG file" });
+    }
+    try {
+      await storage.saveItemPhoto(key, data, "image/png");
+      drawingCacheSet(key, data);
+      try {
+        const filePath = path.resolve(DRAWING_DIR, key);
+        fs.writeFileSync(filePath, data);
+      } catch (fsErr) {
+        console.warn(`[drawing-recover] Filesystem mirror failed for ${key}:`, fsErr);
+      }
+      console.log(`[drawing-recover] Recovered drawing ${key} (${data.length} bytes)`);
+      res.json({ ok: true, key });
+    } catch (e: any) {
+      console.error(`[drawing-recover] Failed to recover drawing ${key}:`, e);
+      res.status(500).json({ error: "Failed to recover drawing" });
+    }
+  });
+
+  app.post("/api/drawing-images/check-missing", requireAuth, async (req, res) => {
+    try {
+      const { keys } = req.body;
+      if (!Array.isArray(keys)) return res.status(400).json({ error: "keys must be an array" });
+      const missing: string[] = [];
+      for (const key of keys) {
+        if (typeof key !== "string" || !/^[a-f0-9-]+\.png$/.test(key)) continue;
+        if (drawingCache.has(key)) continue;
+        const exists = await storage.getItemPhoto(key);
+        if (!exists) {
+          const filePath = path.resolve(DRAWING_DIR, key);
+          const resolvedDir = path.resolve(DRAWING_DIR);
+          if (!(filePath.startsWith(resolvedDir) && fs.existsSync(filePath))) {
+            missing.push(key);
+          }
+        }
+      }
+      res.json({ missing });
+    } catch (e: any) {
+      console.error("[drawing-check] Failed:", e);
+      res.status(500).json({ error: "Check failed" });
+    }
+  });
+
   app.get("/api/drawing-images/:key", async (req, res) => {
     const key = req.params.key;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {

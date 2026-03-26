@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { ArrowLeftCircle, Download, Settings2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { PreviewData, QuoteDocumentModel, TotalsDisplayConfig } from "@/lib/quote-document";
+import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem, TotalsDisplayConfig } from "@/lib/quote-document";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG } from "@/lib/quote-document";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/lib/quote-renderer";
 import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
@@ -21,6 +21,9 @@ import { generateQuotePdf } from "@/lib/pdf-engine";
 import { isSectionVisible } from "@/lib/quote-template";
 import { RichTextRenderer } from "@/components/ui/rich-text-renderer";
 import type { QuoteTemplate } from "@/lib/quote-template";
+import DrawingCanvas from "@/components/drawing-canvas";
+import type { InsertQuoteItem } from "@shared/schema";
+import { svgToPngBlob } from "@/lib/export-png";
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -397,6 +400,7 @@ export default function QuotePreview() {
                     key={item.index}
                     item={item}
                     template={T}
+                    docItem={doc?.items[item.index]}
                   />
                 ))}
               </div>
@@ -742,17 +746,117 @@ function SpecTable({ specs, itemIndex, template }: { specs: { key: string; label
   );
 }
 
+function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
+  const sv = di.specValues || {};
+  return {
+    name: di.itemRef || di.title || "",
+    width: di.width,
+    height: di.height,
+    quantity: di.quantity || 1,
+    category: (di.category || sv.itemCategory || "windows-standard") as any,
+    layout: (sv.layout || "standard") as any,
+    windowType: (sv.windowType || "fixed") as any,
+    hingeSide: (sv.hingeSide || "left") as any,
+    openDirection: (sv.openDirection || "out") as any,
+    openingDirection: (di.openingDirection || "none") as any,
+    panels: Number(sv.panels) || 3,
+    halfSolid: Boolean(sv.halfSolid),
+    rakedLeftHeight: di.rakedLeftHeight || 0,
+    rakedRightHeight: di.rakedRightHeight || 0,
+    rakedSplitEnabled: false,
+    rakedSplitPosition: 0,
+    sidelightEnabled: sv.sidelightEnabled ?? true,
+    sidelightSide: (sv.sidelightSide || "right") as any,
+    sidelightWidth: Number(sv.sidelightWidth) || 400,
+    bayAngle: Number(sv.bayAngle) || 135,
+    bayDepth: Number(sv.bayDepth) || 0,
+    bifoldLeftCount: Number(sv.bifoldLeftCount) || 0,
+    centerWidth: Number(sv.centerWidth) || 0,
+    doorSplit: Boolean(sv.doorSplit),
+    doorSplitHeight: Number(sv.doorSplitHeight) || 0,
+    customColumns: Array.isArray(sv.customColumns) ? sv.customColumns : [],
+    entranceDoorRows: Array.isArray(sv.entranceDoorRows) ? sv.entranceDoorRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    entranceSidelightRows: Array.isArray(sv.entranceSidelightRows) ? sv.entranceSidelightRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    entranceSidelightLeftRows: Array.isArray(sv.entranceSidelightLeftRows) ? sv.entranceSidelightLeftRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    hingeDoorRows: Array.isArray(sv.hingeDoorRows) ? sv.hingeDoorRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    frenchDoorLeftRows: Array.isArray(sv.frenchDoorLeftRows) ? sv.frenchDoorLeftRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    frenchDoorRightRows: Array.isArray(sv.frenchDoorRightRows) ? sv.frenchDoorRightRows : [{ height: 0, type: "fixed" as const, slideDirection: "right" as const }],
+    panelRows: Array.isArray(sv.panelRows) ? sv.panelRows : [],
+    showLegend: true,
+    pricePerSqm: Number(sv.pricePerSqm) || 500,
+    overrideMode: "none" as const,
+    overrideValue: null,
+    frameType: String(sv.frameSeries || ""),
+    frameColor: String(sv.frameColor || ""),
+    flashingSize: Number(sv.flashingSize) || 0,
+    windZone: String(sv.windZone || ""),
+    linerType: String(sv.linerType || ""),
+    glassIguType: String(sv.iguType || ""),
+    glassType: String(sv.glassType || ""),
+    glassThickness: String(sv.glassThickness || ""),
+    wanzBar: Boolean(sv.wanzBarEnabled),
+    wanzBarSource: (sv.wanzBarSource || "") as any,
+    wanzBarSize: String(sv.wanzBarSize || ""),
+    wallThickness: Number(sv.wallThickness) || 0,
+    heightFromFloor: Number(sv.heightFromFloor) || 0,
+    handleType: String(sv.handleSet || ""),
+    lockType: String(sv.lockSet || ""),
+    configurationId: String(sv.configurationId || ""),
+    cachedWeightKg: 0,
+    fulfilmentSource: "in-house" as const,
+    outsourcedCostNzd: null,
+    outsourcedSellNzd: null,
+    gosRequired: di.gosRequired || false,
+    gosChargeNzd: di.gosChargeNzd ?? null,
+    catDoorEnabled: di.catDoorEnabled || false,
+  };
+}
+
+function DrawingRecovery({ svgRef, drawingKey, onRecovered }: { svgRef: React.RefObject<SVGSVGElement | null>; drawingKey: string; onRecovered: () => void }) {
+  const attempted = useRef(false);
+  useEffect(() => {
+    if (attempted.current) return;
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
+    attempted.current = true;
+    const timer = setTimeout(async () => {
+      try {
+        const blob = await svgToPngBlob(svgEl, 2);
+        const formData = new FormData();
+        formData.append("file", blob, "drawing.png");
+        const resp = await fetch(`/api/drawing-images/${drawingKey}`, { method: "PUT", body: formData, credentials: "include" });
+        if (resp.ok) {
+          console.log(`[drawing-recover] Successfully recovered ${drawingKey}`);
+          onRecovered();
+        } else {
+          console.warn(`[drawing-recover] Server rejected recovery for ${drawingKey}: ${resp.status}`);
+        }
+      } catch (err) {
+        console.warn(`[drawing-recover] Failed to recover ${drawingKey}:`, err);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [svgRef, drawingKey, onRecovered]);
+  return null;
+}
+
 function ScheduleItemCard({
   item,
   template,
+  docItem,
 }: {
   item: RenderScheduleItem;
   template: QuoteTemplate;
+  docItem?: QuoteDocumentItem;
 }) {
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [viewerTitle, setViewerTitle] = useState("");
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
   const [drawingFailed, setDrawingFailed] = useState(false);
+  const [drawingRecovered, setDrawingRecovered] = useState(false);
+  const drawingSvgRef = useRef<SVGSVGElement>(null);
+  const drawingConfig = useMemo(() => (docItem && drawingFailed && !drawingRecovered) ? docItemToDrawingConfig(docItem) : null, [docItem, drawingFailed, drawingRecovered]);
+  const handleDrawingRecovered = useCallback(() => { setDrawingRecovered(true); setDrawingFailed(false); }, []);
 
   const { visibleSpecs, media } = item;
   const loadedPhotos = media.customerPhotos.filter((p) => !failedPhotos.has(p.key));
@@ -782,26 +886,33 @@ function ScheduleItemCard({
           <div className="space-y-3">
             {media.drawingUrl && (
               <div className="flex items-center justify-center">
-                <div
-                  className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
-                  onClick={() => {
-                    if (!drawingFailed) {
-                      setViewerSrc(media.drawingUrl);
-                      setViewerTitle(media.drawingLabel);
-                    }
-                  }}
-                >
-                  <MediaImage
-                    src={media.drawingUrl}
-                    alt={`Drawing for item ${item.index + 1}`}
-                    style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
-                    className="w-full object-contain rounded"
-                    testId={`img-drawing-${item.index}`}
-                    fallbackTestId={`fallback-drawing-${item.index}`}
-                    fallbackText="Drawing unavailable"
-                    onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
-                  />
-                </div>
+                {drawingConfig ? (
+                  <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px`, width: "100%" }} data-testid={`recovered-drawing-${item.index}`}>
+                    <DrawingCanvas ref={drawingSvgRef} config={drawingConfig} />
+                    {media.drawingKey && <DrawingRecovery svgRef={drawingSvgRef} drawingKey={media.drawingKey} onRecovered={handleDrawingRecovered} />}
+                  </div>
+                ) : (
+                  <div
+                    className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
+                    onClick={() => {
+                      if (!drawingFailed) {
+                        setViewerSrc(media.drawingUrl);
+                        setViewerTitle(media.drawingLabel);
+                      }
+                    }}
+                  >
+                    <MediaImage
+                      src={media.drawingUrl}
+                      alt={`Drawing for item ${item.index + 1}`}
+                      style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
+                      className="w-full object-contain rounded"
+                      testId={`img-drawing-${item.index}`}
+                      fallbackTestId={`fallback-drawing-${item.index}`}
+                      fallbackText="Drawing unavailable"
+                      onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
+                    />
+                  </div>
+                )}
               </div>
             )}
             <div>
@@ -812,26 +923,33 @@ function ScheduleItemCard({
           <div style={{ display: "grid", gridTemplateColumns: media.drawingUrl ? "45% 1fr" : "1fr", gap: "16px" }}>
             {media.drawingUrl && (
               <div className="flex items-center justify-center">
-                <div
-                  className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
-                  onClick={() => {
-                    if (!drawingFailed) {
-                      setViewerSrc(media.drawingUrl!);
-                      setViewerTitle(media.drawingLabel);
-                    }
-                  }}
-                >
-                  <MediaImage
-                    src={media.drawingUrl}
-                    alt={`Drawing for item ${item.index + 1}`}
-                    style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
-                    className="object-contain rounded"
-                    testId={`img-drawing-${item.index}`}
-                    fallbackTestId={`fallback-drawing-${item.index}`}
-                    fallbackText="Drawing unavailable"
-                    onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
-                  />
-                </div>
+                {drawingConfig ? (
+                  <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }} data-testid={`recovered-drawing-${item.index}`}>
+                    <DrawingCanvas ref={drawingSvgRef} config={drawingConfig} />
+                    {media.drawingKey && <DrawingRecovery svgRef={drawingSvgRef} drawingKey={media.drawingKey} onRecovered={handleDrawingRecovered} />}
+                  </div>
+                ) : (
+                  <div
+                    className={drawingFailed ? "" : "cursor-pointer print:cursor-default"}
+                    onClick={() => {
+                      if (!drawingFailed) {
+                        setViewerSrc(media.drawingUrl!);
+                        setViewerTitle(media.drawingLabel);
+                      }
+                    }}
+                  >
+                    <MediaImage
+                      src={media.drawingUrl}
+                      alt={`Drawing for item ${item.index + 1}`}
+                      style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }}
+                      className="object-contain rounded"
+                      testId={`img-drawing-${item.index}`}
+                      fallbackTestId={`fallback-drawing-${item.index}`}
+                      fallbackText="Drawing unavailable"
+                      onLoadStatusChange={(loaded) => { if (!loaded) setDrawingFailed(true); }}
+                    />
+                  </div>
+                )}
               </div>
             )}
             <div>

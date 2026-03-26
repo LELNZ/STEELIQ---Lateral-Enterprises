@@ -66,6 +66,7 @@ export interface RenderSpecEntry {
 
 export interface RenderItemMedia {
   drawingUrl: string | null;
+  drawingKey: string | null;
   drawingLabel: string;
   customerPhotos: {
     url: string;
@@ -220,6 +221,7 @@ function buildScheduleItem(
     visibleSpecs,
     media: {
       drawingUrl,
+      drawingKey: item.drawingImageKey || null,
       drawingLabel: `Drawing — Item ${item.itemNumber || index + 1}`,
       customerPhotos,
     },
