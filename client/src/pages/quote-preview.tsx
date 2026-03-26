@@ -24,7 +24,7 @@ import { RichTextRenderer } from "@/components/ui/rich-text-renderer";
 import type { QuoteTemplate } from "@/lib/quote-template";
 import DrawingCanvas from "@/components/drawing-canvas";
 import type { InsertQuoteItem } from "@shared/schema";
-import { svgToPngBlob } from "@/lib/export-png";
+
 
 export default function QuotePreview() {
   const [, paramsSingular] = useRoute("/quote/:id/preview");
@@ -67,72 +67,32 @@ export default function QuotePreview() {
     if (!doc || drawingRepairState === "repairing" || drawingRepairState === "checking") return;
     setDrawingRepairState("checking");
     try {
-      const allKeys = doc.items
-        .map(item => item.drawingImageKey)
-        .filter((k): k is string => !!k);
-      if (allKeys.length === 0) {
-        toast({ title: "No drawings to check" });
-        setDrawingRepairState("idle");
-        return;
-      }
-      const checkRes = await fetch("/api/drawing-images/check-missing", {
+      const res = await fetch("/api/drawing-images/regenerate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keys: allKeys }),
+        body: JSON.stringify({ quoteId: doc.metadata.quoteId }),
         credentials: "include",
       });
-      if (!checkRes.ok) throw new Error(`Check failed: ${checkRes.status}`);
-      const { missing } = await checkRes.json();
-      if (!missing || missing.length === 0) {
-        toast({ title: "All drawings present", description: "No repair needed." });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const { summary } = await res.json();
+      setRepairProgress({ total: summary.total, done: summary.total, succeeded: summary.regenerated });
+      if (summary.regenerated > 0) {
         setDrawingRepairState("done");
-        return;
+        toast({
+          title: "Drawing repair complete",
+          description: `${summary.regenerated} regenerated, ${summary.existed} already present.${summary.failed > 0 ? ` ${summary.failed} failed.` : ""}`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "preview-data"] });
+      } else if (summary.failed > 0) {
+        setDrawingRepairState("done");
+        toast({ title: "Drawing repair failed", description: `${summary.failed} drawings could not be regenerated.`, variant: "destructive" });
+      } else {
+        setDrawingRepairState("done");
+        toast({ title: "All drawings present", description: "No repair needed." });
       }
-      setRepairProgress({ total: missing.length, done: 0, succeeded: 0 });
-      setDrawingRepairState("repairing");
-
-      const container = document.createElement("div");
-      container.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:600px;height:400px;overflow:hidden;";
-      document.body.appendChild(container);
-
-      let succeeded = 0;
-      for (let i = 0; i < missing.length; i++) {
-        const key = missing[i];
-        const docItem = doc.items.find(it => it.drawingImageKey === key);
-        if (!docItem) { setRepairProgress(p => ({ ...p, done: p.done + 1 })); continue; }
-        try {
-          const { createRoot } = await import("react-dom/client");
-          const wrapper = document.createElement("div");
-          container.appendChild(wrapper);
-          const config = docItemToDrawingConfig(docItem);
-          const root = createRoot(wrapper);
-          await new Promise<void>((resolve) => {
-            root.render(
-              <DrawingCanvas config={config} ref={(el: SVGSVGElement | null) => {
-                if (!el) return;
-                setTimeout(async () => {
-                  const ok = await regenerateDrawingForKey(el, key);
-                  if (ok) succeeded++;
-                  setRepairProgress(p => ({ ...p, done: p.done + 1, succeeded: p.succeeded + (ok ? 1 : 0) }));
-                  root.unmount();
-                  wrapper.remove();
-                  resolve();
-                }, 200);
-              }} />
-            );
-          });
-        } catch (err) {
-          console.warn(`[drawing-repair] Error repairing ${key}:`, err);
-          setRepairProgress(p => ({ ...p, done: p.done + 1 }));
-        }
-      }
-      container.remove();
-      toast({
-        title: "Drawing repair complete",
-        description: `${succeeded}/${missing.length} drawings regenerated.`,
-      });
-      setDrawingRepairState("done");
-      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId, "preview-data"] });
     } catch (err: any) {
       console.error("[drawing-repair] Error:", err);
       toast({ title: "Drawing repair failed", description: err.message, variant: "destructive" });
@@ -923,23 +883,6 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
   };
 }
 
-async function regenerateDrawingForKey(svgEl: SVGSVGElement, drawingKey: string): Promise<boolean> {
-  try {
-    const blob = await svgToPngBlob(svgEl, 2);
-    const formData = new FormData();
-    formData.append("file", blob, "drawing.png");
-    const resp = await fetch(`/api/drawing-images/${drawingKey}`, { method: "PUT", body: formData, credentials: "include" });
-    if (resp.ok) {
-      console.log(`[drawing-repair] Regenerated ${drawingKey}`);
-      return true;
-    }
-    console.warn(`[drawing-repair] Server rejected ${drawingKey}: ${resp.status}`);
-    return false;
-  } catch (err) {
-    console.warn(`[drawing-repair] Failed ${drawingKey}:`, err);
-    return false;
-  }
-}
 
 function ScheduleItemCard({
   item,

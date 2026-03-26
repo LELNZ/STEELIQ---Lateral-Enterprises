@@ -2226,6 +2226,68 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/drawing-images/regenerate", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Admin or owner role required" });
+    }
+    try {
+      const { quoteId } = req.body;
+      if (!quoteId || typeof quoteId !== "string") {
+        return res.status(400).json({ error: "quoteId is required" });
+      }
+
+      const { snapshotItemToDrawingConfig, renderDrawingToPng, classifySnapshotDrawingSupport } = await import("./lib/drawing-regenerator.tsx");
+
+      const revisions = await storage.getQuoteRevisions(quoteId);
+      if (!revisions || revisions.length === 0) {
+        return res.status(404).json({ error: "No revisions found" });
+      }
+      const latestRevision = revisions[revisions.length - 1];
+      const snapshot = latestRevision.snapshotJson as any;
+      if (!snapshot || !Array.isArray(snapshot.items)) {
+        return res.status(400).json({ error: "Invalid snapshot" });
+      }
+
+      const results: { key: string; status: string; classification: string }[] = [];
+      for (const item of snapshot.items) {
+        const key = item.drawingImageKey;
+        if (!key) continue;
+
+        const existing = await storage.getItemPhoto(key);
+        if (existing) {
+          results.push({ key, status: "exists", classification: classifySnapshotDrawingSupport(item) });
+          continue;
+        }
+
+        const classification = classifySnapshotDrawingSupport(item);
+        try {
+          const config = snapshotItemToDrawingConfig(item);
+          const pngBuffer = await renderDrawingToPng(config);
+          await storage.saveItemPhoto(key, pngBuffer, "image/png");
+          drawingCacheSet(key, pngBuffer);
+          try {
+            const filePath = path.resolve(DRAWING_DIR, key);
+            fs.writeFileSync(filePath, pngBuffer);
+          } catch {}
+          console.log(`[drawing-regen] Regenerated ${key} (${pngBuffer.length} bytes, ${classification})`);
+          results.push({ key, status: "regenerated", classification });
+        } catch (err: any) {
+          console.error(`[drawing-regen] Failed ${key}:`, err.message);
+          results.push({ key, status: "failed", classification });
+        }
+      }
+
+      const regenerated = results.filter(r => r.status === "regenerated").length;
+      const failed = results.filter(r => r.status === "failed").length;
+      const existed = results.filter(r => r.status === "exists").length;
+      console.log(`[drawing-regen] Quote ${quoteId}: ${regenerated} regenerated, ${failed} failed, ${existed} existed`);
+      res.json({ results, summary: { regenerated, failed, existed, total: results.length } });
+    } catch (e: any) {
+      console.error("[drawing-regen] Error:", e);
+      res.status(500).json({ error: "Regeneration failed" });
+    }
+  });
+
   app.get("/api/drawing-images/:key", async (req, res) => {
     const key = req.params.key;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
@@ -2246,7 +2308,6 @@ export async function registerRoutes(
       const data = fs.readFileSync(filePath);
       if (data.length > 100) {
         drawingCacheSet(key, data);
-        storage.saveItemPhoto(key, data, "image/png").catch(() => {});
         return res.type("image/png").send(data);
       }
     }
