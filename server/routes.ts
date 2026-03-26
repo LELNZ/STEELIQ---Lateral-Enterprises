@@ -2174,6 +2174,12 @@ export async function registerRoutes(
       return res.status(400).json({ error: "Invalid PNG file" });
     }
     try {
+      const existing = await storage.getItemPhoto(key);
+      if (existing) {
+        console.log(`[drawing-recover] Key ${key} already exists in DB, skipping overwrite`);
+        drawingCacheSet(key, existing.data);
+        return res.json({ ok: true, key, skipped: true });
+      }
       await storage.saveItemPhoto(key, data, "image/png");
       drawingCacheSet(key, data);
       try {
