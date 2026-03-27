@@ -1086,9 +1086,16 @@ export async function registerRoutes(
 
         if (mode === "revision" && sourceJobId) {
           const existingResult = await client.query(
-            `SELECT * FROM quotes WHERE source_job_id = $1 LIMIT 1 FOR UPDATE`,
+            `SELECT * FROM quotes WHERE source_job_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
             [sourceJobId]
           );
+          if (existingResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+              error: "No existing quote found for this estimate. The linked quote may have been deleted. Please use 'Generate Quote' to create a new one.",
+              code: "QUOTE_NOT_FOUND_FOR_REVISION",
+            });
+          }
           if (existingResult.rows.length > 0) {
             const existing = existingResult.rows[0];
             const revResult = await client.query(
@@ -1121,8 +1128,8 @@ export async function registerRoutes(
             const revision = revInsert.rows[0];
             const snapshotSellValue = (snapshot as any).totals?.sell ?? null;
             await client.query(
-              `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, updated_at = NOW() WHERE id = $4`,
-              [revision.id, divisionCode, snapshotSellValue, existing.id]
+              `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`,
+              [revision.id, divisionCode, snapshotSellValue, customer, existing.id]
             );
             await client.query(
               `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)

@@ -894,6 +894,8 @@ export default function ExecSummary() {
       }
     },
     onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
       toast({ title: "Failed to generate quote", description: err.message, variant: "destructive" });
     },
   });
