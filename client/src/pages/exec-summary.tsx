@@ -1099,12 +1099,12 @@ export default function ExecSummary() {
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => generateQuoteMutation.mutate()}
-                disabled={generateQuoteMutation.isPending}
+                onClick={() => generateNewQuoteMutation.mutate()}
+                disabled={generateNewQuoteMutation.isPending}
                 data-testid="button-generate-quote"
               >
                 <FileText className="h-4 w-4 mr-1" />
-                {generateQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
+                {generateNewQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
               </Button>
               <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates the first quote for this estimate</span>
             </div>
