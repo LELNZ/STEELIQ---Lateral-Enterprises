@@ -185,6 +185,12 @@ export const quoteItemSchema = z.object({
   glassIguType: z.string().default(""),
   glassType: z.string().default(""),
   glassThickness: z.string().default(""),
+  paneGlassSpecs: z.array(z.object({
+    paneIndex: z.number(),
+    iguType: z.string(),
+    glassType: z.string(),
+    glassThickness: z.string(),
+  })).default([]),
   wanzBar: z.boolean().default(false),
   wanzBarSource: z.enum(["nz-local", "direct", ""]).default(""),
   wanzBarSize: z.string().default(""),

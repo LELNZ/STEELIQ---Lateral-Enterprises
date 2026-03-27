@@ -43,6 +43,7 @@ export default function QuotePreview() {
   const { data: preview, isLoading } = useQuery<PreviewData>({
     queryKey: ["/api/quotes", quoteId, "preview-data"],
     enabled: !!quoteId,
+    staleTime: 0,
   });
 
   const doc: QuoteDocumentModel | null = useMemo(() => {
@@ -191,7 +192,8 @@ export default function QuotePreview() {
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
 
   const ITEMS_FIRST_PAGE = 1;
-  const ITEMS_PER_PAGE = 3;
+  const densityItemsMap: Record<string, number> = { comfortable: 3, standard: 4, compact: 5 };
+  const ITEMS_PER_PAGE = densityItemsMap[T.density.itemGapMm <= 2 ? "compact" : T.density.itemGapMm >= 4 ? "comfortable" : "standard"] ?? 3;
   const hasSchedule = isSectionVisible(T, "schedule") && liveScheduleItems.length > 0;
   const page1ScheduleItems = hasSchedule ? liveScheduleItems.slice(0, ITEMS_FIRST_PAGE) : [];
   const overflowItems = hasSchedule ? liveScheduleItems.slice(ITEMS_FIRST_PAGE) : [];
@@ -1009,6 +1011,22 @@ function ScheduleItemCard({
                 • {item.catDoorNote}
               </p>
             )}
+          </div>
+        )}
+
+        {item.paneGlassSpecs.length > 0 && (
+          <div data-testid={`pane-glass-specs-${item.index}`}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Pane-Level Glazing</p>
+            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(item.paneGlassSpecs.length, 4)}, 1fr)` }}>
+              {item.paneGlassSpecs.map((ps) => (
+                <div key={ps.paneIndex} className="text-[10px] rounded border p-1.5" style={{ borderColor: template.colors.border }}>
+                  <span className="font-medium" style={{ color: template.colors.accent }}>Pane {ps.paneIndex + 1}</span>
+                  <div className="mt-0.5" style={{ color: template.colors.bodyText }}>
+                    {[ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

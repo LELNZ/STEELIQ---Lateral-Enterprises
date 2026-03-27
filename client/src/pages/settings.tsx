@@ -1085,6 +1085,13 @@ function TemplateBuilderTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/template"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/org"] });
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return Array.isArray(key) && key.length >= 1 && typeof key[0] === "string" && key[0].startsWith("/api/quotes");
+        },
+      });
       toast({ title: "Template configuration saved" });
     },
     onError: (err: Error) => {

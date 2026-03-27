@@ -806,6 +806,7 @@ export default function ExecSummary() {
         catDoorEnabled: item.catDoorEnabled || false,
         drawingImageKey,
         photos: ip.photos ?? [],
+        paneGlassSpecs: item.paneGlassSpecs || [],
         specValues,
         resolvedSpecs,
       };

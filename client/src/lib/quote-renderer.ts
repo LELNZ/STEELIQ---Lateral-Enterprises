@@ -75,6 +75,13 @@ export interface RenderItemMedia {
   }[];
 }
 
+export interface RenderPaneGlassSpec {
+  paneIndex: number;
+  iguType: string;
+  glassType: string;
+  glassThickness: string;
+}
+
 export interface RenderScheduleItem {
   index: number;
   itemNumber: number;
@@ -86,6 +93,7 @@ export interface RenderScheduleItem {
   gosNote?: string;
   catDoorNote?: string;
   visibleSpecs: RenderSpecEntry[];
+  paneGlassSpecs: RenderPaneGlassSpec[];
   media: RenderItemMedia;
 }
 
@@ -219,6 +227,7 @@ function buildScheduleItem(
     gosNote,
     catDoorNote,
     visibleSpecs,
+    paneGlassSpecs: (item.paneGlassSpecs || []).filter(p => p.iguType || p.glassType || p.glassThickness),
     media: {
       drawingUrl,
       drawingKey: item.drawingImageKey || null,

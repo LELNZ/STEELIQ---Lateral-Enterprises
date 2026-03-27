@@ -287,8 +287,11 @@ function renderRichTextPdf(pdf: Pdf, y: number, text: string | null, opts: RichT
 async function loadImageAsDataUrl(url: string): Promise<string | null> {
   try {
     if (url.startsWith("data:")) return url;
-    const res = await fetch(url);
-    if (!res.ok) return null;
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) {
+      console.warn(`[pdf-engine] Image fetch failed: ${url} → HTTP ${res.status}`);
+      return null;
+    }
     const blob = await res.blob();
     if (blob.size < 100) return null;
     return new Promise((resolve) => {
@@ -954,7 +957,8 @@ async function renderSchedule(
     const itemSpecH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
     const itemDrawH = hasItemDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
     const itemPhotoH = loadablePhotoCount > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
-    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemSpecH) + itemPhotoH + 4;
+    const paneSpecH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
+    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemSpecH) + paneSpecH + itemPhotoH + 4;
     y = ensureSpace(pdf, y, Math.min(estimatedH, MAX_Y - TOP_MARGIN - 5));
 
     y = await renderScheduleItem(pdf, y, item, imageCache);
@@ -978,7 +982,8 @@ async function renderScheduleItem(
   const specH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
   const drawingH = hasDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
   const photosH = hasPhotos ? DENSITY_PHOTO_ROW_H : 0;
-  const minItemH = headerH + Math.max(drawingH, specH) + photosH + SECTION_GAP;
+  const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
+  const minItemH = headerH + Math.max(drawingH, specH) + paneH + photosH + SECTION_GAP;
 
   y = ensureSpace(pdf, y, Math.min(minItemH, MAX_Y - TOP_MARGIN - 5));
   const itemStartPage = pdf.getNumberOfPages();
@@ -1067,6 +1072,23 @@ async function renderScheduleItem(
     if (item.catDoorNote) {
       pdf.text(`\u2022  ${item.catDoorNote}`, LEFT_MARGIN + pad, y + 2.5);
       y += 4;
+    }
+  }
+
+  if (item.paneGlassSpecs && item.paneGlassSpecs.length > 0) {
+    y += 2;
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(COLOR_MUTED);
+    pdf.text("PANE-LEVEL GLAZING", LEFT_MARGIN + pad, y + 2.5);
+    y += 4;
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(COLOR_BLACK);
+    for (const ps of item.paneGlassSpecs) {
+      const label = [ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—";
+      pdf.text(`Pane ${ps.paneIndex + 1}: ${label}`, LEFT_MARGIN + pad + 2, y + 2.5);
+      y += 3.5;
     }
   }
 

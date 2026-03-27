@@ -106,6 +106,7 @@ export interface QuoteDocumentItem {
   catDoorEnabled?: boolean;
   drawingImageKey?: string;
   photos: QuoteDocumentItemPhoto[];
+  paneGlassSpecs?: { paneIndex: number; iguType: string; glassType: string; glassThickness: string }[];
   specValues: Record<string, unknown>;
   resolvedSpecs: Record<string, string>;
 }
@@ -183,6 +184,7 @@ function mapSnapshotItem(si: SnapshotItem): QuoteDocumentItem {
       caption: p.caption,
       takenAt: p.takenAt,
     })),
+    paneGlassSpecs: si.paneGlassSpecs || [],
     specValues: si.specValues || {},
     resolvedSpecs: si.resolvedSpecs || {},
   };

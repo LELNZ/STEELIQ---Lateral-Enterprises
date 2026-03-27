@@ -26,6 +26,12 @@ const snapshotItemSchema = z.object({
   catDoorEnabled: z.boolean().optional(),
   drawingImageKey: z.string().optional(),
   photos: z.array(snapshotPhotoSchema).optional().default([]),
+  paneGlassSpecs: z.array(z.object({
+    paneIndex: z.number(),
+    iguType: z.string(),
+    glassType: z.string(),
+    glassThickness: z.string(),
+  })).optional().default([]),
   specValues: z.record(z.string(), z.any()).default({}),
   resolvedSpecs: z.record(z.string(), z.string()).default({}),
   libraryRefs: z.any().optional(),

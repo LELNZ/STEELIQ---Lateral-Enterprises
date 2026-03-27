@@ -29,7 +29,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List, Package } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List, Package, Shield } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useToast } from "@/hooks/use-toast";
@@ -281,6 +281,7 @@ const defaultValues: InsertQuoteItem = {
   glassIguType: "",
   glassType: "",
   glassThickness: "",
+  paneGlassSpecs: [],
   wanzBar: false,
   wanzBarSource: "",
   wanzBarSize: "",
@@ -809,6 +810,33 @@ export default function QuoteBuilder() {
   })();
 
   const openingPanelCount = configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount;
+
+  const effectivePaneCount = useMemo(() => {
+    const derived = Math.max(1,
+      configSignature.awningCount + configSignature.fixedCount +
+      configSignature.hingeCount + configSignature.slidingCount
+    );
+    if (w.layout === "custom" && w.customColumns && w.customColumns.length > 0) {
+      const gm = deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns);
+      return gm.paneCount;
+    }
+    return derived;
+  }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height]);
+
+  const showPaneGlassSelectors = w.heightFromFloor > 0 && w.heightFromFloor <= 800 && effectivePaneCount > 1;
+
+  useEffect(() => {
+    const specs = w.paneGlassSpecs || [];
+    if (specs.length === 0) return;
+    if (!showPaneGlassSelectors) {
+      form.setValue("paneGlassSpecs", [], { shouldDirty: true });
+      return;
+    }
+    const pruned = specs.filter((s: any) => s.paneIndex < effectivePaneCount);
+    if (pruned.length !== specs.length) {
+      form.setValue("paneGlassSpecs", pruned, { shouldDirty: true });
+    }
+  }, [showPaneGlassSelectors, effectivePaneCount]);
 
   const wanzBarPricingInput = (() => {
     if (!w.wanzBar || !w.wanzBarSource || !w.wanzBarSize) return undefined;
@@ -3375,6 +3403,88 @@ export default function QuoteBuilder() {
                 )}
 
                 {(isSpecVisible("windZone") || isSpecVisible("wallThickness")) && <Separator />}
+
+                {showPaneGlassSelectors && w.glassIguType && (
+                <div>
+                  <div className="flex items-start gap-1.5 mb-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="pane-glass-info-banner">
+                    <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <span className="text-xs text-blue-700 dark:text-blue-300">
+                      Height from floor ≤ 800mm with {effectivePaneCount} panes — you can set glazing per pane below.
+                    </span>
+                  </div>
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-PaneGlazing">
+                    Pane-Level Glazing
+                  </h2>
+                  <div className="space-y-3">
+                    {Array.from({ length: effectivePaneCount }, (_, pi) => {
+                      const existing = (w.paneGlassSpecs || []).find((s: any) => s.paneIndex === pi);
+                      const pIgu = existing?.iguType || w.glassIguType || "";
+                      const pGlass = existing?.glassType || "";
+                      const pThick = existing?.glassThickness || "";
+                      const updatePaneSpec = (field: string, value: string) => {
+                        const specs = [...(w.paneGlassSpecs || [])];
+                        const idx = specs.findIndex((s: any) => s.paneIndex === pi);
+                        const current = idx >= 0 ? { ...specs[idx] } : { paneIndex: pi, iguType: w.glassIguType || "", glassType: "", glassThickness: "" };
+                        if (field === "iguType") {
+                          current.iguType = value;
+                          current.glassType = "";
+                          current.glassThickness = "";
+                        } else if (field === "glassType") {
+                          current.glassType = value;
+                          current.glassThickness = "";
+                        } else {
+                          current.glassThickness = value;
+                        }
+                        if (idx >= 0) specs[idx] = current;
+                        else specs.push(current);
+                        form.setValue("paneGlassSpecs", specs, { shouldDirty: true });
+                      };
+                      return (
+                        <div key={pi} className="p-2 rounded-md border border-border/60 bg-muted/30 space-y-1.5" data-testid={`pane-glass-selector-${pi}`}>
+                          <span className="text-xs font-medium text-muted-foreground">Pane {pi + 1}</span>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                              <Label className="text-[10px]">IGU</Label>
+                              <Select value={pIgu} onValueChange={(v) => updatePaneSpec("iguType", v)}>
+                                <SelectTrigger className="h-7 text-xs" data-testid={`select-pane-igutype-${pi}`}><SelectValue placeholder="IGU" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="EnergySaver">EnergySaver™</SelectItem>
+                                  <SelectItem value="LightBridge">LightBridge™</SelectItem>
+                                  <SelectItem value="VLamThermotech">VLam Thermotech</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px]">Glass</Label>
+                              <Select value={pGlass} onValueChange={(v) => updatePaneSpec("glassType", v)} disabled={!pIgu}>
+                                <SelectTrigger className="h-7 text-xs" data-testid={`select-pane-glasstype-${pi}`}><SelectValue placeholder="Glass" /></SelectTrigger>
+                                <SelectContent>
+                                  {libGlassCombos(pIgu).map((combo) => (
+                                    <SelectItem key={combo} value={combo}>{combo}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px]">Thickness</Label>
+                              <Select value={pThick} onValueChange={(v) => updatePaneSpec("glassThickness", v)} disabled={!pIgu || !pGlass}>
+                                <SelectTrigger className="h-7 text-xs" data-testid={`select-pane-thickness-${pi}`}><SelectValue placeholder="mm" /></SelectTrigger>
+                                <SelectContent>
+                                  {libGlassThicknesses(pIgu, pGlass).map((t) => (
+                                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                )}
+
+                {showPaneGlassSelectors && w.glassIguType && <Separator />}
 
                 {isSpecVisible("linerType") && (
                 <div>
