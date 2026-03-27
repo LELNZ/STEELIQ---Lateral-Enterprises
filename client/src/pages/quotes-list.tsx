@@ -578,6 +578,7 @@ function QuoteDeleteButton({ quoteId, quoteNumber }: { quoteId: string; quoteNum
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({ title: "Quote deleted" });
     },
     onError: (err: Error) => {

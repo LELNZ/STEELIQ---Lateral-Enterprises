@@ -1086,9 +1086,16 @@ export async function registerRoutes(
 
         if (mode === "revision" && sourceJobId) {
           const existingResult = await client.query(
-            `SELECT * FROM quotes WHERE source_job_id = $1 LIMIT 1 FOR UPDATE`,
+            `SELECT * FROM quotes WHERE source_job_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
             [sourceJobId]
           );
+          if (existingResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({
+              error: "No existing quote found for this estimate. The linked quote may have been deleted. Please use 'Generate Quote' to create a new one.",
+              code: "QUOTE_NOT_FOUND_FOR_REVISION",
+            });
+          }
           if (existingResult.rows.length > 0) {
             const existing = existingResult.rows[0];
             const revResult = await client.query(
@@ -1121,8 +1128,8 @@ export async function registerRoutes(
             const revision = revInsert.rows[0];
             const snapshotSellValue = (snapshot as any).totals?.sell ?? null;
             await client.query(
-              `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, updated_at = NOW() WHERE id = $4`,
-              [revision.id, divisionCode, snapshotSellValue, existing.id]
+              `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`,
+              [revision.id, divisionCode, snapshotSellValue, customer, existing.id]
             );
             await client.query(
               `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
@@ -2226,6 +2233,78 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/drawing-images/regenerate", requireAuth, async (req, res) => {
+    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
+      return res.status(403).json({ error: "Admin or owner role required" });
+    }
+    try {
+      const { quoteId } = req.body;
+      if (!quoteId || typeof quoteId !== "string") {
+        return res.status(400).json({ error: "quoteId is required" });
+      }
+
+      const React = (await import("react")).default;
+      (globalThis as any).React = React;
+      const { snapshotItemToDrawingConfig, renderDrawingToPng, classifySnapshotDrawingSupport } = await import("./lib/drawing-regenerator.tsx");
+
+      const revisions = await storage.getQuoteRevisions(quoteId);
+      if (!revisions || revisions.length === 0) {
+        return res.status(404).json({ error: "No revisions found" });
+      }
+      const latestRevision = revisions[revisions.length - 1];
+      const snapshot = latestRevision.snapshotJson as any;
+      if (!snapshot || !Array.isArray(snapshot.items)) {
+        return res.status(400).json({ error: "Invalid snapshot" });
+      }
+
+      const VALID_KEY_RE = /^[a-f0-9-]+\.png$/;
+      const resolvedDir = path.resolve(DRAWING_DIR);
+      const results: { key: string; status: string; classification: string }[] = [];
+      for (const item of snapshot.items) {
+        const key = item.drawingImageKey;
+        if (!key) continue;
+        if (!VALID_KEY_RE.test(key)) {
+          console.warn(`[drawing-regen] Skipping invalid key: ${key}`);
+          continue;
+        }
+
+        const existing = await storage.getItemPhoto(key);
+        if (existing) {
+          results.push({ key, status: "exists", classification: classifySnapshotDrawingSupport(item) });
+          continue;
+        }
+
+        const classification = classifySnapshotDrawingSupport(item);
+        try {
+          const config = snapshotItemToDrawingConfig(item);
+          const pngBuffer = await renderDrawingToPng(config);
+          await storage.saveItemPhoto(key, pngBuffer, "image/png");
+          drawingCacheSet(key, pngBuffer);
+          try {
+            const filePath = path.resolve(DRAWING_DIR, key);
+            if (filePath.startsWith(resolvedDir + path.sep)) {
+              fs.writeFileSync(filePath, pngBuffer);
+            }
+          } catch {}
+          console.log(`[drawing-regen] Regenerated ${key} (${pngBuffer.length} bytes, ${classification})`);
+          results.push({ key, status: "regenerated", classification });
+        } catch (err: any) {
+          console.error(`[drawing-regen] Failed ${key}:`, err.message);
+          results.push({ key, status: "failed", classification });
+        }
+      }
+
+      const regenerated = results.filter(r => r.status === "regenerated").length;
+      const failed = results.filter(r => r.status === "failed").length;
+      const existed = results.filter(r => r.status === "exists").length;
+      console.log(`[drawing-regen] Quote ${quoteId}: ${regenerated} regenerated, ${failed} failed, ${existed} existed`);
+      res.json({ results, summary: { regenerated, failed, existed, total: results.length } });
+    } catch (e: any) {
+      console.error("[drawing-regen] Error:", e);
+      res.status(500).json({ error: "Regeneration failed" });
+    }
+  });
+
   app.get("/api/drawing-images/:key", async (req, res) => {
     const key = req.params.key;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
@@ -2246,7 +2325,6 @@ export async function registerRoutes(
       const data = fs.readFileSync(filePath);
       if (data.length > 100) {
         drawingCacheSet(key, data);
-        storage.saveItemPhoto(key, data, "image/png").catch(() => {});
         return res.type("image/png").send(data);
       }
     }

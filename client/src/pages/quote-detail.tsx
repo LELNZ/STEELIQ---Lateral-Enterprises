@@ -175,6 +175,7 @@ export default function QuoteDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       toast({ title: "Quote deleted" });
       navigate(routes.quoteList());
     },
