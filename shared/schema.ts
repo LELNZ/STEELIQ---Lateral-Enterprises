@@ -195,7 +195,7 @@ export const quoteItemSchema = z.object({
   wanzBarSource: z.enum(["nz-local", "direct", ""]).default(""),
   wanzBarSize: z.string().default(""),
   wallThickness: z.number().default(0),
-  heightFromFloor: z.number().default(0),
+  heightFromFloor: z.number().nullable().default(null),
   handleType: z.string().default(""),
   lockType: z.string().default(""),
   configurationId: z.string().default(""),

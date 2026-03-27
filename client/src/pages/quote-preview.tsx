@@ -871,7 +871,7 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
     wanzBarSource: (sv.wanzBarSource || "") as any,
     wanzBarSize: String(sv.wanzBarSize || ""),
     wallThickness: Number(sv.wallThickness) || 0,
-    heightFromFloor: Number(sv.heightFromFloor) || 0,
+    heightFromFloor: sv.heightFromFloor != null ? Number(sv.heightFromFloor) : 0,
     handleType: String(sv.handleSet || ""),
     lockType: String(sv.lockSet || ""),
     configurationId: String(sv.configurationId || ""),

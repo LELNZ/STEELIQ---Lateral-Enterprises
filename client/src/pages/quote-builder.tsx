@@ -286,7 +286,7 @@ const defaultValues: InsertQuoteItem = {
   wanzBarSource: "",
   wanzBarSize: "",
   wallThickness: 0,
-  heightFromFloor: 0,
+  heightFromFloor: null as number | null,
   handleType: "",
   lockType: "",
   configurationId: "",
@@ -823,7 +823,7 @@ export default function QuoteBuilder() {
     return derived;
   }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height]);
 
-  const showPaneGlassSelectors = w.heightFromFloor > 0 && w.heightFromFloor <= 800 && effectivePaneCount > 1;
+  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor <= 800 && effectivePaneCount > 1;
 
   useEffect(() => {
     const specs = w.paneGlassSpecs || [];
@@ -3385,12 +3385,12 @@ export default function QuoteBuilder() {
                     <div>
                       <Label className="text-xs">Height from Floor (mm)</Label>
                       <Input type="number" inputMode="decimal" min={0}
-                        value={w.heightFromFloor || ""}
-                        onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
+                        value={w.heightFromFloor ?? ""}
+                        onChange={(e) => form.setValue("heightFromFloor", e.target.value === "" ? null : Number(e.target.value))}
                         onFocus={handleConfigFieldFocus}
                         placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
                         data-testid="input-height-from-floor" />
-                      {w.heightFromFloor > 0 && w.heightFromFloor < 800 && (
+                      {w.heightFromFloor != null && w.heightFromFloor < 800 && (
                         <div className="flex items-start gap-1.5 mt-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="warning-height-from-floor">
                           <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                           <span className="text-xs text-amber-700 dark:text-amber-300">Height under 800mm — safety glazing / toughening may be required. Check glass selection.</span>

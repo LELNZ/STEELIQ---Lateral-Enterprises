@@ -718,7 +718,7 @@ export default function ExecSummary() {
         linerType: item.linerType || "",
         flashingSize: item.flashingSize || 0,
         wallThickness: item.wallThickness || 0,
-        heightFromFloor: item.heightFromFloor || 0,
+        heightFromFloor: item.heightFromFloor ?? 0,
         pricePerSqm: item.pricePerSqm || 500,
         configurationId: item.configurationId || "",
         layout: item.layout || "standard",
@@ -783,7 +783,7 @@ export default function ExecSummary() {
         linerType: item.linerType || "",
         flashingSize: item.flashingSize ? `${item.flashingSize}mm` : "",
         wallThickness: item.wallThickness ? `${item.wallThickness}mm` : "",
-        heightFromFloor: item.heightFromFloor ? `${item.heightFromFloor}mm` : "",
+        heightFromFloor: item.heightFromFloor != null ? `${item.heightFromFloor}mm` : "",
         ...(item.category === "bay-window" ? {
           bayAngle: `${item.bayAngle || 135}°`,
           bayDepth: (item.bayDepth || 0) > 0 ? `${item.bayDepth}mm` : "",
