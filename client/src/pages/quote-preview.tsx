@@ -1018,7 +1018,7 @@ function ScheduleItemCard({
           <div data-testid={`pane-glass-specs-${item.index}`}>
             <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Pane-Level Glazing</p>
             <div className="flex flex-col gap-0.5">
-              {item.paneGlassSpecs.map((ps) => (
+              {[...item.paneGlassSpecs].sort((a, b) => a.paneIndex - b.paneIndex).map((ps) => (
                 <p key={ps.paneIndex} className="text-[10px]" style={{ color: template.colors.bodyText }} data-testid={`pane-spec-${item.index}-${ps.paneIndex}`}>
                   <span className="font-medium" style={{ color: template.colors.accent }}>Pane {ps.paneIndex + 1}:</span>{" "}
                   {[ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—"}

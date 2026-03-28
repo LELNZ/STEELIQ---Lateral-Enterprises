@@ -1085,7 +1085,7 @@ async function renderScheduleItem(
     pdf.setFont(FONT_NORMAL, "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(COLOR_BLACK);
-    for (const ps of item.paneGlassSpecs) {
+    for (const ps of [...item.paneGlassSpecs].sort((a, b) => a.paneIndex - b.paneIndex)) {
       const label = [ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—";
       pdf.text(`Pane ${ps.paneIndex + 1}: ${label}`, LEFT_MARGIN + pad + 2, y + 2.5);
       y += 3.5;
