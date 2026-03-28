@@ -2289,7 +2289,7 @@ export default function ExecSummary() {
       <div style={{ position: "absolute", left: "-9999px", top: 0, overflow: "hidden", pointerEvents: "none" }} aria-hidden="true">
         {itemPricings.map((ip, idx) => (
           <div key={idx} data-testid={`drawing-svg-${idx}`} style={{ width: ip.item.width || 600, height: ip.item.height || 600 }}>
-            <DrawingCanvas config={ip.item} />
+            <DrawingCanvas config={ip.item} showPaneNumbers={Array.isArray(ip.item.paneGlassSpecs) && ip.item.paneGlassSpecs.length > 0} />
           </div>
         ))}
       </div>

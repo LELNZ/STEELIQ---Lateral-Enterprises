@@ -1017,14 +1017,12 @@ function ScheduleItemCard({
         {item.paneGlassSpecs.length > 0 && (
           <div data-testid={`pane-glass-specs-${item.index}`}>
             <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Pane-Level Glazing</p>
-            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(item.paneGlassSpecs.length, 4)}, 1fr)` }}>
+            <div className="flex flex-col gap-0.5">
               {item.paneGlassSpecs.map((ps) => (
-                <div key={ps.paneIndex} className="text-[10px] rounded border p-1.5" style={{ borderColor: template.colors.border }}>
-                  <span className="font-medium" style={{ color: template.colors.accent }}>Pane {ps.paneIndex + 1}</span>
-                  <div className="mt-0.5" style={{ color: template.colors.bodyText }}>
-                    {[ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—"}
-                  </div>
-                </div>
+                <p key={ps.paneIndex} className="text-[10px]" style={{ color: template.colors.bodyText }} data-testid={`pane-spec-${item.index}-${ps.paneIndex}`}>
+                  <span className="font-medium" style={{ color: template.colors.accent }}>Pane {ps.paneIndex + 1}:</span>{" "}
+                  {[ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—"}
+                </p>
               ))}
             </div>
           </div>

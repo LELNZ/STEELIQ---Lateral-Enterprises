@@ -883,16 +883,23 @@ export default function QuoteBuilder() {
       perPaneDimensions: geoMetrics?.perPaneDimensions,
       totalGlassAreaSqm: geoMetrics?.totalGlassAreaSqm,
     };
+    const paneGlassPricing = (w.paneGlassSpecs || []).map((ps: any) => ({
+      paneIndex: ps.paneIndex,
+      pricePerSqm: ps.iguType && ps.glassType && ps.glassThickness
+        ? libGlassPrice(ps.iguType, ps.glassType, ps.glassThickness)
+        : null,
+    })).filter((pg: any) => pg.pricePerSqm != null);
+
     return calculatePricing(
       w.width || 0, w.height || 0, w.quantity || 1,
       configProfiles, configAccessories, configLabor,
       usdToNzdRate, w.pricePerSqm || 500,
-      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined, sqmOverride: w.category === "raked-fixed" ? (((w as any).rakedLeftHeight || w.height || 0) + ((w as any).rakedRightHeight || w.height || 0)) / 2 * (w.width || 0) / 1_000_000 : undefined, perimeterOverrideM: w.category === "raked-fixed" ? calcRakedPerimeterM(w.width || 0, (w as any).rakedLeftHeight || w.height || 0, (w as any).rakedRightHeight || w.height || 0) : undefined, gosChargeNzd: w.gosRequired ? (w.gosChargeNzd ?? undefined) : undefined },
+      { glassPricePerSqm, paneGlassPricing: paneGlassPricing.length > 0 ? paneGlassPricing : undefined, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined, sqmOverride: w.category === "raked-fixed" ? (((w as any).rakedLeftHeight || w.height || 0) + ((w as any).rakedRightHeight || w.height || 0)) / 2 * (w.width || 0) / 1_000_000 : undefined, perimeterOverrideM: w.category === "raked-fixed" ? calcRakedPerimeterM(w.width || 0, (w as any).rakedLeftHeight || w.height || 0, (w as any).rakedRightHeight || w.height || 0) : undefined, gosChargeNzd: w.gosRequired ? (w.gosChargeNzd ?? undefined) : undefined },
       { masterProfiles, masterAccessories, masterLabour },
       itemGeometry,
       glazingBands
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount]);
+  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.paneGlassSpecs]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -3284,8 +3291,11 @@ export default function QuoteBuilder() {
                 {(isSpecVisible("iguType") || isSpecVisible("glassType") || isSpecVisible("glassThickness") || isSpecVisible("rValue")) && (
                 <div>
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Glazing">
-                    Glazing
+                    {showPaneGlassSelectors && (w.paneGlassSpecs || []).some((s: any) => s.iguType && s.glassType && s.glassThickness) ? "Default Glazing" : "Glazing"}
                   </h2>
+                  {showPaneGlassSelectors && (w.paneGlassSpecs || []).some((s: any) => s.iguType && s.glassType && s.glassThickness) && (
+                    <p className="text-[10px] text-muted-foreground mb-2" data-testid="text-default-glazing-hint">Used as fallback for panes without an override</p>
+                  )}
                   <div className="space-y-2">
                     {isSpecVisible("iguType") && (
                     <div>
@@ -3982,7 +3992,7 @@ export default function QuoteBuilder() {
           : "flex-1 min-h-0 flex flex-col overflow-hidden"}>
           <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 min-h-0 bg-muted/30 dark:bg-muted/10">
             <div className="w-full flex-1 max-w-3xl max-h-[600px] rounded-lg overflow-hidden shadow-sm ring-1 ring-border/50 bg-background" data-testid="drawing-preview">
-              <DrawingCanvas ref={drawingRef} config={drawingConfig} />
+              <DrawingCanvas ref={drawingRef} config={drawingConfig} showPaneNumbers={showPaneGlassSelectors && effectivePaneCount > 1} />
             </div>
             {hasOpeningDirection(category, w.windowType) && w.openingDirection && w.openingDirection !== "none" && (
               <p className="mt-2 text-sm font-medium text-muted-foreground" data-testid="text-opening-direction-label">

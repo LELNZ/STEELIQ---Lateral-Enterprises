@@ -129,8 +129,8 @@ export function snapshotItemToDrawingConfig(
   };
 }
 
-export async function renderDrawingToPng(config: InsertQuoteItem, scale: number = 2): Promise<Buffer> {
-  const element = React.createElement(DrawingCanvas, { config });
+export async function renderDrawingToPng(config: InsertQuoteItem, scale: number = 2, showPaneNumbers?: boolean): Promise<Buffer> {
+  const element = React.createElement(DrawingCanvas, { config, showPaneNumbers });
   let svgMarkup = renderToStaticMarkup(element);
 
   if (!svgMarkup.includes('xmlns=')) {

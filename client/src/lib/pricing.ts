@@ -36,8 +36,14 @@ export interface WanzBarPricingInput {
   priceNzdPerLinM: number;
 }
 
+export interface PaneGlassPricing {
+  paneIndex: number;
+  pricePerSqm: number | null;
+}
+
 export interface PricingExtras {
   glassPricePerSqm?: number | null;
+  paneGlassPricing?: PaneGlassPricing[];
   linerPricePerM?: number | null;
   handlePriceEach?: number | null;
   lockPriceEach?: number | null;
@@ -385,7 +391,29 @@ export function calculatePricing(
   const effectiveGlassArea = geo.totalGlassAreaSqm != null && geo.totalGlassAreaSqm > 0
     ? geo.totalGlassAreaSqm * quantity
     : sqm;
-  const glassCostNzd = glassPricePerSqm != null ? glassPricePerSqm * effectiveGlassArea : 0;
+
+  const paneOverrides = extras?.paneGlassPricing;
+  const hasPaneOverrides = paneOverrides && paneOverrides.length > 0;
+
+  let glassCostNzd: number;
+  if (hasPaneOverrides) {
+    let paneCostSum = 0;
+    const dims = geo.perPaneDimensions;
+    const paneCount = dims && dims.length > 0 ? dims.length : paneOverrides!.length;
+    for (let pi = 0; pi < paneCount; pi++) {
+      const paneArea = dims && dims[pi]
+        ? (dims[pi].widthMm * dims[pi].heightMm) / 1_000_000
+        : (effectiveGlassArea / quantity) / paneCount;
+      const override = paneOverrides!.find(po => po.paneIndex === pi);
+      const priceSqm = (override && override.pricePerSqm != null) ? override.pricePerSqm : glassPricePerSqm;
+      if (priceSqm != null) {
+        paneCostSum += priceSqm * paneArea;
+      }
+    }
+    glassCostNzd = paneCostSum * quantity;
+  } else {
+    glassCostNzd = glassPricePerSqm != null ? glassPricePerSqm * effectiveGlassArea : 0;
+  }
 
   const linerPricePerM = extras?.linerPricePerM ?? null;
   const linerCostNzd = linerPricePerM != null ? linerPricePerM * perimeterM * quantity : 0;
