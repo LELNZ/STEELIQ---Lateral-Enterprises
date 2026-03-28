@@ -142,7 +142,7 @@ function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
 }
 
-function distributeSpaces(total: number, specs: number[]): number[] {
+export function distributeSpaces(total: number, specs: number[]): number[] {
   const specifiedSum = specs.reduce((s, v) => s + (v > 0 ? v : 0), 0);
   const autoCount = specs.filter(v => v <= 0).length;
 

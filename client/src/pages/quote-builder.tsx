@@ -11,7 +11,7 @@ import { deriveConfigSignature, findMatchingConfiguration, deriveGroupedGeometry
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
+import DrawingCanvas, { getFrameSize, distributeSpaces } from "@/components/drawing-canvas";
 import { MediaViewer } from "@/components/media-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -870,12 +870,91 @@ export default function QuoteBuilder() {
       ? deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns!)
       : null;
     const effectivePaneCountForGeo = geoMetrics ? geoMetrics.paneCount : derivedPaneCount;
-    const nonCustomPerPaneDims = !geoMetrics && effectivePaneCountForGeo > 0
-      ? Array.from({ length: effectivePaneCountForGeo }, () => ({
-          widthMm: (w.width || 0) / effectivePaneCountForGeo,
-          heightMm: w.height || 0,
-        }))
-      : undefined;
+    const nonCustomPerPaneDims = (() => {
+      if (geoMetrics) return undefined;
+      const W = w.width || 0;
+      const H = w.height || 0;
+      const cat = w.category;
+      const dims: { widthMm: number; heightMm: number }[] = [];
+
+      if (cat === "sliding-window" || cat === "sliding-door") {
+        dims.push({ widthMm: W / 2, heightMm: H }, { widthMm: W / 2, heightMm: H });
+      } else if (cat === "entrance-door") {
+        const frameSize = getFrameSize(cat);
+        const minPane = frameSize * 2;
+        const rawSl = w.sidelightWidth > 0 ? w.sidelightWidth : 400;
+        const doorRows = w.entranceDoorRows || [{ height: 0, type: "fixed" as const }];
+        const slRows = w.entranceSidelightRows || [{ height: 0, type: "fixed" as const }];
+        const slLeftRows = w.entranceSidelightLeftRows || [{ height: 0, type: "fixed" as const }];
+        const doorRowH = distributeSpaces(H, doorRows.map(r => r.height || 0));
+        const slRowH = distributeSpaces(H, slRows.map(r => r.height || 0));
+        const slLeftRowH = distributeSpaces(H, slLeftRows.map(r => r.height || 0));
+
+        type Sec = { w: number; role: string };
+        const sections: Sec[] = [];
+        if (!w.sidelightEnabled) {
+          sections.push({ w: W, role: "door" });
+        } else if (w.sidelightSide === "both") {
+          const slEachW = Math.max(minPane, Math.min(rawSl, Math.max(minPane, (W - minPane) / 2)));
+          const doorW = Math.max(minPane, W - slEachW * 2);
+          sections.push({ w: slEachW, role: "sidelight-left" }, { w: doorW, role: "door" }, { w: slEachW, role: "sidelight-right" });
+        } else {
+          const maxSl = Math.max(minPane, W - minPane);
+          const slW = Math.max(minPane, Math.min(rawSl, maxSl));
+          const doorW = Math.max(minPane, W - slW);
+          if (w.sidelightSide === "left") {
+            sections.push({ w: slW, role: "sidelight" }, { w: doorW, role: "door" });
+          } else {
+            sections.push({ w: doorW, role: "door" }, { w: slW, role: "sidelight" });
+          }
+        }
+        for (const sec of sections) {
+          if (sec.role === "door") {
+            for (const rh of doorRowH) dims.push({ widthMm: sec.w, heightMm: rh });
+          } else if (sec.role === "sidelight-left") {
+            for (const rh of slLeftRowH) dims.push({ widthMm: sec.w, heightMm: rh });
+          } else {
+            for (const rh of slRowH) dims.push({ widthMm: sec.w, heightMm: rh });
+          }
+        }
+      } else if (cat === "hinge-door") {
+        const hdRows = w.hingeDoorRows || [{ height: 0, type: "fixed" as const }];
+        const rowHeights = distributeSpaces(H, hdRows.map(r => r.height || 0));
+        for (const rh of rowHeights) dims.push({ widthMm: W, heightMm: rh });
+      } else if (cat === "french-door") {
+        const halfW = W / 2;
+        const leftRows = w.frenchDoorLeftRows || [{ height: 0, type: "fixed" as const }];
+        const rightRows = w.frenchDoorRightRows || [{ height: 0, type: "fixed" as const }];
+        const leftRowH = distributeSpaces(H, leftRows.map(r => r.height || 0));
+        const rightRowH = distributeSpaces(H, rightRows.map(r => r.height || 0));
+        for (const rh of leftRowH) dims.push({ widthMm: halfW, heightMm: rh });
+        for (const rh of rightRowH) dims.push({ widthMm: halfW, heightMm: rh });
+      } else if (cat === "bifold-door" || cat === "stacker-door") {
+        const panelCount = w.panels || 3;
+        const panelW = W / panelCount;
+        const panelRowsDef = w.panelRows || [];
+        for (let i = 0; i < panelCount; i++) {
+          const pRows = panelRowsDef[i] || [{ height: 0, type: "fixed" as const }];
+          const rowH = distributeSpaces(H, pRows.map(r => r.height || 0));
+          for (const rh of rowH) dims.push({ widthMm: panelW, heightMm: rh });
+        }
+      } else if (cat === "bay-window") {
+        const cw = Math.max(getFrameSize(cat) * 4, Math.min(w.centerWidth > 0 ? w.centerWidth : W * 0.6, W - getFrameSize(cat) * 4));
+        const sideW = (W - cw) / 2;
+        dims.push({ widthMm: sideW, heightMm: H }, { widthMm: cw, heightMm: H }, { widthMm: sideW, heightMm: H });
+      } else if (cat === "windows-standard") {
+        if (w.windowType === "french-pair") {
+          dims.push({ widthMm: W / 2, heightMm: H }, { widthMm: W / 2, heightMm: H });
+        } else {
+          dims.push({ widthMm: W, heightMm: H });
+        }
+      } else {
+        for (let i = 0; i < effectivePaneCountForGeo; i++) {
+          dims.push({ widthMm: W / effectivePaneCountForGeo, heightMm: H });
+        }
+      }
+      return dims.length > 0 ? dims : undefined;
+    })();
     const itemGeometry: ItemGeometry = {
       mullionCount: configSignature.mullionCount,
       transomCount: configSignature.transomCount,
