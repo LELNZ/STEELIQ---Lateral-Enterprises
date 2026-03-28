@@ -399,11 +399,17 @@ export function calculatePricing(
   if (hasPaneOverrides) {
     let paneCostSum = 0;
     const dims = geo.perPaneDimensions;
-    const paneCount = dims && dims.length > 0 ? dims.length : paneOverrides!.length;
+    const maxOverrideIdx = paneOverrides!.reduce((mx, po) => Math.max(mx, po.paneIndex), -1);
+    const paneCount = Math.max(
+      geo.paneCount,
+      dims && dims.length > 0 ? dims.length : 0,
+      maxOverrideIdx + 1
+    );
+    const fallbackPaneArea = paneCount > 0 ? (effectiveGlassArea / quantity) / paneCount : 0;
     for (let pi = 0; pi < paneCount; pi++) {
       const paneArea = dims && dims[pi]
         ? (dims[pi].widthMm * dims[pi].heightMm) / 1_000_000
-        : (effectiveGlassArea / quantity) / paneCount;
+        : fallbackPaneArea;
       const override = paneOverrides!.find(po => po.paneIndex === pi);
       const priceSqm = (override && override.pricePerSqm != null) ? override.pricePerSqm : glassPricePerSqm;
       if (priceSqm != null) {
