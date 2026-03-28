@@ -823,7 +823,7 @@ export default function QuoteBuilder() {
     return derived;
   }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height]);
 
-  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor < 800 && effectivePaneCount > 1;
+  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor > 0 && w.heightFromFloor <= 800 && effectivePaneCount > 1;
 
   useEffect(() => {
     const specs = w.paneGlassSpecs || [];
