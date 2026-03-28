@@ -3951,6 +3951,25 @@ export default function QuoteBuilder() {
                               <span className="text-right font-medium" data-testid="text-glass-cost">${currentPricing.glassCostNzd.toFixed(2)}</span>
                             </>
                           )}
+                          {currentPricing.paneGlassBreakdown && currentPricing.paneGlassBreakdown.length > 0 && (
+                            <div className="col-span-2 ml-2 mb-1 border-l-2 border-blue-200 dark:border-blue-800 pl-2" data-testid="pane-glass-breakdown">
+                              {currentPricing.paneGlassBreakdown.map((pl) => {
+                                const spec = (w.paneGlassSpecs || []).find(s => s.paneIndex === pl.paneIndex);
+                                const specText = spec
+                                  ? [spec.iguType, spec.glassType, spec.glassThickness].filter(Boolean).join(" · ")
+                                  : "Default";
+                                return (
+                                  <div key={pl.paneIndex} className="flex items-baseline justify-between text-[11px] leading-5" data-testid={`pane-glass-line-${pl.paneIndex}`}>
+                                    <span className="text-muted-foreground truncate mr-2">
+                                      <span className="font-medium text-blue-600 dark:text-blue-400">P{pl.paneIndex + 1}</span>
+                                      {" "}{pl.areaSqm.toFixed(2)}m² · {specText}
+                                    </span>
+                                    <span className="font-mono text-xs shrink-0">${pl.costNzd.toFixed(2)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                           {currentPricing.linerCostNzd > 0 && (
                             <>
                               <span className="text-muted-foreground">Liner (NZD)</span>
