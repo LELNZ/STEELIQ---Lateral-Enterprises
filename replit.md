@@ -33,6 +33,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **Retention Commercial Model**: Supports optional percentage-based retention.
 **UI/UX**: Features responsive tables, polished spec row formatting in PDFs, project dashboard guidance, customer relink safeguards, and an enterprise app shell with workflow-domain grouped navigation. An accepted quote workflow progress panel guides users through project, job, and invoice creation. The estimate list provides a three-signal commercial control surface for Estimate Status, Quote status, and Revision.
 **Governance and Data Integrity**: Includes features for environment clarity, test data governance, and shielding of demo/test records from standard users.
+**Pane Data Integrity (Phase 2)**: Shared pane integrity helpers in `shared/pane-integrity.ts` provide validation, classification (all-valid/some-unresolved/all-unresolved/no-overrides), and fallback explanation for pane glass specs. The quote-builder UI shows per-pane validation indicators (green check/red X/amber warning), an integrity summary banner, detailed fallback pricing explanations, save-time validation blocking incomplete specs, and "Clear All"/"Clear" correction controls. Items with invalid pane specs display a "Pane Issue" badge in both desktop table and mobile card list views.
 
 ## External Dependencies
 - **PostgreSQL**: Primary relational database.
