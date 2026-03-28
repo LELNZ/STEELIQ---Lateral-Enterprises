@@ -812,16 +812,49 @@ export default function QuoteBuilder() {
   const openingPanelCount = configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount;
 
   const effectivePaneCount = useMemo(() => {
-    const derived = Math.max(1,
-      configSignature.awningCount + configSignature.fixedCount +
-      configSignature.hingeCount + configSignature.slidingCount
-    );
     if (w.layout === "custom" && w.customColumns && w.customColumns.length > 0) {
       const gm = deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns);
       return gm.paneCount;
     }
-    return derived;
-  }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height]);
+    const cat = w.category;
+    if (cat === "entrance-door") {
+      const doorRows = w.entranceDoorRows || [{ height: 0, type: "fixed" as const }];
+      const slRows = w.entranceSidelightRows || [{ height: 0, type: "fixed" as const }];
+      const slLeftRows = w.entranceSidelightLeftRows || [{ height: 0, type: "fixed" as const }];
+      let count = doorRows.length;
+      if (w.sidelightEnabled) {
+        if (w.sidelightSide === "both") {
+          count += slLeftRows.length + slRows.length;
+        } else {
+          count += slRows.length;
+        }
+      }
+      return Math.max(1, count);
+    }
+    if (cat === "hinge-door") {
+      const hdRows = w.hingeDoorRows || [{ height: 0, type: "fixed" as const }];
+      return Math.max(1, hdRows.length);
+    }
+    if (cat === "french-door") {
+      const leftRows = w.frenchDoorLeftRows || [{ height: 0, type: "fixed" as const }];
+      const rightRows = w.frenchDoorRightRows || [{ height: 0, type: "fixed" as const }];
+      return Math.max(1, leftRows.length + rightRows.length);
+    }
+    if (cat === "bifold-door" || cat === "stacker-door") {
+      const panelCount = w.panels || 3;
+      const panelRowsDef = w.panelRows || [];
+      let total = 0;
+      for (let i = 0; i < panelCount; i++) {
+        const pRows = panelRowsDef[i] || [{ height: 0, type: "fixed" as const }];
+        total += pRows.length;
+      }
+      return Math.max(1, total);
+    }
+    return Math.max(1,
+      configSignature.awningCount + configSignature.fixedCount +
+      configSignature.hingeCount + configSignature.slidingCount
+    );
+  }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height, w.category, w.entranceDoorRows, w.entranceSidelightRows, w.entranceSidelightLeftRows, w.sidelightEnabled, w.sidelightSide, w.hingeDoorRows, w.frenchDoorLeftRows, w.frenchDoorRightRows, w.panels, w.panelRows]);
 
   const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor > 0 && w.heightFromFloor <= 800 && effectivePaneCount > 1;
 
@@ -861,15 +894,11 @@ export default function QuoteBuilder() {
     const salePriceOverride = oMode === "total_sell" && oVal ? oVal
       : oMode === "per_sqm" && oVal ? oVal * sqmForPricing
       : null;
-    const derivedPaneCount = Math.max(1,
-      configSignature.awningCount + configSignature.fixedCount +
-      configSignature.hingeCount + configSignature.slidingCount
-    );
     const isCustomLayout = w.layout === "custom" && w.customColumns && w.customColumns.length > 0;
     const geoMetrics = isCustomLayout
       ? deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns!)
       : null;
-    const effectivePaneCountForGeo = geoMetrics ? geoMetrics.paneCount : derivedPaneCount;
+    const effectivePaneCountForGeo = geoMetrics ? geoMetrics.paneCount : effectivePaneCount;
     const nonCustomPerPaneDims = (() => {
       if (geoMetrics) return undefined;
       const W = w.width || 0;
@@ -985,7 +1014,7 @@ export default function QuoteBuilder() {
       itemGeometry,
       glazingBands
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.paneGlassSpecs]);
+  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.paneGlassSpecs, effectivePaneCount, w.category, w.entranceDoorRows, w.entranceSidelightRows, w.entranceSidelightLeftRows, w.sidelightEnabled, w.sidelightSide, w.hingeDoorRows, w.frenchDoorLeftRows, w.frenchDoorRightRows, w.panels, w.panelRows]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -3970,6 +3999,25 @@ export default function QuoteBuilder() {
                               })}
                             </div>
                           )}
+                          {(() => {
+                            const specsFull = (w.paneGlassSpecs || []).filter(s => s.iguType && s.glassType && s.glassThickness);
+                            const resolvedCount = currentPricing.paneGlassBreakdown?.length ?? 0;
+                            const unresolvedCount = specsFull.length - resolvedCount;
+                            if (unresolvedCount <= 0 || specsFull.length === 0) return null;
+                            const allFailed = resolvedCount === 0;
+                            return (
+                              <div className="col-span-2 ml-2 mb-1 flex items-start gap-1.5 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2 py-1.5" data-testid="pane-glass-fallback-warning">
+                                <svg className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-[11px] leading-4 text-amber-800 dark:text-amber-300">
+                                  {allFailed
+                                    ? "Pane overrides set but could not resolve to library prices — using default glass pricing."
+                                    : `${unresolvedCount} pane override(s) could not resolve — those panes use default glass pricing.`}
+                                </span>
+                              </div>
+                            );
+                          })()}
                           {currentPricing.linerCostNzd > 0 && (
                             <>
                               <span className="text-muted-foreground">Liner (NZD)</span>
