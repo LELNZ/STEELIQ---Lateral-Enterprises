@@ -823,7 +823,7 @@ export default function QuoteBuilder() {
     return derived;
   }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height]);
 
-  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor <= 800 && effectivePaneCount > 1;
+  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor < 800 && effectivePaneCount > 1;
 
   useEffect(() => {
     const specs = w.paneGlassSpecs || [];
@@ -3409,7 +3409,7 @@ export default function QuoteBuilder() {
                   <div className="flex items-start gap-1.5 mb-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="pane-glass-info-banner">
                     <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                     <span className="text-xs text-blue-700 dark:text-blue-300">
-                      Height from floor ≤ 800mm with {effectivePaneCount} panes — you can set glazing per pane below.
+                      Height from floor is under 800mm with {effectivePaneCount} panes — you can set glazing per pane below.
                     </span>
                   </div>
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-PaneGlazing">

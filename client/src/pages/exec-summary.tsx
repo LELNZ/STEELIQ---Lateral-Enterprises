@@ -718,7 +718,7 @@ export default function ExecSummary() {
         linerType: item.linerType || "",
         flashingSize: item.flashingSize || 0,
         wallThickness: item.wallThickness || 0,
-        heightFromFloor: item.heightFromFloor ?? 0,
+        heightFromFloor: item.heightFromFloor,
         pricePerSqm: item.pricePerSqm || 500,
         configurationId: item.configurationId || "",
         layout: item.layout || "standard",
