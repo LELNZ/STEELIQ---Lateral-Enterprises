@@ -3291,9 +3291,9 @@ export default function QuoteBuilder() {
                 {(isSpecVisible("iguType") || isSpecVisible("glassType") || isSpecVisible("glassThickness") || isSpecVisible("rValue")) && (
                 <div>
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Glazing">
-                    {showPaneGlassSelectors && (w.paneGlassSpecs || []).some((s: any) => s.iguType && s.glassType && s.glassThickness) ? "Default Glazing" : "Glazing"}
+                    {showPaneGlassSelectors ? "Default Glazing" : "Glazing"}
                   </h2>
-                  {showPaneGlassSelectors && (w.paneGlassSpecs || []).some((s: any) => s.iguType && s.glassType && s.glassThickness) && (
+                  {showPaneGlassSelectors && (
                     <p className="text-[10px] text-muted-foreground mb-2" data-testid="text-default-glazing-hint">Used as fallback for panes without an override</p>
                   )}
                   <div className="space-y-2">
