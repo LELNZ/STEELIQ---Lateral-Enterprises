@@ -931,7 +931,7 @@ function ScheduleItemCard({
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
                   <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px`, width: "100%" }} data-testid={`recovered-drawing-${item.index}`}>
-                    <DrawingCanvas config={drawingConfig} />
+                    <DrawingCanvas config={drawingConfig} showPaneNumbers={item.paneGlassSpecs.length > 0} />
                   </div>
                 ) : (
                   <div
@@ -967,7 +967,7 @@ function ScheduleItemCard({
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
                   <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }} data-testid={`recovered-drawing-${item.index}`}>
-                    <DrawingCanvas config={drawingConfig} />
+                    <DrawingCanvas config={drawingConfig} showPaneNumbers={item.paneGlassSpecs.length > 0} />
                   </div>
                 ) : (
                   <div
