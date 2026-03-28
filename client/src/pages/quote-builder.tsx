@@ -832,7 +832,7 @@ export default function QuoteBuilder() {
       form.setValue("paneGlassSpecs", [], { shouldDirty: true });
       return;
     }
-    const pruned = specs.filter((s: any) => s.paneIndex < effectivePaneCount);
+    const pruned = specs.filter((s: { paneIndex: number }) => s.paneIndex < effectivePaneCount);
     if (pruned.length !== specs.length) {
       form.setValue("paneGlassSpecs", pruned, { shouldDirty: true });
     }
@@ -869,10 +869,17 @@ export default function QuoteBuilder() {
     const geoMetrics = isCustomLayout
       ? deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns!)
       : null;
+    const effectivePaneCountForGeo = geoMetrics ? geoMetrics.paneCount : derivedPaneCount;
+    const nonCustomPerPaneDims = !geoMetrics && effectivePaneCountForGeo > 0
+      ? Array.from({ length: effectivePaneCountForGeo }, () => ({
+          widthMm: (w.width || 0) / effectivePaneCountForGeo,
+          heightMm: w.height || 0,
+        }))
+      : undefined;
     const itemGeometry: ItemGeometry = {
       mullionCount: configSignature.mullionCount,
       transomCount: configSignature.transomCount,
-      paneCount: geoMetrics ? geoMetrics.paneCount : derivedPaneCount,
+      paneCount: effectivePaneCountForGeo,
       widthMm: w.width || 0,
       heightMm: w.height || 0,
       mullionTotalLengthMm: geoMetrics?.mullionTotalLengthMm,
@@ -880,15 +887,15 @@ export default function QuoteBuilder() {
       cutCycleCount: geoMetrics?.cutCycleCount,
       jointEndCount: geoMetrics?.jointEndCount,
       gluePointCount: geoMetrics?.gluePointCount,
-      perPaneDimensions: geoMetrics?.perPaneDimensions,
+      perPaneDimensions: geoMetrics?.perPaneDimensions ?? nonCustomPerPaneDims,
       totalGlassAreaSqm: geoMetrics?.totalGlassAreaSqm,
     };
-    const paneGlassPricing = (w.paneGlassSpecs || []).map((ps: any) => ({
+    const paneGlassPricing = (w.paneGlassSpecs || []).map((ps) => ({
       paneIndex: ps.paneIndex,
       pricePerSqm: ps.iguType && ps.glassType && ps.glassThickness
         ? libGlassPrice(ps.iguType, ps.glassType, ps.glassThickness)
-        : null,
-    })).filter((pg: any) => pg.pricePerSqm != null);
+        : null as number | null,
+    })).filter((pg): pg is { paneIndex: number; pricePerSqm: number } => pg.pricePerSqm != null);
 
     return calculatePricing(
       w.width || 0, w.height || 0, w.quantity || 1,
@@ -3427,13 +3434,13 @@ export default function QuoteBuilder() {
                   </h2>
                   <div className="space-y-3">
                     {Array.from({ length: effectivePaneCount }, (_, pi) => {
-                      const existing = (w.paneGlassSpecs || []).find((s: any) => s.paneIndex === pi);
+                      const existing = (w.paneGlassSpecs || []).find((s) => s.paneIndex === pi);
                       const pIgu = existing?.iguType || w.glassIguType || "";
                       const pGlass = existing?.glassType || "";
                       const pThick = existing?.glassThickness || "";
                       const updatePaneSpec = (field: string, value: string) => {
                         const specs = [...(w.paneGlassSpecs || [])];
-                        const idx = specs.findIndex((s: any) => s.paneIndex === pi);
+                        const idx = specs.findIndex((s) => s.paneIndex === pi);
                         const current = idx >= 0 ? { ...specs[idx] } : { paneIndex: pi, iguType: w.glassIguType || "", glassType: "", glassThickness: "" };
                         if (field === "iguType") {
                           current.iguType = value;
