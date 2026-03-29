@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertQuoteItemSchema, type InsertQuoteItem, type QuoteItem, type CustomColumn, type EntranceDoorRow, type JobItem, type FrameConfiguration, type ConfigurationProfile, type ConfigurationAccessory, type ConfigurationLabor } from "@shared/schema";
 import { getGlassCombos, getAvailableThicknesses, getGlassPrice, getGlassRValue } from "@shared/glass-library";
+import { validatePaneSpec, getPaneIntegritySummary, hasIncompleteSpecs, type PaneGlassSpec, type PaneResolutionStatus } from "@shared/pane-integrity";
 import { FRAME_COLORS, FLASHING_SIZES, WIND_ZONES, LINER_TYPES, DOOR_CATEGORIES, WINDOW_CATEGORIES, WANZ_BAR_DEFAULTS, getFrameTypesForCategory, getHandlesForCategory, getHandleTypeForCategory, getLockTypeForCategory, getLocksForCategory, isDoorCategory } from "@shared/item-options";
 import type { LibraryEntry, SpecDictionaryEntry, DivisionSettings } from "@shared/schema";
 import { resolvePresetsForDivision, type JobTypePresetsConfig } from "@/lib/site-visit-presets";
@@ -11,7 +12,7 @@ import { deriveConfigSignature, findMatchingConfiguration, deriveGroupedGeometry
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import DrawingCanvas, { getFrameSize } from "@/components/drawing-canvas";
+import DrawingCanvas, { getFrameSize, distributeSpaces } from "@/components/drawing-canvas";
 import { MediaViewer } from "@/components/media-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +30,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List, Package } from "lucide-react";
+import { Plus, Trash2, Pencil, Copy, Ruler, LayoutGrid, ChevronDown, ChevronRight, ChevronUp, ArrowLeft, ArrowRight, Save, Download, Camera, X, ArrowLeftCircle, AlertTriangle, FileText, MoreVertical, Eye, Wrench, List, Package, Shield, CheckCircle2, XCircle, Info } from "lucide-react";
 import { useSettings } from "@/lib/settings-context";
 import { useNavigationGuard } from "@/lib/navigation-guard";
 import { useToast } from "@/hooks/use-toast";
@@ -281,11 +282,12 @@ const defaultValues: InsertQuoteItem = {
   glassIguType: "",
   glassType: "",
   glassThickness: "",
+  paneGlassSpecs: [],
   wanzBar: false,
   wanzBarSource: "",
   wanzBarSize: "",
   wallThickness: 0,
-  heightFromFloor: 0,
+  heightFromFloor: null as number | null,
   handleType: "",
   lockType: "",
   configurationId: "",
@@ -810,6 +812,76 @@ export default function QuoteBuilder() {
 
   const openingPanelCount = configSignature.awningCount + configSignature.hingeCount + configSignature.slidingCount;
 
+  const effectivePaneCount = useMemo(() => {
+    if (w.layout === "custom" && w.customColumns && w.customColumns.length > 0) {
+      const gm = deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns);
+      return gm.paneCount;
+    }
+    const cat = w.category;
+    if (cat === "entrance-door") {
+      const doorRows = w.entranceDoorRows || [{ height: 0, type: "fixed" as const }];
+      const slRows = w.entranceSidelightRows || [{ height: 0, type: "fixed" as const }];
+      const slLeftRows = w.entranceSidelightLeftRows || [{ height: 0, type: "fixed" as const }];
+      let count = doorRows.length;
+      if (w.sidelightEnabled) {
+        if (w.sidelightSide === "both") {
+          count += slLeftRows.length + slRows.length;
+        } else {
+          count += slRows.length;
+        }
+      }
+      return Math.max(1, count);
+    }
+    if (cat === "hinge-door") {
+      const hdRows = w.hingeDoorRows || [{ height: 0, type: "fixed" as const }];
+      return Math.max(1, hdRows.length);
+    }
+    if (cat === "french-door") {
+      const leftRows = w.frenchDoorLeftRows || [{ height: 0, type: "fixed" as const }];
+      const rightRows = w.frenchDoorRightRows || [{ height: 0, type: "fixed" as const }];
+      return Math.max(1, leftRows.length + rightRows.length);
+    }
+    if (cat === "bifold-door" || cat === "stacker-door") {
+      const panelCount = w.panels || 3;
+      const panelRowsDef = w.panelRows || [];
+      let total = 0;
+      for (let i = 0; i < panelCount; i++) {
+        const pRows = panelRowsDef[i] || [{ height: 0, type: "fixed" as const }];
+        total += pRows.length;
+      }
+      return Math.max(1, total);
+    }
+    if (cat === "raked-fixed") {
+      const splitOn = (w as any).rakedSplitEnabled || false;
+      const splitPos = (w as any).rakedSplitPosition || 0;
+      return (splitOn && splitPos > 0) ? 2 : 1;
+    }
+    return Math.max(1,
+      configSignature.awningCount + configSignature.fixedCount +
+      configSignature.hingeCount + configSignature.slidingCount
+    );
+  }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height, w.category, w.entranceDoorRows, w.entranceSidelightRows, w.entranceSidelightLeftRows, w.sidelightEnabled, w.sidelightSide, w.hingeDoorRows, w.frenchDoorLeftRows, w.frenchDoorRightRows, w.panels, w.panelRows, (w as any).rakedSplitEnabled, (w as any).rakedSplitPosition]);
+
+  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor > 0 && w.heightFromFloor <= 799 && effectivePaneCount > 1;
+
+  useEffect(() => {
+    const specs = w.paneGlassSpecs || [];
+    if (specs.length === 0) return;
+    if (!showPaneGlassSelectors) {
+      form.setValue("paneGlassSpecs", [], { shouldDirty: true });
+      return;
+    }
+    const pruned = specs.filter((s: { paneIndex: number }) => s.paneIndex < effectivePaneCount);
+    if (pruned.length !== specs.length) {
+      form.setValue("paneGlassSpecs", pruned, { shouldDirty: true });
+    }
+  }, [showPaneGlassSelectors, effectivePaneCount]);
+
+  const paneIntegritySummary = useMemo(() => {
+    if (!w.paneGlassSpecs || w.paneGlassSpecs.length === 0) return null;
+    return getPaneIntegritySummary(w.paneGlassSpecs as PaneGlassSpec[], effectivePaneCount);
+  }, [w.paneGlassSpecs, effectivePaneCount]);
+
   const wanzBarPricingInput = (() => {
     if (!w.wanzBar || !w.wanzBarSource || !w.wanzBarSize) return undefined;
     const wbEntry = libWanzBars.find((e) => (e.data as any).value === w.wanzBarSize);
@@ -833,18 +905,100 @@ export default function QuoteBuilder() {
     const salePriceOverride = oMode === "total_sell" && oVal ? oVal
       : oMode === "per_sqm" && oVal ? oVal * sqmForPricing
       : null;
-    const derivedPaneCount = Math.max(1,
-      configSignature.awningCount + configSignature.fixedCount +
-      configSignature.hingeCount + configSignature.slidingCount
-    );
     const isCustomLayout = w.layout === "custom" && w.customColumns && w.customColumns.length > 0;
     const geoMetrics = isCustomLayout
       ? deriveGroupedGeometryMetrics(w.width || 0, w.height || 0, w.customColumns!)
       : null;
+    const effectivePaneCountForGeo = geoMetrics ? geoMetrics.paneCount : effectivePaneCount;
+    const nonCustomPerPaneDims = (() => {
+      if (geoMetrics) return undefined;
+      const W = w.width || 0;
+      const H = w.height || 0;
+      const cat = w.category;
+      const dims: { widthMm: number; heightMm: number }[] = [];
+
+      if (cat === "sliding-window" || cat === "sliding-door") {
+        dims.push({ widthMm: W / 2, heightMm: H }, { widthMm: W / 2, heightMm: H });
+      } else if (cat === "entrance-door") {
+        const frameSize = getFrameSize(cat);
+        const minPane = frameSize * 2;
+        const rawSl = w.sidelightWidth > 0 ? w.sidelightWidth : 400;
+        const doorRows = w.entranceDoorRows || [{ height: 0, type: "fixed" as const }];
+        const slRows = w.entranceSidelightRows || [{ height: 0, type: "fixed" as const }];
+        const slLeftRows = w.entranceSidelightLeftRows || [{ height: 0, type: "fixed" as const }];
+        const doorRowH = distributeSpaces(H, doorRows.map(r => r.height || 0));
+        const slRowH = distributeSpaces(H, slRows.map(r => r.height || 0));
+        const slLeftRowH = distributeSpaces(H, slLeftRows.map(r => r.height || 0));
+
+        type Sec = { w: number; role: string };
+        const sections: Sec[] = [];
+        if (!w.sidelightEnabled) {
+          sections.push({ w: W, role: "door" });
+        } else if (w.sidelightSide === "both") {
+          const slEachW = Math.max(minPane, Math.min(rawSl, Math.max(minPane, (W - minPane) / 2)));
+          const doorW = Math.max(minPane, W - slEachW * 2);
+          sections.push({ w: slEachW, role: "sidelight-left" }, { w: doorW, role: "door" }, { w: slEachW, role: "sidelight-right" });
+        } else {
+          const maxSl = Math.max(minPane, W - minPane);
+          const slW = Math.max(minPane, Math.min(rawSl, maxSl));
+          const doorW = Math.max(minPane, W - slW);
+          if (w.sidelightSide === "left") {
+            sections.push({ w: slW, role: "sidelight" }, { w: doorW, role: "door" });
+          } else {
+            sections.push({ w: doorW, role: "door" }, { w: slW, role: "sidelight" });
+          }
+        }
+        for (const sec of sections) {
+          if (sec.role === "door") {
+            for (const rh of doorRowH) dims.push({ widthMm: sec.w, heightMm: rh });
+          } else if (sec.role === "sidelight-left") {
+            for (const rh of slLeftRowH) dims.push({ widthMm: sec.w, heightMm: rh });
+          } else {
+            for (const rh of slRowH) dims.push({ widthMm: sec.w, heightMm: rh });
+          }
+        }
+      } else if (cat === "hinge-door") {
+        const hdRows = w.hingeDoorRows || [{ height: 0, type: "fixed" as const }];
+        const rowHeights = distributeSpaces(H, hdRows.map(r => r.height || 0));
+        for (const rh of rowHeights) dims.push({ widthMm: W, heightMm: rh });
+      } else if (cat === "french-door") {
+        const halfW = W / 2;
+        const leftRows = w.frenchDoorLeftRows || [{ height: 0, type: "fixed" as const }];
+        const rightRows = w.frenchDoorRightRows || [{ height: 0, type: "fixed" as const }];
+        const leftRowH = distributeSpaces(H, leftRows.map(r => r.height || 0));
+        const rightRowH = distributeSpaces(H, rightRows.map(r => r.height || 0));
+        for (const rh of leftRowH) dims.push({ widthMm: halfW, heightMm: rh });
+        for (const rh of rightRowH) dims.push({ widthMm: halfW, heightMm: rh });
+      } else if (cat === "bifold-door" || cat === "stacker-door") {
+        const panelCount = w.panels || 3;
+        const panelW = W / panelCount;
+        const panelRowsDef = w.panelRows || [];
+        for (let i = 0; i < panelCount; i++) {
+          const pRows = panelRowsDef[i] || [{ height: 0, type: "fixed" as const }];
+          const rowH = distributeSpaces(H, pRows.map(r => r.height || 0));
+          for (const rh of rowH) dims.push({ widthMm: panelW, heightMm: rh });
+        }
+      } else if (cat === "bay-window") {
+        const cw = Math.max(getFrameSize(cat) * 4, Math.min(w.centerWidth > 0 ? w.centerWidth : W * 0.6, W - getFrameSize(cat) * 4));
+        const sideW = (W - cw) / 2;
+        dims.push({ widthMm: sideW, heightMm: H }, { widthMm: cw, heightMm: H }, { widthMm: sideW, heightMm: H });
+      } else if (cat === "windows-standard") {
+        if (w.windowType === "french-pair") {
+          dims.push({ widthMm: W / 2, heightMm: H }, { widthMm: W / 2, heightMm: H });
+        } else {
+          dims.push({ widthMm: W, heightMm: H });
+        }
+      } else {
+        for (let i = 0; i < effectivePaneCountForGeo; i++) {
+          dims.push({ widthMm: W / effectivePaneCountForGeo, heightMm: H });
+        }
+      }
+      return dims.length > 0 ? dims : undefined;
+    })();
     const itemGeometry: ItemGeometry = {
       mullionCount: configSignature.mullionCount,
       transomCount: configSignature.transomCount,
-      paneCount: geoMetrics ? geoMetrics.paneCount : derivedPaneCount,
+      paneCount: effectivePaneCountForGeo,
       widthMm: w.width || 0,
       heightMm: w.height || 0,
       mullionTotalLengthMm: geoMetrics?.mullionTotalLengthMm,
@@ -852,19 +1006,26 @@ export default function QuoteBuilder() {
       cutCycleCount: geoMetrics?.cutCycleCount,
       jointEndCount: geoMetrics?.jointEndCount,
       gluePointCount: geoMetrics?.gluePointCount,
-      perPaneDimensions: geoMetrics?.perPaneDimensions,
+      perPaneDimensions: geoMetrics?.perPaneDimensions ?? nonCustomPerPaneDims,
       totalGlassAreaSqm: geoMetrics?.totalGlassAreaSqm,
     };
+    const paneGlassPricing = (w.paneGlassSpecs || []).map((ps) => ({
+      paneIndex: ps.paneIndex,
+      pricePerSqm: ps.iguType && ps.glassType && ps.glassThickness
+        ? libGlassPrice(ps.iguType, ps.glassType, ps.glassThickness)
+        : null as number | null,
+    })).filter((pg): pg is { paneIndex: number; pricePerSqm: number } => pg.pricePerSqm != null);
+
     return calculatePricing(
       w.width || 0, w.height || 0, w.quantity || 1,
       configProfiles, configAccessories, configLabor,
       usdToNzdRate, w.pricePerSqm || 500,
-      { glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined, sqmOverride: w.category === "raked-fixed" ? (((w as any).rakedLeftHeight || w.height || 0) + ((w as any).rakedRightHeight || w.height || 0)) / 2 * (w.width || 0) / 1_000_000 : undefined, perimeterOverrideM: w.category === "raked-fixed" ? calcRakedPerimeterM(w.width || 0, (w as any).rakedLeftHeight || w.height || 0, (w as any).rakedRightHeight || w.height || 0) : undefined, gosChargeNzd: w.gosRequired ? (w.gosChargeNzd ?? undefined) : undefined },
+      { glassPricePerSqm, paneGlassPricing: paneGlassPricing.length > 0 ? paneGlassPricing : undefined, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount: Math.max(1, openingPanelCount), wanzBar: wanzBarPricingInput, salePriceOverride: salePriceOverride ?? undefined, sqmOverride: w.category === "raked-fixed" ? (((w as any).rakedLeftHeight || w.height || 0) + ((w as any).rakedRightHeight || w.height || 0)) / 2 * (w.width || 0) / 1_000_000 : undefined, perimeterOverrideM: w.category === "raked-fixed" ? calcRakedPerimeterM(w.width || 0, (w as any).rakedLeftHeight || w.height || 0, (w as any).rakedRightHeight || w.height || 0) : undefined, gosChargeNzd: w.gosRequired ? (w.gosChargeNzd ?? undefined) : undefined },
       { masterProfiles, masterAccessories, masterLabour },
       itemGeometry,
       glazingBands
     );
-  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount]);
+  }, [hasConfigData, w.width, w.height, w.quantity, w.layout, w.customColumns, configProfiles, configAccessories, configLabor, usdToNzdRate, w.pricePerSqm, w.overrideMode, w.overrideValue, glassPricePerSqm, linerPricePerM, handlePriceEach, lockPriceEach, openingPanelCount, wanzBarPricingInput, masterProfiles, masterAccessories, masterLabour, glazingBands, configSignature.mullionCount, configSignature.transomCount, configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.paneGlassSpecs, effectivePaneCount, w.category, w.entranceDoorRows, w.entranceSidelightRows, w.entranceSidelightLeftRows, w.sidelightEnabled, w.sidelightSide, w.hingeDoorRows, w.frenchDoorLeftRows, w.frenchDoorRightRows, w.panels, w.panelRows]);
 
   useEffect(() => {
     if (formIsDirty) setHasUnsavedChanges(true);
@@ -1446,6 +1607,28 @@ export default function QuoteBuilder() {
   const saveInProgressRef = useRef(false);
 
   async function onSubmit(data: InsertQuoteItem) {
+    if (data.paneGlassSpecs && data.paneGlassSpecs.length > 0) {
+      if (hasIncompleteSpecs(data.paneGlassSpecs as PaneGlassSpec[])) {
+        const incomplete = (data.paneGlassSpecs as PaneGlassSpec[]).filter(
+          (s) => (s.iguType || s.glassType || s.glassThickness) && !(s.iguType && s.glassType && s.glassThickness)
+        );
+        toast({
+          title: "Incomplete pane glass specs",
+          description: `${incomplete.length} pane(s) have partially filled glass specs. Complete all three fields (IGU, Glass, Thickness) or clear them before saving.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const invalidSpecs = (data.paneGlassSpecs as PaneGlassSpec[]).filter(
+        (s) => s.iguType && s.glassType && s.glassThickness && !validatePaneSpec(s).isValid
+      );
+      if (invalidSpecs.length > 0) {
+        toast({
+          title: "Invalid pane glass specs",
+          description: `${invalidSpecs.length} pane(s) have glass combinations that cannot be resolved in the library. These panes will use default glass pricing as fallback.`,
+        });
+      }
+    }
     const wasNewJob = !savedJobId;
     const sig = deriveConfigSignature(data as QuoteItem);
     const matchingConfig = findMatchingConfiguration(sig, configurations);
@@ -3256,8 +3439,11 @@ export default function QuoteBuilder() {
                 {(isSpecVisible("iguType") || isSpecVisible("glassType") || isSpecVisible("glassThickness") || isSpecVisible("rValue")) && (
                 <div>
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2" data-testid="spec-group-Glazing">
-                    Glazing
+                    {showPaneGlassSelectors ? "Default Glazing" : "Glazing"}
                   </h2>
+                  {showPaneGlassSelectors && (
+                    <p className="text-[10px] text-muted-foreground mb-2" data-testid="text-default-glazing-hint">Used as fallback for panes without an override</p>
+                  )}
                   <div className="space-y-2">
                     {isSpecVisible("iguType") && (
                     <div>
@@ -3357,12 +3543,12 @@ export default function QuoteBuilder() {
                     <div>
                       <Label className="text-xs">Height from Floor (mm)</Label>
                       <Input type="number" inputMode="decimal" min={0}
-                        value={w.heightFromFloor || ""}
-                        onChange={(e) => form.setValue("heightFromFloor", Number(e.target.value) || 0)}
+                        value={w.heightFromFloor ?? ""}
+                        onChange={(e) => form.setValue("heightFromFloor", e.target.value === "" ? null : Number(e.target.value))}
                         onFocus={handleConfigFieldFocus}
                         placeholder={DOOR_CATEGORIES.includes(w.category || "") ? "Default: 30mm" : "Default: 800mm"}
                         data-testid="input-height-from-floor" />
-                      {w.heightFromFloor > 0 && w.heightFromFloor < 800 && (
+                      {w.heightFromFloor != null && w.heightFromFloor < 800 && (
                         <div className="flex items-start gap-1.5 mt-1.5 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="warning-height-from-floor">
                           <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                           <span className="text-xs text-amber-700 dark:text-amber-300">Height under 800mm — safety glazing / toughening may be required. Check glass selection.</span>
@@ -3375,6 +3561,193 @@ export default function QuoteBuilder() {
                 )}
 
                 {(isSpecVisible("windZone") || isSpecVisible("wallThickness")) && <Separator />}
+
+                {showPaneGlassSelectors && w.glassIguType && (
+                <div>
+                  <div className="flex items-start gap-1.5 mb-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="pane-glass-info-banner">
+                    <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <span className="text-xs text-blue-700 dark:text-blue-300">
+                      Height from floor is under 800mm with {effectivePaneCount} panes — you can set glazing per pane below. Pane controls are active for FFL 1–799mm.
+                    </span>
+                  </div>
+
+                  {paneIntegritySummary && paneIntegritySummary.status !== "no-overrides" && (
+                    <div className={`flex items-start gap-1.5 mb-2 p-2 rounded-md border ${
+                      paneIntegritySummary.status === "all-valid"
+                        ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800"
+                        : paneIntegritySummary.status === "some-unresolved"
+                        ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+                        : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                    }`} data-testid="pane-integrity-banner">
+                      {paneIntegritySummary.status === "all-valid" ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                      ) : paneIntegritySummary.status === "some-unresolved" ? (
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <XCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-xs ${
+                          paneIntegritySummary.status === "all-valid"
+                            ? "text-green-700 dark:text-green-300"
+                            : paneIntegritySummary.status === "some-unresolved"
+                            ? "text-amber-700 dark:text-amber-300"
+                            : "text-red-700 dark:text-red-300"
+                        }`}>
+                          {paneIntegritySummary.explanation}
+                        </span>
+                        {paneIntegritySummary.invalidCount > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {paneIntegritySummary.paneResults.filter(r => !r.isValid).map(r => (
+                              <div key={r.paneIndex} className="text-[10px] text-red-600 dark:text-red-400" data-testid={`pane-integrity-detail-${r.paneIndex}`}>
+                                Pane {r.paneIndex + 1}: {r.issues.join("; ")}
+                                {(r.storedIguType || r.storedGlassType || r.storedThickness) && (
+                                  <span className="ml-1 text-muted-foreground">
+                                    (stored: {[r.storedIguType, r.storedGlassType, r.storedThickness].filter(Boolean).join(" / ") || "empty"})
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" data-testid="spec-group-PaneGlazing">
+                      Pane-Level Glazing
+                    </h2>
+                    {(w.paneGlassSpecs || []).length > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-destructive"
+                        onClick={() => form.setValue("paneGlassSpecs", [], { shouldDirty: true })}
+                        data-testid="button-clear-all-pane-specs"
+                      >
+                        Clear All
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {Array.from({ length: effectivePaneCount }, (_, pi) => {
+                      const existing = (w.paneGlassSpecs || []).find((s) => s.paneIndex === pi);
+                      const pIgu = existing?.iguType || w.glassIguType || "";
+                      const pGlass = existing?.glassType || "";
+                      const pThick = existing?.glassThickness || "";
+                      const paneValidation = existing ? validatePaneSpec(existing as PaneGlassSpec) : null;
+                      const isIncomplete = existing && (existing.iguType || existing.glassType || existing.glassThickness) && !(existing.iguType && existing.glassType && existing.glassThickness);
+                      const isInvalid = paneValidation && !paneValidation.isValid && !isIncomplete;
+                      const isValid = paneValidation?.isValid;
+                      const updatePaneSpec = (field: string, value: string) => {
+                        const specs = [...(w.paneGlassSpecs || [])];
+                        const idx = specs.findIndex((s) => s.paneIndex === pi);
+                        const current = idx >= 0 ? { ...specs[idx] } : { paneIndex: pi, iguType: w.glassIguType || "", glassType: "", glassThickness: "" };
+                        if (field === "iguType") {
+                          current.iguType = value;
+                          current.glassType = "";
+                          current.glassThickness = "";
+                        } else if (field === "glassType") {
+                          current.glassType = value;
+                          current.glassThickness = "";
+                        } else {
+                          current.glassThickness = value;
+                        }
+                        if (idx >= 0) specs[idx] = current;
+                        else specs.push(current);
+                        form.setValue("paneGlassSpecs", specs, { shouldDirty: true });
+                      };
+                      const clearPaneSpec = () => {
+                        const specs = (w.paneGlassSpecs || []).filter((s) => s.paneIndex !== pi);
+                        form.setValue("paneGlassSpecs", specs, { shouldDirty: true });
+                      };
+                      return (
+                        <div key={pi} className={`p-2 rounded-md border space-y-1.5 ${
+                          isValid ? "border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20" :
+                          isInvalid ? "border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20" :
+                          isIncomplete ? "border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20" :
+                          "border-border/60 bg-muted/30"
+                        }`} data-testid={`pane-glass-selector-${pi}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                              Pane {pi + 1}
+                              {isValid && <CheckCircle2 className="w-3 h-3 text-green-500" data-testid={`pane-valid-icon-${pi}`} />}
+                              {isInvalid && <XCircle className="w-3 h-3 text-red-500" data-testid={`pane-invalid-icon-${pi}`} />}
+                              {isIncomplete && <AlertTriangle className="w-3 h-3 text-amber-500" data-testid={`pane-incomplete-icon-${pi}`} />}
+                            </span>
+                            {existing && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-4 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={clearPaneSpec}
+                                data-testid={`button-clear-pane-${pi}`}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                          {isInvalid && paneValidation && (
+                            <div className="text-[10px] text-red-600 dark:text-red-400 leading-3" data-testid={`pane-error-msg-${pi}`}>
+                              {paneValidation.issues.join("; ")} — using default glass pricing
+                            </div>
+                          )}
+                          {isIncomplete && (
+                            <div className="text-[10px] text-amber-600 dark:text-amber-400 leading-3" data-testid={`pane-incomplete-msg-${pi}`}>
+                              Incomplete — fill all three fields or clear this pane
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                              <Label className="text-[10px]">IGU</Label>
+                              <Select value={pIgu} onValueChange={(v) => updatePaneSpec("iguType", v)}>
+                                <SelectTrigger className="h-7 text-xs" data-testid={`select-pane-igutype-${pi}`}><SelectValue placeholder="IGU" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="EnergySaver">EnergySaver™</SelectItem>
+                                  <SelectItem value="LightBridge">LightBridge™</SelectItem>
+                                  <SelectItem value="VLamThermotech">VLam Thermotech</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px]">Glass</Label>
+                              <Select value={pGlass} onValueChange={(v) => updatePaneSpec("glassType", v)} disabled={!pIgu}>
+                                <SelectTrigger className="h-7 text-xs" data-testid={`select-pane-glasstype-${pi}`}><SelectValue placeholder="Glass" /></SelectTrigger>
+                                <SelectContent>
+                                  {libGlassCombos(pIgu).map((combo) => (
+                                    <SelectItem key={combo} value={combo}>{combo}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px]">Thickness</Label>
+                              <Select value={pThick} onValueChange={(v) => updatePaneSpec("glassThickness", v)} disabled={!pIgu || !pGlass}>
+                                <SelectTrigger className="h-7 text-xs" data-testid={`select-pane-thickness-${pi}`}><SelectValue placeholder="mm" /></SelectTrigger>
+                                <SelectContent>
+                                  {libGlassThicknesses(pIgu, pGlass).map((t) => (
+                                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          {isValid && paneValidation?.resolvedPrice != null && (
+                            <div className="text-[10px] text-green-600 dark:text-green-400" data-testid={`pane-price-resolved-${pi}`}>
+                              Resolved: ${paneValidation.resolvedPrice.toFixed(2)}/m²
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                )}
+
+                {showPaneGlassSelectors && w.glassIguType && <Separator />}
 
                 {isSpecVisible("linerType") && (
                 <div>
@@ -3745,6 +4118,64 @@ export default function QuoteBuilder() {
                               <span className="text-right font-medium" data-testid="text-glass-cost">${currentPricing.glassCostNzd.toFixed(2)}</span>
                             </>
                           )}
+                          {currentPricing.paneGlassBreakdown && currentPricing.paneGlassBreakdown.length > 0 && (
+                            <div className="col-span-2 ml-2 mb-1 border-l-2 border-blue-200 dark:border-blue-800 pl-2" data-testid="pane-glass-breakdown">
+                              {currentPricing.paneGlassBreakdown.map((pl) => {
+                                const spec = (w.paneGlassSpecs || []).find(s => s.paneIndex === pl.paneIndex);
+                                const paneVal = spec ? validatePaneSpec(spec as PaneGlassSpec) : null;
+                                const specText = spec
+                                  ? [spec.iguType, spec.glassType, spec.glassThickness].filter(Boolean).join(" · ")
+                                  : "Default";
+                                const pricingSource = pl.isOverride
+                                  ? "pane-aware"
+                                  : spec && (spec.iguType || spec.glassType || spec.glassThickness)
+                                  ? "default fallback"
+                                  : "default";
+                                return (
+                                  <div key={pl.paneIndex} className="flex items-baseline justify-between text-[11px] leading-5" data-testid={`pane-glass-line-${pl.paneIndex}`}>
+                                    <span className="text-muted-foreground truncate mr-2">
+                                      <span className={`font-medium ${pl.isOverride ? "text-blue-600 dark:text-blue-400" : spec && !paneVal?.isValid ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>P{pl.paneIndex + 1}</span>
+                                      {" "}{pl.areaSqm.toFixed(2)}m² · {specText}
+                                      <span className="ml-1 text-[10px] opacity-60">({pricingSource})</span>
+                                    </span>
+                                    <span className="font-mono text-xs shrink-0">${pl.costNzd.toFixed(2)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {(() => {
+                            if (!paneIntegritySummary || paneIntegritySummary.status === "no-overrides" || paneIntegritySummary.status === "all-valid") return null;
+                            return (
+                              <div className="col-span-2 ml-2 mb-1 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2 py-1.5" data-testid="pane-glass-fallback-warning">
+                                <div className="flex items-start gap-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-[11px] leading-4 text-amber-800 dark:text-amber-300 block">
+                                      {paneIntegritySummary.status === "all-unresolved"
+                                        ? "All pane overrides failed to resolve — using default glass pricing for all panes."
+                                        : `${paneIntegritySummary.invalidCount} of ${paneIntegritySummary.overrideCount} pane override(s) could not resolve — those panes use default glass pricing.`}
+                                    </span>
+                                    <div className="mt-1 space-y-0.5">
+                                      {paneIntegritySummary.paneResults.filter(r => !r.isValid).map(r => (
+                                        <div key={r.paneIndex} className="text-[10px] text-amber-700 dark:text-amber-400" data-testid={`pricing-fallback-detail-${r.paneIndex}`}>
+                                          P{r.paneIndex + 1}: {r.issues[0]}
+                                          {(r.storedIguType || r.storedGlassType || r.storedThickness) && (
+                                            <span className="opacity-70 ml-1">
+                                              [{[r.storedIguType, r.storedGlassType, r.storedThickness].filter(Boolean).join(" / ")}]
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="mt-1 text-[10px] text-amber-600 dark:text-amber-500 italic">
+                                      Pricing source: {paneIntegritySummary.status === "all-unresolved" ? "Default glass fallback" : "Partial — resolved panes use pane-aware pricing, unresolved use default fallback"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
                           {currentPricing.linerCostNzd > 0 && (
                             <>
                               <span className="text-muted-foreground">Liner (NZD)</span>
@@ -3872,7 +4303,7 @@ export default function QuoteBuilder() {
           : "flex-1 min-h-0 flex flex-col overflow-hidden"}>
           <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 min-h-0 bg-muted/30 dark:bg-muted/10">
             <div className="w-full flex-1 max-w-3xl max-h-[600px] rounded-lg overflow-hidden shadow-sm ring-1 ring-border/50 bg-background" data-testid="drawing-preview">
-              <DrawingCanvas ref={drawingRef} config={drawingConfig} />
+              <DrawingCanvas ref={drawingRef} config={drawingConfig} showPaneNumbers={showPaneGlassSelectors && effectivePaneCount > 1} />
             </div>
             {hasOpeningDirection(category, w.windowType) && w.openingDirection && w.openingDirection !== "none" && (
               <p className="mt-2 text-sm font-medium text-muted-foreground" data-testid="text-opening-direction-label">
@@ -3981,6 +4412,13 @@ export default function QuoteBuilder() {
                           {(iwp.item as any).fulfilmentSource === "outsourced" && <Badge variant="secondary" className="text-[9px] ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300" data-testid={`badge-outsourced-${iwp.uiId}`}>Outsourced</Badge>}
                           {iwp.item.gosRequired && <Badge variant="secondary" className="text-[9px] ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" data-testid={`badge-gos-${iwp.uiId}`}>GOS</Badge>}
                           {iwp.item.catDoorEnabled && <Badge variant="secondary" className="text-[9px] ml-1 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" data-testid={`badge-catdoor-${iwp.uiId}`}>Cat Door</Badge>}
+                          {(() => {
+                            const specs = iwp.item.paneGlassSpecs as PaneGlassSpec[] | undefined;
+                            if (!specs || specs.length === 0) return null;
+                            const hasInvalid = specs.some(s => (s.iguType || s.glassType || s.glassThickness) && !validatePaneSpec(s).isValid);
+                            if (!hasInvalid) return null;
+                            return <Badge variant="secondary" className="text-[9px] ml-1 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" data-testid={`badge-pane-issue-${iwp.uiId}`}>Pane Issue</Badge>;
+                          })()}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {getLayoutSummary(iwp.item)}
@@ -4126,6 +4564,13 @@ export default function QuoteBuilder() {
                             {(iwp.item as any).fulfilmentSource === "outsourced" && <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Outsourced</Badge>}
                             {iwp.item.gosRequired && <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">GOS</Badge>}
                             {iwp.item.catDoorEnabled && <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">Cat Door</Badge>}
+                            {(() => {
+                              const specs = iwp.item.paneGlassSpecs as PaneGlassSpec[] | undefined;
+                              if (!specs || specs.length === 0) return null;
+                              const hasInvalid = specs.some(s => (s.iguType || s.glassType || s.glassThickness) && !validatePaneSpec(s).isValid);
+                              if (!hasInvalid) return null;
+                              return <Badge variant="secondary" className="text-[9px] px-1 py-0 shrink-0 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" data-testid={`badge-card-pane-issue-${iwp.uiId}`}>Pane Issue</Badge>;
+                            })()}
                           </div>
                           <div className="flex items-center gap-2 mt-1 text-sm font-semibold font-mono" data-testid={`text-card-dims-${iwp.uiId}`}>
                             {iwp.item.width} × {iwp.item.height}

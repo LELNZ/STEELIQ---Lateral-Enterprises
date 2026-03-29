@@ -6,3 +6,15 @@ id = "Leh_q-NvFA_3g5PRgy6B5"
 uri = "file://.local/audit-report-phase7b-closeout.md"
 type = "text"
 title = "SteelIQ Canonical Closeout Audit — Phase 7B Final Proof + Gap Prioritization"
+
+[[outputs]]
+id = "UuFLaCxUV1vlN8glM739i"
+uri = "file://.local/PHASE2_VALIDATION_REPORT.md"
+type = "text"
+title = "Phase 2 Validation Report — Pane Data Integrity & Admin Controls"
+
+[[outputs]]
+id = "NbVnbn5WEYtMZK5iYmTrZ"
+uri = "file://.local/PHASE2A_VALIDATION_REPORT.md"
+type = "text"
+title = "Phase 2A Validation Report — Boundary Correction & Raked Panel-Split"

@@ -43,6 +43,7 @@ export default function QuotePreview() {
   const { data: preview, isLoading } = useQuery<PreviewData>({
     queryKey: ["/api/quotes", quoteId, "preview-data"],
     enabled: !!quoteId,
+    staleTime: 0,
   });
 
   const doc: QuoteDocumentModel | null = useMemo(() => {
@@ -191,7 +192,8 @@ export default function QuotePreview() {
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
 
   const ITEMS_FIRST_PAGE = 1;
-  const ITEMS_PER_PAGE = 3;
+  const densityItemsMap: Record<string, number> = { comfortable: 3, standard: 4, compact: 5 };
+  const ITEMS_PER_PAGE = densityItemsMap[T.density.itemGapMm <= 2 ? "compact" : T.density.itemGapMm >= 4 ? "comfortable" : "standard"] ?? 3;
   const hasSchedule = isSectionVisible(T, "schedule") && liveScheduleItems.length > 0;
   const page1ScheduleItems = hasSchedule ? liveScheduleItems.slice(0, ITEMS_FIRST_PAGE) : [];
   const overflowItems = hasSchedule ? liveScheduleItems.slice(ITEMS_FIRST_PAGE) : [];
@@ -869,7 +871,7 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
     wanzBarSource: (sv.wanzBarSource || "") as any,
     wanzBarSize: String(sv.wanzBarSize || ""),
     wallThickness: Number(sv.wallThickness) || 0,
-    heightFromFloor: Number(sv.heightFromFloor) || 0,
+    heightFromFloor: sv.heightFromFloor != null ? Number(sv.heightFromFloor) : 0,
     handleType: String(sv.handleSet || ""),
     lockType: String(sv.lockSet || ""),
     configurationId: String(sv.configurationId || ""),
@@ -929,7 +931,7 @@ function ScheduleItemCard({
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
                   <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px`, width: "100%" }} data-testid={`recovered-drawing-${item.index}`}>
-                    <DrawingCanvas config={drawingConfig} />
+                    <DrawingCanvas config={drawingConfig} showPaneNumbers={item.paneGlassSpecs.length > 0} />
                   </div>
                 ) : (
                   <div
@@ -965,7 +967,7 @@ function ScheduleItemCard({
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
                   <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }} data-testid={`recovered-drawing-${item.index}`}>
-                    <DrawingCanvas config={drawingConfig} />
+                    <DrawingCanvas config={drawingConfig} showPaneNumbers={item.paneGlassSpecs.length > 0} />
                   </div>
                 ) : (
                   <div
@@ -1009,6 +1011,20 @@ function ScheduleItemCard({
                 • {item.catDoorNote}
               </p>
             )}
+          </div>
+        )}
+
+        {item.paneGlassSpecs.length > 0 && (
+          <div data-testid={`pane-glass-specs-${item.index}`}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Pane-Level Glazing</p>
+            <div className="flex flex-col gap-0.5">
+              {[...item.paneGlassSpecs].sort((a, b) => a.paneIndex - b.paneIndex).map((ps) => (
+                <p key={ps.paneIndex} className="text-[10px]" style={{ color: template.colors.bodyText }} data-testid={`pane-spec-${item.index}-${ps.paneIndex}`}>
+                  <span className="font-medium" style={{ color: template.colors.accent }}>Pane {ps.paneIndex + 1}:</span>{" "}
+                  {[ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—"}
+                </p>
+              ))}
+            </div>
           </div>
         )}
 

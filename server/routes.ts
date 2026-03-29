@@ -2277,7 +2277,8 @@ export async function registerRoutes(
         const classification = classifySnapshotDrawingSupport(item);
         try {
           const config = snapshotItemToDrawingConfig(item);
-          const pngBuffer = await renderDrawingToPng(config);
+          const hasPaneSpecs = Array.isArray(item.paneGlassSpecs) && item.paneGlassSpecs.length > 0;
+          const pngBuffer = await renderDrawingToPng(config, 2, hasPaneSpecs);
           await storage.saveItemPhoto(key, pngBuffer, "image/png");
           drawingCacheSet(key, pngBuffer);
           try {

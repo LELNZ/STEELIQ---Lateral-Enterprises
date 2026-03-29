@@ -1,5 +1,13 @@
 import type { ConfigurationProfile, ConfigurationAccessory, ConfigurationLabor, LibraryEntry } from "@shared/schema";
 
+export interface PaneGlassBreakdownLine {
+  paneIndex: number;
+  areaSqm: number;
+  pricePerSqm: number;
+  costNzd: number;
+  isOverride: boolean;
+}
+
 export interface PricingBreakdown {
   profilesCostUsd: number;
   profilesCostNzd: number;
@@ -20,6 +28,7 @@ export interface PricingBreakdown {
   marginNzd: number;
   marginPercent: number;
   labourBreakdown: LabourLineBreakdown[];
+  paneGlassBreakdown?: PaneGlassBreakdownLine[];
 }
 
 export interface MasterData {
@@ -36,8 +45,14 @@ export interface WanzBarPricingInput {
   priceNzdPerLinM: number;
 }
 
+export interface PaneGlassPricing {
+  paneIndex: number;
+  pricePerSqm: number | null;
+}
+
 export interface PricingExtras {
   glassPricePerSqm?: number | null;
+  paneGlassPricing?: PaneGlassPricing[];
   linerPricePerM?: number | null;
   handlePriceEach?: number | null;
   lockPriceEach?: number | null;
@@ -385,7 +400,46 @@ export function calculatePricing(
   const effectiveGlassArea = geo.totalGlassAreaSqm != null && geo.totalGlassAreaSqm > 0
     ? geo.totalGlassAreaSqm * quantity
     : sqm;
-  const glassCostNzd = glassPricePerSqm != null ? glassPricePerSqm * effectiveGlassArea : 0;
+
+  const paneOverrides = extras?.paneGlassPricing;
+  const hasPaneOverrides = paneOverrides && paneOverrides.length > 0;
+
+  let glassCostNzd: number;
+  let paneGlassBreakdown: PaneGlassBreakdownLine[] | undefined;
+  if (hasPaneOverrides) {
+    let paneCostSum = 0;
+    const dims = geo.perPaneDimensions;
+    const maxOverrideIdx = paneOverrides!.reduce((mx, po) => Math.max(mx, po.paneIndex), -1);
+    const paneCount = Math.max(
+      geo.paneCount,
+      dims && dims.length > 0 ? dims.length : 0,
+      maxOverrideIdx + 1
+    );
+    const fallbackPaneArea = paneCount > 0 ? (effectiveGlassArea / quantity) / paneCount : 0;
+    const breakdown: PaneGlassBreakdownLine[] = [];
+    for (let pi = 0; pi < paneCount; pi++) {
+      const paneArea = dims && dims[pi]
+        ? (dims[pi].widthMm * dims[pi].heightMm) / 1_000_000
+        : fallbackPaneArea;
+      const override = paneOverrides!.find(po => po.paneIndex === pi);
+      const priceSqm = (override && override.pricePerSqm != null) ? override.pricePerSqm : glassPricePerSqm;
+      const paneCost = priceSqm != null ? priceSqm * paneArea : 0;
+      if (priceSqm != null) {
+        paneCostSum += paneCost;
+      }
+      breakdown.push({
+        paneIndex: pi,
+        areaSqm: paneArea,
+        pricePerSqm: priceSqm ?? 0,
+        costNzd: paneCost * quantity,
+        isOverride: override != null && override.pricePerSqm != null,
+      });
+    }
+    glassCostNzd = paneCostSum * quantity;
+    paneGlassBreakdown = breakdown;
+  } else {
+    glassCostNzd = glassPricePerSqm != null ? glassPricePerSqm * effectiveGlassArea : 0;
+  }
 
   const linerPricePerM = extras?.linerPricePerM ?? null;
   const linerCostNzd = linerPricePerM != null ? linerPricePerM * perimeterM * quantity : 0;
@@ -440,5 +494,6 @@ export function calculatePricing(
     marginNzd,
     marginPercent,
     labourBreakdown,
+    paneGlassBreakdown,
   };
 }

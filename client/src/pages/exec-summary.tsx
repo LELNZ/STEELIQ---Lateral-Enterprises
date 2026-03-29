@@ -718,7 +718,7 @@ export default function ExecSummary() {
         linerType: item.linerType || "",
         flashingSize: item.flashingSize || 0,
         wallThickness: item.wallThickness || 0,
-        heightFromFloor: item.heightFromFloor || 0,
+        heightFromFloor: item.heightFromFloor,
         pricePerSqm: item.pricePerSqm || 500,
         configurationId: item.configurationId || "",
         layout: item.layout || "standard",
@@ -783,7 +783,7 @@ export default function ExecSummary() {
         linerType: item.linerType || "",
         flashingSize: item.flashingSize ? `${item.flashingSize}mm` : "",
         wallThickness: item.wallThickness ? `${item.wallThickness}mm` : "",
-        heightFromFloor: item.heightFromFloor ? `${item.heightFromFloor}mm` : "",
+        heightFromFloor: item.heightFromFloor != null ? `${item.heightFromFloor}mm` : "",
         ...(item.category === "bay-window" ? {
           bayAngle: `${item.bayAngle || 135}°`,
           bayDepth: (item.bayDepth || 0) > 0 ? `${item.bayDepth}mm` : "",
@@ -806,6 +806,7 @@ export default function ExecSummary() {
         catDoorEnabled: item.catDoorEnabled || false,
         drawingImageKey,
         photos: ip.photos ?? [],
+        paneGlassSpecs: item.paneGlassSpecs || [],
         specValues,
         resolvedSpecs,
       };
@@ -1099,12 +1100,12 @@ export default function ExecSummary() {
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => generateQuoteMutation.mutate()}
-                disabled={generateQuoteMutation.isPending}
+                onClick={() => generateNewQuoteMutation.mutate()}
+                disabled={generateNewQuoteMutation.isPending}
                 data-testid="button-generate-quote"
               >
                 <FileText className="h-4 w-4 mr-1" />
-                {generateQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
+                {generateNewQuoteMutation.isPending ? "Generating..." : "Generate Quote"}
               </Button>
               <span className="text-xs text-muted-foreground mt-0.5 ml-1">Creates the first quote for this estimate</span>
             </div>
@@ -2288,7 +2289,7 @@ export default function ExecSummary() {
       <div style={{ position: "absolute", left: "-9999px", top: 0, overflow: "hidden", pointerEvents: "none" }} aria-hidden="true">
         {itemPricings.map((ip, idx) => (
           <div key={idx} data-testid={`drawing-svg-${idx}`} style={{ width: ip.item.width || 600, height: ip.item.height || 600 }}>
-            <DrawingCanvas config={ip.item} />
+            <DrawingCanvas config={ip.item} showPaneNumbers={Array.isArray(ip.item.paneGlassSpecs) && ip.item.paneGlassSpecs.length > 0} />
           </div>
         ))}
       </div>

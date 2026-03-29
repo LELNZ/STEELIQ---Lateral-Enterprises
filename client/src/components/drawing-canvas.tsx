@@ -26,9 +26,10 @@ interface PaneProps {
   foldDirection?: string;
   slideDirection?: string;
   strokeScale: number;
+  paneNumber?: number;
 }
 
-function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = false, openDirection = "out", foldDirection = "right", slideDirection = "right", strokeScale: ss }: PaneProps) {
+function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = false, openDirection = "out", foldDirection = "right", slideDirection = "right", strokeScale: ss, paneNumber }: PaneProps) {
   const inset = frameSize * 0.7;
   const gx = x + inset;
   const gy = y + inset;
@@ -42,6 +43,9 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
   const hingeDashed = openDirection === "in";
   const hingeDash = hingeDashed ? `${14 * ss} ${6 * ss}` : "none";
   const hingeStroke = hingeDashed ? 1.5 * ss : 1 * ss;
+
+  const paneNumberRadius = Math.min(gw, gh) * 0.12;
+  const paneNumberFontSize = paneNumberRadius * 1.3;
 
   return (
     <g>
@@ -120,6 +124,16 @@ function Pane({ x, y, w, h, frameSize, type, hingeSide = "left", halfSolid = fal
             fill="none" stroke="#2d2d2d" strokeWidth={1.2 * ss} />
         );
       })()}
+
+      {paneNumber != null && (
+        <g data-testid={`pane-number-${paneNumber}`}>
+          <circle cx={gx + paneNumberRadius * 1.2} cy={gy + paneNumberRadius * 1.2}
+            r={paneNumberRadius} fill="#dc2626" fillOpacity={0.9} stroke="white" strokeWidth={1 * ss} />
+          <text x={gx + paneNumberRadius * 1.2} y={gy + paneNumberRadius * 1.2 + paneNumberFontSize * 0.35}
+            textAnchor="middle" fontSize={paneNumberFontSize} fontWeight="700"
+            fill="white" fontFamily="sans-serif">{paneNumber}</text>
+        </g>
+      )}
     </g>
   );
 }
@@ -128,7 +142,7 @@ function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
 }
 
-function distributeSpaces(total: number, specs: number[]): number[] {
+export function distributeSpaces(total: number, specs: number[]): number[] {
   const specifiedSum = specs.reduce((s, v) => s + (v > 0 ? v : 0), 0);
   const autoCount = specs.filter(v => v <= 0).length;
 
@@ -198,10 +212,11 @@ function computeGridMetrics(
 
 function renderCustomGrid(
   W: number, H: number, customColumns: CustomColumn[],
-  frameSize: number, openDir: string, ss: number
+  frameSize: number, openDir: string, ss: number,
+  paneNumberStart?: number
 ) {
   if (!customColumns || customColumns.length === 0) {
-    return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
+    return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} paneNumber={paneNumberStart} />;
   }
 
   const metrics = computeGridMetrics(W, H, customColumns);
@@ -209,6 +224,7 @@ function renderCustomGrid(
 
   const elements: JSX.Element[] = [];
   let xOffset = 0;
+  let paneIdx = 0;
 
   for (let ci = 0; ci < customColumns.length; ci++) {
     const col = customColumns[ci];
@@ -223,6 +239,7 @@ function renderCustomGrid(
       const row = colRows[ri];
       const rowH = rowHeights[ri];
       const pType = (row.type || "fixed") as PaneProps["type"];
+      const pn = paneNumberStart != null ? paneNumberStart + paneIdx : undefined;
       elements.push(
         <Pane key={`${ci}-${ri}`}
           x={xOffset} y={yOffset} w={colW} h={rowH}
@@ -230,8 +247,10 @@ function renderCustomGrid(
           hingeSide={row.hingeSide || "left"}
           openDirection={pType === "hinge" ? (row.openDirection || "out") : openDir}
           slideDirection={row.slideDirection || "right"}
-          strokeScale={ss} />
+          strokeScale={ss}
+          paneNumber={pn} />
       );
+      paneIdx++;
       yOffset += rowH;
     }
     xOffset += colW;
@@ -296,7 +315,7 @@ function computeEntranceDoorMetrics(config: InsertQuoteItem, frameSize: number):
   return { sections, doorRowHeights, doorRowMmHeights, slRowHeights, slRowMmHeights, slLeftRowHeights, slLeftRowMmHeights };
 }
 
-function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
+function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number, showPaneNumbers?: boolean) {
   const {
     width: W, height: H, category, layout, hingeSide,
     openDirection, panels, sidelightWidth, sidelightSide, doorSplit, doorSplitHeight,
@@ -304,14 +323,15 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   } = config;
   const minPane = frameSize * 2;
   const od = openDirection || "out";
+  const pnStart = showPaneNumbers ? 1 : undefined;
 
   const noCustomCats = ["entrance-door", "hinge-door", "french-door", "bifold-door", "stacker-door"];
   if (layout === "custom" && !noCustomCats.includes(category)) {
-    return renderCustomGrid(W, H, customColumns || [], frameSize, od, ss);
+    return renderCustomGrid(W, H, customColumns || [], frameSize, od, ss, pnStart);
   }
 
   if (layout === "custom" && category === "hinge-door") {
-    const grid = renderCustomGrid(W, H, customColumns || [], frameSize, od, ss);
+    const grid = renderCustomGrid(W, H, customColumns || [], frameSize, od, ss, pnStart);
     const inset = frameSize * 0.7;
     const gx = inset;
     const gy = inset;
@@ -339,33 +359,33 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
   if (category === "windows-standard") {
     if (windowType === "french-left") {
       return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
-        type="hinge" hingeSide="left" openDirection="out" strokeScale={ss} />;
+        type="hinge" hingeSide="left" openDirection="out" strokeScale={ss} paneNumber={pnStart} />;
     }
     if (windowType === "french-right") {
       return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
-        type="hinge" hingeSide="right" openDirection="out" strokeScale={ss} />;
+        type="hinge" hingeSide="right" openDirection="out" strokeScale={ss} paneNumber={pnStart} />;
     }
     if (windowType === "french-pair") {
       const halfW = W / 2;
       return (
         <g>
           <Pane x={0} y={0} w={halfW} h={H} frameSize={frameSize}
-            type="hinge" hingeSide="left" openDirection="out" strokeScale={ss} />
+            type="hinge" hingeSide="left" openDirection="out" strokeScale={ss} paneNumber={pnStart} />
           <Pane x={halfW} y={0} w={halfW} h={H} frameSize={frameSize}
-            type="hinge" hingeSide="right" openDirection="out" strokeScale={ss} />
+            type="hinge" hingeSide="right" openDirection="out" strokeScale={ss} paneNumber={pnStart != null ? pnStart + 1 : undefined} />
         </g>
       );
     }
     const wt = windowType === "awning" ? "awning" : "fixed";
     return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize}
-      type={wt} openDirection="out" strokeScale={ss} />;
+      type={wt} openDirection="out" strokeScale={ss} paneNumber={pnStart} />;
   }
 
   if (category === "sliding-window" || category === "sliding-door") {
     return (
       <g>
-        <Pane x={0} y={0} w={W / 2} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />
-        <Pane x={W / 2} y={0} w={W / 2} h={H} frameSize={frameSize} type="sliding" strokeScale={ss} />
+        <Pane x={0} y={0} w={W / 2} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} paneNumber={pnStart} />
+        <Pane x={W / 2} y={0} w={W / 2} h={H} frameSize={frameSize} type="sliding" strokeScale={ss} paneNumber={pnStart != null ? pnStart + 1 : undefined} />
       </g>
     );
   }
@@ -377,6 +397,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const slRows: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightRows || [{ ...DEFAULT_DOOR_ROW }];
     const slLeftRowsDef: import("@shared/schema").EntranceDoorRow[] = config.entranceSidelightLeftRows || [{ ...DEFAULT_DOOR_ROW }];
     const elements: JSX.Element[] = [];
+    let paneCounter = pnStart != null ? pnStart : undefined;
 
     for (const sec of sections) {
       if (sec.role === "door") {
@@ -386,8 +407,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
           const pType = doorRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
           elements.push(
             <Pane key={`door-${ri}`} x={sec.x} y={yOff} w={sec.w} h={rh}
-              frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+              frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} paneNumber={paneCounter} />
           );
+          if (paneCounter != null) paneCounter++;
           yOff += rh;
         }
         const inset = frameSize * 0.7;
@@ -426,8 +448,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
           const pType = rowDefs[ri].type === "awning" ? "awning" as const : "fixed" as const;
           elements.push(
             <Pane key={`${sec.role}-${ri}`} x={sec.x} y={yOff} w={sec.w} h={rh}
-              frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+              frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} paneNumber={paneCounter} />
           );
+          if (paneCounter != null) paneCounter++;
           yOff += rh;
         }
       }
@@ -441,13 +464,15 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const rowHeights = distributeSpaces(H, hdRows.map(r => r.height || 0));
     const elements: JSX.Element[] = [];
     let yOff = 0;
+    let hdPaneCounter = pnStart != null ? pnStart : undefined;
     for (let ri = 0; ri < hdRows.length; ri++) {
       const rh = rowHeights[ri];
       const pType = hdRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
       elements.push(
         <Pane key={`hd-${ri}`} x={0} y={yOff} w={W} h={rh}
-          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} paneNumber={hdPaneCounter} />
       );
+      if (hdPaneCounter != null) hdPaneCounter++;
       yOff += rh;
     }
     const inset = frameSize * 0.7;
@@ -486,6 +511,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const leftRowHeights = distributeSpaces(H, leftRows.map(r => r.height || 0));
     const rightRowHeights = distributeSpaces(H, rightRows.map(r => r.height || 0));
     const elements: JSX.Element[] = [];
+    let fdPaneCounter = pnStart != null ? pnStart : undefined;
 
     let yOff = 0;
     for (let ri = 0; ri < leftRows.length; ri++) {
@@ -493,8 +519,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
       const pType = leftRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
       elements.push(
         <Pane key={`fl-${ri}`} x={0} y={yOff} w={halfW} h={rh}
-          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} paneNumber={fdPaneCounter} />
       );
+      if (fdPaneCounter != null) fdPaneCounter++;
       yOff += rh;
     }
 
@@ -504,8 +531,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
       const pType = rightRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
       elements.push(
         <Pane key={`fr-${ri}`} x={halfW} y={yOff} w={halfW} h={rh}
-          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+          frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} paneNumber={fdPaneCounter} />
       );
+      if (fdPaneCounter != null) fdPaneCounter++;
       yOff += rh;
     }
 
@@ -551,6 +579,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const lw = W / leafCount;
     const pRows: EntranceDoorRow[][] = config.panelRows || [];
     const elements: JSX.Element[] = [];
+    let bfPaneCounter = pnStart != null ? pnStart : undefined;
 
     for (let i = 0; i < leafCount; i++) {
       const leafRows = pRows[i] || [{ ...DEFAULT_DOOR_ROW }];
@@ -563,8 +592,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
         const pType = leafRows[ri].type === "awning" ? "awning" as const : "fixed" as const;
         elements.push(
           <Pane key={`bf-${i}-${ri}`} x={px} y={yOff} w={lw} h={rh}
-            frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} />
+            frameSize={frameSize} type={pType} openDirection={od} strokeScale={ss} paneNumber={bfPaneCounter} />
         );
+        if (bfPaneCounter != null) bfPaneCounter++;
         yOff += rh;
       }
 
@@ -603,6 +633,7 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     const pw = W / panelCount;
     const pRows: EntranceDoorRow[][] = config.panelRows || [];
     const elements: JSX.Element[] = [];
+    let stPaneCounter = pnStart != null ? pnStart : undefined;
 
     const STACKER_DEFAULT_ROW: EntranceDoorRow = { height: 0, type: "sliding", slideDirection: "right" };
     for (let i = 0; i < panelCount; i++) {
@@ -622,8 +653,9 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
         elements.push(
           <Pane key={`st-${i}-${ri}`} x={px} y={yOff} w={pw} h={rh}
             frameSize={frameSize} type={pType} slideDirection={rowDef.slideDirection ?? "right"}
-            openDirection={od} strokeScale={ss} />
+            openDirection={od} strokeScale={ss} paneNumber={stPaneCounter} />
         );
+        if (stPaneCounter != null) stPaneCounter++;
         yOff += rh;
       }
 
@@ -750,6 +782,39 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
       );
     }
 
+    if (pnStart != null) {
+      const pnR = Math.max(frameSize * 0.45, 10);
+      if (splitEnabled && splitPos > 0 && splitPos < W) {
+        const glassSplitLeft = Math.max(glassLeft, splitPos - inset * 0.5);
+        const glassSplitRight = Math.min(glassRight, splitPos + inset * 0.5);
+        const lx = glassLeft + pnR + 2;
+        const ly = glassTopLeftY + pnR + 2;
+        const rx = glassSplitRight + pnR + 2;
+        const ry = glassSlopeAtX(glassSplitRight) + pnR + 2;
+        elements.push(
+          <g key="pn-left">
+            <circle cx={lx} cy={ly} r={pnR} fill="red" />
+            <text x={lx} y={ly} textAnchor="middle" dominantBaseline="central" fill="white" fontSize={pnR * 1.2} fontWeight="bold">{pnStart}</text>
+          </g>
+        );
+        elements.push(
+          <g key="pn-right">
+            <circle cx={rx} cy={ry} r={pnR} fill="red" />
+            <text x={rx} y={ry} textAnchor="middle" dominantBaseline="central" fill="white" fontSize={pnR * 1.2} fontWeight="bold">{pnStart + 1}</text>
+          </g>
+        );
+      } else {
+        const px = glassLeft + pnR + 2;
+        const py = glassTopLeftY + pnR + 2;
+        elements.push(
+          <g key="pn-single">
+            <circle cx={px} cy={py} r={pnR} fill="red" />
+            <text x={px} y={py} textAnchor="middle" dominantBaseline="central" fill="white" fontSize={pnR * 1.2} fontWeight="bold">{pnStart}</text>
+          </g>
+        );
+      }
+    }
+
     return <g>{elements}</g>;
   }
 
@@ -765,13 +830,13 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
       <g>
         <g transform={`skewY(${-(Math.atan2(skewClamp, H) * 180) / Math.PI})`}>
           <Pane x={0} y={0} w={sideW} h={H} frameSize={frameSize}
-            type="awning" openDirection={od} strokeScale={ss} />
+            type="awning" openDirection={od} strokeScale={ss} paneNumber={pnStart} />
         </g>
         <Pane x={sideW} y={0} w={cw} h={H} frameSize={frameSize}
-          type="fixed" strokeScale={ss} />
+          type="fixed" strokeScale={ss} paneNumber={pnStart != null ? pnStart + 1 : undefined} />
         <g transform={`translate(${sideW + cw}, 0) skewY(${(Math.atan2(skewClamp, H) * 180) / Math.PI})`}>
           <Pane x={0} y={0} w={sideW} h={H} frameSize={frameSize}
-            type="awning" openDirection={od} strokeScale={ss} />
+            type="awning" openDirection={od} strokeScale={ss} paneNumber={pnStart != null ? pnStart + 2 : undefined} />
         </g>
         {(depth > 0 || angle !== 135) && (
           <text
@@ -788,10 +853,10 @@ function renderDrawing(config: InsertQuoteItem, frameSize: number, ss: number) {
     );
   }
 
-  return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} />;
+  return <Pane x={0} y={0} w={W} h={H} frameSize={frameSize} type="fixed" strokeScale={ss} paneNumber={pnStart} />;
 }
 
-const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ config }, ref) => {
+const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem; showPaneNumbers?: boolean }>(({ config, showPaneNumbers }, ref) => {
   const { width: W, height: H, name, quantity, category, layout, customColumns } = config;
   const isRaked = category === "raked-fixed";
   const rakedLeftH = isRaked ? ((config as any).rakedLeftHeight || H) : H;
@@ -896,7 +961,7 @@ const DrawingCanvas = forwardRef<SVGSVGElement, { config: InsertQuoteItem }>(({ 
         {name || "Untitled"} (Qty: {quantity})
       </text>
 
-      {renderDrawing(config, frameSize, ss)}
+      {renderDrawing(config, frameSize, ss, showPaneNumbers)}
 
       <g data-testid="dimension-width">
         <line x1={0} y1={H + 2} x2={0} y2={H + dimGap + tickLen} stroke="#555" strokeWidth={extStroke} />
