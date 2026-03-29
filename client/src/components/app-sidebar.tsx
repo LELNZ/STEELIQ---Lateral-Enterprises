@@ -3,6 +3,7 @@ import {
   Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users,
   ShieldCheck, HardHat, Building2, Contact, ReceiptText, FolderOpen,
   Calendar, ShoppingCart, Factory, Truck, CheckSquare, LineChart, Lock,
+  Shield,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
@@ -69,6 +70,7 @@ export function AppSidebar() {
   const isLibraryActive = location.startsWith("/library");
   const isSettingsActive = location.startsWith("/settings");
   const isAdminActive = location.startsWith("/admin") || location.startsWith("/users");
+  const isGlassGovernanceActive = location.startsWith("/glass-governance");
   const isProjectsActive = location.startsWith("/projects");
   const isInvoicesActive = location.startsWith("/invoices");
   const isCustomersActive = location.startsWith("/customers");
@@ -254,6 +256,17 @@ export function AppSidebar() {
                     <Link href="/admin" onClick={(e) => guardedClick(e, "/admin")} data-testid="link-sidebar-admin-users">
                       <ShieldCheck />
                       <span>Users</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {canManageUsers && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isGlassGovernanceActive} tooltip="Glass Governance">
+                    <Link href="/glass-governance" onClick={(e) => guardedClick(e, "/glass-governance")} data-testid="link-sidebar-glass-governance">
+                      <Shield />
+                      <span>Glass Governance</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

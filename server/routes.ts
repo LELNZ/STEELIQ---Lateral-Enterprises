@@ -4805,6 +4805,60 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Glass Library Governance: audit + batch integrity ──────────
+  app.get("/api/admin/glass-governance/audit", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { auditGlassLibrary } = await import("@shared/glass-governance");
+      const audit = auditGlassLibrary();
+      res.json(audit);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/admin/glass-governance/batch-integrity", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { classifyBatchItem } = await import("@shared/glass-governance");
+      const allJobs = await storage.getAllJobs();
+      const results: any[] = [];
+      for (const job of allJobs) {
+        const items = await storage.getJobItems(job.id);
+        for (const item of items) {
+          const cfg = item.config as any;
+          if (!cfg) continue;
+          const specs = cfg.paneGlassSpecs;
+          if (!specs || !Array.isArray(specs) || specs.length === 0) continue;
+          const hasNoValues = specs.every((s: any) => !s.iguType && !s.glassType && !s.glassThickness);
+          if (hasNoValues) continue;
+          const paneCount = Math.max(1, specs.length);
+          const result = classifyBatchItem(
+            item.id,
+            cfg.name || "Unnamed",
+            job.id,
+            job.name,
+            cfg.category || "",
+            cfg.heightFromFloor ?? null,
+            specs,
+            paneCount,
+            !!cfg.glassIguType
+          );
+          if (result) results.push(result);
+        }
+      }
+      res.json({ items: results, total: results.length });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ─── Governance: Recent governance audit history (Owner/Admin only) ──────────
   app.get("/api/settings/governance/audit-history", async (req, res) => {
     try {
