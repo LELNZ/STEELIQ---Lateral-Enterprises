@@ -44,7 +44,6 @@ import InvoicesPage from "@/pages/invoices";
 import InvoiceDetailPage from "@/pages/invoice-detail";
 import ProjectsList from "@/pages/projects-list";
 import ProjectDetail from "@/pages/project-detail";
-import GlassGovernance from "@/pages/glass-governance";
 
 function QuickCreateMenu() {
   const [, navigate] = useLocation();
@@ -123,7 +122,6 @@ function Router() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />
-      <Route path="/glass-governance" component={GlassGovernance} />
       <Route component={NotFound} />
     </Switch>
   );
