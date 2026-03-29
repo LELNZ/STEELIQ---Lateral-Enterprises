@@ -851,13 +851,18 @@ export default function QuoteBuilder() {
       }
       return Math.max(1, total);
     }
+    if (cat === "raked-fixed") {
+      const splitOn = (w as any).rakedSplitEnabled || false;
+      const splitPos = (w as any).rakedSplitPosition || 0;
+      return (splitOn && splitPos > 0) ? 2 : 1;
+    }
     return Math.max(1,
       configSignature.awningCount + configSignature.fixedCount +
       configSignature.hingeCount + configSignature.slidingCount
     );
-  }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height, w.category, w.entranceDoorRows, w.entranceSidelightRows, w.entranceSidelightLeftRows, w.sidelightEnabled, w.sidelightSide, w.hingeDoorRows, w.frenchDoorLeftRows, w.frenchDoorRightRows, w.panels, w.panelRows]);
+  }, [configSignature.awningCount, configSignature.fixedCount, configSignature.hingeCount, configSignature.slidingCount, w.layout, w.customColumns, w.width, w.height, w.category, w.entranceDoorRows, w.entranceSidelightRows, w.entranceSidelightLeftRows, w.sidelightEnabled, w.sidelightSide, w.hingeDoorRows, w.frenchDoorLeftRows, w.frenchDoorRightRows, w.panels, w.panelRows, (w as any).rakedSplitEnabled, (w as any).rakedSplitPosition]);
 
-  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor > 0 && w.heightFromFloor <= 800 && effectivePaneCount > 1;
+  const showPaneGlassSelectors = w.heightFromFloor != null && w.heightFromFloor > 0 && w.heightFromFloor <= 799 && effectivePaneCount > 1;
 
   useEffect(() => {
     const specs = w.paneGlassSpecs || [];
@@ -3562,7 +3567,7 @@ export default function QuoteBuilder() {
                   <div className="flex items-start gap-1.5 mb-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="pane-glass-info-banner">
                     <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                     <span className="text-xs text-blue-700 dark:text-blue-300">
-                      Height from floor is under 800mm with {effectivePaneCount} panes — you can set glazing per pane below.
+                      Height from floor is under 800mm with {effectivePaneCount} panes — you can set glazing per pane below. Pane controls are active for FFL 1–799mm.
                     </span>
                   </div>
 
