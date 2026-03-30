@@ -2139,6 +2139,7 @@ export async function registerRoutes(
     drawingCache.set(key, data);
   }
 
+  // ─── Drawing Upload: Creates canonical asset in DB (authoritative) + FS mirror ───
   app.post("/api/drawing-images", drawingUpload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     try {
@@ -2167,6 +2168,7 @@ export async function registerRoutes(
   const MAX_DRAWING_RECOVERY_SIZE = 5 * 1024 * 1024;
   const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
+  // ─── Drawing Recovery: Admin-only, restores missing canonical asset to DB — skips if already canonical ───
   app.put("/api/drawing-images/:key", requireAuth, drawingUpload.single("file"), async (req, res) => {
     if (req.user?.role !== "admin" && req.user?.role !== "owner") {
       return res.status(403).json({ error: "Admin or owner role required" });
@@ -2206,6 +2208,7 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Drawing Integrity Check: Admin-only, identifies keys missing from canonical DB store ───
   app.post("/api/drawing-images/check-missing", requireAuth, async (req, res) => {
     if (req.user?.role !== "admin" && req.user?.role !== "owner") {
       return res.status(403).json({ error: "Admin or owner role required" });
@@ -2233,6 +2236,7 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Drawing Regeneration: Admin-only, explicit headless re-render for missing canonical assets ───
   app.post("/api/drawing-images/regenerate", requireAuth, async (req, res) => {
     if (req.user?.role !== "admin" && req.user?.role !== "owner") {
       return res.status(403).json({ error: "Admin or owner role required" });
@@ -2306,6 +2310,7 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Drawing Read: Canonical → Cache → DB (authoritative) → FS (transitional fallback, promotes to DB) → 404 ───
   app.get("/api/drawing-images/:key", async (req, res) => {
     const key = req.params.key;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
@@ -2326,6 +2331,11 @@ export async function registerRoutes(
       const data = fs.readFileSync(filePath);
       if (data.length > 100) {
         drawingCacheSet(key, data);
+        storage.saveItemPhoto(key, data, "image/png").then(() => {
+          console.log(`[drawing-canonicalize] Promoted ${key} from filesystem fallback to canonical DB store`);
+        }).catch((err: any) => {
+          console.warn(`[drawing-canonicalize] Failed to promote ${key} to DB:`, err.message);
+        });
         return res.type("image/png").send(data);
       }
     }
