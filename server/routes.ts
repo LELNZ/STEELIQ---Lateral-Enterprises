@@ -2525,7 +2525,7 @@ export async function registerRoutes(
     try {
       const hashed = await hashPassword(parsed.data.password);
       const { divisionCodes, divisionCode, ...rest } = parsed.data;
-      const resolvedDivisionCode = divisionCodes?.length === 1 ? divisionCodes[0] : (divisionCode ?? null);
+      const resolvedDivisionCode = divisionCodes?.length ? divisionCodes[0] : (divisionCode ?? null);
       const resolvedDivisionCodes = divisionCodes ?? (divisionCode ? [divisionCode] : null);
       const user = await storage.createUser({ ...rest, password: hashed, mustChangePassword: true, divisionCode: resolvedDivisionCode, divisionCodes: resolvedDivisionCodes } as any);
       const { password: _pw, ...safeUser } = user;
@@ -2573,7 +2573,7 @@ export async function registerRoutes(
       const patchData: any = { ...rest };
       if (divisionCodes !== undefined) {
         patchData.divisionCodes = divisionCodes;
-        patchData.divisionCode = divisionCodes?.length === 1 ? divisionCodes[0] : (divisionCodes?.length ? divisionCodes[0] : null);
+        patchData.divisionCode = divisionCodes?.length ? divisionCodes[0] : null;
       } else if (divisionCode !== undefined) {
         patchData.divisionCode = divisionCode;
         patchData.divisionCodes = divisionCode ? [divisionCode] : null;
