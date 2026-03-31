@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { DomainType } from "./schema";
 
 const snapshotPhotoSchema = z.object({
   key: z.string(),
@@ -76,3 +77,38 @@ export const estimateSnapshotSchema = z.object({
 export type EstimateSnapshot = z.infer<typeof estimateSnapshotSchema>;
 export type SnapshotItem = z.infer<typeof snapshotItemSchema>;
 export type TotalsBreakdown = z.infer<typeof totalsBreakdownSchema>;
+
+export type JoinerySnapshotItem = SnapshotItem;
+
+export interface LaserSnapshotItemBase {
+  domain: "laser";
+  itemNumber: number;
+  itemRef: string;
+  title: string;
+  quantity: number;
+  materialType?: string;
+  thickness?: number;
+  photos?: z.infer<typeof snapshotPhotoSchema>[];
+}
+
+export interface EngineeringSnapshotItemBase {
+  domain: "engineering";
+  itemNumber: number;
+  itemRef: string;
+  title: string;
+  quantity: number;
+}
+
+export type DomainSnapshotItemEnvelope =
+  | { domain: "joinery"; item: JoinerySnapshotItem }
+  | { domain: "laser"; item: LaserSnapshotItemBase }
+  | { domain: "engineering"; item: EngineeringSnapshotItemBase };
+
+export function resolveSnapshotItemDomain(
+  item: SnapshotItem,
+  quoteDomainType: DomainType
+): "joinery" | "laser" | "engineering" {
+  if (quoteDomainType === "laser") return "laser";
+  if (quoteDomainType === "engineering") return "engineering";
+  return "joinery";
+}

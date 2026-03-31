@@ -4,6 +4,7 @@ import type {
   QuoteDocumentItemPhoto,
   TotalsDisplayConfig,
 } from "./quote-document";
+import type { DomainType } from "@shared/schema";
 import type { QuoteTemplate } from "./quote-template";
 import { resolveQuoteTemplate, type CompanyTemplateConfig } from "./quote-template";
 
@@ -110,6 +111,7 @@ export interface RenderLegalBlock {
 }
 
 export interface QuoteRenderModel {
+  domainType: DomainType;
   presentationMode: PresentationMode;
   resolvedTemplate: QuoteTemplate;
   header: RenderHeader;
@@ -278,6 +280,7 @@ export function buildQuoteRenderModel(
   );
 
   return {
+    domainType: doc.domainType,
     presentationMode: mode,
     resolvedTemplate: resolved,
     header: {

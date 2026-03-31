@@ -1,4 +1,5 @@
-import type { OrgSettings, DivisionSettings, Quote, QuoteRevision, SpecDictionaryEntry } from "@shared/schema";
+import type { OrgSettings, DivisionSettings, Quote, QuoteRevision, SpecDictionaryEntry, DomainType } from "@shared/schema";
+import { resolveQuoteDomainType } from "@shared/schema";
 import type { EstimateSnapshot, SnapshotItem } from "@shared/estimate-snapshot";
 
 export interface TotalsDisplayConfig {
@@ -30,6 +31,7 @@ export interface PreviewData {
   currentRevision: QuoteRevision;
   snapshot: EstimateSnapshot;
   templateKey: string;
+  domainType?: DomainType;
   specDictionaryGrouped: Record<string, SpecDictionaryEntry[]>;
   effectiveSpecDisplayKeys: string[];
   totalsDisplayConfig: TotalsDisplayConfig | null;
@@ -141,6 +143,7 @@ export interface QuoteDocumentSpecDisplay {
 }
 
 export interface QuoteDocumentModel {
+  domainType: DomainType;
   metadata: QuoteDocumentMetadata;
   branding: QuoteDocumentBranding;
   org: QuoteDocumentOrg;
@@ -203,7 +206,10 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
     ...(preview.totalsDisplayConfig || {}),
   };
 
+  const domainType = preview.domainType || resolveQuoteDomainType(quote.divisionId);
+
   return {
+    domainType,
     metadata: {
       quoteId: quote.id,
       quoteNumber: quote.number,

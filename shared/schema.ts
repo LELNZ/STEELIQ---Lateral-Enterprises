@@ -224,6 +224,48 @@ export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });
 export type QuoteItem = z.infer<typeof quoteItemSchema>;
 export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
 
+export type JoineryItemPayload = QuoteItem;
+
+export interface LaserItemPayload {
+  domain: "laser";
+  id: string;
+  name: string;
+  quantity: number;
+  materialType?: string;
+  thickness?: number;
+  sheetWidth?: number;
+  sheetHeight?: number;
+}
+
+export interface EngineeringItemPayload {
+  domain: "engineering";
+  id: string;
+  name: string;
+  quantity: number;
+}
+
+export type DomainItemEnvelope =
+  | { domain: "joinery"; payload: JoineryItemPayload }
+  | { domain: "laser"; payload: LaserItemPayload }
+  | { domain: "engineering"; payload: EngineeringItemPayload };
+
+export function resolveQuoteDomainType(divisionCode: string | null | undefined): DomainType {
+  if (!divisionCode) return "general";
+  return DIVISION_DOMAIN_MAP[divisionCode] || "general";
+}
+
+export function isJoineryDomain(domainType: DomainType): boolean {
+  return domainType === "joinery";
+}
+
+export function isLaserDomain(domainType: DomainType): boolean {
+  return domainType === "laser";
+}
+
+export function isEngineeringDomain(domainType: DomainType): boolean {
+  return domainType === "engineering";
+}
+
 export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),

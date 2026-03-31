@@ -2280,6 +2280,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid snapshot" });
       }
 
+      const { isDomainDrawingSupported } = await import("./lib/drawing-regenerator.tsx");
+      const { resolveQuoteDomainType } = await import("@shared/schema");
+      const quote = await storage.getQuote(quoteId);
+      const quoteDomain = resolveQuoteDomainType(quote?.divisionId);
+      if (!isDomainDrawingSupported(quoteDomain)) {
+        return res.json({ results: [], skipped: true, reason: `Drawing regeneration not supported for domain: ${quoteDomain}` });
+      }
+
       const VALID_KEY_RE = /^[a-f0-9-]+\.png$/;
       const resolvedDir = path.resolve(DRAWING_DIR);
       const results: { key: string; status: string; classification: string }[] = [];
@@ -2392,6 +2400,9 @@ export async function registerRoutes(
         }
       }
 
+      const { resolveQuoteDomainType } = await import("@shared/schema");
+      const domainType = resolveQuoteDomainType(divCode);
+
       res.json({
         orgSettings: orgSettings || {},
         divisionSettings: divisionSettings || {},
@@ -2399,6 +2410,7 @@ export async function registerRoutes(
         currentRevision,
         snapshot: currentRevision.snapshotJson,
         templateKey: currentRevision.templateKey || "base_v1",
+        domainType,
         specDictionaryGrouped: grouped,
         effectiveSpecDisplayKeys,
         totalsDisplayConfig: (currentRevision as any).totalsDisplayConfigJson || null,
