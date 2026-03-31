@@ -18,3 +18,9 @@ id = "NbVnbn5WEYtMZK5iYmTrZ"
 uri = "file://.local/PHASE2A_VALIDATION_REPORT.md"
 type = "text"
 title = "Phase 2A Validation Report — Boundary Correction & Raked Panel-Split"
+
+[[outputs]]
+id = "vUiqKF41oMQRjSX-0vLw2"
+uri = "file://.local/laser-discovery-report.md"
+type = "text"
+title = "SteelIQ Laser Estimating Discovery Report"
