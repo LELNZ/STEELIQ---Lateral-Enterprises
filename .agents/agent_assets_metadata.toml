@@ -24,3 +24,9 @@ id = "vUiqKF41oMQRjSX-0vLw2"
 uri = "file://.local/laser-discovery-report.md"
 type = "text"
 title = "SteelIQ Laser Estimating Discovery Report"
+
+[[outputs]]
+id = "9tu6HgEF1ZCTMhi90rTnV"
+uri = "file://.local/platform-prep-0a-report.md"
+type = "text"
+title = "Platform Prep 0A — Forensic Completion Report"
