@@ -12,6 +12,15 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
 export const USER_ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer"] as const;
 export type UserRole = typeof USER_ROLES[number];
 
+export const DOMAIN_TYPES = ["joinery", "engineering", "laser", "general"] as const;
+export type DomainType = typeof DOMAIN_TYPES[number];
+
+export const DIVISION_DOMAIN_MAP: Record<string, DomainType> = {
+  LJ: "joinery",
+  LE: "engineering",
+  LL: "laser",
+};
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -20,6 +29,7 @@ export const users = pgTable("users", {
   displayName: text("display_name"),
   role: text("role").notNull().default("estimator"),
   divisionCode: text("division_code"),
+  divisionCodes: text("division_codes").array(),
   isActive: boolean("is_active").notNull().default(true),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
@@ -33,6 +43,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   displayName: z.string().optional(),
   role: z.enum(USER_ROLES).default("estimator"),
   divisionCode: z.string().optional(),
+  divisionCodes: z.array(z.string()).optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -459,6 +470,7 @@ export type OrgSettings = typeof orgSettings.$inferSelect;
 
 export const divisionSettings = pgTable("division_settings", {
   divisionCode: varchar("division_code").primaryKey(),
+  domainType: text("domain_type").notNull().default("general"),
   tradingName: text("trading_name"),
   logoUrl: text("logo_url"),
   templateKey: text("template_key").notNull().default("base_v1"),

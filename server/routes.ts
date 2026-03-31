@@ -296,6 +296,29 @@ export async function registerRoutes(
     return role === "owner" || role === "admin";
   };
 
+  const getUserDivisions = (req: any): string[] => {
+    const user = req.user;
+    if (!user) return [];
+    if (user.divisionCodes && Array.isArray(user.divisionCodes) && user.divisionCodes.length > 0) {
+      return user.divisionCodes;
+    }
+    if (user.divisionCode) return [user.divisionCode];
+    return [];
+  };
+
+  const isUserAllDivision = (req: any): boolean => {
+    if (isPrivilegedUser(req)) return true;
+    const divisions = getUserDivisions(req);
+    return divisions.length === 0;
+  };
+
+  const userCanAccessDivision = (req: any, recordDivision: string | null): boolean => {
+    if (isUserAllDivision(req)) return true;
+    if (!recordDivision) return true;
+    const divisions = getUserDivisions(req);
+    return divisions.includes(recordDivision);
+  };
+
   app.post("/api/jobs", async (req, res) => {
     try {
       const parsed = insertJobSchema.parse(req.body);
@@ -1064,7 +1087,7 @@ export async function registerRoutes(
     snapshot: estimateSnapshotSchema,
     sourceJobId: z.string().optional(),
     customer: z.string().min(1),
-    divisionCode: z.string().optional().default("LJ"),
+    divisionCode: z.string().min(1, "Division code is required"),
     mode: z.enum(["revision", "new_quote"]).optional().default("revision"),
     quoteType: z.enum(["renovation", "new_build"]).optional(),
   });
@@ -1268,11 +1291,9 @@ export async function registerRoutes(
       const allQuotes = await storage.getAllQuotes();
       const enriched = await enrichQuotesWithOrphanState(allQuotes);
 
-      const userDivision = req.user?.divisionCode;
-      const isAllDivision = !req.user?.divisionCode || req.user?.role === "admin" || req.user?.role === "owner";
-      let filtered = isAllDivision
+      let filtered = isUserAllDivision(req)
         ? enriched
-        : enriched.filter(q => (q.divisionId || null) === userDivision);
+        : enriched.filter(q => userCanAccessDivision(req, q.divisionId || null));
       if (!isPrivilegedUser(req)) {
         filtered = filtered.filter(q => !q.isDemoRecord);
       }
@@ -1300,9 +1321,7 @@ export async function registerRoutes(
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       if (quote.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Quote not found" });
-      const userDivision = req.user?.divisionCode;
-      const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-      if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
+      if (!userCanAccessDivision(req, quote.divisionId || null)) {
         return res.status(403).json({ error: "Access denied: different division" });
       }
       const revisions = await storage.getQuoteRevisions(quote.id);
@@ -2351,9 +2370,9 @@ export async function registerRoutes(
       if (!currentRevision) return res.status(404).json({ error: "No revision found" });
 
       const orgSettings = await storage.getOrgSettings();
-      const divCode = quote.divisionId || "LJ";
-      const divisionSettings = await storage.getDivisionSettings(divCode);
-      const specEntries = await storage.getSpecDictionary(divCode);
+      const divCode = quote.divisionId || null;
+      const divisionSettings = divCode ? await storage.getDivisionSettings(divCode) : null;
+      const specEntries = divCode ? await storage.getSpecDictionary(divCode) : [];
 
       const grouped: Record<string, typeof specEntries> = {};
       for (const entry of specEntries) {
@@ -2499,12 +2518,16 @@ export async function registerRoutes(
       displayName: z.string().optional(),
       role: z.enum(["owner", "admin", "estimator", "finance", "production", "viewer"]).default("estimator"),
       divisionCode: z.string().optional(),
+      divisionCodes: z.array(z.string()).optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const hashed = await hashPassword(parsed.data.password);
-      const user = await storage.createUser({ ...parsed.data, password: hashed, mustChangePassword: true } as any);
+      const { divisionCodes, divisionCode, ...rest } = parsed.data;
+      const resolvedDivisionCode = divisionCodes?.length === 1 ? divisionCodes[0] : (divisionCode ?? null);
+      const resolvedDivisionCodes = divisionCodes ?? (divisionCode ? [divisionCode] : null);
+      const user = await storage.createUser({ ...rest, password: hashed, mustChangePassword: true, divisionCode: resolvedDivisionCode, divisionCodes: resolvedDivisionCodes } as any);
       const { password: _pw, ...safeUser } = user;
       return res.status(201).json(safeUser);
     } catch (e: any) {
@@ -2539,13 +2562,23 @@ export async function registerRoutes(
       email: z.string().email().optional().nullable(),
       role: z.enum(["owner", "admin", "estimator", "finance", "production", "viewer"]).optional(),
       divisionCode: z.string().optional().nullable(),
+      divisionCodes: z.array(z.string()).optional().nullable(),
       isActive: z.boolean().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const userId = String(req.params.id);
-      const updated = await storage.updateUser(userId, parsed.data as any);
+      const { divisionCodes, divisionCode, ...rest } = parsed.data;
+      const patchData: any = { ...rest };
+      if (divisionCodes !== undefined) {
+        patchData.divisionCodes = divisionCodes;
+        patchData.divisionCode = divisionCodes?.length === 1 ? divisionCodes[0] : (divisionCodes?.length ? divisionCodes[0] : null);
+      } else if (divisionCode !== undefined) {
+        patchData.divisionCode = divisionCode;
+        patchData.divisionCodes = divisionCode ? [divisionCode] : null;
+      }
+      const updated = await storage.updateUser(userId, patchData);
       if (!updated) return res.status(404).json({ error: "User not found" });
       const { password: _pw, ...safeUser } = updated;
       return res.json(safeUser);
@@ -2942,17 +2975,19 @@ export async function registerRoutes(
 
       // Assign lifecycle template version at acceptance (audit-safe milestone)
       try {
-        const divisionCode = quote.divisionId ?? "LJ";
-        const existingInstance = await storage.getLifecycleInstanceForQuote(quote.id);
-        if (!existingInstance) {
-          const template = await storage.getActiveLifecycleTemplate(divisionCode);
-          if (template) {
-            await storage.createLifecycleInstance({
-              quoteId: quote.id,
-              divisionCode,
-              templateId: template.id,
-              templateVersion: template.version,
-            });
+        const divisionCode = quote.divisionId;
+        if (divisionCode) {
+          const existingInstance = await storage.getLifecycleInstanceForQuote(quote.id);
+          if (!existingInstance) {
+            const template = await storage.getActiveLifecycleTemplate(divisionCode);
+            if (template) {
+              await storage.createLifecycleInstance({
+                quoteId: quote.id,
+                divisionCode,
+                templateId: template.id,
+                templateVersion: template.version,
+              });
+            }
           }
         }
       } catch (lcErr: any) {
@@ -2969,9 +3004,7 @@ export async function registerRoutes(
   app.get("/api/invoices", async (req, res) => {
     try {
       const all = await storage.getAllInvoicesEnriched();
-      const userDivision = req.user?.divisionCode;
-      const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-      let filtered = isAllDivision ? all : all.filter(i => (i.divisionCode || null) === userDivision);
+      let filtered = isUserAllDivision(req) ? all : all.filter(i => userCanAccessDivision(req, i.divisionCode || null));
       if (!isPrivilegedUser(req)) {
         filtered = filtered.filter(i => !i.isDemoRecord);
       }
@@ -2985,9 +3018,7 @@ export async function registerRoutes(
     try {
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
-      const userDivision = req.user?.divisionCode;
-      const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-      if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
+      if (!userCanAccessDivision(req, quote.divisionId || null)) {
         return res.status(403).json({ error: "Access denied: different division" });
       }
       return res.json(await storage.getInvoicesByQuote(req.params.id));
@@ -3335,9 +3366,7 @@ export async function registerRoutes(
     const invoice = await storage.getInvoice(req.params.id);
     if (!invoice) return res.status(404).json({ error: "Not found" });
     if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-    const userDivision = req.user?.divisionCode;
-    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+    if (!userCanAccessDivision(req, invoice.divisionCode || null)) {
       return res.status(403).json({ error: "Access denied: different division" });
     }
     let customerName: string | null = null;
@@ -3374,9 +3403,7 @@ export async function registerRoutes(
     const invoice = await storage.getInvoice(req.params.id);
     if (!invoice) return res.status(404).json({ error: "Not found" });
     if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-    const userDivision = req.user?.divisionCode;
-    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+    if (!userCanAccessDivision(req, invoice.divisionCode || null)) {
       return res.status(403).json({ error: "Access denied: different division" });
     }
     const lines = await storage.getInvoiceLines(req.params.id);
@@ -3411,9 +3438,7 @@ export async function registerRoutes(
     const invoice = await storage.getInvoice(invoiceId);
     if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return null; }
     if (invoice.isDemoRecord && !isPrivilegedUser(req)) { res.status(404).json({ error: "Not found" }); return null; }
-    const userDivision = req.user?.divisionCode;
-    const isAllDivision = !userDivision || req.user?.role === "admin" || req.user?.role === "owner";
-    if (!isAllDivision && (invoice.divisionCode || null) !== userDivision) {
+    if (!userCanAccessDivision(req, invoice.divisionCode || null)) {
       res.status(403).json({ error: "Access denied: different division" }); return null;
     }
     if (requireEditable && !EDITABLE_INVOICE_STATUSES.has(invoice.status)) {
@@ -3504,9 +3529,7 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Not found" });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-      const userDiv = req.user?.divisionCode;
-      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
-      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
+      if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
       const userId = req.user?.id ?? null;
 
       const PUSHED_STATUSES = ["pushed_to_xero_draft", "approved"] as const;
@@ -3643,9 +3666,7 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Invoice not found." });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-      const userDiv = req.user?.divisionCode;
-      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
-      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
+      if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
 
       if (invoice.status !== "ready_for_xero") {
         return res.status(400).json({
@@ -3779,9 +3800,7 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Not found" });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-      const userDiv = req.user?.divisionCode;
-      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
-      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
+      if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
       const userId = req.user?.id ?? null;
       const updated = await storage.updateInvoice(req.params.id, { status: "returned_to_draft" } as any);
       logActivity("invoice_returned_to_draft", "invoice", invoice.id, userId, {
@@ -3814,9 +3833,7 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Invoice not found." });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-      const userDiv = user.divisionCode;
-      const isAllDiv = !userDiv || user.role === "admin" || user.role === "owner";
-      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
+      if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
 
       if (!invoice.xeroInvoiceId) {
         return res.status(400).json({ error: "This invoice is not linked to Xero. No reset needed." });
@@ -3890,9 +3907,7 @@ export async function registerRoutes(
       const invoice = await storage.getInvoice(req.params.id);
       if (!invoice) return res.status(404).json({ error: "Invoice not found." });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
-      const userDiv = req.user?.divisionCode;
-      const isAllDiv = !userDiv || req.user?.role === "admin" || req.user?.role === "owner";
-      if (!isAllDiv && (invoice.divisionCode || null) !== userDiv) return res.status(403).json({ error: "Access denied: different division" });
+      if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
 
       if (!invoice.xeroInvoiceId) {
         return res.status(400).json({ error: "This invoice has not been pushed to Xero yet." });
@@ -4128,18 +4143,17 @@ export async function registerRoutes(
   // ─── Op Jobs Routes ────────────────────────────────────────────────────────
   app.get("/api/op-jobs", async (req, res) => {
     try {
-      const userDivision = (req as any).user?.divisionCode;
-      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
       const privileged = isPrivilegedUser(req);
+      const allDiv = isUserAllDivision(req);
       const scope = req.query.scope as string | undefined;
       if (scope === "archived") {
         let all = await storage.getArchivedOpJobs();
-        if (!isAllDivision) all = all.filter(j => (j.divisionId || null) === userDivision);
+        if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
         if (!privileged) all = all.filter(j => !j.isDemoRecord);
         return res.json(all);
       }
       let all = await storage.getAllOpJobs();
-      if (!isAllDivision) all = all.filter(j => (j.divisionId || null) === userDivision);
+      if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
       if (!privileged) all = all.filter(j => !j.isDemoRecord);
       return res.json(all);
     } catch (e: any) {
@@ -4151,9 +4165,7 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
-      const userDivision = (req as any).user?.divisionCode;
-      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
-      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
+      if (!userCanAccessDivision(req, job.divisionId || null)) return res.status(403).json({ error: "Access denied" });
       if (job.archivedAt) return res.status(400).json({ error: "Job is already archived" });
 
       const updated = await storage.archiveOpJob(req.params.id);
@@ -4174,9 +4186,7 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
-      const userDivision = (req as any).user?.divisionCode;
-      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
-      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
+      if (!userCanAccessDivision(req, job.divisionId || null)) return res.status(403).json({ error: "Access denied" });
       if (!job.archivedAt) return res.status(400).json({ error: "Job is not archived" });
 
       const updated = await storage.unarchiveOpJob(req.params.id);
@@ -5234,9 +5244,7 @@ export async function registerRoutes(
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
       if (job.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Job not found" });
-      const userDivision = (req as any).user?.divisionCode;
-      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
-      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
+      if (!userCanAccessDivision(req, job.divisionId || null)) return res.status(403).json({ error: "Access denied" });
       return res.json(job);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -5247,9 +5255,7 @@ export async function registerRoutes(
     try {
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
-      const userDivision = (req as any).user?.divisionCode;
-      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
-      if (!isAllDivision && (job.divisionId || null) !== userDivision) return res.status(403).json({ error: "Access denied" });
+      if (!userCanAccessDivision(req, job.divisionId || null)) return res.status(403).json({ error: "Access denied" });
       const schema = z.object({
         title: z.string().min(1).optional(),
         status: z.enum(["active", "on_hold", "completed", "cancelled"]).optional(),
@@ -5276,13 +5282,11 @@ export async function registerRoutes(
       const quote = await storage.getQuote(req.params.id);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
 
-      const userDivision = (req as any).user?.divisionCode;
-      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
-      if (!isAllDivision && (quote.divisionId || null) !== userDivision) {
+      if (!userCanAccessDivision(req, quote.divisionId || null)) {
         return res.status(403).json({ error: "Access denied: different division" });
       }
 
-      const divisionCode = quote.divisionId ?? "LJ";
+      const divisionCode = quote.divisionId || null;
       const [invoices, opJob, instance] = await Promise.all([
         storage.getInvoicesByQuote(quote.id),
         storage.getOpJobByQuoteId(quote.id).then((j) => j ?? null),
@@ -5291,7 +5295,7 @@ export async function registerRoutes(
 
       const templateRecord = instance
         ? await storage.getLifecycleTemplateById(instance.templateId)
-        : await storage.getActiveLifecycleTemplate(divisionCode);
+        : divisionCode ? await storage.getActiveLifecycleTemplate(divisionCode) : null;
 
       if (!templateRecord) {
         return res.status(404).json({ error: "No lifecycle template available for this division" });
@@ -5313,9 +5317,7 @@ export async function registerRoutes(
       const job = await storage.getOpJob(req.params.id);
       if (!job) return res.status(404).json({ error: "Job not found" });
 
-      const userDivision = (req as any).user?.divisionCode;
-      const isAllDivision = !userDivision || (req as any).user?.role === "admin" || (req as any).user?.role === "owner";
-      if (!isAllDivision && (job.divisionId || null) !== userDivision) {
+      if (!userCanAccessDivision(req, job.divisionId || null)) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -5326,7 +5328,7 @@ export async function registerRoutes(
       const quote = await storage.getQuote(job.sourceQuoteId);
       if (!quote) return res.status(404).json({ error: "Source quote not found" });
 
-      const divisionCode = quote.divisionId ?? "LJ";
+      const divisionCode = quote.divisionId || null;
       const [invoices, instance] = await Promise.all([
         storage.getInvoicesByQuote(quote.id),
         storage.getLifecycleInstanceForQuote(quote.id).then((i) => i ?? null),
@@ -5334,7 +5336,7 @@ export async function registerRoutes(
 
       const templateRecord = instance
         ? await storage.getLifecycleTemplateById(instance.templateId)
-        : await storage.getActiveLifecycleTemplate(divisionCode);
+        : divisionCode ? await storage.getActiveLifecycleTemplate(divisionCode) : null;
 
       if (!templateRecord) {
         return res.status(404).json({ error: "No lifecycle template available for this division" });
@@ -6070,19 +6072,22 @@ async function seedOrgAndDivisions() {
   }
 
   const divisions = [
-    { divisionCode: "LJ", tradingName: "Lateral Joinery", templateKey: "joinery_v1", specDisplayDefaultsJson: LJ_DEFAULT_SPEC_DISPLAY_KEYS },
-    { divisionCode: "LE", tradingName: "Lateral Engineering", templateKey: "engineering_v1", specDisplayDefaultsJson: null },
-    { divisionCode: "LL", tradingName: "Lateral Laser", templateKey: "laser_v1", specDisplayDefaultsJson: null },
+    { divisionCode: "LJ", domainType: "joinery", tradingName: "Lateral Joinery", templateKey: "joinery_v1", specDisplayDefaultsJson: LJ_DEFAULT_SPEC_DISPLAY_KEYS },
+    { divisionCode: "LE", domainType: "engineering", tradingName: "Lateral Engineering", templateKey: "engineering_v1", specDisplayDefaultsJson: null },
+    { divisionCode: "LL", domainType: "laser", tradingName: "Lateral Laser", templateKey: "laser_v1", specDisplayDefaultsJson: null },
   ];
 
   for (const d of divisions) {
     const existing = await storage.getDivisionSettings(d.divisionCode);
     if (!existing) {
       await storage.upsertDivisionSettings(d.divisionCode, {
+        domainType: d.domainType,
         tradingName: d.tradingName,
         templateKey: d.templateKey,
         specDisplayDefaultsJson: d.specDisplayDefaultsJson,
       });
+    } else if (!(existing as any).domainType || (existing as any).domainType === "general") {
+      await storage.upsertDivisionSettings(d.divisionCode, { domainType: d.domainType });
     }
   }
 }
