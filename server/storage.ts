@@ -24,6 +24,7 @@ import {
   type LifecycleTemplate, type LifecycleInstance, type LifecycleTaskState,
   type XeroConnection,
   type Variation, type InsertVariation,
+  type LlSheetMaterial, type InsertLlSheetMaterial,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -31,7 +32,7 @@ import {
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, invoiceLines, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
-  xeroConnections, variations,
+  xeroConnections, variations, llSheetMaterials,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -131,6 +132,12 @@ export interface IStorage {
   getAllSpecEntries(): Promise<SpecDictionaryEntry[]>;
 
   getLibraryEntriesWithScope(type?: string, divisionCode?: string): Promise<LibraryEntry[]>;
+
+  getLlSheetMaterials(activeOnly?: boolean): Promise<LlSheetMaterial[]>;
+  createLlSheetMaterial(data: InsertLlSheetMaterial): Promise<LlSheetMaterial>;
+  updateLlSheetMaterial(id: string, data: Partial<InsertLlSheetMaterial>): Promise<LlSheetMaterial | undefined>;
+  deleteLlSheetMaterial(id: string): Promise<void>;
+  deleteAllLlSheetMaterials(): Promise<void>;
 
   saveItemPhoto(key: string, data: Buffer, mimeType: string): Promise<void>;
   getItemPhoto(key: string): Promise<{ data: Buffer; mimeType: string } | undefined>;
@@ -1388,6 +1395,34 @@ export class DatabaseStorage implements IStorage {
       .values({ id: "default", ...data })
       .returning();
     return created;
+  }
+
+  async getLlSheetMaterials(activeOnly = false): Promise<LlSheetMaterial[]> {
+    if (activeOnly) {
+      return db.select().from(llSheetMaterials)
+        .where(eq(llSheetMaterials.isActive, true))
+        .orderBy(asc(llSheetMaterials.materialFamily), asc(llSheetMaterials.thickness));
+    }
+    return db.select().from(llSheetMaterials)
+      .orderBy(asc(llSheetMaterials.materialFamily), asc(llSheetMaterials.thickness));
+  }
+
+  async createLlSheetMaterial(data: InsertLlSheetMaterial): Promise<LlSheetMaterial> {
+    const [created] = await db.insert(llSheetMaterials).values(data).returning();
+    return created;
+  }
+
+  async updateLlSheetMaterial(id: string, data: Partial<InsertLlSheetMaterial>): Promise<LlSheetMaterial | undefined> {
+    const [updated] = await db.update(llSheetMaterials).set(data).where(eq(llSheetMaterials.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLlSheetMaterial(id: string): Promise<void> {
+    await db.delete(llSheetMaterials).where(eq(llSheetMaterials.id, id));
+  }
+
+  async deleteAllLlSheetMaterials(): Promise<void> {
+    await db.delete(llSheetMaterials);
   }
 }
 

@@ -6,12 +6,14 @@ import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
+  insertLlSheetMaterialSchema,
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
   VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
   VARIATION_STATUSES,
 } from "@shared/schema";
 import { z } from "zod";
 import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
+import LL_SEED_MATERIALS from "./ll-seed-data";
 import { GLASS_LIBRARY } from "@shared/glass-library";
 import { FRAME_TYPES, FRAME_COLORS, LINER_TYPES, HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS } from "@shared/item-options";
 import multer from "multer";
@@ -246,6 +248,8 @@ export async function registerRoutes(
   await seedOrgAndDivisions();
   await seedSpecDictionary();
   await seedLifecycleTemplates();
+  await correctLibraryScoping();
+  await seedLlSheetMaterials();
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
@@ -1078,6 +1082,46 @@ export async function registerRoutes(
         return res.json({ ...entry, syncedConfigAccessories: synced });
       }
       res.json(entry);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-sheet-materials", async (req, res) => {
+    try {
+      const activeOnly = req.query.active === "true";
+      const materials = await storage.getLlSheetMaterials(activeOnly);
+      res.json(materials);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-sheet-materials", async (req, res) => {
+    try {
+      const parsed = insertLlSheetMaterialSchema.parse(req.body);
+      const material = await storage.createLlSheetMaterial(parsed);
+      res.status(201).json(material);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-sheet-materials/:id", async (req, res) => {
+    try {
+      const parsed = insertLlSheetMaterialSchema.partial().parse(req.body);
+      const updated = await storage.updateLlSheetMaterial(req.params.id, parsed);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/ll-sheet-materials/:id", async (req, res) => {
+    try {
+      await storage.deleteLlSheetMaterial(req.params.id);
+      res.json({ ok: true });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
@@ -2280,6 +2324,14 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid snapshot" });
       }
 
+      const { isDomainDrawingSupported } = await import("./lib/drawing-regenerator.tsx");
+      const { resolveQuoteDomainType } = await import("@shared/schema");
+      const quote = await storage.getQuote(quoteId);
+      const quoteDomain = resolveQuoteDomainType(quote?.divisionId);
+      if (!isDomainDrawingSupported(quoteDomain)) {
+        return res.json({ results: [], skipped: true, reason: `Drawing regeneration not supported for domain: ${quoteDomain}` });
+      }
+
       const VALID_KEY_RE = /^[a-f0-9-]+\.png$/;
       const resolvedDir = path.resolve(DRAWING_DIR);
       const results: { key: string; status: string; classification: string }[] = [];
@@ -2392,6 +2444,9 @@ export async function registerRoutes(
         }
       }
 
+      const { resolveQuoteDomainType } = await import("@shared/schema");
+      const domainType = resolveQuoteDomainType(divCode);
+
       res.json({
         orgSettings: orgSettings || {},
         divisionSettings: divisionSettings || {},
@@ -2399,6 +2454,7 @@ export async function registerRoutes(
         currentRevision,
         snapshot: currentRevision.snapshotJson,
         templateKey: currentRevision.templateKey || "base_v1",
+        domainType,
         specDictionaryGrouped: grouped,
         effectiveSpecDisplayKeys,
         totalsDisplayConfig: (currentRevision as any).totalsDisplayConfigJson || null,
@@ -2408,6 +2464,88 @@ export async function registerRoutes(
       });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/quotes/:id/revisions", async (req, res) => {
+    try {
+      const quoteId = req.params.id;
+      const body = z.object({
+        snapshot: estimateSnapshotSchema,
+      }).parse(req.body);
+
+      const quote = await storage.getQuote(quoteId);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (!userCanAccessDivision(req, quote.divisionId || null)) {
+        return res.status(403).json({ error: "Access denied: different division" });
+      }
+
+      const divCode = quote.divisionId || null;
+      const divSettings = divCode ? await storage.getDivisionSettings(divCode) : null;
+      const templateKey = divSettings?.templateKey || "base_v1";
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const revResult = await client.query(
+          `SELECT COALESCE(MAX(version_number), 0) AS max_ver FROM quote_revisions WHERE quote_id = $1`,
+          [quoteId]
+        );
+        const nextVersion = (revResult.rows[0].max_ver || 0) + 1;
+
+        let prevRemarks: string | null = null;
+        let prevSpecDisplay: string | null = null;
+        let prevTotalsConfig: string | null = null;
+        if (quote.currentRevisionId) {
+          const prevRevResult = await client.query(
+            `SELECT commercial_remarks, spec_display_override_json, totals_display_config_json FROM quote_revisions WHERE id = $1`,
+            [quote.currentRevisionId]
+          );
+          if (prevRevResult.rows.length > 0) {
+            const prev = prevRevResult.rows[0];
+            prevRemarks = prev.commercial_remarks || null;
+            prevSpecDisplay = prev.spec_display_override_json || null;
+            prevTotalsConfig = prev.totals_display_config_json || null;
+          }
+        }
+
+        const revInsert = await client.query(
+          `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, template_key, commercial_remarks, spec_display_override_json, totals_display_config_json, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+          [quoteId, nextVersion, JSON.stringify(body.snapshot), templateKey, prevRemarks, prevSpecDisplay, prevTotalsConfig]
+        );
+        const revision = revInsert.rows[0];
+
+        const snapshotSellValue = (body.snapshot as any).totals?.sell ?? null;
+        await client.query(
+          `UPDATE quotes SET current_revision_id = $1, total_value = $2, customer = $3, updated_at = NOW() WHERE id = $4`,
+          [revision.id, snapshotSellValue, body.snapshot.customer || quote.customer, quoteId]
+        );
+
+        await client.query("COMMIT");
+
+        const updatedQuote = await storage.getQuote(quoteId);
+        res.json({
+          quote: updatedQuote,
+          revision: {
+            id: revision.id,
+            quoteId: revision.quote_id,
+            versionNumber: revision.version_number,
+            snapshotJson: body.snapshot,
+            templateKey: revision.template_key,
+            createdAt: revision.created_at,
+          },
+          isNewRevision: true,
+        });
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
     }
   });
 
@@ -6157,4 +6295,68 @@ async function seedSpecDictionary() {
       ]
     );
   }
+}
+
+const LJ_SCOPED_LIBRARY_TYPES = [
+  "glass", "frame_type", "frame_color", "liner_type",
+  "sliding_window_handle", "awning_handle",
+  "sliding_door_handle", "sliding_door_lock",
+  "bifold_door_handle", "bifold_door_lock",
+  "entrance_door_handle", "entrance_door_lock",
+  "hinge_door_handle", "hinge_door_lock",
+  "french_door_lock",
+  "stacker_door_handle", "stacker_door_lock",
+  "wanz_bar", "glazing_band",
+  "direct_profile", "direct_accessory",
+  "labour_operation",
+];
+
+const SHARED_LIBRARY_TYPES = [
+  "installation_rate", "delivery_rate", "removal_rate", "general_waste",
+];
+
+async function correctLibraryScoping() {
+  const result = await pool.query(
+    `UPDATE library_entries SET division_scope = 'LJ'
+     WHERE division_scope IS NULL
+       AND type = ANY($1)
+     RETURNING id`,
+    [LJ_SCOPED_LIBRARY_TYPES]
+  );
+  if (result.rowCount && result.rowCount > 0) {
+    console.log(`[library-scope-correction] Scoped ${result.rowCount} LJ-specific library entries from shared → LJ`);
+  }
+}
+
+
+async function seedLlSheetMaterials() {
+  const existing = await storage.getLlSheetMaterials();
+  const hasDemoData = existing.some(r => r.supplierName === "NZ Steel" || r.supplierName === "Vulcan Steel" || r.supplierName === "Ullrich Aluminium");
+  const needsReseed = existing.length === 0 || hasDemoData;
+  if (!needsReseed) return;
+
+  if (hasDemoData) {
+    console.log(`[ll-material-seed] Purging ${existing.length} demo rows and replacing with real supplier data...`);
+    await storage.deleteAllLlSheetMaterials();
+  }
+
+  console.log(`[ll-material-seed] Seeding ${LL_SEED_MATERIALS.length} LL sheet material entries from real supplier data...`);
+  for (const mat of LL_SEED_MATERIALS) {
+    await storage.createLlSheetMaterial({
+      divisionScope: "LL",
+      supplierName: mat.supplierName,
+      materialFamily: mat.materialFamily,
+      productDescription: mat.productDescription,
+      grade: mat.grade,
+      finish: mat.finish,
+      thickness: mat.thickness,
+      sheetLength: mat.sheetLength,
+      sheetWidth: mat.sheetWidth,
+      pricePerSheetExGst: mat.pricePerSheetExGst,
+      isActive: true,
+      notes: "",
+      sourceReference: mat.sourceReference,
+    });
+  }
+  console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { DomainType } from "./schema";
 
 const snapshotPhotoSchema = z.object({
   key: z.string(),
@@ -7,6 +8,25 @@ const snapshotPhotoSchema = z.object({
   caption: z.string().optional(),
   takenAt: z.string().optional(),
 });
+
+export const laserSnapshotItemSchema = z.object({
+  itemNumber: z.number(),
+  itemRef: z.string(),
+  title: z.string(),
+  quantity: z.number(),
+  materialType: z.string().default(""),
+  materialGrade: z.string().default(""),
+  thickness: z.number().default(0),
+  length: z.number().default(0),
+  width: z.number().default(0),
+  finish: z.string().default(""),
+  customerNotes: z.string().default(""),
+  internalNotes: z.string().default(""),
+  unitPrice: z.number().default(0),
+  photos: z.array(snapshotPhotoSchema).optional().default([]),
+});
+
+export type LaserSnapshotItem = z.infer<typeof laserSnapshotItemSchema>;
 
 const snapshotItemSchema = z.object({
   itemNumber: z.number(),
@@ -53,6 +73,7 @@ export const estimateSnapshotSchema = z.object({
   customer: z.string().default("Unknown"),
   specDictionaryVersion: z.number().optional().default(1),
   items: z.array(snapshotItemSchema).default([]),
+  laserItems: z.array(laserSnapshotItemSchema).default([]).optional(),
   totalsBreakdown: totalsBreakdownSchema.default({}),
 
   division: z.string().default("").optional(),
@@ -76,3 +97,29 @@ export const estimateSnapshotSchema = z.object({
 export type EstimateSnapshot = z.infer<typeof estimateSnapshotSchema>;
 export type SnapshotItem = z.infer<typeof snapshotItemSchema>;
 export type TotalsBreakdown = z.infer<typeof totalsBreakdownSchema>;
+
+export type JoinerySnapshotItem = SnapshotItem;
+
+export type LaserSnapshotItemBase = LaserSnapshotItem;
+
+export interface EngineeringSnapshotItemBase {
+  domain: "engineering";
+  itemNumber: number;
+  itemRef: string;
+  title: string;
+  quantity: number;
+}
+
+export type DomainSnapshotItemEnvelope =
+  | { domain: "joinery"; item: JoinerySnapshotItem }
+  | { domain: "laser"; item: LaserSnapshotItemBase }
+  | { domain: "engineering"; item: EngineeringSnapshotItemBase };
+
+export function resolveSnapshotItemDomain(
+  item: SnapshotItem,
+  quoteDomainType: DomainType
+): "joinery" | "laser" | "engineering" {
+  if (quoteDomainType === "laser") return "laser";
+  if (quoteDomainType === "engineering") return "engineering";
+  return "joinery";
+}

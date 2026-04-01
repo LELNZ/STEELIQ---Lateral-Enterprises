@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex, index, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, numeric, uniqueIndex, index, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -224,6 +224,74 @@ export const insertQuoteItemSchema = quoteItemSchema.omit({ id: true });
 export type QuoteItem = z.infer<typeof quoteItemSchema>;
 export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
 
+export type JoineryItemPayload = QuoteItem;
+
+export const laserQuoteItemSchema = z.object({
+  id: z.string(),
+  itemRef: z.string().min(1, "Item reference is required"),
+  title: z.string().min(1, "Title is required"),
+  quantity: z.number().int().min(1).default(1),
+  materialType: z.string().default(""),
+  materialGrade: z.string().default(""),
+  thickness: z.number().min(0).default(0),
+  length: z.number().min(0).default(0),
+  width: z.number().min(0).default(0),
+  finish: z.string().default(""),
+  customerNotes: z.string().default(""),
+  internalNotes: z.string().default(""),
+  unitPrice: z.number().min(0).default(0),
+});
+
+export type LaserQuoteItem = z.infer<typeof laserQuoteItemSchema>;
+export const insertLaserQuoteItemSchema = laserQuoteItemSchema.omit({ id: true });
+export type InsertLaserQuoteItem = z.infer<typeof insertLaserQuoteItemSchema>;
+
+export interface LaserItemPayload {
+  domain: "laser";
+  id: string;
+  itemRef: string;
+  title: string;
+  quantity: number;
+  materialType: string;
+  materialGrade: string;
+  thickness: number;
+  length: number;
+  width: number;
+  finish: string;
+  customerNotes: string;
+  internalNotes: string;
+  unitPrice: number;
+}
+
+export interface EngineeringItemPayload {
+  domain: "engineering";
+  id: string;
+  name: string;
+  quantity: number;
+}
+
+export type DomainItemEnvelope =
+  | { domain: "joinery"; payload: JoineryItemPayload }
+  | { domain: "laser"; payload: LaserItemPayload }
+  | { domain: "engineering"; payload: EngineeringItemPayload };
+
+export function resolveQuoteDomainType(divisionCode: string | null | undefined): DomainType {
+  if (!divisionCode) return "general";
+  return DIVISION_DOMAIN_MAP[divisionCode] || "general";
+}
+
+export function isJoineryDomain(domainType: DomainType): boolean {
+  return domainType === "joinery";
+}
+
+export function isLaserDomain(domainType: DomainType): boolean {
+  return domainType === "laser";
+}
+
+export function isEngineeringDomain(domainType: DomainType): boolean {
+  return domainType === "engineering";
+}
+
 export const jobs = pgTable("jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -288,6 +356,28 @@ export const libraryEntries = pgTable("library_entries", {
 export const insertLibraryEntrySchema = createInsertSchema(libraryEntries).omit({ id: true });
 export type InsertLibraryEntry = z.infer<typeof insertLibraryEntrySchema>;
 export type LibraryEntry = typeof libraryEntries.$inferSelect;
+
+export const llSheetMaterials = pgTable("ll_sheet_materials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  divisionScope: text("division_scope").notNull().default("LL"),
+  supplierName: text("supplier_name").notNull(),
+  materialFamily: text("material_family").notNull(),
+  productDescription: text("product_description").notNull(),
+  grade: text("grade").default(""),
+  finish: text("finish").default(""),
+  thickness: numeric("thickness").notNull(),
+  sheetLength: numeric("sheet_length").notNull(),
+  sheetWidth: numeric("sheet_width").notNull(),
+  pricePerSheetExGst: numeric("price_per_sheet_ex_gst").notNull().default("0"),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes").default(""),
+  sourceReference: text("source_reference").default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLlSheetMaterialSchema = createInsertSchema(llSheetMaterials).omit({ id: true, createdAt: true });
+export type InsertLlSheetMaterial = z.infer<typeof insertLlSheetMaterialSchema>;
+export type LlSheetMaterial = typeof llSheetMaterials.$inferSelect;
 
 export const frameConfigurations = pgTable("frame_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

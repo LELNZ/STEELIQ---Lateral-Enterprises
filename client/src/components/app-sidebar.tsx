@@ -118,9 +118,11 @@ export function AppSidebar() {
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
-                        <SidebarMenuSubButton className="opacity-40 pointer-events-none" data-testid="link-sidebar-ll-estimates">
-                          <Briefcase className="w-3.5 h-3.5" />
-                          <span>LL – Laser <span className="text-[10px] text-muted-foreground">(soon)</span></span>
+                        <SidebarMenuSubButton asChild isActive={location.startsWith("/laser-quote")} data-testid="link-sidebar-ll-estimates">
+                          <Link href="/laser-quote/new" onClick={(e) => guardedClick(e, "/laser-quote/new")}>
+                            <Briefcase className="w-3.5 h-3.5" />
+                            <span>LL – Laser</span>
+                          </Link>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                     </SidebarMenuSub>

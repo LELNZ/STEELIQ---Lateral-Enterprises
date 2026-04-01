@@ -22,14 +22,14 @@ import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
   ConfigurationAccessory, ConfigurationLabor,
 } from "@shared/schema";
 import { IGU_INFO, getThicknessColumnsForFamily } from "@shared/glass-library";
-import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
+import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WINDOW_CATEGORIES } from "@shared/item-options";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Standard Window" },
@@ -43,10 +43,109 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "site-costs" | "profile_roles";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "site-costs" | "profile_roles" | "sheet_materials";
 
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
+
+type CategoryOwnershipEntry = {
+  tab: LibraryTab;
+  label: string;
+  owner: DivisionCode | "platform";
+  shared: boolean;
+  justification: string;
+};
+
+const CATEGORY_OWNERSHIP: CategoryOwnershipEntry[] = [
+  {
+    tab: "direct_materials",
+    label: "Direct Materials",
+    owner: "LJ",
+    shared: false,
+    justification: "Aluminium extrusion profiles and accessories are specific to joinery window/door fabrication.",
+  },
+  {
+    tab: "manufacturing_labour",
+    label: "Manufacturing Labour",
+    owner: "LJ",
+    shared: false,
+    justification: "Fabrication tasks, assembly operations, and glazing time bands are specific to joinery manufacturing.",
+  },
+  {
+    tab: "glass",
+    label: "Glass",
+    owner: "LJ",
+    shared: false,
+    justification: "IGU glass types, thickness matrices, and R-value data are specific to joinery window/door products.",
+  },
+  {
+    tab: "frame_type",
+    label: "Frame Types",
+    owner: "LJ",
+    shared: false,
+    justification: "Window and door frame configurations (sliding, bifold, entrance, etc.) are joinery-specific product types.",
+  },
+  {
+    tab: "frame_color",
+    label: "Frame Colors",
+    owner: "LJ",
+    shared: false,
+    justification: "Powder coating and finish options apply to aluminium joinery frames only.",
+  },
+  {
+    tab: "hardware",
+    label: "Hardware",
+    owner: "LJ",
+    shared: false,
+    justification: "Handles, locks, and fittings are category-specific to joinery window/door products.",
+  },
+  {
+    tab: "liner_type",
+    label: "Liner Types",
+    owner: "LJ",
+    shared: false,
+    justification: "Interior liner options are specific to joinery window installations.",
+  },
+  {
+    tab: "wanz_bar",
+    label: "Wanz Bar",
+    owner: "LJ",
+    shared: false,
+    justification: "WANZ Sill Support Bar defaults apply only to joinery window sill details.",
+  },
+  {
+    tab: "profile_roles",
+    label: "Profile Roles",
+    owner: "LJ",
+    shared: false,
+    justification: "Profile role dictionary (outer-frame, mullion, bead, etc.) defines aluminium extrusion roles for joinery.",
+  },
+  {
+    tab: "sheet_materials",
+    label: "Sheet Materials (LL)",
+    owner: "LL",
+    shared: false,
+    justification: "Sheet metal materials (steel, aluminium, stainless) are specific to laser cutting operations.",
+  },
+  {
+    tab: "site-costs",
+    label: "Site Costs",
+    owner: "LJ",
+    shared: false,
+    justification: "LJ site costs are LJ-specific. Each division will have its own site cost structure when needed.",
+  },
+];
+
+const ALL_LIBRARY_TABS: { value: LibraryTab; label: string }[] =
+  CATEGORY_OWNERSHIP.map(c => ({ value: c.tab, label: c.label }));
+
+function getVisibleTabs(divisionCode: string | null): { value: LibraryTab; label: string }[] {
+  if (!divisionCode) return ALL_LIBRARY_TABS;
+  const visible = CATEGORY_OWNERSHIP.filter(
+    c => c.owner === divisionCode || c.shared
+  );
+  return visible.map(c => ({ value: c.tab, label: c.label }));
+}
 
 function useLibraryEntries(type: string, divisionCode?: string | null) {
   return useQuery<LibraryEntry[]>({
@@ -104,7 +203,7 @@ function DivisionScopeSelector({ divisionCode, onChange }: { divisionCode: strin
       </div>
       {divisionCode && (
         <Badge variant="secondary" className="text-xs" data-testid="badge-active-scope">
-          Showing: {divisionCode} + Shared
+          Showing: {divisionCode}
         </Badge>
       )}
     </div>
@@ -141,9 +240,17 @@ export default function Library() {
   const validDivision = parsedDivision && (DIVISION_CODES as readonly string[]).includes(parsedDivision) ? parsedDivision : null;
   const [selectedDivision, setSelectedDivision] = useState<string | null>(validDivision);
 
+  const visibleTabs = getVisibleTabs(selectedDivision);
+
   useEffect(() => {
     setSelectedDivision(validDivision);
   }, [validDivision]);
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some(t => t.value === activeTab)) {
+      setActiveTab(visibleTabs[0].value);
+    }
+  }, [selectedDivision, visibleTabs, activeTab]);
 
   function setDivisionAndUrl(code: string | null) {
     setSelectedDivision(code);
@@ -156,28 +263,6 @@ export default function Library() {
     const qs = params.toString();
     navigate(`/library${qs ? `?${qs}` : ""}`, { replace: true });
   }
-
-  const seedMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/library/seed");
-      await apiRequest("POST", "/api/frame-types/seed-configurations");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/frame-types"] });
-      toast({ title: "Library and configurations reset to defaults" });
-    },
-  });
-
-  const seedConfigsMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/frame-types/seed-configurations");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/frame-types"] });
-      toast({ title: "Configuration data seeded" });
-    },
-  });
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="library-page">
@@ -193,16 +278,6 @@ export default function Library() {
             <p className="text-xs text-muted-foreground hidden sm:block">Manage reference data for quotes</p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => seedMutation.mutate()}
-          disabled={seedMutation.isPending}
-          data-testid="button-reset-defaults"
-        >
-          <RotateCcw className="w-4 h-4 mr-1.5" />
-          {seedMutation.isPending ? "Resetting..." : "Reset to Defaults"}
-        </Button>
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
@@ -210,18 +285,19 @@ export default function Library() {
           <DivisionScopeSelector divisionCode={selectedDivision} onChange={setDivisionAndUrl} />
         </div>
 
+        {visibleTabs.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground" data-testid="empty-division-message">
+            <p className="text-lg font-medium">No library categories for this division yet</p>
+            <p className="text-sm mt-1">Categories will appear here when they are configured for this division.</p>
+          </div>
+        ) : (
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LibraryTab)}>
           <TabsList className="mb-4 overflow-x-auto flex-wrap" data-testid="library-tabs">
-            <TabsTrigger value="direct_materials" data-testid="tab-direct-materials">Direct Materials</TabsTrigger>
-            <TabsTrigger value="manufacturing_labour" data-testid="tab-manufacturing-labour">Manufacturing Labour</TabsTrigger>
-            <TabsTrigger value="glass" data-testid="tab-glass">Glass</TabsTrigger>
-            <TabsTrigger value="frame_type" data-testid="tab-frame-types">Frame Types</TabsTrigger>
-            <TabsTrigger value="frame_color" data-testid="tab-frame-colors">Frame Colors</TabsTrigger>
-            <TabsTrigger value="hardware" data-testid="tab-hardware">Hardware</TabsTrigger>
-            <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
-            <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
-            <TabsTrigger value="site-costs" data-testid="tab-site-costs">Site Costs</TabsTrigger>
-            <TabsTrigger value="profile_roles" data-testid="tab-profile-roles">Profile Roles</TabsTrigger>
+            {visibleTabs.map(tab => (
+              <TabsTrigger key={tab.value} value={tab.value} data-testid={`tab-${tab.value}`}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           <TabsContent value="glass">
@@ -251,10 +327,14 @@ export default function Library() {
           <TabsContent value="site-costs">
             <SiteCostsContent divisionCode={selectedDivision} />
           </TabsContent>
+          <TabsContent value="sheet_materials">
+            <SheetMaterialsSection />
+          </TabsContent>
           <TabsContent value="profile_roles">
             <ProfileRoleDictionarySection />
           </TabsContent>
         </Tabs>
+        )}
       </div>
     </div>
   );
@@ -599,7 +679,7 @@ function FrameTypeSection({ divisionCode }: { divisionCode?: string | null }) {
       })}
 
       {entries.length === 0 && (
-        <Card><CardContent className="text-center text-muted-foreground py-8">No frame types. Click "Add" or "Reset to Defaults".</CardContent></Card>
+        <Card><CardContent className="text-center text-muted-foreground py-8">No frame types. Click "Add" to create an entry.</CardContent></Card>
       )}
 
       {(showAdd || editEntry) && (
@@ -1340,18 +1420,6 @@ function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
     },
   });
 
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      for (const e of entries) await apiRequest("DELETE", `/api/library/${e.id}`);
-      for (const wb of WANZ_BAR_DEFAULTS) {
-        await apiRequest("POST", "/api/library", { type: "wanz_bar", data: wb, sortOrder: 0 });
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-      toast({ title: "Wanz Bar entries reset to defaults" });
-    },
-  });
 
   if (isLoading) return <p className="text-muted-foreground">Loading...</p>;
 
@@ -1362,14 +1430,9 @@ function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
           <h2 className="text-base font-semibold">Wanz Sill Support Bars</h2>
           <p className="text-sm text-muted-foreground">{entries.length} entries · Applies to all window categories (width ≥ 600mm)</p>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending} data-testid="button-reset-wanz-bar">
-            <RotateCcw className="w-4 h-4 mr-1.5" /> Reset to Defaults
-          </Button>
-          <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-wanz-bar">
-            <Plus className="w-4 h-4 mr-1.5" /> Add
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-wanz-bar">
+          <Plus className="w-4 h-4 mr-1.5" /> Add
+        </Button>
       </div>
 
       <Card>
@@ -1413,7 +1476,7 @@ function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No entries. Click "Add" to create an entry.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1724,7 +1787,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={fields.length + (hasAllocation ? 3 : 2)} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={fields.length + (hasAllocation ? 3 : 2)} className="text-center text-muted-foreground py-8">No entries. Click "Add" to create an entry.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -2088,14 +2151,6 @@ function DirectMaterialsSection({ divisionCode }: { divisionCode?: string | null
   const [addingAccessory, setAddingAccessory] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const seedMutation = useMutation({
-    mutationFn: async () => { await apiRequest("POST", "/api/library/seed-direct-materials"); },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "direct_profile"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "direct_accessory"] });
-      toast({ title: "Direct materials seeded from configurations" });
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
@@ -2128,10 +2183,6 @@ function DirectMaterialsSection({ divisionCode }: { divisionCode?: string | null
     <div className="space-y-4" data-testid="direct-materials-section">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Direct Materials Library</h2>
-        <Button variant="outline" size="sm" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-seed-direct-materials">
-          <RotateCcw className="w-4 h-4 mr-1.5" />
-          {seedMutation.isPending ? "Seeding..." : "Seed from Configurations"}
-        </Button>
       </div>
 
       {FAMILY_GROUPS.map((family) => {
@@ -3857,5 +3908,286 @@ function WasteRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface SheetMaterial {
+  id: string;
+  divisionScope: string;
+  supplierName: string;
+  materialFamily: string;
+  productDescription: string;
+  grade: string;
+  finish: string;
+  thickness: string;
+  sheetLength: string;
+  sheetWidth: string;
+  pricePerSheetExGst: string;
+  isActive: boolean;
+  notes: string;
+  sourceReference: string;
+}
+
+const EMPTY_SHEET_MATERIAL = {
+  supplierName: "",
+  materialFamily: "",
+  productDescription: "",
+  grade: "",
+  finish: "",
+  thickness: "",
+  sheetLength: "2400",
+  sheetWidth: "1200",
+  pricePerSheetExGst: "",
+  isActive: true,
+  notes: "",
+  sourceReference: "",
+};
+
+function SheetMaterialsSection() {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(EMPTY_SHEET_MATERIAL);
+  const [filterFamily, setFilterFamily] = useState<string>("all");
+
+  const { data: materials = [], isLoading } = useQuery<SheetMaterial[]>({
+    queryKey: ["/api/ll-sheet-materials"],
+  });
+
+  const families = [...new Set(materials.map(m => m.materialFamily))].sort();
+
+  const filtered = filterFamily === "all"
+    ? materials
+    : materials.filter(m => m.materialFamily === filterFamily);
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof EMPTY_SHEET_MATERIAL) =>
+      apiRequest("POST", "/api/ll-sheet-materials", { ...data, divisionScope: "LL" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ll-sheet-materials"] });
+      toast({ title: "Sheet material created" });
+      closeDialog();
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: typeof EMPTY_SHEET_MATERIAL }) =>
+      apiRequest("PATCH", `/api/ll-sheet-materials/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ll-sheet-materials"] });
+      toast({ title: "Sheet material updated" });
+      closeDialog();
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/ll-sheet-materials/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ll-sheet-materials"] });
+      toast({ title: "Sheet material deleted" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function openAdd() {
+    setEditingId(null);
+    setForm(EMPTY_SHEET_MATERIAL);
+    setDialogOpen(true);
+  }
+
+  function openEdit(m: SheetMaterial) {
+    setEditingId(m.id);
+    setForm({
+      supplierName: m.supplierName,
+      materialFamily: m.materialFamily,
+      productDescription: m.productDescription,
+      grade: m.grade,
+      finish: m.finish,
+      thickness: m.thickness,
+      sheetLength: m.sheetLength,
+      sheetWidth: m.sheetWidth,
+      pricePerSheetExGst: m.pricePerSheetExGst,
+      isActive: m.isActive,
+      notes: m.notes,
+      sourceReference: m.sourceReference,
+    });
+    setDialogOpen(true);
+  }
+
+  function closeDialog() {
+    setDialogOpen(false);
+    setEditingId(null);
+    setForm(EMPTY_SHEET_MATERIAL);
+  }
+
+  function handleSave() {
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: form });
+    } else {
+      createMutation.mutate(form);
+    }
+  }
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle data-testid="text-sheet-materials-title">Sheet Materials (Laser/Lateral)</CardTitle>
+        <div className="flex items-center gap-2">
+          <Select value={filterFamily} onValueChange={setFilterFamily}>
+            <SelectTrigger className="w-[180px]" data-testid="select-filter-family">
+              <SelectValue placeholder="Filter by family" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Families</SelectItem>
+              {families.map(f => (
+                <SelectItem key={f} value={f}>{f}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={openAdd} data-testid="button-add-sheet-material">
+            <Plus className="w-4 h-4 mr-1" /> Add Material
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-muted-foreground">Loading...</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-muted-foreground">No sheet materials found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Family</TableHead>
+                  <TableHead>Grade</TableHead>
+                  <TableHead>Finish</TableHead>
+                  <TableHead className="text-right">Thickness</TableHead>
+                  <TableHead className="text-right">Sheet Size</TableHead>
+                  <TableHead className="text-right">Price (ex GST)</TableHead>
+                  <TableHead>Active</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map(m => (
+                  <TableRow key={m.id} className={!m.isActive ? "opacity-50" : ""} data-testid={`row-material-${m.id}`}>
+                    <TableCell className="text-xs">{m.supplierName}</TableCell>
+                    <TableCell>{m.materialFamily}</TableCell>
+                    <TableCell>{m.grade}</TableCell>
+                    <TableCell>{m.finish}</TableCell>
+                    <TableCell className="text-right font-mono">{m.thickness}mm</TableCell>
+                    <TableCell className="text-right font-mono text-xs">{m.sheetLength}×{m.sheetWidth}</TableCell>
+                    <TableCell className="text-right font-mono">${parseFloat(m.pricePerSheetExGst).toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Badge variant={m.isActive ? "default" : "secondary"} data-testid={`badge-active-${m.id}`}>
+                        {m.isActive ? "Yes" : "No"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(m)} data-testid={`button-edit-material-${m.id}`}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(m.id)} data-testid={`button-delete-material-${m.id}`}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) closeDialog(); }}>
+        <DialogContent className="max-w-lg" data-testid="dialog-sheet-material">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Sheet Material" : "Add Sheet Material"}</DialogTitle>
+            <DialogDescription>Manage LL sheet material pricing from supplier lists.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Supplier Name *</Label>
+                <Input value={form.supplierName} onChange={(e) => setForm(p => ({ ...p, supplierName: e.target.value }))} data-testid="input-supplier-name" />
+              </div>
+              <div>
+                <Label>Material Family *</Label>
+                <Input value={form.materialFamily} onChange={(e) => setForm(p => ({ ...p, materialFamily: e.target.value }))} placeholder="e.g. Mild Steel" data-testid="input-material-family" />
+              </div>
+            </div>
+            <div>
+              <Label>Product Description</Label>
+              <Input value={form.productDescription} onChange={(e) => setForm(p => ({ ...p, productDescription: e.target.value }))} placeholder="e.g. HR Plate 2400x1200" data-testid="input-product-description" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Grade *</Label>
+                <Input value={form.grade} onChange={(e) => setForm(p => ({ ...p, grade: e.target.value }))} placeholder="e.g. Grade 250" data-testid="input-grade" />
+              </div>
+              <div>
+                <Label>Finish</Label>
+                <Input value={form.finish} onChange={(e) => setForm(p => ({ ...p, finish: e.target.value }))} placeholder="e.g. Hot Rolled" data-testid="input-finish" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Thickness (mm) *</Label>
+                <Input type="number" step="0.1" value={form.thickness} onChange={(e) => setForm(p => ({ ...p, thickness: e.target.value }))} data-testid="input-sm-thickness" />
+              </div>
+              <div>
+                <Label>Sheet Length (mm)</Label>
+                <Input type="number" value={form.sheetLength} onChange={(e) => setForm(p => ({ ...p, sheetLength: e.target.value }))} data-testid="input-sheet-length" />
+              </div>
+              <div>
+                <Label>Sheet Width (mm)</Label>
+                <Input type="number" value={form.sheetWidth} onChange={(e) => setForm(p => ({ ...p, sheetWidth: e.target.value }))} data-testid="input-sheet-width" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Price per Sheet (ex GST) *</Label>
+                <Input type="number" step="0.01" value={form.pricePerSheetExGst} onChange={(e) => setForm(p => ({ ...p, pricePerSheetExGst: e.target.value }))} data-testid="input-price-per-sheet" />
+              </div>
+              <div>
+                <Label>Source Reference</Label>
+                <Input value={form.sourceReference} onChange={(e) => setForm(p => ({ ...p, sourceReference: e.target.value }))} placeholder="e.g. NZ Steel Price List" data-testid="input-source-reference" />
+              </div>
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} data-testid="input-sm-notes" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="sm-active"
+                checked={form.isActive}
+                onCheckedChange={(v) => setForm(p => ({ ...p, isActive: !!v }))}
+                data-testid="checkbox-sm-active"
+              />
+              <Label htmlFor="sm-active">Active</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button
+              onClick={handleSave}
+              disabled={!form.supplierName || !form.materialFamily || !form.grade || !form.thickness || !form.pricePerSheetExGst || isPending}
+              data-testid="button-save-sheet-material"
+            >
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }

@@ -1,5 +1,6 @@
-import type { OrgSettings, DivisionSettings, Quote, QuoteRevision, SpecDictionaryEntry } from "@shared/schema";
-import type { EstimateSnapshot, SnapshotItem } from "@shared/estimate-snapshot";
+import type { OrgSettings, DivisionSettings, Quote, QuoteRevision, SpecDictionaryEntry, DomainType } from "@shared/schema";
+import { resolveQuoteDomainType } from "@shared/schema";
+import type { EstimateSnapshot, SnapshotItem, LaserSnapshotItem } from "@shared/estimate-snapshot";
 
 export interface TotalsDisplayConfig {
   showItemsSubtotal: boolean;
@@ -30,6 +31,7 @@ export interface PreviewData {
   currentRevision: QuoteRevision;
   snapshot: EstimateSnapshot;
   templateKey: string;
+  domainType?: DomainType;
   specDictionaryGrouped: Record<string, SpecDictionaryEntry[]>;
   effectiveSpecDisplayKeys: string[];
   totalsDisplayConfig: TotalsDisplayConfig | null;
@@ -141,6 +143,7 @@ export interface QuoteDocumentSpecDisplay {
 }
 
 export interface QuoteDocumentModel {
+  domainType: DomainType;
   metadata: QuoteDocumentMetadata;
   branding: QuoteDocumentBranding;
   org: QuoteDocumentOrg;
@@ -190,6 +193,45 @@ function mapSnapshotItem(si: SnapshotItem): QuoteDocumentItem {
   };
 }
 
+function mapLaserSnapshotItem(li: LaserSnapshotItem): QuoteDocumentItem {
+  const resolvedSpecs: Record<string, string> = {};
+  if (li.materialType) resolvedSpecs["materialType"] = li.materialType;
+  if (li.materialGrade) resolvedSpecs["materialGrade"] = li.materialGrade;
+  if (li.thickness) resolvedSpecs["thickness"] = `${li.thickness}mm`;
+  if (li.length && li.width) resolvedSpecs["dimensions"] = `${li.length}mm x ${li.width}mm`;
+  else if (li.length) resolvedSpecs["length"] = `${li.length}mm`;
+  else if (li.width) resolvedSpecs["width"] = `${li.width}mm`;
+  if (li.finish) resolvedSpecs["finish"] = li.finish;
+  if (li.customerNotes) resolvedSpecs["customerNotes"] = li.customerNotes;
+
+  return {
+    itemNumber: li.itemNumber,
+    itemRef: li.itemRef,
+    title: li.title,
+    quantity: li.quantity,
+    width: li.length || 0,
+    height: li.width || 0,
+    photos: (li.photos || []).map(p => ({
+      key: p.key,
+      isPrimary: p.isPrimary,
+      includeInCustomerPdf: p.includeInCustomerPdf,
+      caption: p.caption,
+      takenAt: p.takenAt,
+    })),
+    specValues: {
+      materialType: li.materialType,
+      materialGrade: li.materialGrade,
+      thickness: li.thickness,
+      length: li.length,
+      width: li.width,
+      finish: li.finish,
+      customerNotes: li.customerNotes,
+      unitPrice: li.unitPrice,
+    },
+    resolvedSpecs,
+  };
+}
+
 export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentModel {
   const { orgSettings: org, divisionSettings: div, quote, currentRevision, snapshot } = preview;
   const validityDays = org.quoteValidityDays || 30;
@@ -203,7 +245,10 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
     ...(preview.totalsDisplayConfig || {}),
   };
 
+  const domainType = preview.domainType || resolveQuoteDomainType(quote.divisionId);
+
   return {
+    domainType,
     metadata: {
       quoteId: quote.id,
       quoteNumber: quote.number,
@@ -243,7 +288,9 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       address: preview.projectAddress || "",
       sourceJobId: quote.sourceJobId || null,
     },
-    items: (snapshot.items || []).map(mapSnapshotItem),
+    items: domainType === "laser" && (snapshot as any).laserItems?.length
+      ? ((snapshot as any).laserItems as LaserSnapshotItem[]).map(mapLaserSnapshotItem)
+      : (snapshot.items || []).map(mapSnapshotItem),
     totals: {
       itemsSubtotal: tb.itemsSubtotal,
       installationTotal: tb.installationTotal,

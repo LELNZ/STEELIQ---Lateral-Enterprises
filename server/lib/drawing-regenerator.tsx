@@ -2,7 +2,13 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import sharp from "sharp";
 import DrawingCanvas from "@/components/drawing-canvas";
-import type { InsertQuoteItem } from "@shared/schema";
+import type { InsertQuoteItem, DomainType } from "@shared/schema";
+
+export const DRAWING_ENGINE_DOMAIN: DomainType = "joinery";
+
+export function isDomainDrawingSupported(domainType: DomainType): boolean {
+  return domainType === "joinery";
+}
 
 const CANONICAL_DRAWING_FIELDS = [
   "customColumns",

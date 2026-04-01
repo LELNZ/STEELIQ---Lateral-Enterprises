@@ -4,6 +4,7 @@ import type {
   QuoteDocumentItemPhoto,
   TotalsDisplayConfig,
 } from "./quote-document";
+import type { DomainType } from "@shared/schema";
 import type { QuoteTemplate } from "./quote-template";
 import { resolveQuoteTemplate, type CompanyTemplateConfig } from "./quote-template";
 
@@ -110,6 +111,7 @@ export interface RenderLegalBlock {
 }
 
 export interface QuoteRenderModel {
+  domainType: DomainType;
   presentationMode: PresentationMode;
   resolvedTemplate: QuoteTemplate;
   header: RenderHeader;
@@ -179,16 +181,35 @@ function buildTotals(doc: QuoteDocumentModel): RenderTotals {
   return { hasBreakdown, hasLegacyOnly, lines, isEmpty: false };
 }
 
+const LASER_SPEC_LABELS: Record<string, string> = {
+  materialType: "Material",
+  materialGrade: "Grade",
+  thickness: "Thickness",
+  dimensions: "Dimensions",
+  length: "Length",
+  width: "Width",
+  finish: "Finish",
+  customerNotes: "Notes",
+};
+
 function buildScheduleItem(
   item: QuoteDocumentItem,
   index: number,
   displayKeys: string[],
   specKeyToLabel: Record<string, string>,
+  domainType?: string,
 ): RenderScheduleItem {
   const specs = item.resolvedSpecs || {};
-  const visibleSpecs = displayKeys
-    .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
-    .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
+
+  const isLaser = domainType === "laser";
+
+  const visibleSpecs = isLaser
+    ? Object.entries(specs)
+        .filter(([, v]) => v && v !== "" && v !== "0")
+        .map(([key, value]) => ({ key, label: LASER_SPEC_LABELS[key] || key, value }))
+    : displayKeys
+        .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
+        .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
 
   const customerPhotos = (item.photos || [])
     .filter((p: QuoteDocumentItemPhoto) => p.includeInCustomerPdf)
@@ -198,7 +219,7 @@ function buildScheduleItem(
       key: p.key,
     }));
 
-  const drawingUrl = item.drawingImageKey ? `/api/drawing-images/${item.drawingImageKey}` : null;
+  const drawingUrl = isLaser ? null : (item.drawingImageKey ? `/api/drawing-images/${item.drawingImageKey}` : null);
 
   const openingDirMap: Record<string, string> = {
     "open-in": "Open In",
@@ -209,28 +230,32 @@ function buildScheduleItem(
     "fold-right": "Fold Right",
   };
   const odVal = item.openingDirection;
-  const openingDirectionLabel = odVal && odVal !== "none" && openingDirMap[odVal] ? openingDirMap[odVal] : undefined;
+  const openingDirectionLabel = isLaser ? undefined : (odVal && odVal !== "none" && openingDirMap[odVal] ? openingDirMap[odVal] : undefined);
 
-  const gosNote = item.gosRequired ? "Glaze on site due to size and weight" : undefined;
-  const catDoorNote = item.catDoorEnabled ? "Cat door included" : undefined;
+  const gosNote = isLaser ? undefined : (item.gosRequired ? "Glaze on site due to size and weight" : undefined);
+  const catDoorNote = isLaser ? undefined : (item.catDoorEnabled ? "Cat door included" : undefined);
+
+  const dimensionLabel = isLaser
+    ? (item.width > 0 && item.height > 0 ? `${item.width}mm x ${item.height}mm` : "")
+    : (item.category === "raked-fixed" && item.rakedLeftHeight != null && item.rakedRightHeight != null
+      ? `${item.width}mm W × ${item.rakedLeftHeight}/${item.rakedRightHeight}mm H (L/R)`
+      : `${item.width}mm x ${item.height}mm`);
 
   return {
     index,
     itemNumber: item.itemNumber || index + 1,
     itemRef: item.itemRef || item.title || `Item ${index + 1}`,
     title: `Item ${item.itemNumber || index + 1} — ${item.itemRef || item.title || `Item ${index + 1}`}`,
-    dimensionLabel: item.category === "raked-fixed" && item.rakedLeftHeight != null && item.rakedRightHeight != null
-      ? `${item.width}mm W × ${item.rakedLeftHeight}/${item.rakedRightHeight}mm H (L/R)`
-      : `${item.width}mm x ${item.height}mm`,
+    dimensionLabel,
     quantityLabel: `Qty: ${item.quantity || 1}`,
     openingDirectionLabel,
     gosNote,
     catDoorNote,
     visibleSpecs,
-    paneGlassSpecs: (item.paneGlassSpecs || []).filter(p => p.iguType || p.glassType || p.glassThickness),
+    paneGlassSpecs: isLaser ? [] : (item.paneGlassSpecs || []).filter(p => p.iguType || p.glassType || p.glassThickness),
     media: {
       drawingUrl,
-      drawingKey: item.drawingImageKey || null,
+      drawingKey: isLaser ? null : (item.drawingImageKey || null),
       drawingLabel: `Drawing — Item ${item.itemNumber || index + 1}`,
       customerPhotos,
     },
@@ -253,9 +278,12 @@ function buildLegal(doc: QuoteDocumentModel): RenderLegalBlock {
 
 function buildSpecKeyToLabel(doc: QuoteDocumentModel): Record<string, string> {
   const m: Record<string, string> = {};
-  for (const group of Object.values(doc.specDisplay.specDictionaryGrouped)) {
-    for (const entry of group) {
-      m[entry.key] = entry.label;
+  const grouped = doc.specDisplay.specDictionaryGrouped;
+  if (grouped) {
+    for (const group of Object.values(grouped)) {
+      for (const entry of group) {
+        m[entry.key] = entry.label;
+      }
     }
   }
   return m;
@@ -278,6 +306,7 @@ export function buildQuoteRenderModel(
   );
 
   return {
+    domainType: doc.domainType,
     presentationMode: mode,
     resolvedTemplate: resolved,
     header: {
@@ -309,7 +338,7 @@ export function buildQuoteRenderModel(
     },
     totals: buildTotals(doc),
     scheduleItems: doc.items.map((item, idx) =>
-      buildScheduleItem(item, idx, doc.specDisplay.effectiveKeys, specKeyToLabel)
+      buildScheduleItem(item, idx, doc.specDisplay.effectiveKeys, specKeyToLabel, doc.domainType)
     ),
     legal: buildLegal(doc),
     disclaimerText: "Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.",
@@ -327,6 +356,6 @@ export function rebuildScheduleItems(
 ): RenderScheduleItem[] {
   const specKeyToLabel = buildSpecKeyToLabel(doc);
   return doc.items.map((item, idx) =>
-    buildScheduleItem(item, idx, effectiveKeys, specKeyToLabel)
+    buildScheduleItem(item, idx, effectiveKeys, specKeyToLabel, doc.domainType)
   );
 }

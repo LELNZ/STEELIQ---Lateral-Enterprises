@@ -1,4 +1,4 @@
-import type { ConfigurationProfile, ConfigurationAccessory, ConfigurationLabor, LibraryEntry } from "@shared/schema";
+import type { ConfigurationProfile, ConfigurationAccessory, ConfigurationLabor, LibraryEntry, DomainType } from "@shared/schema";
 
 export interface PaneGlassBreakdownLine {
   paneIndex: number;
@@ -30,6 +30,10 @@ export interface PricingBreakdown {
   labourBreakdown: LabourLineBreakdown[];
   paneGlassBreakdown?: PaneGlassBreakdownLine[];
 }
+
+export type JoineryPricingBreakdown = PricingBreakdown;
+
+export const PRICING_ENGINE_DOMAIN: DomainType = "joinery";
 
 export interface MasterData {
   masterProfiles?: LibraryEntry[];
