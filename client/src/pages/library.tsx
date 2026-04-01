@@ -22,14 +22,14 @@ import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, RotateCcw, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
   ConfigurationAccessory, ConfigurationLabor,
 } from "@shared/schema";
 import { IGU_INFO, getThicknessColumnsForFamily } from "@shared/glass-library";
-import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WANZ_BAR_DEFAULTS, WINDOW_CATEGORIES } from "@shared/item-options";
+import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WINDOW_CATEGORIES } from "@shared/item-options";
 
 const CATEGORY_OPTIONS = [
   { value: "windows-standard", label: "Standard Window" },
@@ -264,28 +264,6 @@ export default function Library() {
     navigate(`/library${qs ? `?${qs}` : ""}`, { replace: true });
   }
 
-  const seedMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/library/seed");
-      await apiRequest("POST", "/api/frame-types/seed-configurations");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/frame-types"] });
-      toast({ title: "Library and configurations reset to defaults" });
-    },
-  });
-
-  const seedConfigsMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/frame-types/seed-configurations");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/frame-types"] });
-      toast({ title: "Configuration data seeded" });
-    },
-  });
-
   return (
     <div className="flex flex-col h-full bg-background" data-testid="library-page">
       <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4 bg-card shrink-0 flex-wrap">
@@ -300,16 +278,6 @@ export default function Library() {
             <p className="text-xs text-muted-foreground hidden sm:block">Manage reference data for quotes</p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => seedMutation.mutate()}
-          disabled={seedMutation.isPending}
-          data-testid="button-reset-defaults"
-        >
-          <RotateCcw className="w-4 h-4 mr-1.5" />
-          {seedMutation.isPending ? "Resetting..." : "Reset to Defaults"}
-        </Button>
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
@@ -711,7 +679,7 @@ function FrameTypeSection({ divisionCode }: { divisionCode?: string | null }) {
       })}
 
       {entries.length === 0 && (
-        <Card><CardContent className="text-center text-muted-foreground py-8">No frame types. Click "Add" or "Reset to Defaults".</CardContent></Card>
+        <Card><CardContent className="text-center text-muted-foreground py-8">No frame types. Click "Add" to create an entry.</CardContent></Card>
       )}
 
       {(showAdd || editEntry) && (
@@ -1452,18 +1420,6 @@ function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
     },
   });
 
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      for (const e of entries) await apiRequest("DELETE", `/api/library/${e.id}`);
-      for (const wb of WANZ_BAR_DEFAULTS) {
-        await apiRequest("POST", "/api/library", { type: "wanz_bar", data: wb, sortOrder: 0 });
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library"] });
-      toast({ title: "Wanz Bar entries reset to defaults" });
-    },
-  });
 
   if (isLoading) return <p className="text-muted-foreground">Loading...</p>;
 
@@ -1474,14 +1430,9 @@ function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
           <h2 className="text-base font-semibold">Wanz Sill Support Bars</h2>
           <p className="text-sm text-muted-foreground">{entries.length} entries · Applies to all window categories (width ≥ 600mm)</p>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => resetMutation.mutate()} disabled={resetMutation.isPending} data-testid="button-reset-wanz-bar">
-            <RotateCcw className="w-4 h-4 mr-1.5" /> Reset to Defaults
-          </Button>
-          <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-wanz-bar">
-            <Plus className="w-4 h-4 mr-1.5" /> Add
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setShowAdd(true)} data-testid="button-add-wanz-bar">
+          <Plus className="w-4 h-4 mr-1.5" /> Add
+        </Button>
       </div>
 
       <Card>
@@ -1525,7 +1476,7 @@ function WanzBarSection({ divisionCode }: { divisionCode?: string | null }) {
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No entries. Click "Add" to create an entry.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -1836,7 +1787,7 @@ function SimpleSection({ type, title, fields, priceUnit, defaultAllocation, allF
                 );
               })}
               {entries.length === 0 && (
-                <TableRow><TableCell colSpan={fields.length + (hasAllocation ? 3 : 2)} className="text-center text-muted-foreground py-8">No entries. Click "Add" or "Reset to Defaults".</TableCell></TableRow>
+                <TableRow><TableCell colSpan={fields.length + (hasAllocation ? 3 : 2)} className="text-center text-muted-foreground py-8">No entries. Click "Add" to create an entry.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
@@ -2200,14 +2151,6 @@ function DirectMaterialsSection({ divisionCode }: { divisionCode?: string | null
   const [addingAccessory, setAddingAccessory] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const seedMutation = useMutation({
-    mutationFn: async () => { await apiRequest("POST", "/api/library/seed-direct-materials"); },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "direct_profile"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/library", "direct_accessory"] });
-      toast({ title: "Direct materials seeded from configurations" });
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/library/${id}`); },
@@ -2240,10 +2183,6 @@ function DirectMaterialsSection({ divisionCode }: { divisionCode?: string | null
     <div className="space-y-4" data-testid="direct-materials-section">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Direct Materials Library</h2>
-        <Button variant="outline" size="sm" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-seed-direct-materials">
-          <RotateCcw className="w-4 h-4 mr-1.5" />
-          {seedMutation.isPending ? "Seeding..." : "Seed from Configurations"}
-        </Button>
       </div>
 
       {FAMILY_GROUPS.map((family) => {
