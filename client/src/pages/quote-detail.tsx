@@ -416,6 +416,19 @@ export default function QuoteDetail() {
             </SelectContent>
           </Select>
         </div>
+        {quote.divisionId === "LL" && (
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Laser Builder</p>
+            <Button
+              variant="ghost"
+              className="p-0 h-auto text-sm underline"
+              onClick={() => navigate(`/laser-quote/${quote.id}`)}
+              data-testid="link-laser-builder"
+            >
+              Open Laser Builder
+            </Button>
+          </div>
+        )}
         {quote.sourceJobId && (
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Source Estimate</p>

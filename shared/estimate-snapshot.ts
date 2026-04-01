@@ -9,6 +9,25 @@ const snapshotPhotoSchema = z.object({
   takenAt: z.string().optional(),
 });
 
+export const laserSnapshotItemSchema = z.object({
+  itemNumber: z.number(),
+  itemRef: z.string(),
+  title: z.string(),
+  quantity: z.number(),
+  materialType: z.string().default(""),
+  materialGrade: z.string().default(""),
+  thickness: z.number().default(0),
+  length: z.number().default(0),
+  width: z.number().default(0),
+  finish: z.string().default(""),
+  customerNotes: z.string().default(""),
+  internalNotes: z.string().default(""),
+  unitPrice: z.number().default(0),
+  photos: z.array(snapshotPhotoSchema).optional().default([]),
+});
+
+export type LaserSnapshotItem = z.infer<typeof laserSnapshotItemSchema>;
+
 const snapshotItemSchema = z.object({
   itemNumber: z.number(),
   itemRef: z.string(),
@@ -54,6 +73,7 @@ export const estimateSnapshotSchema = z.object({
   customer: z.string().default("Unknown"),
   specDictionaryVersion: z.number().optional().default(1),
   items: z.array(snapshotItemSchema).default([]),
+  laserItems: z.array(laserSnapshotItemSchema).default([]).optional(),
   totalsBreakdown: totalsBreakdownSchema.default({}),
 
   division: z.string().default("").optional(),
@@ -80,16 +100,7 @@ export type TotalsBreakdown = z.infer<typeof totalsBreakdownSchema>;
 
 export type JoinerySnapshotItem = SnapshotItem;
 
-export interface LaserSnapshotItemBase {
-  domain: "laser";
-  itemNumber: number;
-  itemRef: string;
-  title: string;
-  quantity: number;
-  materialType?: string;
-  thickness?: number;
-  photos?: z.infer<typeof snapshotPhotoSchema>[];
-}
+export type LaserSnapshotItemBase = LaserSnapshotItem;
 
 export interface EngineeringSnapshotItemBase {
   domain: "engineering";

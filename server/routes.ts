@@ -2423,6 +2423,88 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/quotes/:id/revisions", async (req, res) => {
+    try {
+      const quoteId = req.params.id;
+      const body = z.object({
+        snapshot: estimateSnapshotSchema,
+      }).parse(req.body);
+
+      const quote = await storage.getQuote(quoteId);
+      if (!quote) return res.status(404).json({ error: "Quote not found" });
+      if (!userCanAccessDivision(req, quote.divisionId || null)) {
+        return res.status(403).json({ error: "Access denied: different division" });
+      }
+
+      const divCode = quote.divisionId || null;
+      const divSettings = divCode ? await storage.getDivisionSettings(divCode) : null;
+      const templateKey = divSettings?.templateKey || "base_v1";
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const revResult = await client.query(
+          `SELECT COALESCE(MAX(version_number), 0) AS max_ver FROM quote_revisions WHERE quote_id = $1`,
+          [quoteId]
+        );
+        const nextVersion = (revResult.rows[0].max_ver || 0) + 1;
+
+        let prevRemarks: string | null = null;
+        let prevSpecDisplay: string | null = null;
+        let prevTotalsConfig: string | null = null;
+        if (quote.currentRevisionId) {
+          const prevRevResult = await client.query(
+            `SELECT commercial_remarks, spec_display_override_json, totals_display_config_json FROM quote_revisions WHERE id = $1`,
+            [quote.currentRevisionId]
+          );
+          if (prevRevResult.rows.length > 0) {
+            const prev = prevRevResult.rows[0];
+            prevRemarks = prev.commercial_remarks || null;
+            prevSpecDisplay = prev.spec_display_override_json || null;
+            prevTotalsConfig = prev.totals_display_config_json || null;
+          }
+        }
+
+        const revInsert = await client.query(
+          `INSERT INTO quote_revisions (id, quote_id, version_number, snapshot_json, template_key, commercial_remarks, spec_display_override_json, totals_display_config_json, created_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING *`,
+          [quoteId, nextVersion, JSON.stringify(body.snapshot), templateKey, prevRemarks, prevSpecDisplay, prevTotalsConfig]
+        );
+        const revision = revInsert.rows[0];
+
+        const snapshotSellValue = (body.snapshot as any).totals?.sell ?? null;
+        await client.query(
+          `UPDATE quotes SET current_revision_id = $1, total_value = $2, customer = $3, updated_at = NOW() WHERE id = $4`,
+          [revision.id, snapshotSellValue, body.snapshot.customer || quote.customer, quoteId]
+        );
+
+        await client.query("COMMIT");
+
+        const updatedQuote = await storage.getQuote(quoteId);
+        res.json({
+          quote: updatedQuote,
+          revision: {
+            id: revision.id,
+            quoteId: revision.quote_id,
+            versionNumber: revision.version_number,
+            snapshotJson: body.snapshot,
+            templateKey: revision.template_key,
+            createdAt: revision.created_at,
+          },
+          isNewRevision: true,
+        });
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   app.patch("/api/quotes/:id/revisions/:revId/spec-display", async (req, res) => {
     try {
       const body = z.object({

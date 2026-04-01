@@ -44,6 +44,7 @@ import InvoicesPage from "@/pages/invoices";
 import InvoiceDetailPage from "@/pages/invoice-detail";
 import ProjectsList from "@/pages/projects-list";
 import ProjectDetail from "@/pages/project-detail";
+import LaserQuoteBuilder from "@/pages/laser-quote-builder";
 
 function QuickCreateMenu() {
   const [, navigate] = useLocation();
@@ -107,6 +108,8 @@ function Router() {
       <Route path="/job/:id/exec-summary" component={ExecSummary} />
       <Route path="/job/:id" component={QuoteBuilder} />
       <Route path="/quotes" component={QuotesList} />
+      <Route path="/laser-quote/new" component={LaserQuoteBuilder} />
+      <Route path="/laser-quote/:id" component={LaserQuoteBuilder} />
       <Route path="/quotes/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id" component={QuoteDetail} />

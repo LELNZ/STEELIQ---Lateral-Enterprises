@@ -226,15 +226,41 @@ export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
 
 export type JoineryItemPayload = QuoteItem;
 
+export const laserQuoteItemSchema = z.object({
+  id: z.string(),
+  itemRef: z.string().min(1, "Item reference is required"),
+  title: z.string().min(1, "Title is required"),
+  quantity: z.number().int().min(1).default(1),
+  materialType: z.string().default(""),
+  materialGrade: z.string().default(""),
+  thickness: z.number().min(0).default(0),
+  length: z.number().min(0).default(0),
+  width: z.number().min(0).default(0),
+  finish: z.string().default(""),
+  customerNotes: z.string().default(""),
+  internalNotes: z.string().default(""),
+  unitPrice: z.number().min(0).default(0),
+});
+
+export type LaserQuoteItem = z.infer<typeof laserQuoteItemSchema>;
+export const insertLaserQuoteItemSchema = laserQuoteItemSchema.omit({ id: true });
+export type InsertLaserQuoteItem = z.infer<typeof insertLaserQuoteItemSchema>;
+
 export interface LaserItemPayload {
   domain: "laser";
   id: string;
-  name: string;
+  itemRef: string;
+  title: string;
   quantity: number;
-  materialType?: string;
-  thickness?: number;
-  sheetWidth?: number;
-  sheetHeight?: number;
+  materialType: string;
+  materialGrade: string;
+  thickness: number;
+  length: number;
+  width: number;
+  finish: string;
+  customerNotes: string;
+  internalNotes: string;
+  unitPrice: number;
 }
 
 export interface EngineeringItemPayload {
