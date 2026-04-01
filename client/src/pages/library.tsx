@@ -43,7 +43,7 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "site-costs" | "profile_roles";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "site-costs" | "profile_roles" | "sheet_materials";
 
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
@@ -221,6 +221,7 @@ export default function Library() {
             <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
             <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
             <TabsTrigger value="site-costs" data-testid="tab-site-costs">Site Costs</TabsTrigger>
+            <TabsTrigger value="sheet_materials" data-testid="tab-sheet-materials">Sheet Materials (LL)</TabsTrigger>
             <TabsTrigger value="profile_roles" data-testid="tab-profile-roles">Profile Roles</TabsTrigger>
           </TabsList>
 
@@ -250,6 +251,9 @@ export default function Library() {
           </TabsContent>
           <TabsContent value="site-costs">
             <SiteCostsContent divisionCode={selectedDivision} />
+          </TabsContent>
+          <TabsContent value="sheet_materials">
+            <SheetMaterialsSection />
           </TabsContent>
           <TabsContent value="profile_roles">
             <ProfileRoleDictionarySection />
@@ -3857,5 +3861,286 @@ function WasteRateDialog({ entry, divisionCode, onClose }: { entry: LibraryEntry
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface SheetMaterial {
+  id: string;
+  divisionScope: string;
+  supplierName: string;
+  materialFamily: string;
+  productDescription: string;
+  grade: string;
+  finish: string;
+  thickness: string;
+  sheetLength: string;
+  sheetWidth: string;
+  pricePerSheetExGst: string;
+  isActive: boolean;
+  notes: string;
+  sourceReference: string;
+}
+
+const EMPTY_SHEET_MATERIAL = {
+  supplierName: "",
+  materialFamily: "",
+  productDescription: "",
+  grade: "",
+  finish: "",
+  thickness: "",
+  sheetLength: "2400",
+  sheetWidth: "1200",
+  pricePerSheetExGst: "",
+  isActive: true,
+  notes: "",
+  sourceReference: "",
+};
+
+function SheetMaterialsSection() {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(EMPTY_SHEET_MATERIAL);
+  const [filterFamily, setFilterFamily] = useState<string>("all");
+
+  const { data: materials = [], isLoading } = useQuery<SheetMaterial[]>({
+    queryKey: ["/api/ll-sheet-materials"],
+  });
+
+  const families = [...new Set(materials.map(m => m.materialFamily))].sort();
+
+  const filtered = filterFamily === "all"
+    ? materials
+    : materials.filter(m => m.materialFamily === filterFamily);
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof EMPTY_SHEET_MATERIAL) =>
+      apiRequest("POST", "/api/ll-sheet-materials", { ...data, divisionScope: "LL" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ll-sheet-materials"] });
+      toast({ title: "Sheet material created" });
+      closeDialog();
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: typeof EMPTY_SHEET_MATERIAL }) =>
+      apiRequest("PATCH", `/api/ll-sheet-materials/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ll-sheet-materials"] });
+      toast({ title: "Sheet material updated" });
+      closeDialog();
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/ll-sheet-materials/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ll-sheet-materials"] });
+      toast({ title: "Sheet material deleted" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function openAdd() {
+    setEditingId(null);
+    setForm(EMPTY_SHEET_MATERIAL);
+    setDialogOpen(true);
+  }
+
+  function openEdit(m: SheetMaterial) {
+    setEditingId(m.id);
+    setForm({
+      supplierName: m.supplierName,
+      materialFamily: m.materialFamily,
+      productDescription: m.productDescription,
+      grade: m.grade,
+      finish: m.finish,
+      thickness: m.thickness,
+      sheetLength: m.sheetLength,
+      sheetWidth: m.sheetWidth,
+      pricePerSheetExGst: m.pricePerSheetExGst,
+      isActive: m.isActive,
+      notes: m.notes,
+      sourceReference: m.sourceReference,
+    });
+    setDialogOpen(true);
+  }
+
+  function closeDialog() {
+    setDialogOpen(false);
+    setEditingId(null);
+    setForm(EMPTY_SHEET_MATERIAL);
+  }
+
+  function handleSave() {
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: form });
+    } else {
+      createMutation.mutate(form);
+    }
+  }
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle data-testid="text-sheet-materials-title">Sheet Materials (Laser/Lateral)</CardTitle>
+        <div className="flex items-center gap-2">
+          <Select value={filterFamily} onValueChange={setFilterFamily}>
+            <SelectTrigger className="w-[180px]" data-testid="select-filter-family">
+              <SelectValue placeholder="Filter by family" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Families</SelectItem>
+              {families.map(f => (
+                <SelectItem key={f} value={f}>{f}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={openAdd} data-testid="button-add-sheet-material">
+            <Plus className="w-4 h-4 mr-1" /> Add Material
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-muted-foreground">Loading...</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-muted-foreground">No sheet materials found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Supplier</TableHead>
+                  <TableHead>Family</TableHead>
+                  <TableHead>Grade</TableHead>
+                  <TableHead>Finish</TableHead>
+                  <TableHead className="text-right">Thickness</TableHead>
+                  <TableHead className="text-right">Sheet Size</TableHead>
+                  <TableHead className="text-right">Price (ex GST)</TableHead>
+                  <TableHead>Active</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map(m => (
+                  <TableRow key={m.id} className={!m.isActive ? "opacity-50" : ""} data-testid={`row-material-${m.id}`}>
+                    <TableCell className="text-xs">{m.supplierName}</TableCell>
+                    <TableCell>{m.materialFamily}</TableCell>
+                    <TableCell>{m.grade}</TableCell>
+                    <TableCell>{m.finish}</TableCell>
+                    <TableCell className="text-right font-mono">{m.thickness}mm</TableCell>
+                    <TableCell className="text-right font-mono text-xs">{m.sheetLength}×{m.sheetWidth}</TableCell>
+                    <TableCell className="text-right font-mono">${parseFloat(m.pricePerSheetExGst).toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Badge variant={m.isActive ? "default" : "secondary"} data-testid={`badge-active-${m.id}`}>
+                        {m.isActive ? "Yes" : "No"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(m)} data-testid={`button-edit-material-${m.id}`}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => deleteMutation.mutate(m.id)} data-testid={`button-delete-material-${m.id}`}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) closeDialog(); }}>
+        <DialogContent className="max-w-lg" data-testid="dialog-sheet-material">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Sheet Material" : "Add Sheet Material"}</DialogTitle>
+            <DialogDescription>Manage LL sheet material pricing from supplier lists.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Supplier Name *</Label>
+                <Input value={form.supplierName} onChange={(e) => setForm(p => ({ ...p, supplierName: e.target.value }))} data-testid="input-supplier-name" />
+              </div>
+              <div>
+                <Label>Material Family *</Label>
+                <Input value={form.materialFamily} onChange={(e) => setForm(p => ({ ...p, materialFamily: e.target.value }))} placeholder="e.g. Mild Steel" data-testid="input-material-family" />
+              </div>
+            </div>
+            <div>
+              <Label>Product Description</Label>
+              <Input value={form.productDescription} onChange={(e) => setForm(p => ({ ...p, productDescription: e.target.value }))} placeholder="e.g. HR Plate 2400x1200" data-testid="input-product-description" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Grade *</Label>
+                <Input value={form.grade} onChange={(e) => setForm(p => ({ ...p, grade: e.target.value }))} placeholder="e.g. Grade 250" data-testid="input-grade" />
+              </div>
+              <div>
+                <Label>Finish</Label>
+                <Input value={form.finish} onChange={(e) => setForm(p => ({ ...p, finish: e.target.value }))} placeholder="e.g. Hot Rolled" data-testid="input-finish" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Thickness (mm) *</Label>
+                <Input type="number" step="0.1" value={form.thickness} onChange={(e) => setForm(p => ({ ...p, thickness: e.target.value }))} data-testid="input-sm-thickness" />
+              </div>
+              <div>
+                <Label>Sheet Length (mm)</Label>
+                <Input type="number" value={form.sheetLength} onChange={(e) => setForm(p => ({ ...p, sheetLength: e.target.value }))} data-testid="input-sheet-length" />
+              </div>
+              <div>
+                <Label>Sheet Width (mm)</Label>
+                <Input type="number" value={form.sheetWidth} onChange={(e) => setForm(p => ({ ...p, sheetWidth: e.target.value }))} data-testid="input-sheet-width" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Price per Sheet (ex GST) *</Label>
+                <Input type="number" step="0.01" value={form.pricePerSheetExGst} onChange={(e) => setForm(p => ({ ...p, pricePerSheetExGst: e.target.value }))} data-testid="input-price-per-sheet" />
+              </div>
+              <div>
+                <Label>Source Reference</Label>
+                <Input value={form.sourceReference} onChange={(e) => setForm(p => ({ ...p, sourceReference: e.target.value }))} placeholder="e.g. NZ Steel Price List" data-testid="input-source-reference" />
+              </div>
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input value={form.notes} onChange={(e) => setForm(p => ({ ...p, notes: e.target.value }))} data-testid="input-sm-notes" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="sm-active"
+                checked={form.isActive}
+                onCheckedChange={(v) => setForm(p => ({ ...p, isActive: !!v }))}
+                data-testid="checkbox-sm-active"
+              />
+              <Label htmlFor="sm-active">Active</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+            <Button
+              onClick={handleSave}
+              disabled={!form.supplierName || !form.materialFamily || !form.grade || !form.thickness || !form.pricePerSheetExGst || isPending}
+              data-testid="button-save-sheet-material"
+            >
+              {isPending ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, uniqueIndex, index, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, numeric, uniqueIndex, index, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -356,6 +356,28 @@ export const libraryEntries = pgTable("library_entries", {
 export const insertLibraryEntrySchema = createInsertSchema(libraryEntries).omit({ id: true });
 export type InsertLibraryEntry = z.infer<typeof insertLibraryEntrySchema>;
 export type LibraryEntry = typeof libraryEntries.$inferSelect;
+
+export const llSheetMaterials = pgTable("ll_sheet_materials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  divisionScope: text("division_scope").notNull().default("LL"),
+  supplierName: text("supplier_name").notNull(),
+  materialFamily: text("material_family").notNull(),
+  productDescription: text("product_description").notNull(),
+  grade: text("grade").default(""),
+  finish: text("finish").default(""),
+  thickness: numeric("thickness").notNull(),
+  sheetLength: numeric("sheet_length").notNull(),
+  sheetWidth: numeric("sheet_width").notNull(),
+  pricePerSheetExGst: numeric("price_per_sheet_ex_gst").notNull().default("0"),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes").default(""),
+  sourceReference: text("source_reference").default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLlSheetMaterialSchema = createInsertSchema(llSheetMaterials).omit({ id: true, createdAt: true });
+export type InsertLlSheetMaterial = z.infer<typeof insertLlSheetMaterialSchema>;
+export type LlSheetMaterial = typeof llSheetMaterials.$inferSelect;
 
 export const frameConfigurations = pgTable("frame_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

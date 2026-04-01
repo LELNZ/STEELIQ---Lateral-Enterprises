@@ -34,8 +34,17 @@ import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, Loader2 } from "lucide-reac
 import type { LaserQuoteItem } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 
-const MATERIAL_TYPES = ["Mild Steel", "Stainless Steel", "Aluminium", "Corten", "Brass", "Copper"];
-const MATERIAL_GRADES = ["Grade 250", "Grade 350", "304", "316", "3003", "5052", "6061"];
+interface SheetMaterialRef {
+  id: string;
+  supplierName: string;
+  materialFamily: string;
+  grade: string;
+  finish: string;
+  thickness: string;
+  sheetLength: string;
+  sheetWidth: string;
+  pricePerSheetExGst: string;
+}
 
 const EMPTY_ITEM: Omit<LaserQuoteItem, "id"> = {
   itemRef: "",
@@ -105,6 +114,43 @@ export default function LaserQuoteBuilder() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const isEditMode = !!quoteId;
+
+  const { data: sheetMaterials = [] } = useQuery<SheetMaterialRef[]>({
+    queryKey: ["/api/ll-sheet-materials", "active"],
+    queryFn: () => fetch("/api/ll-sheet-materials?active=true", { credentials: "include" }).then(r => r.json()),
+  });
+
+  const materialFamilies = useMemo(() =>
+    [...new Set(sheetMaterials.map(m => m.materialFamily))].sort(),
+    [sheetMaterials]
+  );
+
+  const gradesForFamily = useMemo(() => {
+    if (!formData.materialType) return [];
+    return [...new Set(
+      sheetMaterials
+        .filter(m => m.materialFamily === formData.materialType)
+        .map(m => m.grade)
+    )].sort();
+  }, [sheetMaterials, formData.materialType]);
+
+  const finishesForSelection = useMemo(() => {
+    if (!formData.materialType || !formData.materialGrade) return [];
+    return [...new Set(
+      sheetMaterials
+        .filter(m => m.materialFamily === formData.materialType && m.grade === formData.materialGrade)
+        .map(m => m.finish)
+    )].sort();
+  }, [sheetMaterials, formData.materialType, formData.materialGrade]);
+
+  const thicknessesForSelection = useMemo(() => {
+    if (!formData.materialType || !formData.materialGrade) return [];
+    return [...new Set(
+      sheetMaterials
+        .filter(m => m.materialFamily === formData.materialType && m.grade === formData.materialGrade && (!formData.finish || m.finish === formData.finish))
+        .map(m => m.thickness)
+    )].sort((a, b) => parseFloat(a) - parseFloat(b));
+  }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish]);
 
   const { data: quoteData, isLoading: quoteLoading } = useQuery<any>({
     queryKey: ["/api/quotes", quoteId],
@@ -471,53 +517,75 @@ export default function LaserQuoteBuilder() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="materialType">Material Type</Label>
+                <Label htmlFor="materialType">Material Family</Label>
                 <Select
                   value={formData.materialType}
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, materialType: v }))}
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, materialType: v, materialGrade: "", finish: "", thickness: 0 }))}
                 >
                   <SelectTrigger data-testid="select-material-type">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {MATERIAL_TYPES.map(t => (
+                    {materialFamilies.map(t => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label htmlFor="materialGrade">Material Grade</Label>
+                <Label htmlFor="materialGrade">Grade</Label>
                 <Select
                   value={formData.materialGrade}
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, materialGrade: v }))}
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, materialGrade: v, finish: "", thickness: 0 }))}
                 >
                   <SelectTrigger data-testid="select-material-grade">
-                    <SelectValue placeholder="Select..." />
+                    <SelectValue placeholder={formData.materialType ? "Select grade..." : "Select family first"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {MATERIAL_GRADES.map(g => (
+                    {gradesForFamily.map(g => (
                       <SelectItem key={g} value={g}>{g}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="thickness">Thickness (mm)</Label>
-                <Input
-                  id="thickness"
-                  type="number"
-                  min={0}
-                  step={0.1}
-                  value={formData.thickness || ""}
-                  onChange={(e) => setFormData(prev => ({ ...prev, thickness: parseFloat(e.target.value) || 0 }))}
-                  data-testid="input-thickness"
-                />
+                <Label htmlFor="finish">Finish</Label>
+                <Select
+                  value={formData.finish}
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, finish: v, thickness: 0 }))}
+                >
+                  <SelectTrigger data-testid="select-finish">
+                    <SelectValue placeholder={formData.materialGrade ? "Select finish..." : "Select grade first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {finishesForSelection.map(f => (
+                      <SelectItem key={f} value={f}>{f}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label htmlFor="length">Length (mm)</Label>
+                <Label htmlFor="thickness">Thickness (mm)</Label>
+                <Select
+                  value={formData.thickness ? String(formData.thickness) : ""}
+                  onValueChange={(v) => setFormData(prev => ({ ...prev, thickness: parseFloat(v) || 0 }))}
+                >
+                  <SelectTrigger data-testid="select-thickness">
+                    <SelectValue placeholder={formData.materialGrade ? "Select..." : "Select grade first"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {thicknessesForSelection.map(t => (
+                      <SelectItem key={t} value={t}>{t}mm</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="length">Part Length (mm)</Label>
                 <Input
                   id="length"
                   type="number"
@@ -528,7 +596,7 @@ export default function LaserQuoteBuilder() {
                 />
               </div>
               <div>
-                <Label htmlFor="width">Width (mm)</Label>
+                <Label htmlFor="width">Part Width (mm)</Label>
                 <Input
                   id="width"
                   type="number"
@@ -539,29 +607,17 @@ export default function LaserQuoteBuilder() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="finish">Finish</Label>
-                <Input
-                  id="finish"
-                  value={formData.finish}
-                  onChange={(e) => setFormData(prev => ({ ...prev, finish: e.target.value }))}
-                  placeholder="e.g. Hot-dip galvanised"
-                  data-testid="input-finish"
-                />
-              </div>
-              <div>
-                <Label htmlFor="unitPrice">Unit Price ($)</Label>
-                <Input
-                  id="unitPrice"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={formData.unitPrice || ""}
-                  onChange={(e) => setFormData(prev => ({ ...prev, unitPrice: parseFloat(e.target.value) || 0 }))}
-                  data-testid="input-unit-price"
-                />
-              </div>
+            <div>
+              <Label htmlFor="unitPrice">Unit Price ($)</Label>
+              <Input
+                id="unitPrice"
+                type="number"
+                min={0}
+                step={0.01}
+                value={formData.unitPrice || ""}
+                onChange={(e) => setFormData(prev => ({ ...prev, unitPrice: parseFloat(e.target.value) || 0 }))}
+                data-testid="input-unit-price"
+              />
             </div>
             <div>
               <Label htmlFor="customerNotes">Customer Notes</Label>

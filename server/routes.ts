@@ -6,6 +6,7 @@ import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
+  insertLlSheetMaterialSchema,
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
   VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
   VARIATION_STATUSES,
@@ -246,6 +247,8 @@ export async function registerRoutes(
   await seedOrgAndDivisions();
   await seedSpecDictionary();
   await seedLifecycleTemplates();
+  await correctLibraryScoping();
+  await seedLlSheetMaterials();
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
@@ -1078,6 +1081,46 @@ export async function registerRoutes(
         return res.json({ ...entry, syncedConfigAccessories: synced });
       }
       res.json(entry);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-sheet-materials", async (req, res) => {
+    try {
+      const activeOnly = req.query.active === "true";
+      const materials = await storage.getLlSheetMaterials(activeOnly);
+      res.json(materials);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-sheet-materials", async (req, res) => {
+    try {
+      const parsed = insertLlSheetMaterialSchema.parse(req.body);
+      const material = await storage.createLlSheetMaterial(parsed);
+      res.status(201).json(material);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-sheet-materials/:id", async (req, res) => {
+    try {
+      const parsed = insertLlSheetMaterialSchema.partial().parse(req.body);
+      const updated = await storage.updateLlSheetMaterial(req.params.id, parsed);
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/ll-sheet-materials/:id", async (req, res) => {
+    try {
+      await storage.deleteLlSheetMaterial(req.params.id);
+      res.json({ ok: true });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
@@ -6251,4 +6294,90 @@ async function seedSpecDictionary() {
       ]
     );
   }
+}
+
+const LJ_SCOPED_LIBRARY_TYPES = [
+  "glass", "frame_type", "frame_color", "liner_type",
+  "sliding_window_handle", "awning_handle",
+  "sliding_door_handle", "sliding_door_lock",
+  "bifold_door_handle", "bifold_door_lock",
+  "entrance_door_handle", "entrance_door_lock",
+  "hinge_door_handle", "hinge_door_lock",
+  "french_door_lock",
+  "stacker_door_handle", "stacker_door_lock",
+  "wanz_bar", "glazing_band",
+  "direct_profile", "direct_accessory",
+  "labour_operation",
+];
+
+const SHARED_LIBRARY_TYPES = [
+  "installation_rate", "delivery_rate", "removal_rate", "general_waste",
+];
+
+async function correctLibraryScoping() {
+  const result = await pool.query(
+    `UPDATE library_entries SET division_scope = 'LJ'
+     WHERE division_scope IS NULL
+       AND type = ANY($1)
+     RETURNING id`,
+    [LJ_SCOPED_LIBRARY_TYPES]
+  );
+  if (result.rowCount && result.rowCount > 0) {
+    console.log(`[library-scope-correction] Scoped ${result.rowCount} LJ-specific library entries from shared → LJ`);
+  }
+}
+
+const LL_SEED_MATERIALS = [
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "1.6", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "45.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "2.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "55.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "3.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "78.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "4.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "105.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "5.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "130.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "6.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "155.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "8.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "210.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "10.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "260.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 250", finish: "Hot Rolled", thickness: "12.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "315.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 350", finish: "Hot Rolled", thickness: "6.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "175.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 350", finish: "Hot Rolled", thickness: "8.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "235.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Mild Steel", productDescription: "HR Plate 2400x1200", grade: "Grade 350", finish: "Hot Rolled", thickness: "10.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "290.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "Vulcan Steel", materialFamily: "Stainless Steel", productDescription: "SS Sheet 2400x1200", grade: "304", finish: "2B", thickness: "1.2", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "185.00", sourceReference: "Vulcan Steel" },
+  { supplierName: "Vulcan Steel", materialFamily: "Stainless Steel", productDescription: "SS Sheet 2400x1200", grade: "304", finish: "2B", thickness: "1.5", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "220.00", sourceReference: "Vulcan Steel" },
+  { supplierName: "Vulcan Steel", materialFamily: "Stainless Steel", productDescription: "SS Sheet 2400x1200", grade: "304", finish: "2B", thickness: "2.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "295.00", sourceReference: "Vulcan Steel" },
+  { supplierName: "Vulcan Steel", materialFamily: "Stainless Steel", productDescription: "SS Sheet 2400x1200", grade: "304", finish: "2B", thickness: "3.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "440.00", sourceReference: "Vulcan Steel" },
+  { supplierName: "Vulcan Steel", materialFamily: "Stainless Steel", productDescription: "SS Sheet 2400x1200", grade: "316", finish: "2B", thickness: "1.5", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "310.00", sourceReference: "Vulcan Steel" },
+  { supplierName: "Vulcan Steel", materialFamily: "Stainless Steel", productDescription: "SS Sheet 2400x1200", grade: "316", finish: "2B", thickness: "2.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "415.00", sourceReference: "Vulcan Steel" },
+  { supplierName: "Vulcan Steel", materialFamily: "Stainless Steel", productDescription: "SS Sheet 2400x1200", grade: "316", finish: "2B", thickness: "3.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "620.00", sourceReference: "Vulcan Steel" },
+  { supplierName: "Ullrich Aluminium", materialFamily: "Aluminium", productDescription: "Alloy Sheet 2400x1200", grade: "5052", finish: "Mill", thickness: "1.6", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "95.00", sourceReference: "Ullrich Aluminium" },
+  { supplierName: "Ullrich Aluminium", materialFamily: "Aluminium", productDescription: "Alloy Sheet 2400x1200", grade: "5052", finish: "Mill", thickness: "2.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "120.00", sourceReference: "Ullrich Aluminium" },
+  { supplierName: "Ullrich Aluminium", materialFamily: "Aluminium", productDescription: "Alloy Sheet 2400x1200", grade: "5052", finish: "Mill", thickness: "3.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "175.00", sourceReference: "Ullrich Aluminium" },
+  { supplierName: "Ullrich Aluminium", materialFamily: "Aluminium", productDescription: "Alloy Sheet 2400x1200", grade: "5052", finish: "Mill", thickness: "4.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "235.00", sourceReference: "Ullrich Aluminium" },
+  { supplierName: "Ullrich Aluminium", materialFamily: "Aluminium", productDescription: "Alloy Sheet 2400x1200", grade: "6061", finish: "Mill", thickness: "3.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "195.00", sourceReference: "Ullrich Aluminium" },
+  { supplierName: "NZ Steel", materialFamily: "Corten", productDescription: "Corten A Sheet 2400x1200", grade: "Corten A", finish: "Weathering", thickness: "3.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "165.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Corten", productDescription: "Corten A Sheet 2400x1200", grade: "Corten A", finish: "Weathering", thickness: "5.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "245.00", sourceReference: "NZ Steel Price List" },
+  { supplierName: "NZ Steel", materialFamily: "Corten", productDescription: "Corten A Sheet 2400x1200", grade: "Corten A", finish: "Weathering", thickness: "6.0", sheetLength: "2400", sheetWidth: "1200", pricePerSheetExGst: "295.00", sourceReference: "NZ Steel Price List" },
+];
+
+async function seedLlSheetMaterials() {
+  const existing = await storage.getLlSheetMaterials();
+  if (existing.length > 0) return;
+
+  console.log(`[ll-material-seed] Seeding ${LL_SEED_MATERIALS.length} LL sheet material entries...`);
+  for (const mat of LL_SEED_MATERIALS) {
+    await storage.createLlSheetMaterial({
+      divisionScope: "LL",
+      supplierName: mat.supplierName,
+      materialFamily: mat.materialFamily,
+      productDescription: mat.productDescription,
+      grade: mat.grade,
+      finish: mat.finish,
+      thickness: mat.thickness,
+      sheetLength: mat.sheetLength,
+      sheetWidth: mat.sheetWidth,
+      pricePerSheetExGst: mat.pricePerSheetExGst,
+      isActive: true,
+      notes: "",
+      sourceReference: mat.sourceReference,
+    });
+  }
+  console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
 }
