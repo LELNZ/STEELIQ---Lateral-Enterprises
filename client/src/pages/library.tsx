@@ -48,31 +48,103 @@ type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_t
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
 
-const ALL_LIBRARY_TABS: { value: LibraryTab; label: string }[] = [
-  { value: "direct_materials", label: "Direct Materials" },
-  { value: "manufacturing_labour", label: "Manufacturing Labour" },
-  { value: "glass", label: "Glass" },
-  { value: "frame_type", label: "Frame Types" },
-  { value: "frame_color", label: "Frame Colors" },
-  { value: "hardware", label: "Hardware" },
-  { value: "liner_type", label: "Liner Types" },
-  { value: "wanz_bar", label: "Wanz Bar" },
-  { value: "site-costs", label: "Site Costs" },
-  { value: "sheet_materials", label: "Sheet Materials (LL)" },
-  { value: "profile_roles", label: "Profile Roles" },
+type CategoryOwnershipEntry = {
+  tab: LibraryTab;
+  label: string;
+  owner: DivisionCode | "platform";
+  shared: boolean;
+  justification: string;
+};
+
+const CATEGORY_OWNERSHIP: CategoryOwnershipEntry[] = [
+  {
+    tab: "direct_materials",
+    label: "Direct Materials",
+    owner: "LJ",
+    shared: false,
+    justification: "Aluminium extrusion profiles and accessories are specific to joinery window/door fabrication.",
+  },
+  {
+    tab: "manufacturing_labour",
+    label: "Manufacturing Labour",
+    owner: "LJ",
+    shared: false,
+    justification: "Fabrication tasks, assembly operations, and glazing time bands are specific to joinery manufacturing.",
+  },
+  {
+    tab: "glass",
+    label: "Glass",
+    owner: "LJ",
+    shared: false,
+    justification: "IGU glass types, thickness matrices, and R-value data are specific to joinery window/door products.",
+  },
+  {
+    tab: "frame_type",
+    label: "Frame Types",
+    owner: "LJ",
+    shared: false,
+    justification: "Window and door frame configurations (sliding, bifold, entrance, etc.) are joinery-specific product types.",
+  },
+  {
+    tab: "frame_color",
+    label: "Frame Colors",
+    owner: "LJ",
+    shared: false,
+    justification: "Powder coating and finish options apply to aluminium joinery frames only.",
+  },
+  {
+    tab: "hardware",
+    label: "Hardware",
+    owner: "LJ",
+    shared: false,
+    justification: "Handles, locks, and fittings are category-specific to joinery window/door products.",
+  },
+  {
+    tab: "liner_type",
+    label: "Liner Types",
+    owner: "LJ",
+    shared: false,
+    justification: "Interior liner options are specific to joinery window installations.",
+  },
+  {
+    tab: "wanz_bar",
+    label: "Wanz Bar",
+    owner: "LJ",
+    shared: false,
+    justification: "WANZ Sill Support Bar defaults apply only to joinery window sill details.",
+  },
+  {
+    tab: "profile_roles",
+    label: "Profile Roles",
+    owner: "LJ",
+    shared: false,
+    justification: "Profile role dictionary (outer-frame, mullion, bead, etc.) defines aluminium extrusion roles for joinery.",
+  },
+  {
+    tab: "sheet_materials",
+    label: "Sheet Materials (LL)",
+    owner: "LL",
+    shared: false,
+    justification: "Sheet metal materials (steel, aluminium, stainless) are specific to laser cutting operations.",
+  },
+  {
+    tab: "site-costs",
+    label: "Site Costs",
+    owner: "platform",
+    shared: true,
+    justification: "Installation labour, delivery rates, removal rates, and waste disposal are cross-domain operational costs that apply to any division delivering to site.",
+  },
 ];
 
-const DOMAIN_TAB_MAP: Record<string, LibraryTab[]> = {
-  LJ: ["direct_materials", "manufacturing_labour", "glass", "frame_type", "frame_color", "hardware", "liner_type", "wanz_bar", "site-costs", "profile_roles"],
-  LL: ["sheet_materials", "site-costs"],
-  LE: ["direct_materials", "manufacturing_labour", "site-costs"],
-};
+const ALL_LIBRARY_TABS: { value: LibraryTab; label: string }[] =
+  CATEGORY_OWNERSHIP.map(c => ({ value: c.tab, label: c.label }));
 
 function getVisibleTabs(divisionCode: string | null): { value: LibraryTab; label: string }[] {
   if (!divisionCode) return ALL_LIBRARY_TABS;
-  const allowed = DOMAIN_TAB_MAP[divisionCode];
-  if (!allowed) return ALL_LIBRARY_TABS;
-  return ALL_LIBRARY_TABS.filter(t => allowed.includes(t.value));
+  const visible = CATEGORY_OWNERSHIP.filter(
+    c => c.owner === divisionCode || c.shared
+  );
+  return visible.map(c => ({ value: c.tab, label: c.label }));
 }
 
 function useLibraryEntries(type: string, divisionCode?: string | null) {
