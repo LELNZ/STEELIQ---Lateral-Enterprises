@@ -130,9 +130,9 @@ const CATEGORY_OWNERSHIP: CategoryOwnershipEntry[] = [
   {
     tab: "site-costs",
     label: "Site Costs",
-    owner: "platform",
-    shared: true,
-    justification: "Installation labour, delivery rates, removal rates, and waste disposal are cross-domain operational costs that apply to any division delivering to site.",
+    owner: "LJ",
+    shared: false,
+    justification: "LJ site costs are LJ-specific. Each division will have its own site cost structure when needed.",
   },
 ];
 
@@ -203,7 +203,7 @@ function DivisionScopeSelector({ divisionCode, onChange }: { divisionCode: strin
       </div>
       {divisionCode && (
         <Badge variant="secondary" className="text-xs" data-testid="badge-active-scope">
-          Showing: {divisionCode} + Shared
+          Showing: {divisionCode}
         </Badge>
       )}
     </div>
@@ -317,6 +317,12 @@ export default function Library() {
           <DivisionScopeSelector divisionCode={selectedDivision} onChange={setDivisionAndUrl} />
         </div>
 
+        {visibleTabs.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground" data-testid="empty-division-message">
+            <p className="text-lg font-medium">No library categories for this division yet</p>
+            <p className="text-sm mt-1">Categories will appear here when they are configured for this division.</p>
+          </div>
+        ) : (
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LibraryTab)}>
           <TabsList className="mb-4 overflow-x-auto flex-wrap" data-testid="library-tabs">
             {visibleTabs.map(tab => (
@@ -360,6 +366,7 @@ export default function Library() {
             <ProfileRoleDictionarySection />
           </TabsContent>
         </Tabs>
+        )}
       </div>
     </div>
   );
