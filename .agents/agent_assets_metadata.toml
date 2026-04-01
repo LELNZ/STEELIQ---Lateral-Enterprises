@@ -30,3 +30,9 @@ id = "9tu6HgEF1ZCTMhi90rTnV"
 uri = "file://.local/platform-prep-0a-report.md"
 type = "text"
 title = "Platform Prep 0A — Forensic Completion Report"
+
+[[outputs]]
+id = "_AxzgHkOQ8WBqAW6daswE"
+uri = "file://.local/platform-prep-0b-report.md"
+type = "text"
+title = "Platform Prep 0B — Final Report"
