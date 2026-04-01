@@ -137,6 +137,7 @@ export interface IStorage {
   createLlSheetMaterial(data: InsertLlSheetMaterial): Promise<LlSheetMaterial>;
   updateLlSheetMaterial(id: string, data: Partial<InsertLlSheetMaterial>): Promise<LlSheetMaterial | undefined>;
   deleteLlSheetMaterial(id: string): Promise<void>;
+  deleteAllLlSheetMaterials(): Promise<void>;
 
   saveItemPhoto(key: string, data: Buffer, mimeType: string): Promise<void>;
   getItemPhoto(key: string): Promise<{ data: Buffer; mimeType: string } | undefined>;
@@ -1418,6 +1419,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteLlSheetMaterial(id: string): Promise<void> {
     await db.delete(llSheetMaterials).where(eq(llSheetMaterials.id, id));
+  }
+
+  async deleteAllLlSheetMaterials(): Promise<void> {
+    await db.delete(llSheetMaterials);
   }
 }
 
