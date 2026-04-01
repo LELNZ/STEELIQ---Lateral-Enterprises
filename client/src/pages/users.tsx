@@ -17,6 +17,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -61,6 +62,33 @@ const ROLE_COLORS: Record<string, "default" | "secondary" | "destructive" | "out
   production: "secondary",
   viewer: "outline",
 };
+
+function DivisionPicker({ selected, onChange, testIdSuffix }: { selected: string[]; onChange: (codes: string[]) => void; testIdSuffix: string }) {
+  const toggle = (code: string) => {
+    if (selected.includes(code)) {
+      onChange(selected.filter(c => c !== code));
+    } else {
+      onChange([...selected, code]);
+    }
+  };
+  return (
+    <div className="space-y-1.5">
+      {DIVISIONS.map((d) => (
+        <label key={d.code} className="flex items-center gap-2 cursor-pointer">
+          <Checkbox
+            checked={selected.includes(d.code)}
+            onCheckedChange={() => toggle(d.code)}
+            data-testid={`checkbox-division-${d.code}-${testIdSuffix}`}
+          />
+          <span className="text-sm">{d.label}</span>
+        </label>
+      ))}
+      <p className="text-xs text-muted-foreground mt-1">
+        {selected.length === 0 ? "No selection = all divisions" : `${selected.length} selected`}
+      </p>
+    </div>
+  );
+}
 
 function RolePicker({ value, onChange, testIdSuffix }: { value: Role; onChange: (v: string) => void; testIdSuffix: string }) {
   return (
@@ -167,14 +195,14 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: {
     displayName: "",
     email: "",
     role: "estimator" as Role,
-    divisionCode: "__none__",
+    divisionCodes: [] as string[],
   });
 
   const mutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/auth/users", {
         ...form,
-        divisionCode: form.divisionCode === "__none__" ? undefined : form.divisionCode,
+        divisionCodes: form.divisionCodes.length > 0 ? form.divisionCodes : undefined,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -189,14 +217,14 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: {
         username: form.username,
         displayName: form.displayName || undefined,
         role: form.role,
-        divisionCode: form.divisionCode === "__none__" ? undefined : form.divisionCode,
+        divisionCode: form.divisionCodes.length > 0 ? form.divisionCodes.join(", ") : undefined,
       });
-      setForm({ username: "", password: "", displayName: "", email: "", role: "estimator", divisionCode: "__none__" });
+      setForm({ username: "", password: "", displayName: "", email: "", role: "estimator", divisionCodes: [] });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: string) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -233,15 +261,12 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: {
               <RolePicker value={form.role} onChange={(v) => set("role")(v)} testIdSuffix="create" />
             </div>
             <div>
-              <Label>Division</Label>
-              <Select value={form.divisionCode} onValueChange={(v) => set("divisionCode")(v)}>
-                <SelectTrigger data-testid="select-division-create"><SelectValue placeholder="All divisions" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">All divisions</SelectItem>
-                  {DIVISIONS.map((d) => <SelectItem key={d.code} value={d.code}>{d.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">Leave blank for org-wide access.</p>
+              <Label className="mb-1.5 block">Divisions</Label>
+              <DivisionPicker
+                selected={form.divisionCodes}
+                onChange={(codes) => setForm((f) => ({ ...f, divisionCodes: codes }))}
+                testIdSuffix="create"
+              />
             </div>
           </div>
         </div>
@@ -262,11 +287,12 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: {
 
 function EditUserDialog({ user, open, onOpenChange }: { user: SafeUser; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
+  const initDivisionCodes = (user as any).divisionCodes ?? (user.divisionCode ? [user.divisionCode] : []);
   const [form, setForm] = useState({
     displayName: user.displayName ?? "",
     email: user.email ?? "",
     role: (user.role ?? "estimator") as Role,
-    divisionCode: user.divisionCode ?? "__none__",
+    divisionCodes: initDivisionCodes as string[],
     isActive: user.isActive,
   });
 
@@ -274,7 +300,7 @@ function EditUserDialog({ user, open, onOpenChange }: { user: SafeUser; open: bo
     mutationFn: async () => {
       const res = await apiRequest("PATCH", `/api/auth/users/${user.id}`, {
         ...form,
-        divisionCode: form.divisionCode === "__none__" ? null : form.divisionCode,
+        divisionCodes: form.divisionCodes.length > 0 ? form.divisionCodes : null,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -313,15 +339,12 @@ function EditUserDialog({ user, open, onOpenChange }: { user: SafeUser; open: bo
               <RolePicker value={form.role} onChange={(v) => set("role")(v)} testIdSuffix="edit" />
             </div>
             <div>
-              <Label>Division</Label>
-              <Select value={form.divisionCode} onValueChange={(v) => set("divisionCode")(v)}>
-                <SelectTrigger data-testid="select-division-edit"><SelectValue placeholder="All divisions" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">All divisions</SelectItem>
-                  {DIVISIONS.map((d) => <SelectItem key={d.code} value={d.code}>{d.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground mt-1">Restricts to one division's data.</p>
+              <Label className="mb-1.5 block">Divisions</Label>
+              <DivisionPicker
+                selected={form.divisionCodes}
+                onChange={(codes) => setForm((f) => ({ ...f, divisionCodes: codes }))}
+                testIdSuffix="edit"
+              />
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -543,7 +566,7 @@ export default function Users() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm font-mono py-3" data-testid={`text-division-${u.id}`}>
-                  {u.divisionCode || <span className="text-xs text-muted-foreground">All</span>}
+                  {((u as any).divisionCodes?.length > 0 ? (u as any).divisionCodes.join(", ") : u.divisionCode) || <span className="text-xs text-muted-foreground">All</span>}
                 </TableCell>
                 <TableCell className="py-3">
                   {u.isActive ? (

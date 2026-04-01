@@ -76,6 +76,7 @@ interface DivisionSettings {
   totalsLayoutVariant: string;
   specDisplayDefaultsJson: string[] | null;
   jobTypePresetsJson: JobTypePresetsConfig | null;
+  domainType?: string;
 }
 
 interface SpecEntry {
@@ -676,6 +677,8 @@ function DivisionSettingsTab() {
     mutation.mutate(changed);
   };
 
+  const isJoineryDomain = (div as any)?.domainType === "joinery";
+
   const resolvedPresets = useMemo(() => {
     return resolvePresetsForDivision(selectedCode, form.jobTypePresetsJson as JobTypePresetsConfig | null);
   }, [selectedCode, form.jobTypePresetsJson]);
@@ -953,24 +956,28 @@ function DivisionSettingsTab() {
             </Card>
           )}
 
-          <Separator className="my-6" />
+          {isJoineryDomain && (
+            <>
+              <Separator className="my-6" />
 
-          {/* ── SECTION 2: On-Site Estimate Defaults ── */}
-          <div className="space-y-1" data-testid="section-estimate-defaults">
-            <div className="flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">On-Site Estimate Defaults</h3>
-            </div>
-            <p className="text-xs text-muted-foreground pl-6">
-              These defaults are used in Quote Builder to prefill item specifics when Renovation or New Build is selected. They speed up on-site quote creation. Items can still be reviewed and edited later.
-            </p>
-          </div>
+              {/* ── SECTION 2: On-Site Estimate Defaults (Joinery only) ── */}
+              <div className="space-y-1" data-testid="section-estimate-defaults">
+                <div className="flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">On-Site Estimate Defaults</h3>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  These defaults are used in Quote Builder to prefill item specifics when Renovation or New Build is selected. They speed up on-site quote creation. Items can still be reviewed and edited later.
+                </p>
+              </div>
 
-          <JobTypePresetsCard
-            divisionCode={selectedCode}
-            presetsConfig={resolvedPresets}
-            onPresetsChange={(updated) => setForm({ ...form, jobTypePresetsJson: updated })}
-          />
+              <JobTypePresetsCard
+                divisionCode={selectedCode}
+                presetsConfig={resolvedPresets}
+                onPresetsChange={(updated) => setForm({ ...form, jobTypePresetsJson: updated })}
+              />
+            </>
+          )}
 
           <div className="flex justify-end pt-2">
             <Button onClick={handleSave} disabled={isLoading || mutation.isPending} data-testid="button-save-division">
