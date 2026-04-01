@@ -48,6 +48,33 @@ type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_t
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
 
+const ALL_LIBRARY_TABS: { value: LibraryTab; label: string }[] = [
+  { value: "direct_materials", label: "Direct Materials" },
+  { value: "manufacturing_labour", label: "Manufacturing Labour" },
+  { value: "glass", label: "Glass" },
+  { value: "frame_type", label: "Frame Types" },
+  { value: "frame_color", label: "Frame Colors" },
+  { value: "hardware", label: "Hardware" },
+  { value: "liner_type", label: "Liner Types" },
+  { value: "wanz_bar", label: "Wanz Bar" },
+  { value: "site-costs", label: "Site Costs" },
+  { value: "sheet_materials", label: "Sheet Materials (LL)" },
+  { value: "profile_roles", label: "Profile Roles" },
+];
+
+const DOMAIN_TAB_MAP: Record<string, LibraryTab[]> = {
+  LJ: ["direct_materials", "manufacturing_labour", "glass", "frame_type", "frame_color", "hardware", "liner_type", "wanz_bar", "site-costs", "profile_roles"],
+  LL: ["sheet_materials", "site-costs"],
+  LE: ["direct_materials", "manufacturing_labour", "site-costs"],
+};
+
+function getVisibleTabs(divisionCode: string | null): { value: LibraryTab; label: string }[] {
+  if (!divisionCode) return ALL_LIBRARY_TABS;
+  const allowed = DOMAIN_TAB_MAP[divisionCode];
+  if (!allowed) return ALL_LIBRARY_TABS;
+  return ALL_LIBRARY_TABS.filter(t => allowed.includes(t.value));
+}
+
 function useLibraryEntries(type: string, divisionCode?: string | null) {
   return useQuery<LibraryEntry[]>({
     queryKey: ["/api/library", type, divisionCode ?? "all"],
@@ -141,9 +168,17 @@ export default function Library() {
   const validDivision = parsedDivision && (DIVISION_CODES as readonly string[]).includes(parsedDivision) ? parsedDivision : null;
   const [selectedDivision, setSelectedDivision] = useState<string | null>(validDivision);
 
+  const visibleTabs = getVisibleTabs(selectedDivision);
+
   useEffect(() => {
     setSelectedDivision(validDivision);
   }, [validDivision]);
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some(t => t.value === activeTab)) {
+      setActiveTab(visibleTabs[0].value);
+    }
+  }, [selectedDivision, visibleTabs, activeTab]);
 
   function setDivisionAndUrl(code: string | null) {
     setSelectedDivision(code);
@@ -212,17 +247,11 @@ export default function Library() {
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as LibraryTab)}>
           <TabsList className="mb-4 overflow-x-auto flex-wrap" data-testid="library-tabs">
-            <TabsTrigger value="direct_materials" data-testid="tab-direct-materials">Direct Materials</TabsTrigger>
-            <TabsTrigger value="manufacturing_labour" data-testid="tab-manufacturing-labour">Manufacturing Labour</TabsTrigger>
-            <TabsTrigger value="glass" data-testid="tab-glass">Glass</TabsTrigger>
-            <TabsTrigger value="frame_type" data-testid="tab-frame-types">Frame Types</TabsTrigger>
-            <TabsTrigger value="frame_color" data-testid="tab-frame-colors">Frame Colors</TabsTrigger>
-            <TabsTrigger value="hardware" data-testid="tab-hardware">Hardware</TabsTrigger>
-            <TabsTrigger value="liner_type" data-testid="tab-liner-types">Liner Types</TabsTrigger>
-            <TabsTrigger value="wanz_bar" data-testid="tab-wanz-bar">Wanz Bar</TabsTrigger>
-            <TabsTrigger value="site-costs" data-testid="tab-site-costs">Site Costs</TabsTrigger>
-            <TabsTrigger value="sheet_materials" data-testid="tab-sheet-materials">Sheet Materials (LL)</TabsTrigger>
-            <TabsTrigger value="profile_roles" data-testid="tab-profile-roles">Profile Roles</TabsTrigger>
+            {visibleTabs.map(tab => (
+              <TabsTrigger key={tab.value} value={tab.value} data-testid={`tab-${tab.value}`}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           <TabsContent value="glass">
