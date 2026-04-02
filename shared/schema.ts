@@ -240,6 +240,14 @@ export const laserQuoteItemSchema = z.object({
   customerNotes: z.string().default(""),
   internalNotes: z.string().default(""),
   unitPrice: z.number().min(0).default(0),
+
+  llSheetMaterialId: z.string().default(""),
+  cutLengthMm: z.number().min(0).default(0),
+  pierceCount: z.number().int().min(0).default(0),
+  setupMinutes: z.number().min(0).default(15),
+  handlingMinutes: z.number().min(0).default(10),
+  markupPercent: z.number().min(0).default(35),
+  utilisationFactor: z.number().min(0).max(1).default(0.75),
 });
 
 export type LaserQuoteItem = z.infer<typeof laserQuoteItemSchema>;
@@ -261,6 +269,14 @@ export interface LaserItemPayload {
   customerNotes: string;
   internalNotes: string;
   unitPrice: number;
+
+  llSheetMaterialId: string;
+  cutLengthMm: number;
+  pierceCount: number;
+  setupMinutes: number;
+  handlingMinutes: number;
+  markupPercent: number;
+  utilisationFactor: number;
 }
 
 export interface EngineeringItemPayload {

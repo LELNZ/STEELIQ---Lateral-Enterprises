@@ -24,6 +24,24 @@ export const laserSnapshotItemSchema = z.object({
   internalNotes: z.string().default(""),
   unitPrice: z.number().default(0),
   photos: z.array(snapshotPhotoSchema).optional().default([]),
+
+  llSheetMaterialId: z.string().default(""),
+  supplierName: z.string().default(""),
+  sheetLength: z.number().default(0),
+  sheetWidth: z.number().default(0),
+  pricePerSheetExGst: z.number().default(0),
+  cutLengthMm: z.number().default(0),
+  pierceCount: z.number().default(0),
+  setupMinutes: z.number().default(0),
+  handlingMinutes: z.number().default(0),
+  markupPercent: z.number().default(0),
+  utilisationFactor: z.number().default(0),
+  materialCostTotal: z.number().default(0),
+  processCostTotal: z.number().default(0),
+  setupHandlingCost: z.number().default(0),
+  internalCostSubtotal: z.number().default(0),
+  markupAmount: z.number().default(0),
+  sellTotal: z.number().default(0),
 });
 
 export type LaserSnapshotItem = z.infer<typeof laserSnapshotItemSchema>;
