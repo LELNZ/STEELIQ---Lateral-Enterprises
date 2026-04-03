@@ -36,3 +36,9 @@ id = "_AxzgHkOQ8WBqAW6daswE"
 uri = "file://.local/platform-prep-0b-report.md"
 type = "text"
 title = "Platform Prep 0B — Final Report"
+
+[[outputs]]
+id = "UlbO5aaFGVRLNreizEyms"
+uri = "file://.local/ll-pricing-architecture-report.md"
+type = "text"
+title = "LL Pricing Architecture & Commercial Positioning Report"
