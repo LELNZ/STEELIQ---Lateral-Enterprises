@@ -36,11 +36,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, Loader2, ChevronDown, ChevronRight, Calculator } from "lucide-react";
-import type { LaserQuoteItem } from "@shared/schema";
+import type { LaserQuoteItem, LLPricingSettings, DivisionSettings } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
   computeLLPricing,
-  LL_PRICING_DEFAULTS,
+  resolveRatesFromSettings,
   type LLMaterialTruth,
   type LLPricingBreakdown,
 } from "@/lib/ll-pricing";
@@ -57,27 +57,31 @@ interface SheetMaterialRef {
   pricePerSheetExGst: string;
 }
 
-const EMPTY_ITEM: Omit<LaserQuoteItem, "id"> = {
-  itemRef: "",
-  title: "",
-  quantity: 1,
-  materialType: "",
-  materialGrade: "",
-  thickness: 0,
-  length: 0,
-  width: 0,
-  finish: "",
-  customerNotes: "",
-  internalNotes: "",
-  unitPrice: 0,
-  llSheetMaterialId: "",
-  cutLengthMm: 0,
-  pierceCount: 0,
-  setupMinutes: LL_PRICING_DEFAULTS.DEFAULT_SETUP_MINUTES,
-  handlingMinutes: LL_PRICING_DEFAULTS.DEFAULT_HANDLING_MINUTES,
-  markupPercent: LL_PRICING_DEFAULTS.DEFAULT_MARKUP_PERCENT,
-  utilisationFactor: LL_PRICING_DEFAULTS.DEFAULT_UTILISATION_FACTOR,
-};
+function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<LaserQuoteItem, "id"> {
+  const rates = resolveRatesFromSettings(settings);
+  return {
+    itemRef: "",
+    title: "",
+    quantity: 1,
+    materialType: "",
+    materialGrade: "",
+    thickness: 0,
+    length: 0,
+    width: 0,
+    finish: "",
+    customerNotes: "",
+    internalNotes: "",
+    unitPrice: 0,
+    llSheetMaterialId: "",
+    cutLengthMm: 0,
+    pierceCount: 0,
+    setupMinutes: rates.defaultSetupMinutes,
+    handlingMinutes: rates.defaultHandlingMinutes,
+    markupPercent: rates.defaultMarkupPercent,
+    utilisationFactor: rates.defaultUtilisationFactor,
+    geometrySource: "manual",
+  };
+}
 
 function findMatchingMaterial(
   materials: SheetMaterialRef[],
@@ -112,7 +116,8 @@ function materialToTruth(m: SheetMaterialRef): LLMaterialTruth {
 
 function computeItemPricing(
   item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
-  materials: SheetMaterialRef[]
+  materials: SheetMaterialRef[],
+  settings?: LLPricingSettings | null,
 ): LLPricingBreakdown {
   const matched = findMatchingMaterial(materials, item);
   return computeLLPricing({
@@ -126,15 +131,16 @@ function computeItemPricing(
     handlingMinutes: item.handlingMinutes,
     markupPercent: item.markupPercent,
     utilisationFactor: item.utilisationFactor,
-  });
+  }, settings);
 }
 
 function itemToSnapshotItem(
   item: LaserQuoteItem,
   index: number,
-  materials: SheetMaterialRef[]
+  materials: SheetMaterialRef[],
+  settings?: LLPricingSettings | null,
 ): LaserSnapshotItem {
-  const pricing = computeItemPricing(item, materials);
+  const pricing = computeItemPricing(item, materials, settings);
   const matched = findMatchingMaterial(materials, item);
   const matTruth = matched ? materialToTruth(matched) : null;
   return {
@@ -170,10 +176,13 @@ function itemToSnapshotItem(
     internalCostSubtotal: pricing.internalCostSubtotal,
     markupAmount: pricing.markupAmount,
     sellTotal: pricing.sellTotal,
+    geometrySource: item.geometrySource ?? "manual",
+    operations: [{ type: "laser" as const, enabled: true, costTotal: pricing.internalCostSubtotal }],
   };
 }
 
-function snapshotItemToItem(si: LaserSnapshotItem): LaserQuoteItem {
+function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings | null): LaserQuoteItem {
+  const rates = resolveRatesFromSettings(settings);
   return {
     id: crypto.randomUUID(),
     itemRef: si.itemRef,
@@ -191,10 +200,11 @@ function snapshotItemToItem(si: LaserSnapshotItem): LaserQuoteItem {
     llSheetMaterialId: si.llSheetMaterialId ?? "",
     cutLengthMm: si.cutLengthMm ?? 0,
     pierceCount: si.pierceCount ?? 0,
-    setupMinutes: si.setupMinutes ?? LL_PRICING_DEFAULTS.DEFAULT_SETUP_MINUTES,
-    handlingMinutes: si.handlingMinutes ?? LL_PRICING_DEFAULTS.DEFAULT_HANDLING_MINUTES,
-    markupPercent: si.markupPercent ?? LL_PRICING_DEFAULTS.DEFAULT_MARKUP_PERCENT,
-    utilisationFactor: si.utilisationFactor ?? LL_PRICING_DEFAULTS.DEFAULT_UTILISATION_FACTOR,
+    setupMinutes: si.setupMinutes ?? rates.defaultSetupMinutes,
+    handlingMinutes: si.handlingMinutes ?? rates.defaultHandlingMinutes,
+    markupPercent: si.markupPercent ?? rates.defaultMarkupPercent,
+    utilisationFactor: si.utilisationFactor ?? rates.defaultUtilisationFactor,
+    geometrySource: (si as any).geometrySource ?? "manual",
   };
 }
 
@@ -243,12 +253,18 @@ export default function LaserQuoteBuilder() {
   const [projectAddress, setProjectAddress] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LaserQuoteItem | null>(null);
-  const [formData, setFormData] = useState<Omit<LaserQuoteItem, "id">>(EMPTY_ITEM);
+  const [formData, setFormData] = useState<Omit<LaserQuoteItem, "id">>(makeEmptyItem(null));
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const isEditMode = !!quoteId;
+
+  const { data: llDivisionSettings } = useQuery<DivisionSettings>({
+    queryKey: ["/api/settings/divisions", "LL"],
+    staleTime: Infinity,
+  });
+  const llPricingSettings = (llDivisionSettings?.llPricingSettingsJson ?? null) as LLPricingSettings | null;
 
   const { data: sheetMaterials = [] } = useQuery<SheetMaterialRef[]>({
     queryKey: ["/api/ll-sheet-materials", "active"],
@@ -295,8 +311,8 @@ export default function LaserQuoteBuilder() {
   }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish, formData.thickness, formData.llSheetMaterialId]);
 
   const dialogPricing = useMemo(() => {
-    return computeItemPricing(formData, sheetMaterials);
-  }, [formData, sheetMaterials]);
+    return computeItemPricing(formData, sheetMaterials, llPricingSettings);
+  }, [formData, sheetMaterials, llPricingSettings]);
 
   const { data: quoteData, isLoading: quoteLoading } = useQuery<any>({
     queryKey: ["/api/quotes", quoteId],
@@ -314,7 +330,7 @@ export default function LaserQuoteBuilder() {
         if (snapshot) {
           setProjectAddress(snapshot.projectAddress || "");
           if (snapshot.laserItems?.length) {
-            setItems(snapshot.laserItems.map(snapshotItemToItem));
+            setItems(snapshot.laserItems.map((si: LaserSnapshotItem) => snapshotItemToItem(si, llPricingSettings)));
           }
         }
       }
@@ -324,10 +340,10 @@ export default function LaserQuoteBuilder() {
   const itemPricings = useMemo(() => {
     const map = new Map<string, LLPricingBreakdown>();
     for (const item of items) {
-      map.set(item.id, computeItemPricing(item, sheetMaterials));
+      map.set(item.id, computeItemPricing(item, sheetMaterials, llPricingSettings));
     }
     return map;
-  }, [items, sheetMaterials]);
+  }, [items, sheetMaterials, llPricingSettings]);
 
   const totalValue = useMemo(() => {
     let total = 0;
@@ -338,7 +354,7 @@ export default function LaserQuoteBuilder() {
   }, [itemPricings]);
 
   const buildSnapshot = () => {
-    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials));
+    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings));
     return {
       customer: customerName,
       projectAddress,
@@ -421,7 +437,7 @@ export default function LaserQuoteBuilder() {
 
   const openAddDialog = () => {
     setEditingItem(null);
-    setFormData({ ...EMPTY_ITEM });
+    setFormData(makeEmptyItem(llPricingSettings));
     setDialogOpen(true);
   };
 
@@ -456,7 +472,7 @@ export default function LaserQuoteBuilder() {
       toast({ title: "Required", description: "Item reference and title are required", variant: "destructive" });
       return;
     }
-    const pricing = computeItemPricing(formData, sheetMaterials);
+    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings);
     const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
     const updatedData = {
       ...formData,

@@ -43,6 +43,15 @@ export const laserSnapshotItemSchema = z.object({
   internalCostSubtotal: z.number().default(0),
   markupAmount: z.number().default(0),
   sellTotal: z.number().default(0),
+
+  geometrySource: z.enum(["manual", "dxf", "cam_import"]).default("manual"),
+
+  operations: z.array(z.object({
+    type: z.enum(["laser", "fold"]),
+    enabled: z.boolean().default(true),
+    costTotal: z.number().default(0),
+    notes: z.string().optional(),
+  })).optional(),
 });
 
 export type LaserSnapshotItem = z.infer<typeof laserSnapshotItemSchema>;

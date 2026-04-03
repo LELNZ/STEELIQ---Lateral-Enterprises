@@ -1,5 +1,5 @@
 /**
- * LL (Laser) Pricing Engine — Phase 2B Corrected
+ * LL (Laser) Pricing Engine — Phase 3A Settings-Driven
  *
  * Bounded manual-entry pricing model for Lateral Laser division.
  * This is NOT DXF automation, nesting optimisation, or machine integration.
@@ -27,7 +27,13 @@
  *
  * COMMERCIAL RULE:
  *   Explicit percentage markup on internal cost subtotal.
+ *
+ * SETTINGS-DRIVEN (Phase 3A):
+ *   All rates now read from LLPricingSettings passed as parameter.
+ *   LL_PRICING_DEFAULTS retained as fallback for safety only.
  */
+
+import type { LLPricingSettings } from "@shared/schema";
 
 export interface LLMaterialTruth {
   id: string;
@@ -94,7 +100,46 @@ export const LL_PRICING_DEFAULTS = {
   MINIMUM_MATERIAL_CHARGE: 25.00,
 } as const;
 
-export function computeLLPricing(inputs: LLPricingInputs): LLPricingBreakdown {
+export interface LLResolvedRates {
+  ratePerMmCut: number;
+  ratePerPierce: number;
+  shopRatePerHour: number;
+  minimumMaterialCharge: number;
+  defaultSetupMinutes: number;
+  defaultHandlingMinutes: number;
+  defaultMarkupPercent: number;
+  defaultUtilisationFactor: number;
+}
+
+export function resolveRatesFromSettings(settings: LLPricingSettings | null | undefined): LLResolvedRates {
+  if (!settings) {
+    return {
+      ratePerMmCut: LL_PRICING_DEFAULTS.RATE_PER_MM_CUT,
+      ratePerPierce: LL_PRICING_DEFAULTS.RATE_PER_PIERCE,
+      shopRatePerHour: LL_PRICING_DEFAULTS.SHOP_RATE_PER_HOUR,
+      minimumMaterialCharge: LL_PRICING_DEFAULTS.MINIMUM_MATERIAL_CHARGE,
+      defaultSetupMinutes: LL_PRICING_DEFAULTS.DEFAULT_SETUP_MINUTES,
+      defaultHandlingMinutes: LL_PRICING_DEFAULTS.DEFAULT_HANDLING_MINUTES,
+      defaultMarkupPercent: LL_PRICING_DEFAULTS.DEFAULT_MARKUP_PERCENT,
+      defaultUtilisationFactor: LL_PRICING_DEFAULTS.DEFAULT_UTILISATION_FACTOR,
+    };
+  }
+
+  return {
+    ratePerMmCut: settings.commercialPolicy.defaultRatePerMmCut ?? LL_PRICING_DEFAULTS.RATE_PER_MM_CUT,
+    ratePerPierce: settings.commercialPolicy.defaultRatePerPierce ?? LL_PRICING_DEFAULTS.RATE_PER_PIERCE,
+    shopRatePerHour: settings.labourRates.shopRatePerHour,
+    minimumMaterialCharge: settings.commercialPolicy.minimumMaterialCharge,
+    defaultSetupMinutes: settings.setupHandlingDefaults.defaultSetupMinutes,
+    defaultHandlingMinutes: settings.setupHandlingDefaults.defaultHandlingMinutes,
+    defaultMarkupPercent: settings.commercialPolicy.defaultMarkupPercent,
+    defaultUtilisationFactor: settings.nestingDefaults.defaultUtilisationFactor,
+  };
+}
+
+export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSettings | null): LLPricingBreakdown {
+  const rates = resolveRatesFromSettings(settings);
+
   const {
     material,
     partLengthMm,
@@ -125,21 +170,21 @@ export function computeLLPricing(inputs: LLPricingInputs): LLPricingBreakdown {
     materialCostTotal = estimatedSheets * material.pricePerSheetExGst;
   }
 
-  if (materialCostTotal > 0 && materialCostTotal < LL_PRICING_DEFAULTS.MINIMUM_MATERIAL_CHARGE) {
-    materialCostTotal = LL_PRICING_DEFAULTS.MINIMUM_MATERIAL_CHARGE;
+  if (materialCostTotal > 0 && materialCostTotal < rates.minimumMaterialCharge) {
+    materialCostTotal = rates.minimumMaterialCharge;
   }
 
   const materialCostPerUnit = materialCostTotal / safeQty;
 
-  const ratePerMmCut = LL_PRICING_DEFAULTS.RATE_PER_MM_CUT;
-  const ratePerPierce = LL_PRICING_DEFAULTS.RATE_PER_PIERCE;
+  const ratePerMmCut = rates.ratePerMmCut;
+  const ratePerPierce = rates.ratePerPierce;
 
   const cutCost = cutLengthMm * ratePerMmCut;
   const pierceCost = pierceCount * ratePerPierce;
   const processCostPerUnit = cutCost + pierceCost;
   const processCostTotal = processCostPerUnit * safeQty;
 
-  const shopRatePerHour = LL_PRICING_DEFAULTS.SHOP_RATE_PER_HOUR;
+  const shopRatePerHour = rates.shopRatePerHour;
   const setupHandlingCost = ((setupMinutes + handlingMinutes) / 60) * shopRatePerHour;
 
   const internalCostSubtotal = materialCostTotal + processCostTotal + setupHandlingCost;
