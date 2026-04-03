@@ -42,3 +42,9 @@ id = "UlbO5aaFGVRLNreizEyms"
 uri = "file://.local/ll-pricing-architecture-report.md"
 type = "text"
 title = "LL Pricing Architecture & Commercial Positioning Report"
+
+[[outputs]]
+id = "bAKS3o9R78N-Bh7vkfSSs"
+uri = "file://.local/ll-enterprise-parity-gap-analysis.md"
+type = "text"
+title = "Enterprise Parity Gap Analysis — Laser + Folding"
