@@ -36,6 +36,7 @@ export const laserSnapshotItemSchema = z.object({
   handlingMinutes: z.number().default(0),
   markupPercent: z.number().default(0),
   utilisationFactor: z.number().default(0),
+  estimatedSheets: z.number().default(0),
   materialCostTotal: z.number().default(0),
   processCostTotal: z.number().default(0),
   setupHandlingCost: z.number().default(0),

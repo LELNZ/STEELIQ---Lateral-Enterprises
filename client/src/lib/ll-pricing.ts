@@ -1,5 +1,5 @@
 /**
- * LL (Laser) Pricing Engine — Phase 2 Foundation
+ * LL (Laser) Pricing Engine — Phase 2B Corrected
  *
  * Bounded manual-entry pricing model for Lateral Laser division.
  * This is NOT DXF automation, nesting optimisation, or machine integration.
@@ -9,12 +9,17 @@
  *   B. Pricing Engine Truth — derived costs, commercial rule, sell result
  *   C. Customer Output Truth — sell totals only, no internal cost leakage
  *
- * MATERIAL COST APPROXIMATION:
- *   Uses direct rectangular area basis with a configurable utilisation factor.
- *   Default utilisation factor is 0.75 (75%), representing a bounded assumption
- *   that 75% of sheet area is usable before nesting optimisation exists.
- *   This is an honest approximation — full nesting/utilisation is out of scope
- *   for this phase.
+ * MATERIAL COST — SHEET CONSUMPTION MODEL (Phase 2B):
+ *   Material cost is derived from estimated sheet consumption, NOT per-unit
+ *   area pricing. The model calculates:
+ *     1. Total net part area = partLength × partWidth × quantity
+ *     2. Usable sheet area = sheetLength × sheetWidth × utilisationFactor
+ *     3. Estimated sheets required = ceil(totalNetPartArea / usableSheetArea)
+ *     4. Material cost = estimatedSheets × pricePerSheet
+ *   This is an honest bounded approximation — NOT nesting, NOT remnant
+ *   tracking, NOT stock management. The utilisation factor (default 75%)
+ *   accounts for kerf, edge trim, and general material waste.
+ *   Minimum material charge ($25) is applied per line item, not per unit.
  *
  * PROCESS COST:
  *   Operator-entered cut length (mm) and pierce count, multiplied by
@@ -52,7 +57,9 @@ export interface LLPricingInputs {
 export interface LLPricingBreakdown {
   sheetAreaMm2: number;
   partAreaMm2: number;
-  costPerMm2: number;
+  totalNetPartArea: number;
+  usableSheetArea: number;
+  estimatedSheets: number;
   materialCostPerUnit: number;
   materialCostTotal: number;
 
@@ -107,17 +114,22 @@ export function computeLLPricing(inputs: LLPricingInputs): LLPricingBreakdown {
   const sheetAreaMm2 = material ? material.sheetLength * material.sheetWidth : 0;
   const partAreaMm2 = partLengthMm * partWidthMm;
 
-  const costPerMm2 = sheetAreaMm2 > 0 && material
-    ? material.pricePerSheetExGst / (sheetAreaMm2 * safeUtilisation)
-    : 0;
+  const totalNetPartArea = partAreaMm2 * safeQty;
+  const usableSheetArea = sheetAreaMm2 * safeUtilisation;
 
-  let materialCostPerUnit = partAreaMm2 > 0 ? partAreaMm2 * costPerMm2 : 0;
+  let estimatedSheets = 0;
+  let materialCostTotal = 0;
 
-  if (materialCostPerUnit > 0 && materialCostPerUnit < LL_PRICING_DEFAULTS.MINIMUM_MATERIAL_CHARGE) {
-    materialCostPerUnit = LL_PRICING_DEFAULTS.MINIMUM_MATERIAL_CHARGE;
+  if (usableSheetArea > 0 && totalNetPartArea > 0 && material) {
+    estimatedSheets = Math.ceil(totalNetPartArea / usableSheetArea);
+    materialCostTotal = estimatedSheets * material.pricePerSheetExGst;
   }
 
-  const materialCostTotal = materialCostPerUnit * safeQty;
+  if (materialCostTotal > 0 && materialCostTotal < LL_PRICING_DEFAULTS.MINIMUM_MATERIAL_CHARGE) {
+    materialCostTotal = LL_PRICING_DEFAULTS.MINIMUM_MATERIAL_CHARGE;
+  }
+
+  const materialCostPerUnit = materialCostTotal / safeQty;
 
   const ratePerMmCut = LL_PRICING_DEFAULTS.RATE_PER_MM_CUT;
   const ratePerPierce = LL_PRICING_DEFAULTS.RATE_PER_PIERCE;
@@ -139,7 +151,9 @@ export function computeLLPricing(inputs: LLPricingInputs): LLPricingBreakdown {
   return {
     sheetAreaMm2,
     partAreaMm2,
-    costPerMm2,
+    totalNetPartArea,
+    usableSheetArea,
+    estimatedSheets,
     materialCostPerUnit,
     materialCostTotal,
     cutCost,
