@@ -189,7 +189,8 @@ export default function QuotePreview() {
   }
 
   const activeModel = liveRenderModel ?? renderModel;
-  const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T } = activeModel;
+  const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T, domainType } = activeModel;
+  const isLaserQuote = domainType === "laser";
 
   const ITEMS_FIRST_PAGE = 1;
   const densityItemsMap: Record<string, number> = { comfortable: 3, standard: 4, compact: 5 };
@@ -255,10 +256,14 @@ export default function QuotePreview() {
                     <div className="space-y-2.5">
                       {([
                         { key: "showItemsSubtotal", label: "Items Subtotal" },
-                        { key: "showInstallation", label: "Installation" },
-                        { key: "showDelivery", label: "Delivery" },
-                        { key: "showRemoval", label: "Old Window/Door Removal" },
-                        { key: "showRubbish", label: "Rubbish / Waste Removal" },
+                        ...(!isLaserQuote ? [
+                          { key: "showInstallation", label: "Installation" },
+                          { key: "showDelivery", label: "Delivery" },
+                          { key: "showRemoval", label: "Old Window/Door Removal" },
+                          { key: "showRubbish", label: "Rubbish / Waste Removal" },
+                        ] : [
+                          { key: "showDelivery", label: "Delivery" },
+                        ]),
                         { key: "showSubtotal", label: "Subtotal (excl. GST)" },
                         { key: "showGst", label: "GST (15%)" },
                       ] as { key: keyof TotalsDisplayConfig; label: string }[]).map(({ key, label }) => (
@@ -447,7 +452,9 @@ export default function QuotePreview() {
               <div>
                 <div style={{ display: "flex", flexDirection: "column", gap: sectionGap, marginBottom: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
                   <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
-                  <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
+                  {!isLaserQuote && (
+                    <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
+                  )}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
                   {page1ScheduleItems.map((item) => (

@@ -618,10 +618,20 @@ export default function LaserQuoteBuilder() {
                               {item.length > 0 && item.width > 0 ? `${item.length} x ${item.width}` : "—"}
                             </TableCell>
                             <TableCell className="text-right font-mono" data-testid={`text-unit-sell-${idx}`}>
-                              ${unitSell.toFixed(2)}
+                              <span>${unitSell.toFixed(2)}</span>
+                              {pricing && (
+                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-cost-indicator-${idx}`}>
+                                  cost ${(pricing.internalCostSubtotal / (item.quantity || 1)).toFixed(2)} +{pricing.markupPercent}%
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="text-right font-mono font-medium" data-testid={`text-line-total-${idx}`}>
-                              ${lineTotal.toFixed(2)}
+                              <span>${lineTotal.toFixed(2)}</span>
+                              {pricing && (
+                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-margin-indicator-${idx}`}>
+                                  margin ${(lineTotal - pricing.internalCostSubtotal).toFixed(2)}
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">

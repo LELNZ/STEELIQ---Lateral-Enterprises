@@ -409,7 +409,7 @@ export default function QuoteDetail() {
             </SelectTrigger>
             <SelectContent>
               {quote.quoteType !== "renovation" && quote.quoteType !== "new_build" && (
-                <SelectItem value="__legacy__" disabled className="text-muted-foreground italic">Unclassified</SelectItem>
+                <SelectItem value="__legacy__" disabled className="text-muted-foreground italic">{quote.divisionId === "LL" ? "Laser Quote" : "Unclassified"}</SelectItem>
               )}
               <SelectItem value="renovation">Renovation</SelectItem>
               <SelectItem value="new_build">New Build</SelectItem>
