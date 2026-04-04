@@ -60,3 +60,9 @@ id = "0O5IYkEsF3iKY0BiLxWMI"
 uri = "file://.local/multi-division-workflow-forensic-report.md"
 type = "text"
 title = "Multi-Division Workflow Forensic Report — Estimates to Quote to Completion"
+
+[[outputs]]
+id = "XohIvBNnOrPUlqAC359F2"
+uri = "file://reports/phase-3c-forensic-report.md"
+type = "text"
+title = "SteelIQ Phase 3C Forensic Report — LL Estimate Persistence Layer"
