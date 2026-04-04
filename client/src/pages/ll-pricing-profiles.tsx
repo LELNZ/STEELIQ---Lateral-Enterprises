@@ -100,8 +100,8 @@ export default function LLPricingProfiles({ embedded }: { embedded?: boolean } =
       {embedded && (
         <div className="flex items-center justify-between pb-3">
           <div>
-            <h3 className="text-sm font-semibold">Pricing Profiles</h3>
-            <p className="text-xs text-muted-foreground">Process rates, machine settings, commercial policy, and markup rules</p>
+            <h3 className="text-sm font-semibold">LL Pricing Model — Profiles</h3>
+            <p className="text-xs text-muted-foreground">Process rates, machine settings, commercial policy, and markup rules — does not own gas/consumable source costs</p>
           </div>
           <Button size="sm" onClick={() => { setDuplicateSourceId(null); setCreateDialogOpen(true); }} data-testid="button-new-profile">
             <Plus className="h-4 w-4 mr-1" />
@@ -384,7 +384,7 @@ function PricingSettingsEditor({
       <SettingsSection title="Gas Costs">
         <div className="px-3 py-2 mb-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5" data-testid="gas-governed-notice">
           <Info className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>Gas costs are <strong>governed by active Commercial Inputs</strong> (supplier-backed). Profile values below are fallback only and do not override governed rates.</span>
+          <span>Gas costs are <strong>governed by active Source Costs</strong> (supplier-backed). Profile values below are fallback only and do not override governed rates.</span>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {numField("O2 (fallback)", "gasCosts.o2PricePerLitre", settings.gasCosts.o2PricePerLitre, "$/L")}
@@ -396,7 +396,7 @@ function PricingSettingsEditor({
       <SettingsSection title="Consumable Costs">
         <div className="px-3 py-2 mb-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5" data-testid="consumables-governed-notice">
           <Info className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>Consumable costs are <strong>governed by active Commercial Inputs</strong> (invoice-backed). Profile value below is fallback only.</span>
+          <span>Consumable costs are <strong>governed by active Source Costs</strong> (invoice-backed). Profile value below is fallback only.</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {numField("Cost per Machine Hour (fallback)", "consumableCosts.consumableCostPerMachineHour", settings.consumableCosts.consumableCostPerMachineHour, "$")}

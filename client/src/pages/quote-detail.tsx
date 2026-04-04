@@ -429,6 +429,15 @@ export default function QuoteDetail() {
             </Button>
           </div>
         )}
+        {quote.divisionId === "LL" && (quote as any).pricingProfileLabel && (
+          <div className="rounded-lg border bg-card p-3" data-testid="ll-quote-provenance">
+            <p className="text-xs text-muted-foreground">Pricing Basis</p>
+            <p className="text-sm font-medium mt-0.5" data-testid="text-pricing-model-label">{(quote as any).pricingProfileLabel}</p>
+            {(quote as any).pricedAt && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">Priced: {new Date((quote as any).pricedAt).toLocaleDateString()}</p>
+            )}
+          </div>
+        )}
         {quote.sourceLaserEstimateId && (
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Source Estimate</p>

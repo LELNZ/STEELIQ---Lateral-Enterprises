@@ -78,8 +78,8 @@ export default function LLCommercialInputs({ embedded }: { embedded?: boolean } 
       {embedded && (
         <div className="flex items-center justify-between pb-3">
           <div>
-            <h3 className="text-sm font-semibold">Commercial Inputs</h3>
-            <p className="text-xs text-muted-foreground">Supplier-backed gas and consumable cost records with contract traceability</p>
+            <h3 className="text-sm font-semibold">Gas & Consumable Source Costs</h3>
+            <p className="text-xs text-muted-foreground">Supplier-backed source cost records with contract traceability — not library material records</p>
           </div>
           <div className="flex gap-2">
             {hasNoData && (

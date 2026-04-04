@@ -2104,10 +2104,20 @@ export async function registerRoutes(
             );
             const revision = revInsert.rows[0];
             const snapshotSellValue = (snapshot as any).totals?.sell ?? null;
-            await client.query(
-              `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`,
-              [revision.id, divisionCode, snapshotSellValue, customer, existing.id]
-            );
+            const revisionUpdateParams: any[] = [revision.id, divisionCode, snapshotSellValue, customer, existing.id];
+            let revisionUpdateSql: string;
+            if (divisionCode === "LL") {
+              const activeProfile = await storage.getActiveLLPricingProfile();
+              if (activeProfile) {
+                revisionUpdateSql = `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, pricing_profile_id = $6, pricing_profile_label = $7, priced_at = $8, updated_at = NOW() WHERE id = $5`;
+                revisionUpdateParams.push(activeProfile.id, `${activeProfile.profileName} (${activeProfile.versionLabel})`, new Date().toISOString());
+              } else {
+                revisionUpdateSql = `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`;
+              }
+            } else {
+              revisionUpdateSql = `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`;
+            }
+            await client.query(revisionUpdateSql, revisionUpdateParams);
             await client.query(
               `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
                VALUES (gen_random_uuid(), 'quote', $1, 'revision_created', $2, NOW())`,

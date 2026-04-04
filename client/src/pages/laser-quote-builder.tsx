@@ -743,6 +743,15 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               Fallback Pricing
             </Badge>
           )}
+          {activeGasInputs.length > 0 || activeConsumableInputs.length > 0 ? (
+            <Badge variant="outline" className="ml-1 text-xs bg-blue-50 text-blue-700 border-blue-300" data-testid="badge-source-costs-active">
+              Source Costs: {activeGasInputs.length} gas, {activeConsumableInputs.length} consumable
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="ml-1 text-xs bg-gray-50 text-gray-500 border-gray-300" data-testid="badge-source-costs-none">
+              Source Costs: fallback
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isEditMode && !estimateMode && (
