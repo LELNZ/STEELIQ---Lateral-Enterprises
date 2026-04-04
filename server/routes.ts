@@ -250,6 +250,7 @@ export async function registerRoutes(
   await seedLifecycleTemplates();
   await correctLibraryScoping();
   await seedLlSheetMaterials();
+  await seedLlPricingSettings();
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
@@ -1737,6 +1738,7 @@ export async function registerRoutes(
     totalsLayoutVariant: z.string().optional(),
     specDisplayDefaultsJson: z.any().optional(),
     jobTypePresetsJson: jobTypePresetsSchema.optional().nullable(),
+    llPricingSettingsJson: z.any().optional().nullable(),
   });
 
   app.patch("/api/settings/divisions/:code", async (req, res) => {
@@ -6328,6 +6330,131 @@ async function correctLibraryScoping() {
   }
 }
 
+
+async function seedLlPricingSettings() {
+  const existing = await storage.getDivisionSettings("LL");
+  if (!existing) return;
+  const existingSettings = (existing as any).llPricingSettingsJson;
+  if (existingSettings) {
+    if (existingSettings.commercialPolicy && existingSettings.commercialPolicy.defaultRatePerMmCut == null) {
+      existingSettings.commercialPolicy.defaultRatePerMmCut = 0.012;
+      existingSettings.commercialPolicy.defaultRatePerPierce = 0.50;
+      await storage.upsertDivisionSettings("LL", { llPricingSettingsJson: existingSettings });
+      console.log("[ll-pricing-settings] Migrated: added defaultRatePerMmCut/defaultRatePerPierce to commercial policy");
+    }
+    return;
+  }
+
+  const llPricingSettings = {
+    version: 1,
+    machineProfiles: [
+      {
+        id: "machine-bodor-3015",
+        name: "Bodor 3015 6kW Fibre",
+        bedLengthMm: 3000,
+        bedWidthMm: 1500,
+        usableLengthMm: 2970,
+        usableWidthMm: 1470,
+        hourlyMachineRate: 85.00,
+        maxThicknessByMaterialFamily: {
+          "Mild Steel": 20,
+          "Stainless Steel": 10,
+          "Aluminium": 16,
+          "Galvanised": 6,
+          "Zincanneal": 3,
+        },
+        isDefault: true,
+        isActive: true,
+      }
+    ],
+    processRateTables: [
+      { materialFamily: "Mild Steel", thickness: 1.6, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
+      { materialFamily: "Mild Steel", thickness: 2.0, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
+      { materialFamily: "Mild Steel", thickness: 3.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
+      { materialFamily: "Mild Steel", thickness: 4.5, cutSpeedMmPerMin: 4200, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
+      { materialFamily: "Mild Steel", thickness: 6.0, cutSpeedMmPerMin: 3200, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20 },
+      { materialFamily: "Mild Steel", thickness: 8.0, cutSpeedMmPerMin: 2400, pierceTimeSec: 1.0, assistGasType: "O2", gasConsumptionLPerMin: 22 },
+      { materialFamily: "Mild Steel", thickness: 10.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.2, assistGasType: "O2", gasConsumptionLPerMin: 25 },
+      { materialFamily: "Mild Steel", thickness: 12.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 1.5, assistGasType: "O2", gasConsumptionLPerMin: 28 },
+      { materialFamily: "Mild Steel", thickness: 16.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.0, assistGasType: "O2", gasConsumptionLPerMin: 30 },
+      { materialFamily: "Mild Steel", thickness: 20.0, cutSpeedMmPerMin: 600, pierceTimeSec: 3.0, assistGasType: "O2", gasConsumptionLPerMin: 35 },
+
+      { materialFamily: "Stainless Steel", thickness: 1.2, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30 },
+      { materialFamily: "Stainless Steel", thickness: 1.5, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30 },
+      { materialFamily: "Stainless Steel", thickness: 2.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35 },
+      { materialFamily: "Stainless Steel", thickness: 3.0, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 40 },
+      { materialFamily: "Stainless Steel", thickness: 4.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 45 },
+      { materialFamily: "Stainless Steel", thickness: 6.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 50 },
+      { materialFamily: "Stainless Steel", thickness: 8.0, cutSpeedMmPerMin: 1100, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 55 },
+      { materialFamily: "Stainless Steel", thickness: 10.0, cutSpeedMmPerMin: 700, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 60 },
+
+      { materialFamily: "Aluminium", thickness: 1.6, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25 },
+      { materialFamily: "Aluminium", thickness: 2.0, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25 },
+      { materialFamily: "Aluminium", thickness: 3.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 30 },
+      { materialFamily: "Aluminium", thickness: 4.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35 },
+      { materialFamily: "Aluminium", thickness: 5.0, cutSpeedMmPerMin: 3500, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 38 },
+      { materialFamily: "Aluminium", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 40 },
+      { materialFamily: "Aluminium", thickness: 8.0, cutSpeedMmPerMin: 2000, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 45 },
+      { materialFamily: "Aluminium", thickness: 10.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 50 },
+      { materialFamily: "Aluminium", thickness: 12.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 55 },
+      { materialFamily: "Aluminium", thickness: 16.0, cutSpeedMmPerMin: 500, pierceTimeSec: 3.0, assistGasType: "N2", gasConsumptionLPerMin: 60 },
+
+      { materialFamily: "Galvanised", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
+      { materialFamily: "Galvanised", thickness: 1.6, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
+      { materialFamily: "Galvanised", thickness: 2.0, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
+      { materialFamily: "Galvanised", thickness: 3.0, cutSpeedMmPerMin: 5000, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
+      { materialFamily: "Galvanised", thickness: 4.5, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
+      { materialFamily: "Galvanised", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20 },
+
+      { materialFamily: "Zincanneal", thickness: 0.55, cutSpeedMmPerMin: 10000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10 },
+      { materialFamily: "Zincanneal", thickness: 0.8, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10 },
+      { materialFamily: "Zincanneal", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12 },
+      { materialFamily: "Zincanneal", thickness: 1.6, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12 },
+      { materialFamily: "Zincanneal", thickness: 2.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
+      { materialFamily: "Zincanneal", thickness: 3.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
+    ],
+    gasCosts: {
+      o2PricePerLitre: 0.003,
+      n2PricePerLitre: 0.008,
+      compressedAirPricePerLitre: 0.0005,
+    },
+    consumableCosts: {
+      consumableCostPerMachineHour: 8.50,
+    },
+    labourRates: {
+      operatorRatePerHour: 45.00,
+      shopRatePerHour: 95.00,
+    },
+    setupHandlingDefaults: {
+      defaultSetupMinutes: 15,
+      defaultHandlingMinutes: 10,
+    },
+    commercialPolicy: {
+      defaultMarkupPercent: 35,
+      minimumMaterialCharge: 25.00,
+      minimumLineCharge: 50.00,
+      defaultRatePerMmCut: 0.012,
+      defaultRatePerPierce: 0.50,
+      expediteTiers: [
+        { key: "standard", label: "Standard", upliftPercent: 0 },
+        { key: "priority", label: "Priority (3-5 days)", upliftPercent: 15 },
+        { key: "urgent", label: "Urgent (1-2 days)", upliftPercent: 35 },
+        { key: "emergency", label: "Emergency (same day)", upliftPercent: 75 },
+      ],
+    },
+    nestingDefaults: {
+      kerfWidthMm: 0.3,
+      partGapMm: 3.0,
+      edgeTrimMm: 10.0,
+      defaultUtilisationFactor: 0.75,
+    },
+  };
+
+  await storage.upsertDivisionSettings("LL", {
+    llPricingSettingsJson: llPricingSettings,
+  } as any);
+  console.log("[ll-pricing-settings] Seeded LL pricing settings (initial architecture activation defaults)");
+}
 
 async function seedLlSheetMaterials() {
   const existing = await storage.getLlSheetMaterials();

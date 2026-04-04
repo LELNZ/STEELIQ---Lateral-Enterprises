@@ -43,7 +43,15 @@ const CATEGORY_OPTIONS = [
   { value: "bay-window", label: "Bay Window" },
 ];
 
-type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "site-costs" | "profile_roles" | "sheet_materials";
+type LibraryTab = "glass" | "frame_type" | "frame_color" | "hardware" | "liner_type" | "wanz_bar" | "direct_materials" | "manufacturing_labour" | "site-costs" | "profile_roles" | "ll_mild_steel" | "ll_aluminium" | "ll_stainless_steel" | "ll_corten" | "ll_galvanised_steel";
+
+const LL_FAMILY_TABS: { tab: LibraryTab; label: string; family: string }[] = [
+  { tab: "ll_mild_steel", label: "Mild Steel", family: "Mild Steel" },
+  { tab: "ll_aluminium", label: "Aluminium", family: "Aluminium" },
+  { tab: "ll_stainless_steel", label: "Stainless Steel", family: "Stainless Steel" },
+  { tab: "ll_galvanised_steel", label: "Galvanised Steel", family: "Galvanised Steel" },
+  { tab: "ll_corten", label: "Corten", family: "Corten" },
+];
 
 const DIVISION_CODES = ["LJ", "LE", "LL"] as const;
 type DivisionCode = typeof DIVISION_CODES[number];
@@ -120,13 +128,13 @@ const CATEGORY_OWNERSHIP: CategoryOwnershipEntry[] = [
     shared: false,
     justification: "Profile role dictionary (outer-frame, mullion, bead, etc.) defines aluminium extrusion roles for joinery.",
   },
-  {
-    tab: "sheet_materials",
-    label: "Sheet Materials (LL)",
-    owner: "LL",
+  ...LL_FAMILY_TABS.map(ft => ({
+    tab: ft.tab,
+    label: ft.label,
+    owner: "LL" as DivisionCode,
     shared: false,
-    justification: "Sheet metal materials (steel, aluminium, stainless) are specific to laser cutting operations.",
-  },
+    justification: `${ft.family} sheet materials are specific to laser cutting operations (LL).`,
+  })),
   {
     tab: "site-costs",
     label: "Site Costs",
@@ -137,7 +145,7 @@ const CATEGORY_OWNERSHIP: CategoryOwnershipEntry[] = [
 ];
 
 const ALL_LIBRARY_TABS: { value: LibraryTab; label: string }[] =
-  CATEGORY_OWNERSHIP.map(c => ({ value: c.tab, label: c.label }));
+  CATEGORY_OWNERSHIP.map(c => ({ value: c.tab, label: `${c.owner} – ${c.label}` }));
 
 function getVisibleTabs(divisionCode: string | null): { value: LibraryTab; label: string }[] {
   if (!divisionCode) return ALL_LIBRARY_TABS;
@@ -327,9 +335,11 @@ export default function Library() {
           <TabsContent value="site-costs">
             <SiteCostsContent divisionCode={selectedDivision} />
           </TabsContent>
-          <TabsContent value="sheet_materials">
-            <SheetMaterialsSection />
-          </TabsContent>
+          {LL_FAMILY_TABS.map(ft => (
+            <TabsContent key={ft.tab} value={ft.tab}>
+              <SheetMaterialsSection materialFamily={ft.family} />
+            </TabsContent>
+          ))}
           <TabsContent value="profile_roles">
             <ProfileRoleDictionarySection />
           </TabsContent>
@@ -3943,22 +3953,32 @@ const EMPTY_SHEET_MATERIAL = {
   sourceReference: "",
 };
 
-function SheetMaterialsSection() {
+function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_SHEET_MATERIAL);
-  const [filterFamily, setFilterFamily] = useState<string>("all");
+  const [filterGrade, setFilterGrade] = useState<string>("all");
+  const [filterFinish, setFilterFinish] = useState<string>("all");
+  const [filterThickness, setFilterThickness] = useState<string>("all");
+  const [filterSupplier, setFilterSupplier] = useState<string>("all");
 
   const { data: materials = [], isLoading } = useQuery<SheetMaterial[]>({
     queryKey: ["/api/ll-sheet-materials"],
   });
 
-  const families = [...new Set(materials.map(m => m.materialFamily))].sort();
+  const familyMaterials = materials.filter(m => m.materialFamily === materialFamily);
 
-  const filtered = filterFamily === "all"
-    ? materials
-    : materials.filter(m => m.materialFamily === filterFamily);
+  const grades = [...new Set(familyMaterials.map(m => m.grade))].sort();
+  const finishes = [...new Set(familyMaterials.map(m => m.finish).filter(Boolean))].sort();
+  const thicknesses = [...new Set(familyMaterials.map(m => m.thickness))].sort((a, b) => parseFloat(a) - parseFloat(b));
+  const suppliers = [...new Set(familyMaterials.map(m => m.supplierName))].sort();
+
+  let filtered = familyMaterials;
+  if (filterGrade !== "all") filtered = filtered.filter(m => m.grade === filterGrade);
+  if (filterFinish !== "all") filtered = filtered.filter(m => m.finish === filterFinish);
+  if (filterThickness !== "all") filtered = filtered.filter(m => m.thickness === filterThickness);
+  if (filterSupplier !== "all") filtered = filtered.filter(m => m.supplierName === filterSupplier);
 
   const createMutation = useMutation({
     mutationFn: (data: typeof EMPTY_SHEET_MATERIAL) =>
@@ -3993,7 +4013,7 @@ function SheetMaterialsSection() {
 
   function openAdd() {
     setEditingId(null);
-    setForm(EMPTY_SHEET_MATERIAL);
+    setForm({ ...EMPTY_SHEET_MATERIAL, materialFamily });
     setDialogOpen(true);
   }
 
@@ -4034,23 +4054,60 @@ function SheetMaterialsSection() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle data-testid="text-sheet-materials-title">Sheet Materials (Laser/Lateral)</CardTitle>
-        <div className="flex items-center gap-2">
-          <Select value={filterFamily} onValueChange={setFilterFamily}>
-            <SelectTrigger className="w-[180px]" data-testid="select-filter-family">
-              <SelectValue placeholder="Filter by family" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Families</SelectItem>
-              {families.map(f => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle data-testid="text-sheet-materials-title">{materialFamily} Sheet Materials</CardTitle>
           <Button size="sm" onClick={openAdd} data-testid="button-add-sheet-material">
             <Plus className="w-4 h-4 mr-1" /> Add Material
           </Button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="sheet-material-filters">
+          <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
+          {suppliers.length > 1 && (
+            <Select value={filterSupplier} onValueChange={setFilterSupplier}>
+              <SelectTrigger className="w-[160px] h-8 text-xs" data-testid="select-filter-supplier">
+                <SelectValue placeholder="Supplier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Suppliers</SelectItem>
+                {suppliers.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {grades.length > 1 && (
+            <Select value={filterGrade} onValueChange={setFilterGrade}>
+              <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-filter-grade">
+                <SelectValue placeholder="Grade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Grades</SelectItem>
+                {grades.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {finishes.length > 1 && (
+            <Select value={filterFinish} onValueChange={setFilterFinish}>
+              <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-filter-finish">
+                <SelectValue placeholder="Finish" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Finishes</SelectItem>
+                {finishes.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {thicknesses.length > 1 && (
+            <Select value={filterThickness} onValueChange={setFilterThickness}>
+              <SelectTrigger className="w-[120px] h-8 text-xs" data-testid="select-filter-thickness">
+                <SelectValue placeholder="Thickness" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Thicknesses</SelectItem>
+                {thicknesses.map(t => <SelectItem key={t} value={t}>{t}mm</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          <span className="text-xs text-muted-foreground">{filtered.length} of {familyMaterials.length} materials</span>
         </div>
       </CardHeader>
       <CardContent>

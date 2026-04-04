@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -30,9 +30,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, Loader2 } from "lucide-react";
-import type { LaserQuoteItem } from "@shared/schema";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, Loader2, ChevronDown, ChevronRight, Calculator } from "lucide-react";
+import type { LaserQuoteItem, LLPricingSettings, DivisionSettings } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
+import {
+  computeLLPricing,
+  resolveRatesFromSettings,
+  type LLMaterialTruth,
+  type LLPricingBreakdown,
+} from "@/lib/ll-pricing";
 
 interface SheetMaterialRef {
   id: string;
@@ -46,22 +57,92 @@ interface SheetMaterialRef {
   pricePerSheetExGst: string;
 }
 
-const EMPTY_ITEM: Omit<LaserQuoteItem, "id"> = {
-  itemRef: "",
-  title: "",
-  quantity: 1,
-  materialType: "",
-  materialGrade: "",
-  thickness: 0,
-  length: 0,
-  width: 0,
-  finish: "",
-  customerNotes: "",
-  internalNotes: "",
-  unitPrice: 0,
-};
+function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<LaserQuoteItem, "id"> {
+  const rates = resolveRatesFromSettings(settings);
+  return {
+    itemRef: "",
+    title: "",
+    quantity: 1,
+    materialType: "",
+    materialGrade: "",
+    thickness: 0,
+    length: 0,
+    width: 0,
+    finish: "",
+    customerNotes: "",
+    internalNotes: "",
+    unitPrice: 0,
+    llSheetMaterialId: "",
+    cutLengthMm: 0,
+    pierceCount: 0,
+    setupMinutes: rates.defaultSetupMinutes,
+    handlingMinutes: rates.defaultHandlingMinutes,
+    markupPercent: rates.defaultMarkupPercent,
+    utilisationFactor: rates.defaultUtilisationFactor,
+    geometrySource: "manual",
+  };
+}
 
-function itemToSnapshotItem(item: LaserQuoteItem, index: number): LaserSnapshotItem {
+function findMatchingMaterial(
+  materials: SheetMaterialRef[],
+  item: { materialType: string; materialGrade: string; finish: string; thickness: number; llSheetMaterialId: string }
+): SheetMaterialRef | undefined {
+  if (item.llSheetMaterialId) {
+    const byId = materials.find(m => m.id === item.llSheetMaterialId);
+    if (byId) return byId;
+  }
+  return materials.find(
+    m =>
+      m.materialFamily === item.materialType &&
+      m.grade === item.materialGrade &&
+      m.finish === item.finish &&
+      parseFloat(m.thickness) === item.thickness
+  );
+}
+
+function materialToTruth(m: SheetMaterialRef): LLMaterialTruth {
+  return {
+    id: m.id,
+    supplierName: m.supplierName,
+    materialFamily: m.materialFamily,
+    grade: m.grade,
+    finish: m.finish,
+    thickness: parseFloat(m.thickness),
+    sheetLength: parseFloat(m.sheetLength),
+    sheetWidth: parseFloat(m.sheetWidth),
+    pricePerSheetExGst: parseFloat(m.pricePerSheetExGst),
+  };
+}
+
+function computeItemPricing(
+  item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
+  materials: SheetMaterialRef[],
+  settings?: LLPricingSettings | null,
+): LLPricingBreakdown {
+  const matched = findMatchingMaterial(materials, item);
+  return computeLLPricing({
+    material: matched ? materialToTruth(matched) : null,
+    partLengthMm: item.length,
+    partWidthMm: item.width,
+    quantity: item.quantity,
+    cutLengthMm: item.cutLengthMm,
+    pierceCount: item.pierceCount,
+    setupMinutes: item.setupMinutes,
+    handlingMinutes: item.handlingMinutes,
+    markupPercent: item.markupPercent,
+    utilisationFactor: item.utilisationFactor,
+  }, settings);
+}
+
+function itemToSnapshotItem(
+  item: LaserQuoteItem,
+  index: number,
+  materials: SheetMaterialRef[],
+  settings?: LLPricingSettings | null,
+): LaserSnapshotItem {
+  const pricing = computeItemPricing(item, materials, settings);
+  const matched = findMatchingMaterial(materials, item);
+  const matTruth = matched ? materialToTruth(matched) : null;
   return {
     itemNumber: index + 1,
     itemRef: item.itemRef,
@@ -75,12 +156,33 @@ function itemToSnapshotItem(item: LaserQuoteItem, index: number): LaserSnapshotI
     finish: item.finish,
     customerNotes: item.customerNotes,
     internalNotes: item.internalNotes,
-    unitPrice: item.unitPrice,
+    unitPrice: pricing.unitSell,
     photos: [],
+    llSheetMaterialId: item.llSheetMaterialId,
+    supplierName: matTruth?.supplierName || "",
+    sheetLength: matTruth?.sheetLength || 0,
+    sheetWidth: matTruth?.sheetWidth || 0,
+    pricePerSheetExGst: matTruth?.pricePerSheetExGst || 0,
+    cutLengthMm: item.cutLengthMm,
+    pierceCount: item.pierceCount,
+    setupMinutes: item.setupMinutes,
+    handlingMinutes: item.handlingMinutes,
+    markupPercent: item.markupPercent,
+    utilisationFactor: item.utilisationFactor,
+    estimatedSheets: pricing.estimatedSheets,
+    materialCostTotal: pricing.materialCostTotal,
+    processCostTotal: pricing.processCostTotal,
+    setupHandlingCost: pricing.setupHandlingCost,
+    internalCostSubtotal: pricing.internalCostSubtotal,
+    markupAmount: pricing.markupAmount,
+    sellTotal: pricing.sellTotal,
+    geometrySource: item.geometrySource ?? "manual",
+    operations: [{ type: "laser" as const, enabled: true, costTotal: pricing.internalCostSubtotal }],
   };
 }
 
-function snapshotItemToItem(si: LaserSnapshotItem): LaserQuoteItem {
+function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings | null): LaserQuoteItem {
+  const rates = resolveRatesFromSettings(settings);
   return {
     id: crypto.randomUUID(),
     itemRef: si.itemRef,
@@ -95,7 +197,49 @@ function snapshotItemToItem(si: LaserSnapshotItem): LaserQuoteItem {
     customerNotes: si.customerNotes,
     internalNotes: si.internalNotes,
     unitPrice: si.unitPrice,
+    llSheetMaterialId: si.llSheetMaterialId ?? "",
+    cutLengthMm: si.cutLengthMm ?? 0,
+    pierceCount: si.pierceCount ?? 0,
+    setupMinutes: si.setupMinutes ?? rates.defaultSetupMinutes,
+    handlingMinutes: si.handlingMinutes ?? rates.defaultHandlingMinutes,
+    markupPercent: si.markupPercent ?? rates.defaultMarkupPercent,
+    utilisationFactor: si.utilisationFactor ?? rates.defaultUtilisationFactor,
+    geometrySource: (si as any).geometrySource ?? "manual",
   };
+}
+
+function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPricingBreakdown; supplierName: string }) {
+  const rows = [
+    { label: "Supplier", value: supplierName || "—" },
+    { label: "Sheet Area", value: breakdown.sheetAreaMm2 > 0 ? `${(breakdown.sheetAreaMm2 / 1_000_000).toFixed(3)} m²` : "—" },
+    { label: "Part Area (each)", value: breakdown.partAreaMm2 > 0 ? `${(breakdown.partAreaMm2 / 1_000_000).toFixed(4)} m²` : "—" },
+    { label: "Total Part Area", value: breakdown.totalNetPartArea > 0 ? `${(breakdown.totalNetPartArea / 1_000_000).toFixed(4)} m²` : "—" },
+    { label: "Utilisation Factor", value: `${(breakdown.utilisationFactor * 100).toFixed(0)}%` },
+    { label: "Est. Sheets Required", value: breakdown.estimatedSheets > 0 ? `${breakdown.estimatedSheets} sheet${breakdown.estimatedSheets !== 1 ? "s" : ""}` : "—" },
+    { label: "Material Cost", value: `$${breakdown.materialCostTotal.toFixed(2)}` },
+    { label: "Cut Cost (per unit)", value: `$${breakdown.cutCost.toFixed(2)}` },
+    { label: "Pierce Cost (per unit)", value: `$${breakdown.pierceCost.toFixed(2)}` },
+    { label: "Process Cost (total)", value: `$${breakdown.processCostTotal.toFixed(2)}` },
+    { label: "Setup/Handling", value: `$${breakdown.setupHandlingCost.toFixed(2)}` },
+    { label: "Internal Subtotal", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true },
+    { label: `Markup (${breakdown.markupPercent}%)`, value: `$${breakdown.markupAmount.toFixed(2)}` },
+    { label: "Sell Total", value: `$${breakdown.sellTotal.toFixed(2)}`, bold: true },
+    { label: "Unit Sell", value: `$${breakdown.unitSell.toFixed(2)}`, bold: true },
+  ];
+  return (
+    <div className="bg-muted/50 border rounded-md p-3 space-y-1" data-testid="pricing-breakdown-panel">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Internal Pricing Breakdown</span>
+      </div>
+      {rows.map((r, i) => (
+        <div key={i} className={`flex justify-between text-xs ${r.bold ? 'font-semibold border-t pt-1 mt-1' : 'text-muted-foreground'}`}>
+          <span>{r.label}</span>
+          <span className="font-mono">{r.value}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function LaserQuoteBuilder() {
@@ -109,11 +253,18 @@ export default function LaserQuoteBuilder() {
   const [projectAddress, setProjectAddress] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LaserQuoteItem | null>(null);
-  const [formData, setFormData] = useState<Omit<LaserQuoteItem, "id">>(EMPTY_ITEM);
+  const [formData, setFormData] = useState<Omit<LaserQuoteItem, "id">>(makeEmptyItem(null));
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const isEditMode = !!quoteId;
+
+  const { data: llDivisionSettings } = useQuery<DivisionSettings>({
+    queryKey: ["/api/settings/divisions", "LL"],
+    staleTime: Infinity,
+  });
+  const llPricingSettings = (llDivisionSettings?.llPricingSettingsJson ?? null) as LLPricingSettings | null;
 
   const { data: sheetMaterials = [] } = useQuery<SheetMaterialRef[]>({
     queryKey: ["/api/ll-sheet-materials", "active"],
@@ -152,6 +303,17 @@ export default function LaserQuoteBuilder() {
     )].sort((a, b) => parseFloat(a) - parseFloat(b));
   }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish]);
 
+  const selectedMaterialRow = useMemo(() => {
+    return findMatchingMaterial(sheetMaterials, {
+      ...formData,
+      llSheetMaterialId: formData.llSheetMaterialId,
+    });
+  }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish, formData.thickness, formData.llSheetMaterialId]);
+
+  const dialogPricing = useMemo(() => {
+    return computeItemPricing(formData, sheetMaterials, llPricingSettings);
+  }, [formData, sheetMaterials, llPricingSettings]);
+
   const { data: quoteData, isLoading: quoteLoading } = useQuery<any>({
     queryKey: ["/api/quotes", quoteId],
     enabled: isEditMode,
@@ -168,29 +330,43 @@ export default function LaserQuoteBuilder() {
         if (snapshot) {
           setProjectAddress(snapshot.projectAddress || "");
           if (snapshot.laserItems?.length) {
-            setItems(snapshot.laserItems.map(snapshotItemToItem));
+            setItems(snapshot.laserItems.map((si: LaserSnapshotItem) => snapshotItemToItem(si, llPricingSettings)));
           }
         }
       }
     }
   }, [quoteData, isEditMode]);
 
+  const itemPricings = useMemo(() => {
+    const map = new Map<string, LLPricingBreakdown>();
+    for (const item of items) {
+      map.set(item.id, computeItemPricing(item, sheetMaterials, llPricingSettings));
+    }
+    return map;
+  }, [items, sheetMaterials, llPricingSettings]);
+
   const totalValue = useMemo(() => {
-    return items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-  }, [items]);
+    let total = 0;
+    for (const [, p] of itemPricings) {
+      total += p.sellTotal;
+    }
+    return total;
+  }, [itemPricings]);
 
   const buildSnapshot = () => {
-    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx));
+    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings));
     return {
       customer: customerName,
       projectAddress,
       items: [],
       laserItems,
       totals: {
-        cost: 0,
+        cost: Array.from(itemPricings.values()).reduce((s, p) => s + p.internalCostSubtotal, 0),
         sell: totalValue,
-        grossProfit: totalValue,
-        grossMargin: totalValue > 0 ? 100 : 0,
+        grossProfit: totalValue - Array.from(itemPricings.values()).reduce((s, p) => s + p.internalCostSubtotal, 0),
+        grossMargin: totalValue > 0
+          ? ((totalValue - Array.from(itemPricings.values()).reduce((s, p) => s + p.internalCostSubtotal, 0)) / totalValue) * 100
+          : 0,
         totalLabourHours: 0,
         gpPerHour: 0,
       },
@@ -261,7 +437,7 @@ export default function LaserQuoteBuilder() {
 
   const openAddDialog = () => {
     setEditingItem(null);
-    setFormData({ ...EMPTY_ITEM });
+    setFormData(makeEmptyItem(llPricingSettings));
     setDialogOpen(true);
   };
 
@@ -280,6 +456,13 @@ export default function LaserQuoteBuilder() {
       customerNotes: item.customerNotes,
       internalNotes: item.internalNotes,
       unitPrice: item.unitPrice,
+      llSheetMaterialId: item.llSheetMaterialId,
+      cutLengthMm: item.cutLengthMm,
+      pierceCount: item.pierceCount,
+      setupMinutes: item.setupMinutes,
+      handlingMinutes: item.handlingMinutes,
+      markupPercent: item.markupPercent,
+      utilisationFactor: item.utilisationFactor,
     });
     setDialogOpen(true);
   };
@@ -289,10 +472,17 @@ export default function LaserQuoteBuilder() {
       toast({ title: "Required", description: "Item reference and title are required", variant: "destructive" });
       return;
     }
+    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings);
+    const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
+    const updatedData = {
+      ...formData,
+      llSheetMaterialId: materialId,
+      unitPrice: pricing.unitSell,
+    };
     if (editingItem) {
-      setItems(prev => prev.map(i => i.id === editingItem.id ? { ...formData, id: editingItem.id } : i));
+      setItems(prev => prev.map(i => i.id === editingItem.id ? { ...updatedData, id: editingItem.id } : i));
     } else {
-      setItems(prev => [...prev, { ...formData, id: crypto.randomUUID() }]);
+      setItems(prev => [...prev, { ...updatedData, id: crypto.randomUUID() }]);
     }
     setHasUnsavedChanges(true);
     setDialogOpen(false);
@@ -302,6 +492,15 @@ export default function LaserQuoteBuilder() {
     setItems(prev => prev.filter(i => i.id !== id));
     setHasUnsavedChanges(true);
     setDeleteConfirm(null);
+  };
+
+  const toggleItemExpand = (id: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const isSaving = createQuoteMutation.isPending || saveRevisionMutation.isPending;
@@ -411,53 +610,94 @@ export default function LaserQuoteBuilder() {
                       <TableHead>Material</TableHead>
                       <TableHead className="text-right">Thickness</TableHead>
                       <TableHead className="text-right">L x W (mm)</TableHead>
-                      <TableHead className="text-right">Unit Price</TableHead>
+                      <TableHead className="text-right">Unit Sell</TableHead>
                       <TableHead className="text-right">Line Total</TableHead>
-                      <TableHead className="w-20"></TableHead>
+                      <TableHead className="w-24"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {items.map((item, idx) => (
-                      <TableRow key={item.id} data-testid={`row-item-${idx}`}>
-                        <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                        <TableCell className="font-mono text-xs" data-testid={`text-item-ref-${idx}`}>{item.itemRef}</TableCell>
-                        <TableCell data-testid={`text-item-title-${idx}`}>{item.title}</TableCell>
-                        <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-xs">
-                          {[item.materialType, item.materialGrade].filter(Boolean).join(" / ") || "—"}
-                        </TableCell>
-                        <TableCell className="text-right">{item.thickness > 0 ? `${item.thickness}mm` : "—"}</TableCell>
-                        <TableCell className="text-right text-xs">
-                          {item.length > 0 && item.width > 0 ? `${item.length} x ${item.width}` : "—"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">${item.unitPrice.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono font-medium">
-                          ${(item.unitPrice * item.quantity).toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => openEditDialog(item)}
-                              data-testid={`button-edit-item-${idx}`}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive"
-                              onClick={() => setDeleteConfirm(item.id)}
-                              data-testid={`button-delete-item-${idx}`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {items.map((item, idx) => {
+                      const pricing = itemPricings.get(item.id);
+                      const unitSell = pricing?.unitSell || 0;
+                      const lineTotal = pricing?.sellTotal || 0;
+                      const isExpanded = expandedItems.has(item.id);
+                      const matched = findMatchingMaterial(sheetMaterials, item);
+                      return (
+                        <Fragment key={item.id}>
+                          <TableRow data-testid={`row-item-${idx}`}>
+                            <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell className="font-mono text-xs" data-testid={`text-item-ref-${idx}`}>{item.itemRef}</TableCell>
+                            <TableCell data-testid={`text-item-title-${idx}`}>{item.title}</TableCell>
+                            <TableCell className="text-center">{item.quantity}</TableCell>
+                            <TableCell className="text-xs">
+                              {[item.materialType, item.materialGrade].filter(Boolean).join(" / ") || "—"}
+                            </TableCell>
+                            <TableCell className="text-right">{item.thickness > 0 ? `${item.thickness}mm` : "—"}</TableCell>
+                            <TableCell className="text-right text-xs">
+                              {item.length > 0 && item.width > 0 ? `${item.length} x ${item.width}` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono" data-testid={`text-unit-sell-${idx}`}>
+                              <span>${unitSell.toFixed(2)}</span>
+                              {pricing && (
+                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-cost-indicator-${idx}`}>
+                                  cost ${(pricing.internalCostSubtotal / (item.quantity || 1)).toFixed(2)} +{pricing.markupPercent}%
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-medium" data-testid={`text-line-total-${idx}`}>
+                              <span>${lineTotal.toFixed(2)}</span>
+                              {pricing && (
+                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-margin-indicator-${idx}`}>
+                                  margin ${(lineTotal - pricing.internalCostSubtotal).toFixed(2)}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => toggleItemExpand(item.id)}
+                                  data-testid={`button-toggle-breakdown-${idx}`}
+                                  title="Toggle pricing breakdown"
+                                >
+                                  {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => openEditDialog(item)}
+                                  data-testid={`button-edit-item-${idx}`}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive"
+                                  onClick={() => setDeleteConfirm(item.id)}
+                                  data-testid={`button-delete-item-${idx}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded && pricing && (
+                            <TableRow>
+                              <TableCell colSpan={10} className="p-2">
+                                <PricingBreakdownPanel
+                                  breakdown={pricing}
+                                  supplierName={matched?.supplierName || "—"}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -467,9 +707,9 @@ export default function LaserQuoteBuilder() {
             <div className="border-t px-4 py-3 flex justify-end" data-testid="items-total">
               <div className="text-sm">
                 <span className="text-muted-foreground mr-2">Subtotal:</span>
-                <span className="font-mono font-semibold">${totalValue.toFixed(2)}</span>
+                <span className="font-mono font-semibold" data-testid="text-subtotal">${totalValue.toFixed(2)}</span>
                 <span className="text-muted-foreground ml-4 mr-2">Incl. GST:</span>
-                <span className="font-mono font-semibold">${(totalValue * 1.15).toFixed(2)}</span>
+                <span className="font-mono font-semibold" data-testid="text-total-gst">${(totalValue * 1.15).toFixed(2)}</span>
               </div>
             </div>
           )}
@@ -477,7 +717,7 @@ export default function LaserQuoteBuilder() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="dialog-item-form">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-item-form">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit Item" : "Add Item"}</DialogTitle>
           </DialogHeader>
@@ -515,74 +755,104 @@ export default function LaserQuoteBuilder() {
                 data-testid="input-title"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="materialType">Material Family</Label>
-                <Select
-                  value={formData.materialType}
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, materialType: v, materialGrade: "", finish: "", thickness: 0 }))}
-                >
-                  <SelectTrigger data-testid="select-material-type">
-                    <SelectValue placeholder="Select..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {materialFamilies.map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+            <div className="border rounded-md p-3 space-y-3 bg-muted/20">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Material Selection</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="materialType">Material Family</Label>
+                  <Select
+                    value={formData.materialType}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, materialType: v, materialGrade: "", finish: "", thickness: 0, llSheetMaterialId: "" }))}
+                  >
+                    <SelectTrigger data-testid="select-material-type">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {materialFamilies.map(t => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="materialGrade">Grade</Label>
+                  <Select
+                    value={formData.materialGrade}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, materialGrade: v, finish: "", thickness: 0, llSheetMaterialId: "" }))}
+                  >
+                    <SelectTrigger data-testid="select-material-grade">
+                      <SelectValue placeholder={formData.materialType ? "Select grade..." : "Select family first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {gradesForFamily.map(g => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="materialGrade">Grade</Label>
-                <Select
-                  value={formData.materialGrade}
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, materialGrade: v, finish: "", thickness: 0 }))}
-                >
-                  <SelectTrigger data-testid="select-material-grade">
-                    <SelectValue placeholder={formData.materialType ? "Select grade..." : "Select family first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {gradesForFamily.map(g => (
-                      <SelectItem key={g} value={g}>{g}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="finish">Finish</Label>
+                  <Select
+                    value={formData.finish}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, finish: v, thickness: 0, llSheetMaterialId: "" }))}
+                  >
+                    <SelectTrigger data-testid="select-finish">
+                      <SelectValue placeholder={formData.materialGrade ? "Select finish..." : "Select grade first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {finishesForSelection.map(f => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="thickness">Thickness (mm)</Label>
+                  <Select
+                    value={formData.thickness ? String(formData.thickness) : ""}
+                    onValueChange={(v) => {
+                      const t = parseFloat(v) || 0;
+                      const matched = sheetMaterials.find(
+                        m => m.materialFamily === formData.materialType &&
+                          m.grade === formData.materialGrade &&
+                          m.finish === formData.finish &&
+                          parseFloat(m.thickness) === t
+                      );
+                      setFormData(prev => ({
+                        ...prev,
+                        thickness: t,
+                        llSheetMaterialId: matched?.id || "",
+                      }));
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-thickness">
+                      <SelectValue placeholder={formData.materialGrade ? "Select..." : "Select grade first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {thicknessesForSelection.map(t => (
+                        <SelectItem key={t} value={t}>{t}mm</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              {selectedMaterialRow && (
+                <div className="text-xs text-muted-foreground bg-background border rounded px-2 py-1.5 space-y-0.5" data-testid="material-identity-display">
+                  <div className="flex justify-between">
+                    <span>Supplier: <strong>{selectedMaterialRow.supplierName}</strong></span>
+                    <span>Sheet: {selectedMaterialRow.sheetLength}mm x {selectedMaterialRow.sheetWidth}mm</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Price/Sheet: <strong>${parseFloat(selectedMaterialRow.pricePerSheetExGst).toFixed(2)}</strong> ex GST</span>
+                    <span className="text-[10px] text-muted-foreground/60 font-mono">ID: {selectedMaterialRow.id.slice(0, 8)}</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="finish">Finish</Label>
-                <Select
-                  value={formData.finish}
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, finish: v, thickness: 0 }))}
-                >
-                  <SelectTrigger data-testid="select-finish">
-                    <SelectValue placeholder={formData.materialGrade ? "Select finish..." : "Select grade first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {finishesForSelection.map(f => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="thickness">Thickness (mm)</Label>
-                <Select
-                  value={formData.thickness ? String(formData.thickness) : ""}
-                  onValueChange={(v) => setFormData(prev => ({ ...prev, thickness: parseFloat(v) || 0 }))}
-                >
-                  <SelectTrigger data-testid="select-thickness">
-                    <SelectValue placeholder={formData.materialGrade ? "Select..." : "Select grade first"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {thicknessesForSelection.map(t => (
-                      <SelectItem key={t} value={t}>{t}mm</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="length">Part Length (mm)</Label>
@@ -607,18 +877,112 @@ export default function LaserQuoteBuilder() {
                 />
               </div>
             </div>
-            <div>
-              <Label htmlFor="unitPrice">Unit Price ($)</Label>
-              <Input
-                id="unitPrice"
-                type="number"
-                min={0}
-                step={0.01}
-                value={formData.unitPrice || ""}
-                onChange={(e) => setFormData(prev => ({ ...prev, unitPrice: parseFloat(e.target.value) || 0 }))}
-                data-testid="input-unit-price"
-              />
+
+            <div className="border rounded-md p-3 space-y-3 bg-muted/20">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Process / Cutting Drivers</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="cutLengthMm">Total Cut Length (mm)</Label>
+                  <Input
+                    id="cutLengthMm"
+                    type="number"
+                    min={0}
+                    value={formData.cutLengthMm || ""}
+                    onChange={(e) => setFormData(prev => ({ ...prev, cutLengthMm: parseFloat(e.target.value) || 0 }))}
+                    placeholder="e.g. 800"
+                    data-testid="input-cut-length"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Per unit, estimated from drawing</p>
+                </div>
+                <div>
+                  <Label htmlFor="pierceCount">Pierce Count</Label>
+                  <Input
+                    id="pierceCount"
+                    type="number"
+                    min={0}
+                    value={formData.pierceCount || ""}
+                    onChange={(e) => setFormData(prev => ({ ...prev, pierceCount: parseInt(e.target.value) || 0 }))}
+                    placeholder="e.g. 4"
+                    data-testid="input-pierce-count"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Per unit, number of pierce starts</p>
+                </div>
+              </div>
             </div>
+
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-start text-xs text-muted-foreground" data-testid="button-toggle-advanced">
+                  <ChevronRight className="h-3 w-3 mr-1" />
+                  Setup, Handling &amp; Commercial Settings
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="border rounded-md p-3 space-y-3 bg-muted/20 mt-1">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="setupMinutes">Setup Minutes</Label>
+                      <Input
+                        id="setupMinutes"
+                        type="number"
+                        min={0}
+                        value={formData.setupMinutes}
+                        onChange={(e) => setFormData(prev => ({ ...prev, setupMinutes: parseFloat(e.target.value) || 0 }))}
+                        data-testid="input-setup-minutes"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="handlingMinutes">Handling Minutes</Label>
+                      <Input
+                        id="handlingMinutes"
+                        type="number"
+                        min={0}
+                        value={formData.handlingMinutes}
+                        onChange={(e) => setFormData(prev => ({ ...prev, handlingMinutes: parseFloat(e.target.value) || 0 }))}
+                        data-testid="input-handling-minutes"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="markupPercent">Markup %</Label>
+                      <Input
+                        id="markupPercent"
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={formData.markupPercent}
+                        onChange={(e) => setFormData(prev => ({ ...prev, markupPercent: parseFloat(e.target.value) || 0 }))}
+                        data-testid="input-markup-percent"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="utilisationFactor">Utilisation Factor</Label>
+                      <Input
+                        id="utilisationFactor"
+                        type="number"
+                        min={0.1}
+                        max={1}
+                        step={0.05}
+                        value={formData.utilisationFactor}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          setFormData(prev => ({ ...prev, utilisationFactor: Number.isFinite(v) ? Math.max(0.1, Math.min(1, v)) : 0.75 }));
+                        }}
+                        data-testid="input-utilisation-factor"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Sheet utilisation (0.75 = 75%, bounded rectangular estimate)</p>
+                    </div>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <PricingBreakdownPanel
+              breakdown={dialogPricing}
+              supplierName={selectedMaterialRow?.supplierName || ""}
+            />
+
             <div>
               <Label htmlFor="customerNotes">Customer Notes</Label>
               <Textarea

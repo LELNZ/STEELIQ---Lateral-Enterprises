@@ -58,11 +58,13 @@ function fmt(n: number): string {
   return n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function formatQuoteType(qt: string | null | undefined): string {
+function formatQuoteType(qt: string | null | undefined, divisionId?: string | null): string {
   switch (qt) {
     case "renovation": return "Renovation";
     case "new_build": return "New Build";
-    default: return "Unclassified";
+    default:
+      if (divisionId === "LL") return "Laser Quote";
+      return "Unclassified";
   }
 }
 
@@ -467,7 +469,7 @@ function DesktopQuoteTable({ quotes, isAdmin, demoFlagMutation }: { quotes: Enri
                 {q.sourceEstimateName || "—"}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-sm text-muted-foreground" data-testid={`text-quote-type-${q.id}`}>
-                {formatQuoteType(q.quoteType)}
+                {formatQuoteType(q.quoteType, q.divisionId)}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-sm text-muted-foreground" data-testid={`text-quote-division-${q.id}`}>
                 {q.divisionId || "—"}
@@ -541,7 +543,7 @@ function MobileQuoteCards({ quotes, isAdmin, demoFlagMutation }: { quotes: Enric
             </p>
             <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span data-testid={`text-quote-type-mobile-${q.id}`}>{formatQuoteType(q.quoteType)}</span>
+                <span data-testid={`text-quote-type-mobile-${q.id}`}>{formatQuoteType(q.quoteType, q.divisionId)}</span>
                 {q.divisionId && <span data-testid={`text-quote-division-mobile-${q.id}`}>{q.divisionId}</span>}
                 <span>
                   {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-NZ") : "—"}

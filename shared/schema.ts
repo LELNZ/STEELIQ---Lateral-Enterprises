@@ -240,6 +240,23 @@ export const laserQuoteItemSchema = z.object({
   customerNotes: z.string().default(""),
   internalNotes: z.string().default(""),
   unitPrice: z.number().min(0).default(0),
+
+  llSheetMaterialId: z.string().default(""),
+  cutLengthMm: z.number().min(0).default(0),
+  pierceCount: z.number().int().min(0).default(0),
+  setupMinutes: z.number().min(0).default(15),
+  handlingMinutes: z.number().min(0).default(10),
+  markupPercent: z.number().min(0).default(35),
+  utilisationFactor: z.number().min(0).max(1).default(0.75),
+
+  geometrySource: z.enum(["manual", "dxf", "cam_import"]).default("manual"),
+  geometryFileRef: z.string().optional(),
+
+  operations: z.array(z.object({
+    type: z.enum(["laser", "fold"]),
+    enabled: z.boolean().default(true),
+    notes: z.string().optional(),
+  })).optional(),
 });
 
 export type LaserQuoteItem = z.infer<typeof laserQuoteItemSchema>;
@@ -261,6 +278,14 @@ export interface LaserItemPayload {
   customerNotes: string;
   internalNotes: string;
   unitPrice: number;
+
+  llSheetMaterialId: string;
+  cutLengthMm: number;
+  pierceCount: number;
+  setupMinutes: number;
+  handlingMinutes: number;
+  markupPercent: number;
+  utilisationFactor: number;
 }
 
 export interface EngineeringItemPayload {
@@ -577,6 +602,7 @@ export const divisionSettings = pgTable("division_settings", {
   specDisplayDefaultsJson: jsonb("spec_display_defaults_json"),
   jobTypePresetsJson: jsonb("job_type_presets_json"),
   additionalCapabilitiesBlock: text("additional_capabilities_block"),
+  llPricingSettingsJson: jsonb("ll_pricing_settings_json"),
 });
 
 export const insertDivisionSettingsSchema = createInsertSchema(divisionSettings);
@@ -837,3 +863,79 @@ export const xeroConnections = pgTable("xero_connections", {
 });
 
 export type XeroConnection = typeof xeroConnections.$inferSelect;
+
+export interface LLMachineProfile {
+  id: string;
+  name: string;
+  bedLengthMm: number;
+  bedWidthMm: number;
+  usableLengthMm: number;
+  usableWidthMm: number;
+  hourlyMachineRate: number;
+  maxThicknessByMaterialFamily: Record<string, number>;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
+export interface LLProcessRateEntry {
+  materialFamily: string;
+  thickness: number;
+  cutSpeedMmPerMin: number;
+  pierceTimeSec: number;
+  assistGasType: "O2" | "N2" | "compressed_air";
+  gasConsumptionLPerMin: number;
+}
+
+export interface LLGasCosts {
+  o2PricePerLitre: number;
+  n2PricePerLitre: number;
+  compressedAirPricePerLitre: number;
+}
+
+export interface LLConsumableCosts {
+  consumableCostPerMachineHour: number;
+}
+
+export interface LLLabourRates {
+  operatorRatePerHour: number;
+  shopRatePerHour: number;
+}
+
+export interface LLSetupHandlingDefaults {
+  defaultSetupMinutes: number;
+  defaultHandlingMinutes: number;
+}
+
+export interface LLExpediteTier {
+  key: string;
+  label: string;
+  upliftPercent: number;
+}
+
+export interface LLCommercialPolicy {
+  defaultMarkupPercent: number;
+  minimumMaterialCharge: number;
+  minimumLineCharge: number;
+  defaultRatePerMmCut: number;
+  defaultRatePerPierce: number;
+  expediteTiers: LLExpediteTier[];
+}
+
+export interface LLNestingDefaults {
+  kerfWidthMm: number;
+  partGapMm: number;
+  edgeTrimMm: number;
+  defaultUtilisationFactor: number;
+}
+
+export interface LLPricingSettings {
+  version: number;
+  machineProfiles: LLMachineProfile[];
+  processRateTables: LLProcessRateEntry[];
+  gasCosts: LLGasCosts;
+  consumableCosts: LLConsumableCosts;
+  labourRates: LLLabourRates;
+  setupHandlingDefaults: LLSetupHandlingDefaults;
+  commercialPolicy: LLCommercialPolicy;
+  nestingDefaults: LLNestingDefaults;
+}
