@@ -90,3 +90,9 @@ id = "BGcE13KZHaVBWug28Zvog"
 uri = "file://reports/phase-4c-hardening-forensic-report.md"
 type = "text"
 title = "Phase 4C Governance Hardening — Enterprise Forensic Report"
+
+[[outputs]]
+id = "sFvRLrcD8iDLe2giPnwIC"
+uri = "file://reports/phase-4d-forensic-report.md"
+type = "text"
+title = "Phase 4D Forensic Report — LL Commercial Inputs Governance"
