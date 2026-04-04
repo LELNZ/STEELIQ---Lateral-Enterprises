@@ -476,94 +476,114 @@ function PricingSettingsEditor({
 }
 
 function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
+  const gas = settings.gasCosts;
+  const consumables = settings.consumableCosts;
+  const labour = settings.labourRates;
+  const setup = settings.setupHandlingDefaults;
   return (
     <div className="space-y-3" data-testid="settings-viewer">
-      <SettingsSection title="Gas Costs">
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <div><span className="text-muted-foreground">O2:</span> ${settings.gasCosts.o2PricePerLitre}/L</div>
-          <div><span className="text-muted-foreground">N2:</span> ${settings.gasCosts.n2PricePerLitre}/L</div>
-          <div><span className="text-muted-foreground">Air:</span> ${settings.gasCosts.compressedAirPricePerLitre}/L</div>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Consumable Costs">
-        <div className="text-sm">
-          <span className="text-muted-foreground">Per Machine Hour:</span> ${settings.consumableCosts.consumableCostPerMachineHour}
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Labour Rates">
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-muted-foreground">Operator:</span> ${settings.labourRates.operatorRatePerHour}/hr</div>
-          <div><span className="text-muted-foreground">Shop:</span> ${settings.labourRates.shopRatePerHour}/hr</div>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Setup & Handling">
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div><span className="text-muted-foreground">Setup:</span> {settings.setupHandlingDefaults.defaultSetupMinutes} min</div>
-          <div><span className="text-muted-foreground">Handling:</span> {settings.setupHandlingDefaults.defaultHandlingMinutes} min</div>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Commercial Policy">
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <div><span className="text-muted-foreground">Markup:</span> {settings.commercialPolicy.defaultMarkupPercent}%</div>
-          <div><span className="text-muted-foreground">Min Material:</span> ${settings.commercialPolicy.minimumMaterialCharge}</div>
-          <div><span className="text-muted-foreground">Min Line:</span> ${settings.commercialPolicy.minimumLineCharge}</div>
-          <div><span className="text-muted-foreground">Rate/mm:</span> ${settings.commercialPolicy.defaultRatePerMmCut}</div>
-          <div><span className="text-muted-foreground">Rate/Pierce:</span> ${settings.commercialPolicy.defaultRatePerPierce}</div>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Nesting Defaults">
-        <div className="grid grid-cols-4 gap-3 text-sm">
-          <div><span className="text-muted-foreground">Kerf:</span> {settings.nestingDefaults.kerfWidthMm}mm</div>
-          <div><span className="text-muted-foreground">Gap:</span> {settings.nestingDefaults.partGapMm}mm</div>
-          <div><span className="text-muted-foreground">Trim:</span> {settings.nestingDefaults.edgeTrimMm}mm</div>
-          <div><span className="text-muted-foreground">Util:</span> {(settings.nestingDefaults.defaultUtilisationFactor * 100).toFixed(0)}%</div>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title={`Machine Profiles (${settings.machineProfiles.length})`}>
-        {settings.machineProfiles.map(mp => (
-          <div key={mp.id} className="p-2 bg-muted/30 rounded text-sm mb-1">
-            <span className="font-medium">{mp.name}</span>
-            {mp.isDefault && <Badge variant="outline" className="ml-2 text-[10px]">Default</Badge>}
-            <span className="text-muted-foreground ml-2">${mp.hourlyMachineRate}/hr</span>
-            <span className="text-muted-foreground ml-2">{mp.bedLengthMm}×{mp.bedWidthMm}mm</span>
+      {gas && (
+        <SettingsSection title="Gas Costs">
+          <div className="grid grid-cols-3 gap-3 text-sm">
+            <div><span className="text-muted-foreground">O2:</span> ${gas.o2PricePerLitre}/L</div>
+            <div><span className="text-muted-foreground">N2:</span> ${gas.n2PricePerLitre}/L</div>
+            <div><span className="text-muted-foreground">Air:</span> ${gas.compressedAirPricePerLitre}/L</div>
           </div>
-        ))}
-      </SettingsSection>
+        </SettingsSection>
+      )}
 
-      <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
-        <div className="max-h-48 overflow-y-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-1">Material</th>
-                <th className="text-left p-1">Thickness</th>
-                <th className="text-left p-1">Cut Speed (mm/min)</th>
-                <th className="text-left p-1">Pierce (sec)</th>
-                <th className="text-left p-1">Gas</th>
-                <th className="text-left p-1">Gas (L/min)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {settings.processRateTables.map((entry, idx) => (
-                <tr key={idx} className="border-b border-muted">
-                  <td className="p-1">{entry.materialFamily}</td>
-                  <td className="p-1">{entry.thickness}mm</td>
-                  <td className="p-1">{entry.cutSpeedMmPerMin}</td>
-                  <td className="p-1">{entry.pierceTimeSec}</td>
-                  <td className="p-1">{entry.assistGasType}</td>
-                  <td className="p-1">{entry.gasConsumptionLPerMin}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {consumables && (
+        <SettingsSection title="Consumable Costs">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Per Machine Hour:</span> ${consumables.consumableCostPerMachineHour}
+          </div>
+        </SettingsSection>
+      )}
+
+      {labour && (
+        <SettingsSection title="Labour Rates">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-muted-foreground">Operator:</span> ${labour.operatorRatePerHour}/hr</div>
+            <div><span className="text-muted-foreground">Shop:</span> ${labour.shopRatePerHour}/hr</div>
+          </div>
+        </SettingsSection>
+      )}
+
+      {setup && (
+        <SettingsSection title="Setup & Handling">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div><span className="text-muted-foreground">Setup:</span> {setup.defaultSetupMinutes} min</div>
+          <div><span className="text-muted-foreground">Handling:</span> {setup.defaultHandlingMinutes} min</div>
         </div>
       </SettingsSection>
+      )}
+
+      {settings.commercialPolicy && (
+        <SettingsSection title="Commercial Policy">
+          <div className="grid grid-cols-3 gap-3 text-sm">
+            <div><span className="text-muted-foreground">Markup:</span> {settings.commercialPolicy.defaultMarkupPercent}%</div>
+            <div><span className="text-muted-foreground">Min Material:</span> ${settings.commercialPolicy.minimumMaterialCharge}</div>
+            <div><span className="text-muted-foreground">Min Line:</span> ${settings.commercialPolicy.minimumLineCharge}</div>
+            <div><span className="text-muted-foreground">Rate/mm:</span> ${settings.commercialPolicy.defaultRatePerMmCut}</div>
+            <div><span className="text-muted-foreground">Rate/Pierce:</span> ${settings.commercialPolicy.defaultRatePerPierce}</div>
+          </div>
+        </SettingsSection>
+      )}
+
+      {settings.nestingDefaults && (
+        <SettingsSection title="Nesting Defaults">
+          <div className="grid grid-cols-4 gap-3 text-sm">
+            <div><span className="text-muted-foreground">Kerf:</span> {settings.nestingDefaults.kerfWidthMm}mm</div>
+            <div><span className="text-muted-foreground">Gap:</span> {settings.nestingDefaults.partGapMm}mm</div>
+            <div><span className="text-muted-foreground">Trim:</span> {settings.nestingDefaults.edgeTrimMm}mm</div>
+            <div><span className="text-muted-foreground">Util:</span> {(settings.nestingDefaults.defaultUtilisationFactor * 100).toFixed(0)}%</div>
+          </div>
+        </SettingsSection>
+      )}
+
+      {settings.machineProfiles && (
+        <SettingsSection title={`Machine Profiles (${settings.machineProfiles.length})`}>
+          {settings.machineProfiles.map(mp => (
+            <div key={mp.id} className="p-2 bg-muted/30 rounded text-sm mb-1">
+              <span className="font-medium">{mp.name}</span>
+              {mp.isDefault && <Badge variant="outline" className="ml-2 text-[10px]">Default</Badge>}
+              <span className="text-muted-foreground ml-2">${mp.hourlyMachineRate}/hr</span>
+              <span className="text-muted-foreground ml-2">{mp.bedLengthMm}×{mp.bedWidthMm}mm</span>
+            </div>
+          ))}
+        </SettingsSection>
+      )}
+
+      {settings.processRateTables && settings.processRateTables.length > 0 && (
+        <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
+          <div className="max-h-48 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-1">Material</th>
+                  <th className="text-left p-1">Thickness</th>
+                  <th className="text-left p-1">Cut Speed (mm/min)</th>
+                  <th className="text-left p-1">Pierce (sec)</th>
+                  <th className="text-left p-1">Gas</th>
+                  <th className="text-left p-1">Gas (L/min)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {settings.processRateTables.map((entry, idx) => (
+                  <tr key={idx} className="border-b border-muted">
+                    <td className="p-1">{entry.materialFamily}</td>
+                    <td className="p-1">{entry.thickness}mm</td>
+                    <td className="p-1">{entry.cutSpeedMmPerMin}</td>
+                    <td className="p-1">{entry.pierceTimeSec}</td>
+                    <td className="p-1">{entry.assistGasType}</td>
+                    <td className="p-1">{entry.gasConsumptionLPerMin}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SettingsSection>
+      )}
     </div>
   );
 }

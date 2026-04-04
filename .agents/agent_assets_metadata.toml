@@ -84,3 +84,9 @@ id = "iXee4FbUcEZFmxoZ2Xvjf"
 uri = "file://reports/phase-4b-forensic-report.md"
 type = "text"
 title = "Phase 4B Forensic Report — LL Pricing Governance"
+
+[[outputs]]
+id = "BGcE13KZHaVBWug28Zvog"
+uri = "file://reports/phase-4c-hardening-forensic-report.md"
+type = "text"
+title = "Phase 4C Governance Hardening — Enterprise Forensic Report"
