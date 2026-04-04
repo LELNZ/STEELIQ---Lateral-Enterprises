@@ -1088,6 +1088,217 @@ export async function registerRoutes(
     }
   });
 
+  // ── LL Pricing Profiles ─────────────────────────────────────────────────
+
+  app.get("/api/ll-pricing-profiles", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const profiles = await storage.getAllLLPricingProfiles();
+      res.json(profiles);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-pricing-profiles/active", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getActiveLLPricingProfile();
+      res.json(profile || null);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-pricing-profiles/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      res.json(profile);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-pricing-profiles/:id/audit", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const logs = await storage.getLLPricingAuditLog(req.params.id);
+      res.json(logs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const { profileName, versionLabel, notes, llPricingSettingsJson, duplicateFromId } = req.body;
+      if (!profileName || !versionLabel) return res.status(400).json({ error: "profileName and versionLabel are required" });
+
+      let settingsJson = llPricingSettingsJson;
+      if (duplicateFromId) {
+        const source = await storage.getLLPricingProfile(duplicateFromId);
+        if (!source) return res.status(404).json({ error: "Source profile not found" });
+        settingsJson = settingsJson || source.llPricingSettingsJson;
+      }
+
+      if (!settingsJson) return res.status(400).json({ error: "llPricingSettingsJson is required" });
+
+      const profile = await storage.createLLPricingProfile({
+        divisionKey: "LL",
+        profileName,
+        versionLabel,
+        notes: notes || "",
+        llPricingSettingsJson: settingsJson,
+        status: "draft",
+        createdBy: req.user.id,
+      });
+
+      await storage.createLLPricingAuditEntry({
+        profileId: profile.id,
+        eventType: duplicateFromId ? "duplicated" : "created",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: duplicateFromId ? `Duplicated from profile ${duplicateFromId}` : `Created draft profile "${profileName}"`,
+      });
+
+      res.status(201).json(profile);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-pricing-profiles/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+      if (profile.status !== "draft") {
+        return res.status(400).json({ error: `Only draft profiles can be edited. Current status: "${profile.status}". Duplicate it to make changes.` });
+      }
+
+      const { profileName, versionLabel, notes, llPricingSettingsJson } = req.body;
+      const updateData: any = {};
+      if (profileName !== undefined) updateData.profileName = profileName;
+      if (versionLabel !== undefined) updateData.versionLabel = versionLabel;
+      if (notes !== undefined) updateData.notes = notes;
+      if (llPricingSettingsJson !== undefined) updateData.llPricingSettingsJson = llPricingSettingsJson;
+
+      const updated = await storage.updateLLPricingProfile(req.params.id, updateData);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "edited",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Edited profile "${updated?.profileName}"`,
+      });
+
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles/:id/approve", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      if (profile.status !== "draft") return res.status(400).json({ error: `Only draft profiles can be approved. Current status: ${profile.status}` });
+
+      const updated = await storage.updateLLPricingProfile(req.params.id, {
+        status: "approved",
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "approved",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Approved profile "${profile.profileName}"`,
+      });
+
+      const refreshed = await storage.getLLPricingProfile(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles/:id/activate", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      if (profile.status !== "approved") return res.status(400).json({ error: `Only approved profiles can be activated. Current status: ${profile.status}` });
+
+      const currentActive = await storage.getActiveLLPricingProfile();
+      if (currentActive && currentActive.id !== req.params.id) {
+        await storage.updateLLPricingProfile(currentActive.id, { status: "superseded" } as any);
+        await storage.createLLPricingAuditEntry({
+          profileId: currentActive.id,
+          eventType: "superseded",
+          actorUserId: req.user.id,
+          actorDisplayName: req.user.displayName || req.user.username,
+          summary: `Superseded by activation of "${profile.profileName}"`,
+        });
+      }
+
+      const now = new Date();
+      await storage.updateLLPricingProfile(req.params.id, {
+        status: "active",
+        activatedBy: req.user.id,
+        activatedAt: now,
+        effectiveFrom: now,
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "activated",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Activated profile "${profile.profileName}"`,
+      });
+
+      const refreshed = await storage.getLLPricingProfile(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles/:id/archive", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      if (profile.status === "active") return res.status(400).json({ error: "Cannot archive the active profile. Activate a replacement first." });
+
+      await storage.updateLLPricingProfile(req.params.id, { status: "archived" } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "archived",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Archived profile "${profile.profileName}"`,
+      });
+
+      const refreshed = await storage.getLLPricingProfile(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ── LL Sheet Materials ─────────────────────────────────────────────────
+
   app.get("/api/ll-sheet-materials", async (req, res) => {
     try {
       const activeOnly = req.query.active === "true";
@@ -1188,6 +1399,9 @@ export async function registerRoutes(
         notes: z.string().optional().default(""),
         customerId: z.string().optional(),
         contactId: z.string().optional(),
+        pricingProfileId: z.string().nullable().optional(),
+        pricingProfileLabel: z.string().nullable().optional(),
+        pricedAt: z.string().nullable().optional(),
       }).parse(req.body);
       const estimateNumber = await storage.getNextLaserEstimateNumber();
       const estimate = await storage.createLaserEstimate({
@@ -1200,7 +1414,10 @@ export async function registerRoutes(
         customerId: body.customerId || null,
         contactId: body.contactId || null,
         status: "draft",
-      });
+        pricingProfileId: body.pricingProfileId || null,
+        pricingProfileLabel: body.pricingProfileLabel || null,
+        pricedAt: body.pricedAt ? new Date(body.pricedAt) : null,
+      } as any);
       res.status(201).json(estimate);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -1220,7 +1437,11 @@ export async function registerRoutes(
         status: z.enum(["draft", "ready", "converted", "archived"]).optional(),
         customerId: z.string().nullable().optional(),
         contactId: z.string().nullable().optional(),
+        pricingProfileId: z.string().nullable().optional(),
+        pricingProfileLabel: z.string().nullable().optional(),
+        pricedAt: z.string().nullable().optional(),
       }).parse(req.body);
+      if (body.pricedAt) (body as any).pricedAt = new Date(body.pricedAt);
       const updated = await storage.updateLaserEstimate(req.params.id, body as any);
       if (!updated) return res.status(404).json({ error: "Laser estimate not found" });
       res.json(updated);
@@ -1394,10 +1615,20 @@ export async function registerRoutes(
           }
         }
 
+        let quotePricingProfileId: string | null = null;
+        let quotePricingProfileLabel: string | null = null;
+        if (divisionCode === "LL") {
+          const activeProfile = await storage.getActiveLLPricingProfile();
+          if (activeProfile) {
+            quotePricingProfileId = activeProfile.id;
+            quotePricingProfileLabel = `${activeProfile.profileName} (${activeProfile.versionLabel})`;
+          }
+        }
+
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, source_laser_estimate_id, division_id, customer, status, quote_type, total_value, customer_id, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'draft', $6, $7, $8, NOW(), NOW()) RETURNING *`,
-          [number, sourceJobId || null, sourceLaserEstimateId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId]
+          `INSERT INTO quotes (id, number, source_job_id, source_laser_estimate_id, division_id, customer, status, quote_type, total_value, customer_id, pricing_profile_id, pricing_profile_label, priced_at, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9, $10, NOW(), NOW(), NOW()) RETURNING *`,
+          [number, sourceJobId || null, sourceLaserEstimateId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId, quotePricingProfileId, quotePricingProfileLabel]
         );
         const quote = quoteInsert.rows[0];
 

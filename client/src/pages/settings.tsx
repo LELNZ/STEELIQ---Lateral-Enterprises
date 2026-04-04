@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -619,6 +620,7 @@ function LogoUploadField({ logoUrl, onLogoChange }: { logoUrl: string; onLogoCha
 
 function DivisionSettingsTab() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [selectedCode, setSelectedCode] = useState("LJ");
 
   const { data: div, isLoading } = useQuery<DivisionSettings>({
@@ -983,6 +985,12 @@ function DivisionSettingsTab() {
           {selectedCode === "LL" && (
             <>
               <Separator className="my-6" />
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium">LL Pricing Settings (Legacy View)</h3>
+                <Button variant="outline" size="sm" onClick={() => navigate("/ll-pricing-profiles")} data-testid="link-pricing-profiles">
+                  Manage Pricing Profiles
+                </Button>
+              </div>
               <LLPricingSettingsViewer settings={(div as any)?.llPricingSettingsJson as LLPricingSettings | null} />
             </>
           )}

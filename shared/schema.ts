@@ -370,6 +370,46 @@ export const insertJobItemSchema = createInsertSchema(jobItems).omit({ id: true 
 export type InsertJobItem = z.infer<typeof insertJobItemSchema>;
 export type JobItem = typeof jobItems.$inferSelect;
 
+export const LL_PRICING_PROFILE_STATUSES = ["draft", "approved", "active", "superseded", "archived"] as const;
+export type LLPricingProfileStatus = typeof LL_PRICING_PROFILE_STATUSES[number];
+
+export const llPricingProfiles = pgTable("ll_pricing_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  divisionKey: text("division_key").notNull().default("LL"),
+  profileName: text("profile_name").notNull(),
+  versionLabel: text("version_label").notNull(),
+  status: text("status").notNull().default("draft"),
+  effectiveFrom: timestamp("effective_from"),
+  notes: text("notes").default(""),
+  llPricingSettingsJson: jsonb("ll_pricing_settings_json").$type<LLPricingSettings>().notNull(),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  activatedBy: varchar("activated_by"),
+  activatedAt: timestamp("activated_at"),
+});
+
+export const insertLLPricingProfileSchema = createInsertSchema(llPricingProfiles).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, activatedAt: true });
+export type InsertLLPricingProfile = z.infer<typeof insertLLPricingProfileSchema>;
+export type LLPricingProfile = typeof llPricingProfiles.$inferSelect;
+
+export const llPricingAuditLog = pgTable("ll_pricing_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  profileId: varchar("profile_id").notNull(),
+  eventType: text("event_type").notNull(),
+  actorUserId: varchar("actor_user_id"),
+  actorDisplayName: text("actor_display_name"),
+  summary: text("summary").notNull(),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLLPricingAuditLogSchema = createInsertSchema(llPricingAuditLog).omit({ id: true, createdAt: true });
+export type InsertLLPricingAuditLog = z.infer<typeof insertLLPricingAuditLogSchema>;
+export type LLPricingAuditLog = typeof llPricingAuditLog.$inferSelect;
+
 export const LASER_ESTIMATE_STATUSES = ["draft", "ready", "converted", "archived"] as const;
 export type LaserEstimateStatus = typeof LASER_ESTIMATE_STATUSES[number];
 
@@ -384,6 +424,9 @@ export const laserEstimates = pgTable("laser_estimates", {
   customerId: varchar("customer_id"),
   contactId: varchar("contact_id"),
   notes: text("notes").default(""),
+  pricingProfileId: varchar("pricing_profile_id"),
+  pricingProfileLabel: text("pricing_profile_label"),
+  pricedAt: timestamp("priced_at"),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -532,6 +575,9 @@ export const quotes = pgTable("quotes", {
   isDemoRecord: boolean("is_demo_record").default(false),
   retentionPercentage: real("retention_percentage"),
   retentionHeldValue: real("retention_held_value"),
+  pricingProfileId: varchar("pricing_profile_id"),
+  pricingProfileLabel: text("pricing_profile_label"),
+  pricedAt: timestamp("priced_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

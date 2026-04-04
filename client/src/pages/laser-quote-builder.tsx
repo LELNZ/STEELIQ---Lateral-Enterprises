@@ -36,8 +36,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator } from "lucide-react";
-import type { LaserQuoteItem, LLPricingSettings, DivisionSettings } from "@shared/schema";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle } from "lucide-react";
+import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
   computeLLPricing,
@@ -293,7 +293,16 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     queryKey: ["/api/settings/divisions", "LL"],
     staleTime: Infinity,
   });
-  const llPricingSettings = (llDivisionSettings?.llPricingSettingsJson ?? null) as LLPricingSettings | null;
+
+  const { data: activePricingProfile } = useQuery<LLPricingProfile | null>({
+    queryKey: ["/api/ll-pricing-profiles", "active"],
+    queryFn: () => fetch("/api/ll-pricing-profiles/active", { credentials: "include" }).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const llPricingSettings = (activePricingProfile?.llPricingSettingsJson ?? llDivisionSettings?.llPricingSettingsJson ?? null) as LLPricingSettings | null;
+  const pricingProfileId = activePricingProfile?.id ?? null;
+  const pricingProfileLabel = activePricingProfile ? `${activePricingProfile.profileName} (${activePricingProfile.versionLabel})` : null;
 
   const { data: sheetMaterials = [] } = useQuery<SheetMaterialRef[]>({
     queryKey: ["/api/ll-sheet-materials", "active"],
@@ -490,6 +499,9 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
         customerName: customerName.trim(),
         projectAddress,
         itemsJson: items,
+        pricingProfileId: pricingProfileId,
+        pricingProfileLabel: pricingProfileLabel,
+        pricedAt: new Date().toISOString(),
       });
       return res.json();
     },
@@ -510,6 +522,9 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
         customerName: customerName.trim(),
         projectAddress,
         itemsJson: items,
+        pricingProfileId: pricingProfileId,
+        pricingProfileLabel: pricingProfileLabel,
+        pricedAt: new Date().toISOString(),
       });
       return res.json();
     },
@@ -688,6 +703,17 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
             <h1 className="text-lg font-semibold" data-testid="text-page-title">{pageTitle}</h1>
             <p className="text-xs text-muted-foreground">{pageSubtitle}</p>
           </div>
+          {activePricingProfile ? (
+            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-300" data-testid="badge-pricing-profile">
+              <ShieldCheck className="h-3 w-3 mr-1" />
+              {activePricingProfile.profileName} ({activePricingProfile.versionLabel})
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300" data-testid="badge-pricing-fallback">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Fallback Pricing
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isEditMode && !estimateMode && (

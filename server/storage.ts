@@ -26,6 +26,8 @@ import {
   type Variation, type InsertVariation,
   type LlSheetMaterial, type InsertLlSheetMaterial,
   type LaserEstimate, type InsertLaserEstimate,
+  type LLPricingProfile, type InsertLLPricingProfile,
+  type LLPricingAuditLog, type InsertLLPricingAuditLog,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -34,6 +36,7 @@ import {
   userSessions, customers, customerContacts, projects, invoices, invoiceLines, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
   xeroConnections, variations, llSheetMaterials, laserEstimates,
+  llPricingProfiles, llPricingAuditLog,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -256,6 +259,15 @@ export interface IStorage {
   getVariationsForAllocation(quoteId: string, projectId: string | null): Promise<Variation[]>;
   updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined>;
   syncVariationStatus(variationId: string): Promise<void>;
+
+  // ── LL Pricing Profiles ─────────────────────────────────────────────────
+  getAllLLPricingProfiles(): Promise<LLPricingProfile[]>;
+  getLLPricingProfile(id: string): Promise<LLPricingProfile | undefined>;
+  getActiveLLPricingProfile(): Promise<LLPricingProfile | undefined>;
+  createLLPricingProfile(data: InsertLLPricingProfile): Promise<LLPricingProfile>;
+  updateLLPricingProfile(id: string, data: Partial<InsertLLPricingProfile>): Promise<LLPricingProfile | undefined>;
+  createLLPricingAuditEntry(data: InsertLLPricingAuditLog): Promise<LLPricingAuditLog>;
+  getLLPricingAuditLog(profileId: string): Promise<LLPricingAuditLog[]>;
 
   // ── Laser Estimates (LL) ─────────────────────────────────────────────────
   getNextLaserEstimateNumber(): Promise<string>;
@@ -1433,6 +1445,45 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllLlSheetMaterials(): Promise<void> {
     await db.delete(llSheetMaterials);
+  }
+
+  async getAllLLPricingProfiles(): Promise<LLPricingProfile[]> {
+    return db.select().from(llPricingProfiles).orderBy(desc(llPricingProfiles.createdAt));
+  }
+
+  async getLLPricingProfile(id: string): Promise<LLPricingProfile | undefined> {
+    const [profile] = await db.select().from(llPricingProfiles).where(eq(llPricingProfiles.id, id));
+    return profile;
+  }
+
+  async getActiveLLPricingProfile(): Promise<LLPricingProfile | undefined> {
+    const [profile] = await db.select().from(llPricingProfiles)
+      .where(eq(llPricingProfiles.status, "active"));
+    return profile;
+  }
+
+  async createLLPricingProfile(data: InsertLLPricingProfile): Promise<LLPricingProfile> {
+    const [created] = await db.insert(llPricingProfiles).values(data).returning();
+    return created;
+  }
+
+  async updateLLPricingProfile(id: string, data: Partial<InsertLLPricingProfile>): Promise<LLPricingProfile | undefined> {
+    const [updated] = await db.update(llPricingProfiles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(llPricingProfiles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createLLPricingAuditEntry(data: InsertLLPricingAuditLog): Promise<LLPricingAuditLog> {
+    const [created] = await db.insert(llPricingAuditLog).values(data).returning();
+    return created;
+  }
+
+  async getLLPricingAuditLog(profileId: string): Promise<LLPricingAuditLog[]> {
+    return db.select().from(llPricingAuditLog)
+      .where(eq(llPricingAuditLog.profileId, profileId))
+      .orderBy(desc(llPricingAuditLog.createdAt));
   }
 
   async getNextLaserEstimateNumber(): Promise<string> {
