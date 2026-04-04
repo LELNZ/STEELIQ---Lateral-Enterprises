@@ -35,7 +35,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, Loader2, ChevronDown, ChevronRight, Calculator } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator } from "lucide-react";
 import type { LaserQuoteItem, LLPricingSettings, DivisionSettings } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
@@ -242,9 +242,10 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
   );
 }
 
-export default function LaserQuoteBuilder() {
+export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boolean } = {}) {
   const params = useParams<{ id?: string }>();
-  const quoteId = params.id;
+  const quoteId = estimateMode ? undefined : params.id;
+  const estimateId = estimateMode ? params.id : undefined;
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -259,6 +260,7 @@ export default function LaserQuoteBuilder() {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const isEditMode = !!quoteId;
+  const isEstimateEdit = estimateMode && !!estimateId;
 
   const { data: llDivisionSettings } = useQuery<DivisionSettings>({
     queryKey: ["/api/settings/divisions", "LL"],
@@ -319,6 +321,11 @@ export default function LaserQuoteBuilder() {
     enabled: isEditMode,
   });
 
+  const { data: estimateData, isLoading: estimateLoading } = useQuery<any>({
+    queryKey: ["/api/laser-estimates", estimateId],
+    enabled: isEstimateEdit,
+  });
+
   useEffect(() => {
     if (quoteData && isEditMode) {
       setCustomerName(quoteData.customer || "");
@@ -336,6 +343,17 @@ export default function LaserQuoteBuilder() {
       }
     }
   }, [quoteData, isEditMode]);
+
+  useEffect(() => {
+    if (estimateData && isEstimateEdit) {
+      setCustomerName(estimateData.customerName || "");
+      setProjectAddress(estimateData.projectAddress || "");
+      const savedItems = estimateData.itemsJson;
+      if (Array.isArray(savedItems) && savedItems.length > 0) {
+        setItems(savedItems.map((it: any) => ({ ...it, id: it.id || crypto.randomUUID() })));
+      }
+    }
+  }, [estimateData, isEstimateEdit]);
 
   const itemPricings = useMemo(() => {
     const map = new Map<string, LLPricingBreakdown>();
@@ -423,16 +441,99 @@ export default function LaserQuoteBuilder() {
     },
   });
 
+  const createEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/laser-estimates", {
+        customerName: customerName.trim(),
+        projectAddress,
+        itemsJson: items,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Estimate saved", description: `${data.estimateNumber} created successfully` });
+      navigate(`/laser-estimate/${data.id}`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/laser-estimates/${estimateId}`, {
+        customerName: customerName.trim(),
+        projectAddress,
+        itemsJson: items,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Saved", description: "Estimate updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const generateQuoteFromEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const snapshot = buildSnapshot();
+      const res = await apiRequest("POST", "/api/quotes", {
+        snapshot,
+        sourceLaserEstimateId: estimateId,
+        customer: customerName,
+        divisionCode: "LL",
+        mode: "new_quote",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      toast({ title: "Quote generated", description: `${data.quote.number} created from estimate` });
+      navigate(`/laser-quote/${data.quote.id}`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleSave = () => {
     if (!customerName.trim()) {
       toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
       return;
     }
-    if (isEditMode) {
+    if (estimateMode) {
+      if (isEstimateEdit) {
+        updateEstimateMutation.mutate();
+      } else {
+        createEstimateMutation.mutate();
+      }
+    } else if (isEditMode) {
       saveRevisionMutation.mutate();
     } else {
       createQuoteMutation.mutate();
     }
+  };
+
+  const handleGenerateQuote = () => {
+    if (!customerName.trim()) {
+      toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
+      return;
+    }
+    if (items.length === 0) {
+      toast({ title: "Required", description: "Add at least one item before generating a quote", variant: "destructive" });
+      return;
+    }
+    generateQuoteFromEstimateMutation.mutate();
   };
 
   const openAddDialog = () => {
@@ -503,9 +604,11 @@ export default function LaserQuoteBuilder() {
     });
   };
 
-  const isSaving = createQuoteMutation.isPending || saveRevisionMutation.isPending;
+  const isSaving = createQuoteMutation.isPending || saveRevisionMutation.isPending
+    || createEstimateMutation.isPending || updateEstimateMutation.isPending
+    || generateQuoteFromEstimateMutation.isPending;
 
-  if (isEditMode && quoteLoading) {
+  if ((isEditMode && quoteLoading) || (isEstimateEdit && estimateLoading)) {
     return (
       <div className="flex items-center justify-center h-full" data-testid="loading-laser-builder">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -513,7 +616,18 @@ export default function LaserQuoteBuilder() {
     );
   }
 
-  const quoteNumber = quoteData?.number || "New Laser Quote";
+  const pageTitle = estimateMode
+    ? (isEstimateEdit ? (estimateData?.estimateNumber || "Loading…") : "New Laser Estimate")
+    : (quoteData?.number || "New Laser Quote");
+  const pageSubtitle = estimateMode ? "Lateral Laser — Estimate Builder" : "Lateral Laser — Quote Builder";
+  const backPath = estimateMode ? "/laser-estimates" : "/quotes";
+
+  const getSaveLabel = () => {
+    if (estimateMode) {
+      return isEstimateEdit ? "Save Estimate" : "Save New Estimate";
+    }
+    return isEditMode ? "Save Revision" : "Create Quote";
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -522,18 +636,18 @@ export default function LaserQuoteBuilder() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/quotes")}
-            data-testid="button-back-quotes"
+            onClick={() => navigate(backPath)}
+            data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold" data-testid="text-quote-number">{quoteNumber}</h1>
-            <p className="text-xs text-muted-foreground">Lateral Laser — Quote Builder</p>
+            <h1 className="text-lg font-semibold" data-testid="text-page-title">{pageTitle}</h1>
+            <p className="text-xs text-muted-foreground">{pageSubtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isEditMode && (
+          {isEditMode && !estimateMode && (
             <Button
               variant="outline"
               size="sm"
@@ -544,15 +658,33 @@ export default function LaserQuoteBuilder() {
               Preview
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={isSaving}
-            data-testid="button-save-quote"
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-            {isEditMode ? "Save Revision" : "Create Quote"}
-          </Button>
+          {isEstimateEdit && estimateData?.status !== "converted" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateQuote}
+              disabled={isSaving || items.length === 0}
+              data-testid="button-generate-quote"
+            >
+              {generateQuoteFromEstimateMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <ArrowRightCircle className="h-4 w-4 mr-1" />}
+              Generate Quote
+            </Button>
+          )}
+          {!(estimateMode && estimateData?.status === "converted") && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={isSaving}
+              data-testid="button-save"
+            >
+              {isSaving && !generateQuoteFromEstimateMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <Save className="h-4 w-4 mr-1" />}
+              {getSaveLabel()}
+            </Button>
+          )}
         </div>
       </div>
 

@@ -370,6 +370,29 @@ export const insertJobItemSchema = createInsertSchema(jobItems).omit({ id: true 
 export type InsertJobItem = z.infer<typeof insertJobItemSchema>;
 export type JobItem = typeof jobItems.$inferSelect;
 
+export const LASER_ESTIMATE_STATUSES = ["draft", "ready", "converted", "archived"] as const;
+export type LaserEstimateStatus = typeof LASER_ESTIMATE_STATUSES[number];
+
+export const laserEstimates = pgTable("laser_estimates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  estimateNumber: text("estimate_number").notNull().unique(),
+  divisionCode: text("division_code").notNull().default("LL"),
+  customerName: text("customer_name").notNull(),
+  projectAddress: text("project_address").default(""),
+  status: text("status").notNull().default("draft"),
+  itemsJson: jsonb("items_json").$type<LaserQuoteItem[]>().notNull().default(sql`'[]'::jsonb`),
+  customerId: varchar("customer_id"),
+  contactId: varchar("contact_id"),
+  notes: text("notes").default(""),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLaserEstimateSchema = createInsertSchema(laserEstimates).omit({ id: true, archivedAt: true, createdAt: true, updatedAt: true });
+export type InsertLaserEstimate = z.infer<typeof insertLaserEstimateSchema>;
+export type LaserEstimate = typeof laserEstimates.$inferSelect;
+
 export const libraryEntries = pgTable("library_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   type: text("type").notNull(),
@@ -487,6 +510,7 @@ export const quotes = pgTable("quotes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   number: text("number").notNull().unique(),
   sourceJobId: varchar("source_job_id"),
+  sourceLaserEstimateId: varchar("source_laser_estimate_id"),
   tenantId: varchar("tenant_id"),
   divisionId: varchar("division_id"),
   customer: text("customer").notNull(),

@@ -1128,9 +1128,106 @@ export async function registerRoutes(
     }
   });
 
+  // ── Laser Estimates (LL) ────────────────────────────────────────────────
+  app.get("/api/laser-estimates", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const estimates = await storage.getAllLaserEstimates();
+      res.json(estimates);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/laser-estimates/:id", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const estimate = await storage.getLaserEstimate(req.params.id);
+      if (!estimate) return res.status(404).json({ error: "Laser estimate not found" });
+      res.json(estimate);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/laser-estimates", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const body = z.object({
+        customerName: z.string().min(1, "Customer name is required"),
+        projectAddress: z.string().optional().default(""),
+        itemsJson: z.array(z.any()).optional().default([]),
+        notes: z.string().optional().default(""),
+        customerId: z.string().optional(),
+        contactId: z.string().optional(),
+      }).parse(req.body);
+      const estimateNumber = await storage.getNextLaserEstimateNumber();
+      const estimate = await storage.createLaserEstimate({
+        estimateNumber,
+        divisionCode: "LL",
+        customerName: body.customerName,
+        projectAddress: body.projectAddress,
+        itemsJson: body.itemsJson as any,
+        notes: body.notes,
+        customerId: body.customerId || null,
+        contactId: body.contactId || null,
+        status: "draft",
+      });
+      res.status(201).json(estimate);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/laser-estimates/:id", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const body = z.object({
+        customerName: z.string().min(1).optional(),
+        projectAddress: z.string().optional(),
+        itemsJson: z.array(z.any()).optional(),
+        notes: z.string().optional(),
+        status: z.enum(["draft", "ready", "converted", "archived"]).optional(),
+        customerId: z.string().nullable().optional(),
+        contactId: z.string().nullable().optional(),
+      }).parse(req.body);
+      const updated = await storage.updateLaserEstimate(req.params.id, body as any);
+      if (!updated) return res.status(404).json({ error: "Laser estimate not found" });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/laser-estimates/:id", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const existing = await storage.getLaserEstimate(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Laser estimate not found" });
+      if (existing.status === "converted") {
+        return res.status(400).json({ error: "Cannot delete a converted estimate — it is linked to a quote" });
+      }
+      await storage.deleteLaserEstimate(req.params.id);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   const createQuoteBodySchema = z.object({
     snapshot: estimateSnapshotSchema,
     sourceJobId: z.string().optional(),
+    sourceLaserEstimateId: z.string().optional(),
     customer: z.string().min(1),
     divisionCode: z.string().min(1, "Division code is required"),
     mode: z.enum(["revision", "new_quote"]).optional().default("revision"),
@@ -1140,7 +1237,7 @@ export async function registerRoutes(
   app.post("/api/quotes", async (req, res) => {
     try {
       const parsed = createQuoteBodySchema.parse(req.body);
-      const { snapshot, sourceJobId, customer, divisionCode, mode, quoteType } = parsed;
+      const { snapshot, sourceJobId, sourceLaserEstimateId, customer, divisionCode, mode, quoteType } = parsed;
 
       const divSettings = await storage.getDivisionSettings(divisionCode);
       const templateKey = divSettings?.templateKey || "base_v1";
@@ -1276,9 +1373,9 @@ export async function registerRoutes(
         }
 
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, total_value, customer_id, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, $6, $7, NOW(), NOW()) RETURNING *`,
-          [number, sourceJobId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId]
+          `INSERT INTO quotes (id, number, source_job_id, source_laser_estimate_id, division_id, customer, status, quote_type, total_value, customer_id, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'draft', $6, $7, $8, NOW(), NOW()) RETURNING *`,
+          [number, sourceJobId || null, sourceLaserEstimateId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId]
         );
         const quote = quoteInsert.rows[0];
 
@@ -1293,6 +1390,17 @@ export async function registerRoutes(
           `UPDATE quotes SET current_revision_id = $1 WHERE id = $2`,
           [revision.id, quote.id]
         );
+
+        if (sourceLaserEstimateId) {
+          const estUpdateResult = await client.query(
+            `UPDATE laser_estimates SET status = 'converted', updated_at = NOW() WHERE id = $1 AND division_code = 'LL' RETURNING id`,
+            [sourceLaserEstimateId]
+          );
+          if (estUpdateResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ error: "Source laser estimate not found or invalid" });
+          }
+        }
 
         await client.query(
           `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
@@ -1350,9 +1458,20 @@ export async function registerRoutes(
         if (job) jobNameMap[jid] = job.name;
       }
 
+      const laserEstIds = Array.from(new Set(filtered.map(q => q.sourceLaserEstimateId).filter(Boolean))) as string[];
+      const laserEstNameMap: Record<string, string> = {};
+      for (const leId of laserEstIds) {
+        const le = await storage.getLaserEstimate(leId);
+        if (le) laserEstNameMap[leId] = le.estimateNumber;
+      }
+
       const withEstimateName = filtered.map(q => ({
         ...q,
-        sourceEstimateName: q.sourceJobId ? (jobNameMap[q.sourceJobId] || null) : null,
+        sourceEstimateName: q.sourceJobId
+          ? (jobNameMap[q.sourceJobId] || null)
+          : q.sourceLaserEstimateId
+            ? (laserEstNameMap[q.sourceLaserEstimateId] || null)
+            : null,
       }));
 
       res.json(withEstimateName);

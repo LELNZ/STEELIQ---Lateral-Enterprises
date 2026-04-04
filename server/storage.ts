@@ -25,6 +25,7 @@ import {
   type XeroConnection,
   type Variation, type InsertVariation,
   type LlSheetMaterial, type InsertLlSheetMaterial,
+  type LaserEstimate, type InsertLaserEstimate,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -32,7 +33,7 @@ import {
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, invoiceLines, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
-  xeroConnections, variations, llSheetMaterials,
+  xeroConnections, variations, llSheetMaterials, laserEstimates,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -255,6 +256,15 @@ export interface IStorage {
   getVariationsForAllocation(quoteId: string, projectId: string | null): Promise<Variation[]>;
   updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined>;
   syncVariationStatus(variationId: string): Promise<void>;
+
+  // ── Laser Estimates (LL) ─────────────────────────────────────────────────
+  getNextLaserEstimateNumber(): Promise<string>;
+  createLaserEstimate(data: InsertLaserEstimate): Promise<LaserEstimate>;
+  getLaserEstimate(id: string): Promise<LaserEstimate | undefined>;
+  getAllLaserEstimates(): Promise<LaserEstimate[]>;
+  updateLaserEstimate(id: string, data: Partial<InsertLaserEstimate>): Promise<LaserEstimate | undefined>;
+  archiveLaserEstimate(id: string): Promise<LaserEstimate | undefined>;
+  deleteLaserEstimate(id: string): Promise<void>;
 
   // ── Xero OAuth Connection ─────────────────────────────────────────────────
   getXeroConnection(): Promise<XeroConnection | undefined>;
@@ -1423,6 +1433,49 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllLlSheetMaterials(): Promise<void> {
     await db.delete(llSheetMaterials);
+  }
+
+  async getNextLaserEstimateNumber(): Promise<string> {
+    await db.execute(sql`INSERT INTO number_sequences (id, current_value) VALUES ('laser_estimate', 0) ON CONFLICT DO NOTHING`);
+    const result = await db.execute(sql`UPDATE number_sequences SET current_value = current_value + 1 WHERE id = 'laser_estimate' RETURNING current_value`);
+    const seq = (result as any).rows?.[0]?.current_value ?? 1;
+    return `LE-${String(seq).padStart(4, "0")}-LL`;
+  }
+
+  async createLaserEstimate(data: InsertLaserEstimate): Promise<LaserEstimate> {
+    const [created] = await db.insert(laserEstimates).values(data).returning();
+    return created;
+  }
+
+  async getLaserEstimate(id: string): Promise<LaserEstimate | undefined> {
+    const [est] = await db.select().from(laserEstimates).where(eq(laserEstimates.id, id));
+    return est;
+  }
+
+  async getAllLaserEstimates(): Promise<LaserEstimate[]> {
+    return db.select().from(laserEstimates)
+      .where(isNull(laserEstimates.archivedAt))
+      .orderBy(desc(laserEstimates.createdAt));
+  }
+
+  async updateLaserEstimate(id: string, data: Partial<InsertLaserEstimate>): Promise<LaserEstimate | undefined> {
+    const [updated] = await db.update(laserEstimates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(laserEstimates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async archiveLaserEstimate(id: string): Promise<LaserEstimate | undefined> {
+    const [updated] = await db.update(laserEstimates)
+      .set({ archivedAt: new Date(), status: "archived" })
+      .where(eq(laserEstimates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLaserEstimate(id: string): Promise<void> {
+    await db.delete(laserEstimates).where(eq(laserEstimates.id, id));
   }
 }
 
