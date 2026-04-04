@@ -1314,7 +1314,7 @@ export async function registerRoutes(
 
   app.get("/api/ll-gas-cost-inputs", async (req, res) => {
     try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
       const inputs = await storage.getAllLLGasCostInputs();
       res.json(inputs);
     } catch (e: any) {
@@ -1334,7 +1334,7 @@ export async function registerRoutes(
 
   app.get("/api/ll-gas-cost-inputs/:id", async (req, res) => {
     try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
       const input = await storage.getLLGasCostInput(req.params.id);
       if (!input) return res.status(404).json({ error: "Gas cost input not found" });
       res.json(input);
@@ -1363,17 +1363,21 @@ export async function registerRoutes(
         unitCapacityUom: z.string().optional(),
         usableFraction: z.number().min(0).max(1).default(0.95),
         surchargePolicyJson: z.any().optional(),
-        derivedCostPerLitre: z.number().optional(),
         derivedAssumptionsJson: z.any().optional(),
         effectiveFrom: z.string().optional(),
         effectiveTo: z.string().optional(),
       }).parse(req.body);
+
+      const derivedCostPerLitre = (body.unitCapacityValue && body.unitCapacityValue > 0 && body.usableFraction > 0)
+        ? parseFloat((body.deliveredPriceExGst / (body.unitCapacityValue * body.usableFraction)).toFixed(6))
+        : null;
 
       const created = await storage.createLLGasCostInput({
         ...body,
         divisionKey: "LL",
         status: "draft",
         createdBy: req.user.id,
+        derivedCostPerLitre,
         effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : null,
         effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
       } as any);
@@ -1416,11 +1420,17 @@ export async function registerRoutes(
         unitCapacityUom: z.string().optional(),
         usableFraction: z.number().min(0).max(1).optional(),
         surchargePolicyJson: z.any().optional(),
-        derivedCostPerLitre: z.number().optional(),
         derivedAssumptionsJson: z.any().optional(),
       }).parse(req.body);
 
-      const updated = await storage.updateLLGasCostInput(req.params.id, body as any);
+      const mergedPrice = body.deliveredPriceExGst ?? input.deliveredPriceExGst;
+      const mergedCapacity = body.unitCapacityValue ?? input.unitCapacityValue;
+      const mergedFraction = body.usableFraction ?? input.usableFraction;
+      const recomputedDerived = (mergedCapacity && mergedCapacity > 0 && mergedFraction && mergedFraction > 0)
+        ? parseFloat((mergedPrice / (mergedCapacity * mergedFraction)).toFixed(6))
+        : null;
+
+      const updated = await storage.updateLLGasCostInput(req.params.id, { ...body, derivedCostPerLitre: recomputedDerived } as any);
       res.json(updated);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -1535,7 +1545,7 @@ export async function registerRoutes(
 
   app.get("/api/ll-consumables-cost-inputs", async (req, res) => {
     try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
       const inputs = await storage.getAllLLConsumablesCostInputs();
       res.json(inputs);
     } catch (e: any) {
@@ -1555,7 +1565,7 @@ export async function registerRoutes(
 
   app.get("/api/ll-consumables-cost-inputs/:id", async (req, res) => {
     try {
-      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
       const input = await storage.getLLConsumablesCostInput(req.params.id);
       if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
       res.json(input);
@@ -1584,17 +1594,21 @@ export async function registerRoutes(
         unitCostExGst: z.number().min(0),
         lifeModelType: z.enum(["hours", "pierces", "metres_cut", "sheets", "manual"]),
         expectedLifeValue: z.number().min(0),
-        derivedCostPerHour: z.number().optional(),
         derivedAssumptionsJson: z.any().optional(),
         effectiveFrom: z.string().optional(),
         effectiveTo: z.string().optional(),
       }).parse(req.body);
+
+      const derivedCostPerHour = (body.expectedLifeValue > 0 && body.unitCostExGst > 0)
+        ? parseFloat((body.unitCostExGst / body.expectedLifeValue).toFixed(4))
+        : null;
 
       const created = await storage.createLLConsumablesCostInput({
         ...body,
         divisionKey: "LL",
         status: "draft",
         createdBy: req.user.id,
+        derivedCostPerHour,
         effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : null,
         effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
       } as any);
@@ -1637,11 +1651,16 @@ export async function registerRoutes(
         unitCostExGst: z.number().min(0).optional(),
         lifeModelType: z.enum(["hours", "pierces", "metres_cut", "sheets", "manual"]).optional(),
         expectedLifeValue: z.number().min(0).optional(),
-        derivedCostPerHour: z.number().optional(),
         derivedAssumptionsJson: z.any().optional(),
       }).parse(req.body);
 
-      const updated = await storage.updateLLConsumablesCostInput(req.params.id, body as any);
+      const mergedUnitCost = body.unitCostExGst ?? input.unitCostExGst;
+      const mergedLife = body.expectedLifeValue ?? input.expectedLifeValue;
+      const recomputedDerived = (mergedLife > 0 && mergedUnitCost > 0)
+        ? parseFloat((mergedUnitCost / mergedLife).toFixed(4))
+        : null;
+
+      const updated = await storage.updateLLConsumablesCostInput(req.params.id, { ...body, derivedCostPerHour: recomputedDerived } as any);
       res.json(updated);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -1757,6 +1776,12 @@ export async function registerRoutes(
   app.post("/api/ll-commercial-inputs/seed", async (req, res) => {
     try {
       if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+
+      const existingGas = await storage.getAllLLGasCostInputs();
+      const existingCons = await storage.getAllLLConsumablesCostInputs();
+      if (existingGas.length > 0 || existingCons.length > 0) {
+        return res.status(409).json({ error: "Commercial inputs already exist. Seed is only available when no records exist." });
+      }
 
       const seeded: any[] = [];
       const actorId = req.user.id;
