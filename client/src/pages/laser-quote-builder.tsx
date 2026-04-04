@@ -210,28 +210,54 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
 }
 
 function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPricingBreakdown; supplierName: string }) {
-  const rows = [
+  const isTimeBased = breakdown.processMode === "time-based";
+  const rows: Array<{ label: string; value: string; bold?: boolean }> = [
     { label: "Supplier", value: supplierName || "—" },
     { label: "Sheet Area", value: breakdown.sheetAreaMm2 > 0 ? `${(breakdown.sheetAreaMm2 / 1_000_000).toFixed(3)} m²` : "—" },
     { label: "Part Area (each)", value: breakdown.partAreaMm2 > 0 ? `${(breakdown.partAreaMm2 / 1_000_000).toFixed(4)} m²` : "—" },
-    { label: "Total Part Area", value: breakdown.totalNetPartArea > 0 ? `${(breakdown.totalNetPartArea / 1_000_000).toFixed(4)} m²` : "—" },
-    { label: "Utilisation Factor", value: `${(breakdown.utilisationFactor * 100).toFixed(0)}%` },
+    { label: "Parts/Sheet", value: breakdown.partsPerSheet > 0 ? `${breakdown.partsPerSheet}` : "—" },
     { label: "Est. Sheets Required", value: breakdown.estimatedSheets > 0 ? `${breakdown.estimatedSheets} sheet${breakdown.estimatedSheets !== 1 ? "s" : ""}` : "—" },
     { label: "Material Cost", value: `$${breakdown.materialCostTotal.toFixed(2)}` },
-    { label: "Cut Cost (per unit)", value: `$${breakdown.cutCost.toFixed(2)}` },
-    { label: "Pierce Cost (per unit)", value: `$${breakdown.pierceCost.toFixed(2)}` },
-    { label: "Process Cost (total)", value: `$${breakdown.processCostTotal.toFixed(2)}` },
+  ];
+
+  if (isTimeBased) {
+    rows.push(
+      { label: "Machine Time", value: `${breakdown.machineTimeMinutes.toFixed(1)} min` },
+      { label: "Machine Cost", value: `$${breakdown.machineTimeCost.toFixed(2)}` },
+      { label: "Gas Cost", value: `$${breakdown.gasCost.toFixed(2)}` },
+      { label: "Consumables", value: `$${breakdown.consumablesCost.toFixed(2)}` },
+    );
+  } else {
+    rows.push(
+      { label: "Cut Cost (per unit)", value: `$${breakdown.cutCost.toFixed(2)}` },
+      { label: "Pierce Cost (per unit)", value: `$${breakdown.pierceCost.toFixed(2)}` },
+    );
+  }
+
+  rows.push(
+    { label: `Process Cost (${isTimeBased ? "time" : "flat"})`, value: `$${breakdown.processCostTotal.toFixed(2)}` },
     { label: "Setup/Handling", value: `$${breakdown.setupHandlingCost.toFixed(2)}` },
-    { label: "Internal Subtotal", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true },
+  );
+
+  if (breakdown.minimumLineChargeApplied) {
+    rows.push({ label: "Min. Line Charge Applied", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true });
+  } else {
+    rows.push({ label: "Internal Subtotal", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true });
+  }
+
+  rows.push(
     { label: `Markup (${breakdown.markupPercent}%)`, value: `$${breakdown.markupAmount.toFixed(2)}` },
     { label: "Sell Total", value: `$${breakdown.sellTotal.toFixed(2)}`, bold: true },
     { label: "Unit Sell", value: `$${breakdown.unitSell.toFixed(2)}`, bold: true },
-  ];
+  );
   return (
     <div className="bg-muted/50 border rounded-md p-3 space-y-1" data-testid="pricing-breakdown-panel">
       <div className="flex items-center gap-1.5 mb-2">
         <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Internal Pricing Breakdown</span>
+        <Badge variant={isTimeBased ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 ml-auto" data-testid="process-mode-badge">
+          {isTimeBased ? "Time-Based" : "Flat Rate"}
+        </Badge>
       </div>
       {rows.map((r, i) => (
         <div key={i} className={`flex justify-between text-xs ${r.bold ? 'font-semibold border-t pt-1 mt-1' : 'text-muted-foreground'}`}>
