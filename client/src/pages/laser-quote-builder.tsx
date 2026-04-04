@@ -499,9 +499,6 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
         customerName: customerName.trim(),
         projectAddress,
         itemsJson: items,
-        pricingProfileId: pricingProfileId,
-        pricingProfileLabel: pricingProfileLabel,
-        pricedAt: new Date().toISOString(),
       });
       return res.json();
     },
@@ -522,9 +519,6 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
         customerName: customerName.trim(),
         projectAddress,
         itemsJson: items,
-        pricingProfileId: pricingProfileId,
-        pricingProfileLabel: pricingProfileLabel,
-        pricedAt: new Date().toISOString(),
       });
       return res.json();
     },

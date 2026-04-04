@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -701,19 +701,21 @@ function ConfirmActionDialog({
 }) {
   const { toast } = useToast();
 
+  const actionRef = useRef(action);
+  actionRef.current = action;
+
   const mutation = useMutation({
-    mutationFn: async () => {
-      if (!action) return;
-      const res = await apiRequest("POST", `/api/ll-pricing-profiles/${action.profileId}/${action.type}`);
+    mutationFn: async (captured: { type: string; profileId: string }) => {
+      const res = await apiRequest("POST", `/api/ll-pricing-profiles/${captured.profileId}/${captured.type}`);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, captured) => {
       const labels: Record<string, string> = {
         approve: "Profile approved",
         activate: "Profile activated — now live for all new estimates",
         archive: "Profile archived",
       };
-      toast({ title: labels[action!.type] || "Done" });
+      toast({ title: labels[captured.type] || "Done" });
       queryClient.invalidateQueries({ queryKey: ["/api/ll-pricing-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ll-pricing-profiles", "active"] });
       onSuccess();
@@ -729,6 +731,11 @@ function ConfirmActionDialog({
     archive: "This will archive the profile. It will no longer be available for activation.",
   };
 
+  const handleConfirm = () => {
+    if (!action) return;
+    mutation.mutate({ type: action.type, profileId: action.profileId });
+  };
+
   return (
     <AlertDialog open={!!action} onOpenChange={(o) => { if (!o) onClose(); }}>
       <AlertDialogContent data-testid="dialog-confirm-action">
@@ -742,7 +749,7 @@ function ConfirmActionDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={() => mutation.mutate()} disabled={mutation.isPending} data-testid="button-confirm-action">
+          <AlertDialogAction onClick={handleConfirm} disabled={mutation.isPending} data-testid="button-confirm-action">
             {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
             Confirm
           </AlertDialogAction>

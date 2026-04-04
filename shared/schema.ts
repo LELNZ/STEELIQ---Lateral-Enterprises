@@ -389,7 +389,9 @@ export const llPricingProfiles = pgTable("ll_pricing_profiles", {
   approvedAt: timestamp("approved_at"),
   activatedBy: varchar("activated_by"),
   activatedAt: timestamp("activated_at"),
-});
+}, (table) => [
+  uniqueIndex("idx_ll_pricing_profiles_single_active").on(table.divisionKey).where(sql`status = 'active'`),
+]);
 
 export const insertLLPricingProfileSchema = createInsertSchema(llPricingProfiles).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, activatedAt: true });
 export type InsertLLPricingProfile = z.infer<typeof insertLLPricingProfileSchema>;

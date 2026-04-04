@@ -1238,33 +1238,46 @@ export async function registerRoutes(
       if (!profile) return res.status(404).json({ error: "Profile not found" });
       if (profile.status !== "approved") return res.status(400).json({ error: `Only approved profiles can be activated. Current status: ${profile.status}` });
 
-      const currentActive = await storage.getActiveLLPricingProfile();
-      if (currentActive && currentActive.id !== req.params.id) {
-        await storage.updateLLPricingProfile(currentActive.id, { status: "superseded" } as any);
-        await storage.createLLPricingAuditEntry({
-          profileId: currentActive.id,
-          eventType: "superseded",
-          actorUserId: req.user.id,
-          actorDisplayName: req.user.displayName || req.user.username,
-          summary: `Superseded by activation of "${profile.profileName}"`,
-        });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const now = new Date();
+        const actorId = req.user.id;
+        const actorName = req.user.displayName || req.user.username;
+
+        const { rows: activeRows } = await client.query(
+          `UPDATE ll_pricing_profiles SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND id != $2 RETURNING id, profile_name`,
+          [now, req.params.id]
+        );
+
+        for (const row of activeRows) {
+          await client.query(
+            `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
+            [row.id, actorId, actorName, `Superseded by activation of "${profile.profileName}"`]
+          );
+        }
+
+        const { rowCount: activatedCount } = await client.query(
+          `UPDATE ll_pricing_profiles SET status = 'active', activated_by = $1, activated_at = $2, effective_from = $2, updated_at = $2 WHERE id = $3 AND status = 'approved' AND division_key = 'LL'`,
+          [actorId, now, req.params.id]
+        );
+        if (activatedCount !== 1) {
+          throw new Error("Failed to activate profile: target row not found or not in approved state");
+        }
+
+        await client.query(
+          `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
+          [req.params.id, actorId, actorName, `Activated profile "${profile.profileName}"`]
+        );
+
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
       }
-
-      const now = new Date();
-      await storage.updateLLPricingProfile(req.params.id, {
-        status: "active",
-        activatedBy: req.user.id,
-        activatedAt: now,
-        effectiveFrom: now,
-      } as any);
-
-      await storage.createLLPricingAuditEntry({
-        profileId: req.params.id,
-        eventType: "activated",
-        actorUserId: req.user.id,
-        actorDisplayName: req.user.displayName || req.user.username,
-        summary: `Activated profile "${profile.profileName}"`,
-      });
 
       const refreshed = await storage.getLLPricingProfile(req.params.id);
       res.json(refreshed);
@@ -1399,10 +1412,10 @@ export async function registerRoutes(
         notes: z.string().optional().default(""),
         customerId: z.string().optional(),
         contactId: z.string().optional(),
-        pricingProfileId: z.string().nullable().optional(),
-        pricingProfileLabel: z.string().nullable().optional(),
-        pricedAt: z.string().nullable().optional(),
       }).parse(req.body);
+
+      const activeProfile = await storage.getActiveLLPricingProfile();
+      const now = new Date();
       const estimateNumber = await storage.getNextLaserEstimateNumber();
       const estimate = await storage.createLaserEstimate({
         estimateNumber,
@@ -1414,9 +1427,9 @@ export async function registerRoutes(
         customerId: body.customerId || null,
         contactId: body.contactId || null,
         status: "draft",
-        pricingProfileId: body.pricingProfileId || null,
-        pricingProfileLabel: body.pricingProfileLabel || null,
-        pricedAt: body.pricedAt ? new Date(body.pricedAt) : null,
+        pricingProfileId: activeProfile?.id || null,
+        pricingProfileLabel: activeProfile ? `${activeProfile.profileName} (${activeProfile.versionLabel})` : null,
+        pricedAt: activeProfile ? now : null,
       } as any);
       res.status(201).json(estimate);
     } catch (e: any) {
@@ -1437,12 +1450,15 @@ export async function registerRoutes(
         status: z.enum(["draft", "ready", "converted", "archived"]).optional(),
         customerId: z.string().nullable().optional(),
         contactId: z.string().nullable().optional(),
-        pricingProfileId: z.string().nullable().optional(),
-        pricingProfileLabel: z.string().nullable().optional(),
-        pricedAt: z.string().nullable().optional(),
       }).parse(req.body);
-      if (body.pricedAt) (body as any).pricedAt = new Date(body.pricedAt);
-      const updated = await storage.updateLaserEstimate(req.params.id, body as any);
+
+      const activeProfile = await storage.getActiveLLPricingProfile();
+      const updateData: any = { ...body };
+      updateData.pricingProfileId = activeProfile?.id || null;
+      updateData.pricingProfileLabel = activeProfile ? `${activeProfile.profileName} (${activeProfile.versionLabel})` : null;
+      updateData.pricedAt = activeProfile ? new Date() : null;
+
+      const updated = await storage.updateLaserEstimate(req.params.id, updateData);
       if (!updated) return res.status(404).json({ error: "Laser estimate not found" });
       res.json(updated);
     } catch (e: any) {
