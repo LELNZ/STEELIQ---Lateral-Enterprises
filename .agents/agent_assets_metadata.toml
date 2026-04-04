@@ -96,3 +96,9 @@ id = "sFvRLrcD8iDLe2giPnwIC"
 uri = "file://reports/phase-4d-forensic-report.md"
 type = "text"
 title = "Phase 4D Forensic Report — LL Commercial Inputs Governance"
+
+[[outputs]]
+id = "4bbQAwd7eeoMLVBYcS3Jx"
+uri = "file://reports/phase-4e-forensic-report.md"
+type = "text"
+title = "Phase 4E — Enterprise Forensic Report"
