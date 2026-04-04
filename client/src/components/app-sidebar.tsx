@@ -3,7 +3,6 @@ import {
   Briefcase, BookOpen, Settings, FileText, ChevronDown, BarChart3, Users,
   ShieldCheck, HardHat, Building2, Contact, ReceiptText, FolderOpen,
   Calendar, ShoppingCart, Factory, Truck, CheckSquare, LineChart, Lock,
-  Flame, DollarSign,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useNavigationGuard } from "@/lib/navigation-guard";
@@ -70,8 +69,6 @@ export function AppSidebar() {
   const isLibraryActive = location.startsWith("/library");
   const isSettingsActive = location.startsWith("/settings");
   const isAdminActive = location.startsWith("/admin") || location.startsWith("/users");
-  const isCommercialInputsActive = location.startsWith("/ll-commercial-inputs");
-  const isPricingProfilesActive = location.startsWith("/ll-pricing-profiles");
   const isProjectsActive = location.startsWith("/projects");
   const isInvoicesActive = location.startsWith("/invoices");
   const isCustomersActive = location.startsWith("/customers");
@@ -273,27 +270,6 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              {canManageUsers && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isPricingProfilesActive} tooltip="Pricing Profiles">
-                    <Link href="/ll-pricing-profiles" onClick={(e) => guardedClick(e, "/ll-pricing-profiles")} data-testid="link-sidebar-pricing-profiles">
-                      <DollarSign />
-                      <span>Pricing Profiles</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
-              {canManageUsers && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isCommercialInputsActive} tooltip="Commercial Inputs">
-                    <Link href="/ll-commercial-inputs" onClick={(e) => guardedClick(e, "/ll-commercial-inputs")} data-testid="link-sidebar-commercial-inputs">
-                      <Flame />
-                      <span>Commercial Inputs</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

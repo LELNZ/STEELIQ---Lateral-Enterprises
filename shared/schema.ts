@@ -447,7 +447,7 @@ export const llGasCostInputs = pgTable("ll_gas_cost_inputs", {
   activatedBy: varchar("activated_by"),
   activatedAt: timestamp("activated_at"),
 }, (table) => [
-  uniqueIndex("idx_ll_gas_cost_inputs_single_active").on(table.divisionKey, table.gasType).where(sql`status = 'active'`),
+  uniqueIndex("idx_ll_gas_cost_inputs_single_active").on(table.divisionKey, table.gasType, table.packageCode).where(sql`status = 'active'`),
 ]);
 
 export const insertLLGasCostInputSchema = createInsertSchema(llGasCostInputs).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, activatedAt: true });

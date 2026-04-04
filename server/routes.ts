@@ -1480,8 +1480,8 @@ export async function registerRoutes(
         await client.query("BEGIN");
 
         const { rows: activeRows } = await client.query(
-          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 RETURNING id`,
-          [now, input.gasType]
+          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 AND package_code IS NOT DISTINCT FROM $3 RETURNING id`,
+          [now, input.gasType, input.packageCode || null]
         );
         for (const row of activeRows) {
           await client.query(
@@ -1788,8 +1788,9 @@ export async function registerRoutes(
       const actorName = req.user.displayName || req.user.username;
 
       const bocGasInputs = [
-        { gasType: "oxygen", packageType: "cylinder" as const, packageCode: "100G2", description: "OXYGEN INDUSTRIAL SIZE G2", deliveredPriceExGst: 50.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G2 cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. Business must confirm G2 capacity." } },
-        { gasType: "nitrogen", packageType: "mcp" as const, packageCode: "152MP15", description: "NITROGEN 4.0 MANPACK MP15", deliveredPriceExGst: 500.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 50000, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC MP15 MCP nominal ~50,000L at STP (estimate — business must confirm)", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. MCP capacity is an estimate and must be confirmed by BOC." } },
+        { gasType: "oxygen", packageType: "cylinder" as const, packageCode: "100G2", description: "OXYGEN INDUSTRIAL SIZE G2", deliveredPriceExGst: 50.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G2 cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre" } },
+        { gasType: "oxygen", packageType: "mcp" as const, packageCode: "J15", description: "OXYGEN 200BAR J15 MANPACK (15 bottles, 154 m³)", deliveredPriceExGst: 200.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 154000, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { note: "J15 Manpack is a distinct package from G2 cylinder. Both O2 records maintained separately.", capacitySource: "Operator-confirmed: 15 bottles, total pack volume 154 m³ = 154,000 litres at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre" } },
+        { gasType: "nitrogen", packageType: "mcp" as const, packageCode: "152MP15", description: "NITROGEN 4.0 MANPACK MP15 (15 bottles, 187.30 m³)", deliveredPriceExGst: 500.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 187300, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "Operator-confirmed: 15 bottles × 12.49 m³ = 187.30 m³ total pack volume = 187,300 litres at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre", correctionReason: "Phase 4E T001 — operator-confirmed pack volumes replace placeholder estimates" } },
         { gasType: "argon", packageType: "cylinder" as const, packageCode: "130G", description: "ARGON SIZE G", deliveredPriceExGst: 65.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. Business must confirm G capacity for argon." } },
       ];
 

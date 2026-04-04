@@ -224,11 +224,12 @@ function getGasPricePerLitre(
   const normGas = normaliseGasName(gasType);
 
   if (governed?.gasInputs?.length) {
-    const match = governed.gasInputs.find(g => normaliseGasName(g.gasType) === normGas);
-    if (match?.derivedCostPerLitre != null) {
+    const matches = governed.gasInputs.filter(g => normaliseGasName(g.gasType) === normGas && g.derivedCostPerLitre != null);
+    if (matches.length > 0) {
+      const best = matches.reduce((a, b) => (a.derivedCostPerLitre! <= b.derivedCostPerLitre!) ? a : b);
       return {
-        pricePerLitre: match.derivedCostPerLitre,
-        source: `${match.supplierName} ${match.sourceReference} (${match.packageType})`,
+        pricePerLitre: best.derivedCostPerLitre!,
+        source: `${best.supplierName} ${best.sourceReference} (${best.packageCode || best.packageType})`,
       };
     }
   }

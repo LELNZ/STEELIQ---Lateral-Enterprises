@@ -29,7 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle,
-  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight,
+  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info,
 } from "lucide-react";
 import type {
   LLPricingProfile,
@@ -50,7 +50,7 @@ const STATUS_COLORS: Record<string, string> = {
   archived: "bg-gray-100 text-gray-500 border-gray-300",
 };
 
-export default function LLPricingProfiles() {
+export default function LLPricingProfiles({ embedded }: { embedded?: boolean } = {}) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -79,24 +79,38 @@ export default function LLPricingProfiles() {
   }
 
   return (
-    <div className="flex flex-col h-full" data-testid="ll-pricing-profiles-page">
-      <div className="flex items-center justify-between border-b px-4 py-3 bg-background">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} data-testid="button-back-settings">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-semibold" data-testid="text-page-title">LL Pricing Profiles</h1>
-            <p className="text-xs text-muted-foreground">Pricing governance for Lateral Laser</p>
+    <div className={embedded ? "flex flex-col" : "flex flex-col h-full"} data-testid="ll-pricing-profiles-page">
+      {!embedded && (
+        <div className="flex items-center justify-between border-b px-4 py-3 bg-background">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} data-testid="button-back-settings">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-lg font-semibold" data-testid="text-page-title">LL Pricing Profiles</h1>
+              <p className="text-xs text-muted-foreground">Pricing governance for Lateral Laser</p>
+            </div>
           </div>
+          <Button size="sm" onClick={() => { setDuplicateSourceId(null); setCreateDialogOpen(true); }} data-testid="button-new-profile">
+            <Plus className="h-4 w-4 mr-1" />
+            New Profile
+          </Button>
         </div>
-        <Button size="sm" onClick={() => { setDuplicateSourceId(null); setCreateDialogOpen(true); }} data-testid="button-new-profile">
-          <Plus className="h-4 w-4 mr-1" />
-          New Profile
-        </Button>
-      </div>
+      )}
+      {embedded && (
+        <div className="flex items-center justify-between pb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Pricing Profiles</h3>
+            <p className="text-xs text-muted-foreground">Process rates, machine settings, commercial policy, and markup rules</p>
+          </div>
+          <Button size="sm" onClick={() => { setDuplicateSourceId(null); setCreateDialogOpen(true); }} data-testid="button-new-profile">
+            <Plus className="h-4 w-4 mr-1" />
+            New Profile
+          </Button>
+        </div>
+      )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className={`flex ${embedded ? "h-[600px]" : "flex-1"} overflow-hidden border rounded-lg`}>
         <div className="w-80 border-r overflow-y-auto">
           <div className="p-3 space-y-1">
             {profiles.length === 0 && (
@@ -368,16 +382,24 @@ function PricingSettingsEditor({
   return (
     <div className="space-y-4">
       <SettingsSection title="Gas Costs">
+        <div className="px-3 py-2 mb-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5" data-testid="gas-governed-notice">
+          <Info className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Gas costs are <strong>governed by active Commercial Inputs</strong> (supplier-backed). Profile values below are fallback only and do not override governed rates.</span>
+        </div>
         <div className="grid grid-cols-3 gap-3">
-          {numField("O2", "gasCosts.o2PricePerLitre", settings.gasCosts.o2PricePerLitre, "$/L")}
-          {numField("N2", "gasCosts.n2PricePerLitre", settings.gasCosts.n2PricePerLitre, "$/L")}
-          {numField("Air", "gasCosts.compressedAirPricePerLitre", settings.gasCosts.compressedAirPricePerLitre, "$/L")}
+          {numField("O2 (fallback)", "gasCosts.o2PricePerLitre", settings.gasCosts.o2PricePerLitre, "$/L")}
+          {numField("N2 (fallback)", "gasCosts.n2PricePerLitre", settings.gasCosts.n2PricePerLitre, "$/L")}
+          {numField("Air (fallback)", "gasCosts.compressedAirPricePerLitre", settings.gasCosts.compressedAirPricePerLitre, "$/L")}
         </div>
       </SettingsSection>
 
       <SettingsSection title="Consumable Costs">
+        <div className="px-3 py-2 mb-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5" data-testid="consumables-governed-notice">
+          <Info className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Consumable costs are <strong>governed by active Commercial Inputs</strong> (invoice-backed). Profile value below is fallback only.</span>
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          {numField("Cost per Machine Hour", "consumableCosts.consumableCostPerMachineHour", settings.consumableCosts.consumableCostPerMachineHour, "$")}
+          {numField("Cost per Machine Hour (fallback)", "consumableCosts.consumableCostPerMachineHour", settings.consumableCosts.consumableCostPerMachineHour, "$")}
         </div>
       </SettingsSection>
 

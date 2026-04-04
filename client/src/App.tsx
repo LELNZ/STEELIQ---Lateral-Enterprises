@@ -131,8 +131,8 @@ function Router() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />
-      <Route path="/ll-pricing-profiles" component={LLPricingProfiles} />
-      <Route path="/ll-commercial-inputs" component={LLCommercialInputs} />
+      <Route path="/ll-pricing-profiles">{() => { window.location.replace("/settings?division=LL&tab=pricing-governance"); return null; }}</Route>
+      <Route path="/ll-commercial-inputs">{() => { window.location.replace("/settings?division=LL&tab=commercial-inputs"); return null; }}</Route>
       <Route component={NotFound} />
     </Switch>
   );

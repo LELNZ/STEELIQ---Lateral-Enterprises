@@ -23,7 +23,7 @@ const statusColors: Record<string, string> = {
   archived: "bg-red-50 text-red-600 border-red-300",
 };
 
-export default function LLCommercialInputs() {
+export default function LLCommercialInputs({ embedded }: { embedded?: boolean } = {}) {
   const [activeTab, setActiveTab] = useState<string>("gas");
   const [selectedGasId, setSelectedGasId] = useState<string | null>(null);
   const [selectedConsumableId, setSelectedConsumableId] = useState<string | null>(null);
@@ -58,21 +58,39 @@ export default function LLCommercialInputs() {
   const hasNoData = gasInputs.length === 0 && consumableInputs.length === 0;
 
   return (
-    <div className="flex flex-col h-full" data-testid="ll-commercial-inputs-page">
-      <div className="border-b px-6 py-3 flex items-center justify-between bg-background">
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-semibold" data-testid="page-title">LL Commercial Inputs</h1>
+    <div className={embedded ? "flex flex-col" : "flex flex-col h-full"} data-testid="ll-commercial-inputs-page">
+      {!embedded && (
+        <div className="border-b px-6 py-3 flex items-center justify-between bg-background">
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold" data-testid="page-title">LL Commercial Inputs</h1>
+          </div>
+          <div className="flex gap-2">
+            {hasNoData && (
+              <Button variant="outline" size="sm" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-seed">
+                {seedMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+                Seed from BOC/Bodor
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2">
-          {hasNoData && (
-            <Button variant="outline" size="sm" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-seed">
-              {seedMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
-              Seed from BOC/Bodor
-            </Button>
-          )}
+      )}
+      {embedded && (
+        <div className="flex items-center justify-between pb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Commercial Inputs</h3>
+            <p className="text-xs text-muted-foreground">Supplier-backed gas and consumable cost records with contract traceability</p>
+          </div>
+          <div className="flex gap-2">
+            {hasNoData && (
+              <Button variant="outline" size="sm" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-seed">
+                {seedMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+                Seed from BOC/Bodor
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <div className="border-b px-6">
