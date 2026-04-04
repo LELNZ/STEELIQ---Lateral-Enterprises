@@ -66,3 +66,9 @@ id = "XohIvBNnOrPUlqAC359F2"
 uri = "file://reports/phase-3c-forensic-report.md"
 type = "text"
 title = "SteelIQ Phase 3C Forensic Report — LL Estimate Persistence Layer"
+
+[[outputs]]
+id = "DT_Dm-ZYvVHn5xqg-9fhi"
+uri = "file://reports/phase-3d-forensic-report.md"
+type = "text"
+title = "Phase 3D Forensic Report"
