@@ -10,9 +10,13 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, FolderOpen, Loader2, FileText, ArrowRightCircle } from "lucide-react";
+import { Plus, Trash2, FolderOpen, Loader2, FileText, ArrowRightCircle, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { LaserEstimate } from "@shared/schema";
+
+type EnrichedLaserEstimate = LaserEstimate & {
+  linkedQuote?: { id: string; number: string; status: string } | null;
+};
 
 const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   draft: { label: "Draft", className: "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-700" },
@@ -24,9 +28,9 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
 export default function LaserEstimatesList() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const [deleteTarget, setDeleteTarget] = useState<LaserEstimate | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EnrichedLaserEstimate | null>(null);
 
-  const { data: estimates = [], isLoading } = useQuery<LaserEstimate[]>({
+  const { data: estimates = [], isLoading } = useQuery<EnrichedLaserEstimate[]>({
     queryKey: ["/api/laser-estimates"],
   });
 
@@ -101,6 +105,7 @@ export default function LaserEstimatesList() {
                   <TableHead className="w-[100px]">Status</TableHead>
                   <TableHead className="w-[110px]">Created</TableHead>
                   <TableHead className="w-[110px]">Updated</TableHead>
+                  <TableHead className="w-[140px] hidden md:table-cell">Linked Quote</TableHead>
                   <TableHead className="w-[100px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -132,6 +137,17 @@ export default function LaserEstimatesList() {
                       </TableCell>
                       <TableCell>
                         <span className="text-xs text-muted-foreground">{formatDate(est.updatedAt)}</span>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {est.linkedQuote ? (
+                          <Link href={`/quote/${est.linkedQuote.id}`}>
+                            <span className="text-xs font-medium text-primary hover:underline cursor-pointer" data-testid={`link-quote-${est.id}`}>
+                              {est.linkedQuote.number}
+                            </span>
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">

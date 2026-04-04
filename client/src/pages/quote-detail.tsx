@@ -429,6 +429,22 @@ export default function QuoteDetail() {
             </Button>
           </div>
         )}
+        {quote.sourceLaserEstimateId && (
+          <div className="rounded-lg border bg-card p-3">
+            <p className="text-xs text-muted-foreground">Source Estimate</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-medium" data-testid="text-source-estimate-name">{(quote as any).sourceEstimateName || quote.sourceLaserEstimateId}</span>
+              <Button
+                variant="ghost"
+                className="p-0 h-auto text-xs underline text-muted-foreground"
+                onClick={() => navigate(`/laser-estimate/${quote.sourceLaserEstimateId}`)}
+                data-testid="link-source-laser-estimate"
+              >
+                Open Estimate
+              </Button>
+            </div>
+          </div>
+        )}
         {quote.sourceJobId && (
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Source Estimate</p>

@@ -1135,7 +1135,23 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Access denied: LL division required" });
       }
       const estimates = await storage.getAllLaserEstimates();
-      res.json(estimates);
+      const convertedIds = estimates.filter(e => e.status === "converted").map(e => e.id);
+      const linkedQuoteMap: Record<string, { id: string; number: string; status: string }> = {};
+      if (convertedIds.length > 0) {
+        const allQuotes = await storage.getAllQuotes();
+        for (const q of allQuotes) {
+          if (q.sourceLaserEstimateId && convertedIds.includes(q.sourceLaserEstimateId)) {
+            if (!linkedQuoteMap[q.sourceLaserEstimateId]) {
+              linkedQuoteMap[q.sourceLaserEstimateId] = { id: q.id, number: q.number, status: q.status };
+            }
+          }
+        }
+      }
+      const enriched = estimates.map(e => ({
+        ...e,
+        linkedQuote: linkedQuoteMap[e.id] || null,
+      }));
+      res.json(enriched);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1148,7 +1164,13 @@ export async function registerRoutes(
       }
       const estimate = await storage.getLaserEstimate(req.params.id);
       if (!estimate) return res.status(404).json({ error: "Laser estimate not found" });
-      res.json(estimate);
+      let linkedQuote: { id: string; number: string; status: string } | null = null;
+      if (estimate.status === "converted") {
+        const allQuotes = await storage.getAllQuotes();
+        const match = allQuotes.find(q => q.sourceLaserEstimateId === estimate.id);
+        if (match) linkedQuote = { id: match.id, number: match.number, status: match.status };
+      }
+      res.json({ ...estimate, linkedQuote });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1489,7 +1511,15 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Access denied: different division" });
       }
       const revisions = await storage.getQuoteRevisions(quote.id);
-      res.json({ ...quote, revisions });
+      let sourceEstimateName: string | null = null;
+      if (quote.sourceLaserEstimateId) {
+        const le = await storage.getLaserEstimate(quote.sourceLaserEstimateId);
+        if (le) sourceEstimateName = le.estimateNumber;
+      } else if (quote.sourceJobId) {
+        const job = await storage.getJob(quote.sourceJobId);
+        if (job) sourceEstimateName = job.name;
+      }
+      res.json({ ...quote, revisions, sourceEstimateName });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

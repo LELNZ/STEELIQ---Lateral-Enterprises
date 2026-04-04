@@ -256,6 +256,7 @@ export default function JobsList() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Estimate #</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Date</TableHead>
@@ -267,11 +268,15 @@ export default function JobsList() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {jobs.map((job) => {
+                    {jobs.map((job, idx) => {
                       const estStatus = deriveEstimateStatus(job);
                       const estStyle = ESTIMATE_STATUS_STYLES[estStatus];
+                      const estDisplayNum = `LJ-EST-${String(activeJobs.length - idx).padStart(4, "0")}`;
                       return (
                       <TableRow key={job.id} className="hover:bg-muted/30" data-testid={`row-job-${job.id}`}>
+                        <TableCell className="py-2.5">
+                          <span className="text-xs font-mono text-muted-foreground" data-testid={`text-estimate-number-${job.id}`}>{estDisplayNum}</span>
+                        </TableCell>
                         <TableCell className="font-medium text-sm py-2.5" data-testid={`text-job-name-${job.id}`}>
                           <div className="flex items-center gap-1.5">
                             {job.name}
@@ -383,6 +388,7 @@ export default function JobsList() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Estimate #</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Archived</TableHead>
@@ -393,10 +399,14 @@ export default function JobsList() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {archivedJobs.map((job) => {
+                    {archivedJobs.map((job, idx) => {
                       const estStyle = ESTIMATE_STATUS_STYLES["archived"];
+                      const archDisplayNum = `LJ-EST-A${String(archivedJobs.length - idx).padStart(4, "0")}`;
                       return (
                       <TableRow key={job.id} className="opacity-80 hover:opacity-100 hover:bg-muted/30" data-testid={`row-archived-job-${job.id}`}>
+                        <TableCell className="py-2.5">
+                          <span className="text-xs font-mono text-muted-foreground" data-testid={`text-archived-estimate-number-${job.id}`}>{archDisplayNum}</span>
+                        </TableCell>
                         <TableCell className="py-2.5">
                           <span className="font-medium text-sm" data-testid={`text-archived-job-name-${job.id}`}>{job.name}</span>
                         </TableCell>

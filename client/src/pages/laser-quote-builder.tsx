@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -305,12 +306,28 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     )].sort((a, b) => parseFloat(a) - parseFloat(b));
   }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish]);
 
-  const selectedMaterialRow = useMemo(() => {
-    return findMatchingMaterial(sheetMaterials, {
-      ...formData,
-      llSheetMaterialId: formData.llSheetMaterialId,
+  const sheetSizesForSelection = useMemo(() => {
+    if (!formData.materialType || !formData.materialGrade || !formData.thickness) return [];
+    return sheetMaterials.filter(
+      m => m.materialFamily === formData.materialType &&
+        m.grade === formData.materialGrade &&
+        (!formData.finish || m.finish === formData.finish) &&
+        parseFloat(m.thickness) === formData.thickness
+    ).sort((a, b) => {
+      const areaA = parseFloat(a.sheetLength) * parseFloat(a.sheetWidth);
+      const areaB = parseFloat(b.sheetLength) * parseFloat(b.sheetWidth);
+      return areaA - areaB;
     });
-  }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish, formData.thickness, formData.llSheetMaterialId]);
+  }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish, formData.thickness]);
+
+  const selectedMaterialRow = useMemo(() => {
+    if (formData.llSheetMaterialId) {
+      const byId = sheetMaterials.find(m => m.id === formData.llSheetMaterialId);
+      if (byId) return byId;
+    }
+    if (sheetSizesForSelection.length === 1) return sheetSizesForSelection[0];
+    return undefined;
+  }, [sheetMaterials, sheetSizesForSelection, formData.llSheetMaterialId]);
 
   const dialogPricing = useMemo(() => {
     return computeItemPricing(formData, sheetMaterials, llPricingSettings);
@@ -658,6 +675,17 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               Preview
             </Button>
           )}
+          {isEstimateEdit && estimateData?.status === "converted" && estimateData?.linkedQuote && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}`)}
+              data-testid="button-open-linked-quote"
+            >
+              <Eye className="h-4 w-4 mr-1" />
+              Open Quote {estimateData.linkedQuote.number}
+            </Button>
+          )}
           {isEstimateEdit && estimateData?.status !== "converted" && (
             <Button
               variant="outline"
@@ -689,6 +717,28 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       </div>
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
+        {isEstimateEdit && estimateData?.status === "converted" && (
+          <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3 flex items-center justify-between" data-testid="banner-converted">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-300 dark:border-green-700 text-xs">Converted</Badge>
+              <span className="text-sm text-green-800 dark:text-green-300">
+                This estimate has been converted to quote <strong>{estimateData.linkedQuote?.number || "—"}</strong>
+              </span>
+            </div>
+            {estimateData.linkedQuote && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-green-300 dark:border-green-700 text-green-800 dark:text-green-300"
+                onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}`)}
+                data-testid="banner-open-quote"
+              >
+                <ArrowRightCircle className="h-3.5 w-3.5 mr-1" />
+                Open Quote
+              </Button>
+            )}
+          </div>
+        )}
         <Card data-testid="card-quote-details">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Quote Details</CardTitle>
@@ -943,34 +993,70 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                 </div>
                 <div>
                   <Label htmlFor="thickness">Thickness (mm)</Label>
+                  {thicknessesForSelection.length > 0 ? (
+                    <Select
+                      key={`thickness-${formData.materialType}-${formData.materialGrade}-${formData.finish}`}
+                      value={formData.thickness > 0 ? String(formData.thickness) : undefined}
+                      onValueChange={(v) => {
+                        const t = parseFloat(v) || 0;
+                        const matchingSheets = sheetMaterials.filter(
+                          m => m.materialFamily === formData.materialType &&
+                            m.grade === formData.materialGrade &&
+                            (!formData.finish || m.finish === formData.finish) &&
+                            parseFloat(m.thickness) === t
+                        );
+                        setFormData(prev => ({
+                          ...prev,
+                          thickness: t,
+                          llSheetMaterialId: matchingSheets.length === 1 ? matchingSheets[0].id : "",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger data-testid="select-thickness">
+                        <SelectValue placeholder="Select thickness..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {thicknessesForSelection.map(t => (
+                          <SelectItem key={t} value={t}>{t}mm</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="h-9 flex items-center px-3 border rounded-md bg-muted/50 text-sm text-muted-foreground" data-testid="select-thickness-disabled">
+                      {formData.materialGrade ? "No thicknesses available" : "Select grade first"}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && (
+                <div>
+                  <Label>Sheet Size</Label>
                   <Select
-                    value={formData.thickness ? String(formData.thickness) : ""}
+                    key={`sheet-${formData.materialType}-${formData.thickness}`}
+                    value={formData.llSheetMaterialId || undefined}
                     onValueChange={(v) => {
-                      const t = parseFloat(v) || 0;
-                      const matched = sheetMaterials.find(
-                        m => m.materialFamily === formData.materialType &&
-                          m.grade === formData.materialGrade &&
-                          m.finish === formData.finish &&
-                          parseFloat(m.thickness) === t
-                      );
-                      setFormData(prev => ({
-                        ...prev,
-                        thickness: t,
-                        llSheetMaterialId: matched?.id || "",
-                      }));
+                      setFormData(prev => ({ ...prev, llSheetMaterialId: v }));
                     }}
                   >
-                    <SelectTrigger data-testid="select-thickness">
-                      <SelectValue placeholder={formData.materialGrade ? "Select..." : "Select grade first"} />
+                    <SelectTrigger data-testid="select-sheet-size">
+                      <SelectValue placeholder="Select sheet size..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {thicknessesForSelection.map(t => (
-                        <SelectItem key={t} value={t}>{t}mm</SelectItem>
+                      {sheetSizesForSelection.map(m => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.sheetLength}mm x {m.sheetWidth}mm — ${parseFloat(m.pricePerSheetExGst).toFixed(2)} ({m.supplierName})
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{sheetSizesForSelection.length} sheet sizes available for this combination</p>
                 </div>
-              </div>
+              )}
+              {formData.thickness > 0 && sheetSizesForSelection.length === 0 && (
+                <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5" data-testid="no-sheets-warning">
+                  No valid sheet found for this material/thickness combination. Check the sheet materials library.
+                </div>
+              )}
               {selectedMaterialRow && (
                 <div className="text-xs text-muted-foreground bg-background border rounded px-2 py-1.5 space-y-0.5" data-testid="material-identity-display">
                   <div className="flex justify-between">
@@ -981,6 +1067,11 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                     <span>Price/Sheet: <strong>${parseFloat(selectedMaterialRow.pricePerSheetExGst).toFixed(2)}</strong> ex GST</span>
                     <span className="text-[10px] text-muted-foreground/60 font-mono">ID: {selectedMaterialRow.id.slice(0, 8)}</span>
                   </div>
+                </div>
+              )}
+              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && !formData.llSheetMaterialId && (
+                <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1.5" data-testid="sheet-size-required-warning">
+                  Please select a sheet size to proceed with accurate pricing.
                 </div>
               )}
             </div>

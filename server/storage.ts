@@ -330,11 +330,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllJobs(): Promise<Job[]> {
-    return db.select().from(jobs).where(isNull(jobs.archivedAt));
+    return db.select().from(jobs).where(isNull(jobs.archivedAt)).orderBy(desc(jobs.createdAt));
   }
 
   async getArchivedJobs(): Promise<Job[]> {
-    return db.select().from(jobs).where(isNotNull(jobs.archivedAt));
+    return db.select().from(jobs).where(isNotNull(jobs.archivedAt)).orderBy(desc(jobs.createdAt));
   }
 
   async archiveJob(id: string): Promise<Job | undefined> {
@@ -1439,7 +1439,7 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`INSERT INTO number_sequences (id, current_value) VALUES ('laser_estimate', 0) ON CONFLICT DO NOTHING`);
     const result = await db.execute(sql`UPDATE number_sequences SET current_value = current_value + 1 WHERE id = 'laser_estimate' RETURNING current_value`);
     const seq = (result as any).rows?.[0]?.current_value ?? 1;
-    return `LE-${String(seq).padStart(4, "0")}-LL`;
+    return `LL-EST-${String(seq).padStart(4, "0")}`;
   }
 
   async createLaserEstimate(data: InsertLaserEstimate): Promise<LaserEstimate> {
