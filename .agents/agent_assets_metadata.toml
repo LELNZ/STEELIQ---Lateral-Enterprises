@@ -48,3 +48,9 @@ id = "bAKS3o9R78N-Bh7vkfSSs"
 uri = "file://.local/ll-enterprise-parity-gap-analysis.md"
 type = "text"
 title = "Enterprise Parity Gap Analysis — Laser + Folding"
+
+[[outputs]]
+id = "t9B__r3cAgK7AvuqIpj2b"
+uri = "file://.local/phase-3a-forensic-report.md"
+type = "text"
+title = "Phase 3A Forensic Report — LL Settings Foundation + Schema Seams"
