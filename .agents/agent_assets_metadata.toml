@@ -72,3 +72,9 @@ id = "DT_Dm-ZYvVHn5xqg-9fhi"
 uri = "file://reports/phase-3d-forensic-report.md"
 type = "text"
 title = "Phase 3D Forensic Report"
+
+[[outputs]]
+id = "owYBCNxzHYhb31Qg97HVm"
+uri = "file://reports/phase-4a-forensic-report.md"
+type = "text"
+title = "Phase 4A Forensic Report: LL Pricing Calibration"
