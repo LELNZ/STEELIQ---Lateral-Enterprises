@@ -1310,6 +1310,533 @@ export async function registerRoutes(
     }
   });
 
+  // ── LL Gas Cost Inputs ──────────────────────────────────────────────────
+
+  app.get("/api/ll-gas-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const inputs = await storage.getAllLLGasCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-gas-cost-inputs/active", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const inputs = await storage.getActiveLLGasCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-gas-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      res.json(input);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]),
+        supplierName: z.string().min(1),
+        sourceReference: z.string().min(1),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        gasType: z.string().min(1),
+        packageType: z.enum(["cylinder", "mcp", "bulk", "other"]),
+        packageCode: z.string().optional(),
+        description: z.string().optional(),
+        deliveredPriceExGst: z.number().min(0),
+        dailyServiceChargeExGst: z.number().min(0).default(0),
+        unitCapacityValue: z.number().optional(),
+        unitCapacityUom: z.string().optional(),
+        usableFraction: z.number().min(0).max(1).default(0.95),
+        surchargePolicyJson: z.any().optional(),
+        derivedCostPerLitre: z.number().optional(),
+        derivedAssumptionsJson: z.any().optional(),
+        effectiveFrom: z.string().optional(),
+        effectiveTo: z.string().optional(),
+      }).parse(req.body);
+
+      const created = await storage.createLLGasCostInput({
+        ...body,
+        divisionKey: "LL",
+        status: "draft",
+        createdBy: req.user.id,
+        effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : null,
+        effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: created.id,
+        eventType: "created",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Created gas cost input "${body.gasType} (${body.packageType})" from ${body.supplierName}`,
+      });
+
+      res.status(201).json(created);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-gas-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: "Only draft inputs can be edited" });
+
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]).optional(),
+        supplierName: z.string().min(1).optional(),
+        sourceReference: z.string().min(1).optional(),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        gasType: z.string().min(1).optional(),
+        packageType: z.enum(["cylinder", "mcp", "bulk", "other"]).optional(),
+        packageCode: z.string().optional(),
+        description: z.string().optional(),
+        deliveredPriceExGst: z.number().min(0).optional(),
+        dailyServiceChargeExGst: z.number().min(0).optional(),
+        unitCapacityValue: z.number().optional(),
+        unitCapacityUom: z.string().optional(),
+        usableFraction: z.number().min(0).max(1).optional(),
+        surchargePolicyJson: z.any().optional(),
+        derivedCostPerLitre: z.number().optional(),
+        derivedAssumptionsJson: z.any().optional(),
+      }).parse(req.body);
+
+      const updated = await storage.updateLLGasCostInput(req.params.id, body as any);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs/:id/approve", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: `Only draft inputs can be approved. Current status: ${input.status}` });
+
+      await storage.updateLLGasCostInput(req.params.id, {
+        status: "approved",
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "approved",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Approved gas cost input "${input.gasType} (${input.packageType})"`,
+      });
+
+      const refreshed = await storage.getLLGasCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs/:id/activate", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status !== "approved") return res.status(400).json({ error: `Only approved inputs can be activated. Current status: ${input.status}` });
+
+      const actorId = req.user.id;
+      const actorName = req.user.displayName || req.user.username;
+      const now = new Date();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const { rows: activeRows } = await client.query(
+          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 RETURNING id`,
+          [now, input.gasType]
+        );
+        for (const row of activeRows) {
+          await client.query(
+            `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
+            [row.id, actorId, actorName, `Superseded by activation of "${input.gasType} (${input.packageType})"`]
+          );
+        }
+
+        const { rowCount: activatedCount } = await client.query(
+          `UPDATE ll_gas_cost_inputs SET status = 'active', activated_by = $1, activated_at = $2, effective_from = $2, updated_at = $2 WHERE id = $3 AND status = 'approved' AND division_key = 'LL'`,
+          [actorId, now, req.params.id]
+        );
+        if (activatedCount !== 1) {
+          throw new Error("Failed to activate gas cost input: target row not found or not in approved state");
+        }
+
+        await client.query(
+          `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
+          [req.params.id, actorId, actorName, `Activated gas cost input "${input.gasType} (${input.packageType})"`]
+        );
+
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+
+      const refreshed = await storage.getLLGasCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs/:id/archive", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status === "active") return res.status(400).json({ error: "Cannot archive the active input. Activate a replacement first." });
+
+      await storage.updateLLGasCostInput(req.params.id, { status: "archived" } as any);
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "archived",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Archived gas cost input "${input.gasType} (${input.packageType})"`,
+      });
+
+      const refreshed = await storage.getLLGasCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ── LL Consumables Cost Inputs ─────────────────────────────────────────
+
+  app.get("/api/ll-consumables-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const inputs = await storage.getAllLLConsumablesCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-consumables-cost-inputs/active", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const inputs = await storage.getActiveLLConsumablesCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-consumables-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      res.json(input);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]),
+        supplierName: z.string().min(1),
+        sourceReference: z.string().min(1),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        sku: z.string().min(1),
+        description: z.string().min(1),
+        machineFamily: z.string().optional(),
+        machineModel: z.string().optional(),
+        consumableCategory: z.enum(["lens", "ceramic", "nozzle", "filter", "other"]),
+        purchaseCostExGst: z.number().min(0),
+        quantityPurchased: z.number().min(1).default(1),
+        unitCostExGst: z.number().min(0),
+        lifeModelType: z.enum(["hours", "pierces", "metres_cut", "sheets", "manual"]),
+        expectedLifeValue: z.number().min(0),
+        derivedCostPerHour: z.number().optional(),
+        derivedAssumptionsJson: z.any().optional(),
+        effectiveFrom: z.string().optional(),
+        effectiveTo: z.string().optional(),
+      }).parse(req.body);
+
+      const created = await storage.createLLConsumablesCostInput({
+        ...body,
+        divisionKey: "LL",
+        status: "draft",
+        createdBy: req.user.id,
+        effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : null,
+        effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: created.id,
+        eventType: "created",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Created consumable cost input "${body.description}" (${body.consumableCategory})`,
+      });
+
+      res.status(201).json(created);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-consumables-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: "Only draft inputs can be edited" });
+
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]).optional(),
+        supplierName: z.string().min(1).optional(),
+        sourceReference: z.string().min(1).optional(),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        sku: z.string().min(1).optional(),
+        description: z.string().min(1).optional(),
+        machineFamily: z.string().optional(),
+        machineModel: z.string().optional(),
+        consumableCategory: z.enum(["lens", "ceramic", "nozzle", "filter", "other"]).optional(),
+        purchaseCostExGst: z.number().min(0).optional(),
+        quantityPurchased: z.number().min(1).optional(),
+        unitCostExGst: z.number().min(0).optional(),
+        lifeModelType: z.enum(["hours", "pierces", "metres_cut", "sheets", "manual"]).optional(),
+        expectedLifeValue: z.number().min(0).optional(),
+        derivedCostPerHour: z.number().optional(),
+        derivedAssumptionsJson: z.any().optional(),
+      }).parse(req.body);
+
+      const updated = await storage.updateLLConsumablesCostInput(req.params.id, body as any);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs/:id/approve", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: `Only draft inputs can be approved. Current status: ${input.status}` });
+
+      await storage.updateLLConsumablesCostInput(req.params.id, {
+        status: "approved",
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "approved",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Approved consumable cost input "${input.description}"`,
+      });
+
+      const refreshed = await storage.getLLConsumablesCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs/:id/activate", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status !== "approved") return res.status(400).json({ error: `Only approved inputs can be activated. Current status: ${input.status}` });
+
+      const actorId = req.user.id;
+      const actorName = req.user.displayName || req.user.username;
+      const now = new Date();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const { rows: activeRows } = await client.query(
+          `UPDATE ll_consumables_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND sku = $2 RETURNING id`,
+          [now, input.sku]
+        );
+        for (const row of activeRows) {
+          await client.query(
+            `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
+            [row.id, actorId, actorName, `Superseded by activation of "${input.description}"`]
+          );
+        }
+
+        const { rowCount: activatedCount } = await client.query(
+          `UPDATE ll_consumables_cost_inputs SET status = 'active', activated_by = $1, activated_at = $2, effective_from = $2, updated_at = $2 WHERE id = $3 AND status = 'approved' AND division_key = 'LL'`,
+          [actorId, now, req.params.id]
+        );
+        if (activatedCount !== 1) {
+          throw new Error("Failed to activate consumable cost input: target row not found or not in approved state");
+        }
+
+        await client.query(
+          `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
+          [req.params.id, actorId, actorName, `Activated consumable cost input "${input.description}"`]
+        );
+
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+
+      const refreshed = await storage.getLLConsumablesCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs/:id/archive", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status === "active") return res.status(400).json({ error: "Cannot archive the active input. Activate a replacement first." });
+
+      await storage.updateLLConsumablesCostInput(req.params.id, { status: "archived" } as any);
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "archived",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Archived consumable cost input "${input.description}"`,
+      });
+
+      const refreshed = await storage.getLLConsumablesCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ── LL Commercial Inputs Seed ──────────────────────────────────────────
+
+  app.post("/api/ll-commercial-inputs/seed", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+
+      const seeded: any[] = [];
+      const actorId = req.user.id;
+      const actorName = req.user.displayName || req.user.username;
+
+      const bocGasInputs = [
+        { gasType: "oxygen", packageType: "cylinder" as const, packageCode: "100G2", description: "OXYGEN INDUSTRIAL SIZE G2", deliveredPriceExGst: 50.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G2 cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. Business must confirm G2 capacity." } },
+        { gasType: "nitrogen", packageType: "mcp" as const, packageCode: "152MP15", description: "NITROGEN 4.0 MANPACK MP15", deliveredPriceExGst: 500.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 50000, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC MP15 MCP nominal ~50,000L at STP (estimate — business must confirm)", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. MCP capacity is an estimate and must be confirmed by BOC." } },
+        { gasType: "argon", packageType: "cylinder" as const, packageCode: "130G", description: "ARGON SIZE G", deliveredPriceExGst: 65.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. Business must confirm G capacity for argon." } },
+      ];
+
+      for (const input of bocGasInputs) {
+        const derived = input.unitCapacityValue && input.usableFraction
+          ? input.deliveredPriceExGst / (input.unitCapacityValue * input.usableFraction)
+          : undefined;
+
+        const created = await storage.createLLGasCostInput({
+          divisionKey: "LL",
+          sourceType: "agreement",
+          supplierName: "BOC",
+          sourceReference: "NZ11352442",
+          sourceDocumentName: "BOC 100593891 Agreement 1.pdf",
+          sourceDate: "2026-03-31",
+          sourceNotes: `BOC Industrial Gases Supply Agreement. Account 100593891. Commencement 31 March 2026. 1 year minimum period. Prices fixed for 12 months. Excludes GST and ETS.`,
+          ...input,
+          derivedCostPerLitre: derived ? parseFloat(derived.toFixed(6)) : null,
+          status: "draft",
+          createdBy: actorId,
+        } as any);
+        await storage.createLLPricingAuditEntry({
+          profileId: created.id,
+          eventType: "created",
+          actorUserId: actorId,
+          actorDisplayName: actorName,
+          summary: `Seeded from BOC agreement: ${input.description}`,
+        });
+        seeded.push(created);
+      }
+
+      const bodorConsumables = [
+        { sku: "LM-PLBODOR-37DN", description: "Bodor Protective Lens D37-N-15KW", consumableCategory: "lens" as const, purchaseCostExGst: 450.00, quantityPurchased: 10, unitCostExGst: 45.00, lifeModelType: "hours" as const, expectedLifeValue: 200, derivedAssumptionsJson: { lifeNote: "200 operating hours is an initial estimate. Business must confirm based on actual lens replacement frequency.", costBasis: "Invoice unit price $45.00 ex GST per lens", derivedCalc: "unitCost / expectedLifeHours = derived cost per machine hour" } },
+        { sku: "P0571-1051-00001", description: "KTB2 CON Laser Ceramic BODOR 1.5-6KW", consumableCategory: "ceramic" as const, purchaseCostExGst: 195.00, quantityPurchased: 5, unitCostExGst: 39.00, lifeModelType: "hours" as const, expectedLifeValue: 500, derivedAssumptionsJson: { lifeNote: "500 operating hours is an initial estimate. Business must confirm based on actual ceramic replacement frequency.", costBasis: "Invoice unit price $39.00 ex GST per ceramic", derivedCalc: "unitCost / expectedLifeHours = derived cost per machine hour" } },
+      ];
+
+      for (const input of bodorConsumables) {
+        const derived = input.expectedLifeValue > 0
+          ? input.unitCostExGst / input.expectedLifeValue
+          : undefined;
+
+        const created = await storage.createLLConsumablesCostInput({
+          divisionKey: "LL",
+          sourceType: "invoice",
+          supplierName: "Laser Machines Limited",
+          sourceReference: "INV-0226",
+          sourceDocumentName: "Invoice INV-0226.pdf",
+          sourceDate: "2025-08-18",
+          sourceNotes: `Invoice INV-0226 dated 18 Aug 2025 from Laser Machines Limited. Payment terms 7 days. GST 133-450-440.`,
+          machineFamily: "Bodor",
+          machineModel: "15KW Fiber Laser",
+          ...input,
+          derivedCostPerHour: derived ? parseFloat(derived.toFixed(4)) : null,
+          status: "draft",
+          createdBy: actorId,
+        } as any);
+        await storage.createLLPricingAuditEntry({
+          profileId: created.id,
+          eventType: "created",
+          actorUserId: actorId,
+          actorDisplayName: actorName,
+          summary: `Seeded from Bodor invoice: ${input.description}`,
+        });
+        seeded.push(created);
+      }
+
+      res.json({ seeded: seeded.length, records: seeded });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   // ── LL Sheet Materials ─────────────────────────────────────────────────
 
   app.get("/api/ll-sheet-materials", async (req, res) => {

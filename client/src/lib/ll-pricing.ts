@@ -35,7 +35,7 @@
  *   LL_PRICING_DEFAULTS retained as fallback for safety only.
  */
 
-import type { LLPricingSettings } from "@shared/schema";
+import type { LLPricingSettings, LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
 
 export interface LLMaterialTruth {
   id: string;
@@ -60,6 +60,11 @@ export interface LLPricingInputs {
   handlingMinutes: number;
   markupPercent: number;
   utilisationFactor: number;
+}
+
+export interface LLGovernedInputs {
+  gasInputs?: LLGasCostInput[];
+  consumableInputs?: LLConsumablesCostInput[];
 }
 
 export interface LLPricingBreakdown {
@@ -96,6 +101,11 @@ export interface LLPricingBreakdown {
   ratePerMmCut: number;
   ratePerPierce: number;
   shopRatePerHour: number;
+
+  gasSource?: string;
+  gasCostPerLitre?: number;
+  consumablesSource?: string;
+  consumablesCostPerHourRate?: number;
 }
 
 export const LL_PRICING_DEFAULTS = {
@@ -196,19 +206,62 @@ function findProcessRate(
   return null;
 }
 
-function getGasPricePerLitre(settings: LLPricingSettings | null | undefined, gasType: string): number {
-  if (!settings?.gasCosts) return 0;
-  const gc = settings.gasCosts as { n2PricePerLitre: number; o2PricePerLitre: number; compressedAirPricePerLitre: number };
+function normaliseGasName(gasType: string): string {
   const gt = gasType.toLowerCase().replace(/[_\s-]/g, "");
-  if (gt === "n2" || gt === "nitrogen") return gc.n2PricePerLitre;
-  if (gt === "o2" || gt === "oxygen") return gc.o2PricePerLitre;
-  if (gt === "air" || gt === "compressedair") return gc.compressedAirPricePerLitre;
-  return 0;
+  if (gt === "n2" || gt === "nitrogen") return "nitrogen";
+  if (gt === "o2" || gt === "oxygen") return "oxygen";
+  if (gt === "air" || gt === "compressedair") return "compressed_air";
+  if (gt === "ar" || gt === "argon") return "argon";
+  if (gt === "co2" || gt === "carbondioxide") return "co2";
+  return gt;
 }
 
-function getConsumableCostPerHour(settings: LLPricingSettings | null | undefined): number {
-  if (!settings?.consumableCosts) return 8.5;
-  return (settings.consumableCosts as { consumableCostPerMachineHour: number }).consumableCostPerMachineHour;
+function getGasPricePerLitre(
+  settings: LLPricingSettings | null | undefined,
+  gasType: string,
+  governed?: LLGovernedInputs,
+): { pricePerLitre: number; source: string } {
+  const normGas = normaliseGasName(gasType);
+
+  if (governed?.gasInputs?.length) {
+    const match = governed.gasInputs.find(g => normaliseGasName(g.gasType) === normGas);
+    if (match?.derivedCostPerLitre != null) {
+      return {
+        pricePerLitre: match.derivedCostPerLitre,
+        source: `${match.supplierName} ${match.sourceReference} (${match.packageType})`,
+      };
+    }
+  }
+
+  if (!settings?.gasCosts) return { pricePerLitre: 0, source: "fallback" };
+  const gc = settings.gasCosts as { n2PricePerLitre: number; o2PricePerLitre: number; compressedAirPricePerLitre: number };
+  if (normGas === "nitrogen") return { pricePerLitre: gc.n2PricePerLitre, source: "pricing profile gasCosts" };
+  if (normGas === "oxygen") return { pricePerLitre: gc.o2PricePerLitre, source: "pricing profile gasCosts" };
+  if (normGas === "compressed_air") return { pricePerLitre: gc.compressedAirPricePerLitre, source: "pricing profile gasCosts" };
+  return { pricePerLitre: 0, source: "fallback" };
+}
+
+function getConsumableCostPerHour(
+  settings: LLPricingSettings | null | undefined,
+  governed?: LLGovernedInputs,
+): { costPerHour: number; source: string } {
+  if (governed?.consumableInputs?.length) {
+    let totalPerHour = 0;
+    const sources: string[] = [];
+    for (const c of governed.consumableInputs) {
+      if (c.derivedCostPerHour != null && c.derivedCostPerHour > 0) {
+        totalPerHour += c.derivedCostPerHour;
+        sources.push(`${c.description} ($${c.derivedCostPerHour.toFixed(4)}/hr)`);
+      }
+    }
+    if (totalPerHour > 0) {
+      return { costPerHour: totalPerHour, source: sources.join(" + ") };
+    }
+  }
+
+  if (!settings?.consumableCosts) return { costPerHour: 8.5, source: "fallback default" };
+  const rate = (settings.consumableCosts as { consumableCostPerMachineHour: number }).consumableCostPerMachineHour;
+  return { costPerHour: rate, source: "pricing profile consumableCosts" };
 }
 
 function getMachineHourlyRate(settings: LLPricingSettings | null | undefined): number {
@@ -240,7 +293,7 @@ function estimatePartsPerSheet(
   return Math.max(orientA, orientB, 0);
 }
 
-export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSettings | null): LLPricingBreakdown {
+export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSettings | null, governed?: LLGovernedInputs): LLPricingBreakdown {
   const rates = resolveRatesFromSettings(settings);
 
   const {
@@ -308,6 +361,10 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   let processCostTotal = 0;
   let processCostPerUnit = 0;
   let processMode: "time-based" | "flat-rate" = "flat-rate";
+  let gasSource = "";
+  let gasCostPerLitre = 0;
+  let consumablesSource = "";
+  let consumablesCostPerHourRate = 0;
 
   if (processRate && (cutLengthMm > 0 || pierceCount > 0)) {
     processMode = "time-based";
@@ -323,11 +380,15 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     machineTimeCost = machineTimeHours * machineHourlyRate;
 
-    const gasPricePerL = getGasPricePerLitre(settings, processRate.assistGasType);
-    gasCost = machineTimeMinutes * processRate.gasConsumptionLPerMin * gasPricePerL;
+    const gasResult = getGasPricePerLitre(settings, processRate.assistGasType, governed);
+    gasCost = machineTimeMinutes * processRate.gasConsumptionLPerMin * gasResult.pricePerLitre;
+    gasSource = gasResult.source;
+    gasCostPerLitre = gasResult.pricePerLitre;
 
-    const consumableRate = getConsumableCostPerHour(settings);
-    consumablesCost = machineTimeHours * consumableRate;
+    const consumableResult = getConsumableCostPerHour(settings, governed);
+    consumablesCost = machineTimeHours * consumableResult.costPerHour;
+    consumablesSource = consumableResult.source;
+    consumablesCostPerHourRate = consumableResult.costPerHour;
 
     cutCost = cuttingTimeMin > 0 ? (machineTimeCost * (cuttingTimeMin / machineTimeMinutes)) / safeQty : 0;
     pierceCost = pierceTimeMin > 0 ? (machineTimeCost * (pierceTimeMin / machineTimeMinutes)) / safeQty : 0;
@@ -383,5 +444,9 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     ratePerMmCut,
     ratePerPierce,
     shopRatePerHour,
+    gasSource: gasSource || undefined,
+    gasCostPerLitre: gasCostPerLitre || undefined,
+    consumablesSource: consumablesSource || undefined,
+    consumablesCostPerHourRate: consumablesCostPerHourRate || undefined,
   };
 }

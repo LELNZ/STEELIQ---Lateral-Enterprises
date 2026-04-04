@@ -44,7 +44,9 @@ import {
   resolveRatesFromSettings,
   type LLMaterialTruth,
   type LLPricingBreakdown,
+  type LLGovernedInputs,
 } from "@/lib/ll-pricing";
+import type { LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
 
 interface SheetMaterialRef {
   id: string;
@@ -119,6 +121,7 @@ function computeItemPricing(
   item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
   materials: SheetMaterialRef[],
   settings?: LLPricingSettings | null,
+  governed?: LLGovernedInputs,
 ): LLPricingBreakdown {
   const matched = findMatchingMaterial(materials, item);
   return computeLLPricing({
@@ -132,7 +135,7 @@ function computeItemPricing(
     handlingMinutes: item.handlingMinutes,
     markupPercent: item.markupPercent,
     utilisationFactor: item.utilisationFactor,
-  }, settings);
+  }, settings, governed);
 }
 
 function itemToSnapshotItem(
@@ -140,8 +143,9 @@ function itemToSnapshotItem(
   index: number,
   materials: SheetMaterialRef[],
   settings?: LLPricingSettings | null,
+  governed?: LLGovernedInputs,
 ): LaserSnapshotItem {
-  const pricing = computeItemPricing(item, materials, settings);
+  const pricing = computeItemPricing(item, materials, settings, governed);
   const matched = findMatchingMaterial(materials, item);
   const matTruth = matched ? materialToTruth(matched) : null;
   return {
@@ -224,8 +228,8 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
     rows.push(
       { label: "Machine Time", value: `${breakdown.machineTimeMinutes.toFixed(1)} min` },
       { label: "Machine Cost", value: `$${breakdown.machineTimeCost.toFixed(2)}` },
-      { label: "Gas Cost", value: `$${breakdown.gasCost.toFixed(2)}` },
-      { label: "Consumables", value: `$${breakdown.consumablesCost.toFixed(2)}` },
+      { label: `Gas Cost${breakdown.gasCostPerLitre ? ` @ $${breakdown.gasCostPerLitre.toFixed(6)}/L` : ""}`, value: `$${breakdown.gasCost.toFixed(2)}` },
+      { label: `Consumables${breakdown.consumablesCostPerHourRate ? ` @ $${breakdown.consumablesCostPerHourRate.toFixed(2)}/hr` : ""}`, value: `$${breakdown.consumablesCost.toFixed(2)}` },
     );
   } else {
     rows.push(
@@ -259,6 +263,20 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
           {isTimeBased ? "Time-Based" : "Flat Rate"}
         </Badge>
       </div>
+      {isTimeBased && (breakdown.gasSource || breakdown.consumablesSource) && (
+        <div className="flex flex-wrap gap-1 mb-1.5" data-testid="governed-source-badges">
+          {breakdown.gasSource && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200" data-testid="gas-source-badge">
+              Gas: {breakdown.gasSource}
+            </Badge>
+          )}
+          {breakdown.consumablesSource && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200" data-testid="consumables-source-badge">
+              Consumables: {breakdown.consumablesSource}
+            </Badge>
+          )}
+        </div>
+      )}
       {rows.map((r, i) => (
         <div key={i} className={`flex justify-between text-xs ${r.bold ? 'font-semibold border-t pt-1 mt-1' : 'text-muted-foreground'}`}>
           <span>{r.label}</span>
@@ -308,6 +326,23 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     queryKey: ["/api/ll-sheet-materials", "active"],
     queryFn: () => fetch("/api/ll-sheet-materials?active=true", { credentials: "include" }).then(r => r.json()),
   });
+
+  const { data: activeGasInputs = [] } = useQuery<LLGasCostInput[]>({
+    queryKey: ["/api/ll-gas-cost-inputs", "active"],
+    queryFn: () => fetch("/api/ll-gas-cost-inputs/active", { credentials: "include" }).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const { data: activeConsumableInputs = [] } = useQuery<LLConsumablesCostInput[]>({
+    queryKey: ["/api/ll-consumables-cost-inputs", "active"],
+    queryFn: () => fetch("/api/ll-consumables-cost-inputs/active", { credentials: "include" }).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const governedInputs: LLGovernedInputs = useMemo(() => ({
+    gasInputs: activeGasInputs.length > 0 ? activeGasInputs : undefined,
+    consumableInputs: activeConsumableInputs.length > 0 ? activeConsumableInputs : undefined,
+  }), [activeGasInputs, activeConsumableInputs]);
 
   const materialFamilies = useMemo(() =>
     [...new Set(sheetMaterials.map(m => m.materialFamily))].sort(),
@@ -365,8 +400,8 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   }, [sheetMaterials, sheetSizesForSelection, formData.llSheetMaterialId]);
 
   const dialogPricing = useMemo(() => {
-    return computeItemPricing(formData, sheetMaterials, llPricingSettings);
-  }, [formData, sheetMaterials, llPricingSettings]);
+    return computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
+  }, [formData, sheetMaterials, llPricingSettings, governedInputs]);
 
   const { data: quoteData, isLoading: quoteLoading } = useQuery<any>({
     queryKey: ["/api/quotes", quoteId],
@@ -410,10 +445,10 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   const itemPricings = useMemo(() => {
     const map = new Map<string, LLPricingBreakdown>();
     for (const item of items) {
-      map.set(item.id, computeItemPricing(item, sheetMaterials, llPricingSettings));
+      map.set(item.id, computeItemPricing(item, sheetMaterials, llPricingSettings, governedInputs));
     }
     return map;
-  }, [items, sheetMaterials, llPricingSettings]);
+  }, [items, sheetMaterials, llPricingSettings, governedInputs]);
 
   const totalValue = useMemo(() => {
     let total = 0;
@@ -424,7 +459,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   }, [itemPricings]);
 
   const buildSnapshot = () => {
-    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings));
+    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings, governedInputs));
     return {
       customer: customerName,
       projectAddress,
@@ -625,7 +660,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       toast({ title: "Required", description: "Item reference and title are required", variant: "destructive" });
       return;
     }
-    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings);
+    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
     const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
     const updatedData = {
       ...formData,

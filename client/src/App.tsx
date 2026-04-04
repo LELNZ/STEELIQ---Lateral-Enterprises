@@ -47,6 +47,7 @@ import ProjectDetail from "@/pages/project-detail";
 import LaserQuoteBuilder from "@/pages/laser-quote-builder";
 import LaserEstimatesList from "@/pages/laser-estimates-list";
 import LLPricingProfiles from "@/pages/ll-pricing-profiles";
+import LLCommercialInputs from "@/pages/ll-commercial-inputs";
 
 function QuickCreateMenu() {
   const [, navigate] = useLocation();
@@ -131,6 +132,7 @@ function Router() {
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />
       <Route path="/ll-pricing-profiles" component={LLPricingProfiles} />
+      <Route path="/ll-commercial-inputs" component={LLCommercialInputs} />
       <Route component={NotFound} />
     </Switch>
   );

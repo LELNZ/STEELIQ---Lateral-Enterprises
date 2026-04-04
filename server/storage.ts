@@ -28,6 +28,8 @@ import {
   type LaserEstimate, type InsertLaserEstimate,
   type LLPricingProfile, type InsertLLPricingProfile,
   type LLPricingAuditLog, type InsertLLPricingAuditLog,
+  type LLGasCostInput, type InsertLLGasCostInput,
+  type LLConsumablesCostInput, type InsertLLConsumablesCostInput,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -37,6 +39,7 @@ import {
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
   xeroConnections, variations, llSheetMaterials, laserEstimates,
   llPricingProfiles, llPricingAuditLog,
+  llGasCostInputs, llConsumablesCostInputs,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -268,6 +271,20 @@ export interface IStorage {
   updateLLPricingProfile(id: string, data: Partial<InsertLLPricingProfile>): Promise<LLPricingProfile | undefined>;
   createLLPricingAuditEntry(data: InsertLLPricingAuditLog): Promise<LLPricingAuditLog>;
   getLLPricingAuditLog(profileId: string): Promise<LLPricingAuditLog[]>;
+
+  // ── LL Gas Cost Inputs ──────────────────────────────────────────────────
+  getAllLLGasCostInputs(): Promise<LLGasCostInput[]>;
+  getLLGasCostInput(id: string): Promise<LLGasCostInput | undefined>;
+  getActiveLLGasCostInputs(): Promise<LLGasCostInput[]>;
+  createLLGasCostInput(data: InsertLLGasCostInput): Promise<LLGasCostInput>;
+  updateLLGasCostInput(id: string, data: Partial<InsertLLGasCostInput>): Promise<LLGasCostInput | undefined>;
+
+  // ── LL Consumables Cost Inputs ─────────────────────────────────────────
+  getAllLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]>;
+  getLLConsumablesCostInput(id: string): Promise<LLConsumablesCostInput | undefined>;
+  getActiveLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]>;
+  createLLConsumablesCostInput(data: InsertLLConsumablesCostInput): Promise<LLConsumablesCostInput>;
+  updateLLConsumablesCostInput(id: string, data: Partial<InsertLLConsumablesCostInput>): Promise<LLConsumablesCostInput | undefined>;
 
   // ── Laser Estimates (LL) ─────────────────────────────────────────────────
   getNextLaserEstimateNumber(): Promise<string>;
@@ -1484,6 +1501,62 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(llPricingAuditLog)
       .where(eq(llPricingAuditLog.profileId, profileId))
       .orderBy(desc(llPricingAuditLog.createdAt));
+  }
+
+  async getAllLLGasCostInputs(): Promise<LLGasCostInput[]> {
+    return db.select().from(llGasCostInputs).orderBy(desc(llGasCostInputs.createdAt));
+  }
+
+  async getLLGasCostInput(id: string): Promise<LLGasCostInput | undefined> {
+    const [input] = await db.select().from(llGasCostInputs).where(eq(llGasCostInputs.id, id));
+    return input;
+  }
+
+  async getActiveLLGasCostInputs(): Promise<LLGasCostInput[]> {
+    return db.select().from(llGasCostInputs)
+      .where(eq(llGasCostInputs.status, "active"))
+      .orderBy(llGasCostInputs.gasType);
+  }
+
+  async createLLGasCostInput(data: InsertLLGasCostInput): Promise<LLGasCostInput> {
+    const [created] = await db.insert(llGasCostInputs).values(data).returning();
+    return created;
+  }
+
+  async updateLLGasCostInput(id: string, data: Partial<InsertLLGasCostInput>): Promise<LLGasCostInput | undefined> {
+    const [updated] = await db.update(llGasCostInputs)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(llGasCostInputs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getAllLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]> {
+    return db.select().from(llConsumablesCostInputs).orderBy(desc(llConsumablesCostInputs.createdAt));
+  }
+
+  async getLLConsumablesCostInput(id: string): Promise<LLConsumablesCostInput | undefined> {
+    const [input] = await db.select().from(llConsumablesCostInputs).where(eq(llConsumablesCostInputs.id, id));
+    return input;
+  }
+
+  async getActiveLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]> {
+    return db.select().from(llConsumablesCostInputs)
+      .where(eq(llConsumablesCostInputs.status, "active"))
+      .orderBy(llConsumablesCostInputs.sku);
+  }
+
+  async createLLConsumablesCostInput(data: InsertLLConsumablesCostInput): Promise<LLConsumablesCostInput> {
+    const [created] = await db.insert(llConsumablesCostInputs).values(data).returning();
+    return created;
+  }
+
+  async updateLLConsumablesCostInput(id: string, data: Partial<InsertLLConsumablesCostInput>): Promise<LLConsumablesCostInput | undefined> {
+    const [updated] = await db.update(llConsumablesCostInputs)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(llConsumablesCostInputs.id, id))
+      .returning();
+    return updated;
   }
 
   async getNextLaserEstimateNumber(): Promise<string> {
