@@ -78,3 +78,9 @@ id = "owYBCNxzHYhb31Qg97HVm"
 uri = "file://reports/phase-4a-forensic-report.md"
 type = "text"
 title = "Phase 4A Forensic Report: LL Pricing Calibration (Enterprise Grade)"
+
+[[outputs]]
+id = "iXee4FbUcEZFmxoZ2Xvjf"
+uri = "file://reports/phase-4b-forensic-report.md"
+type = "text"
+title = "Phase 4B Forensic Report — LL Pricing Governance"
