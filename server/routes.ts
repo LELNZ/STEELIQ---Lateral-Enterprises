@@ -1088,6 +1088,783 @@ export async function registerRoutes(
     }
   });
 
+  // ── LL Pricing Profiles ─────────────────────────────────────────────────
+
+  app.get("/api/ll-pricing-profiles", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const profiles = await storage.getAllLLPricingProfiles();
+      res.json(profiles);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-pricing-profiles/active", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getActiveLLPricingProfile();
+      res.json(profile || null);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-pricing-profiles/:id", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      res.json(profile);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-pricing-profiles/:id/audit", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const logs = await storage.getLLPricingAuditLog(req.params.id);
+      res.json(logs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const { profileName, versionLabel, notes, llPricingSettingsJson, duplicateFromId } = req.body;
+      if (!profileName || !versionLabel) return res.status(400).json({ error: "profileName and versionLabel are required" });
+
+      let settingsJson = llPricingSettingsJson;
+      if (duplicateFromId) {
+        const source = await storage.getLLPricingProfile(duplicateFromId);
+        if (!source) return res.status(404).json({ error: "Source profile not found" });
+        settingsJson = settingsJson || source.llPricingSettingsJson;
+      }
+
+      if (!settingsJson) return res.status(400).json({ error: "llPricingSettingsJson is required" });
+
+      const profile = await storage.createLLPricingProfile({
+        divisionKey: "LL",
+        profileName,
+        versionLabel,
+        notes: notes || "",
+        llPricingSettingsJson: settingsJson,
+        status: "draft",
+        createdBy: req.user.id,
+      });
+
+      await storage.createLLPricingAuditEntry({
+        profileId: profile.id,
+        eventType: duplicateFromId ? "duplicated" : "created",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: duplicateFromId ? `Duplicated from profile ${duplicateFromId}` : `Created draft profile "${profileName}"`,
+      });
+
+      res.status(201).json(profile);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-pricing-profiles/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+
+      if (profile.status !== "draft") {
+        return res.status(400).json({ error: `Only draft profiles can be edited. Current status: "${profile.status}". Duplicate it to make changes.` });
+      }
+
+      const { profileName, versionLabel, notes, llPricingSettingsJson } = req.body;
+      const updateData: any = {};
+      if (profileName !== undefined) updateData.profileName = profileName;
+      if (versionLabel !== undefined) updateData.versionLabel = versionLabel;
+      if (notes !== undefined) updateData.notes = notes;
+      if (llPricingSettingsJson !== undefined) updateData.llPricingSettingsJson = llPricingSettingsJson;
+
+      const updated = await storage.updateLLPricingProfile(req.params.id, updateData);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "edited",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Edited profile "${updated?.profileName}"`,
+      });
+
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles/:id/approve", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      if (profile.status !== "draft") return res.status(400).json({ error: `Only draft profiles can be approved. Current status: ${profile.status}` });
+
+      const updated = await storage.updateLLPricingProfile(req.params.id, {
+        status: "approved",
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "approved",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Approved profile "${profile.profileName}"`,
+      });
+
+      const refreshed = await storage.getLLPricingProfile(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles/:id/activate", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      if (profile.status !== "approved") return res.status(400).json({ error: `Only approved profiles can be activated. Current status: ${profile.status}` });
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const now = new Date();
+        const actorId = req.user.id;
+        const actorName = req.user.displayName || req.user.username;
+
+        const { rows: activeRows } = await client.query(
+          `UPDATE ll_pricing_profiles SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND id != $2 RETURNING id, profile_name`,
+          [now, req.params.id]
+        );
+
+        for (const row of activeRows) {
+          await client.query(
+            `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
+            [row.id, actorId, actorName, `Superseded by activation of "${profile.profileName}"`]
+          );
+        }
+
+        const { rowCount: activatedCount } = await client.query(
+          `UPDATE ll_pricing_profiles SET status = 'active', activated_by = $1, activated_at = $2, effective_from = $2, updated_at = $2 WHERE id = $3 AND status = 'approved' AND division_key = 'LL'`,
+          [actorId, now, req.params.id]
+        );
+        if (activatedCount !== 1) {
+          throw new Error("Failed to activate profile: target row not found or not in approved state");
+        }
+
+        await client.query(
+          `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
+          [req.params.id, actorId, actorName, `Activated profile "${profile.profileName}"`]
+        );
+
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+
+      const refreshed = await storage.getLLPricingProfile(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-pricing-profiles/:id/archive", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const profile = await storage.getLLPricingProfile(req.params.id);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      if (profile.status === "active") return res.status(400).json({ error: "Cannot archive the active profile. Activate a replacement first." });
+
+      await storage.updateLLPricingProfile(req.params.id, { status: "archived" } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "archived",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Archived profile "${profile.profileName}"`,
+      });
+
+      const refreshed = await storage.getLLPricingProfile(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ── LL Gas Cost Inputs ──────────────────────────────────────────────────
+
+  app.get("/api/ll-gas-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const inputs = await storage.getAllLLGasCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-gas-cost-inputs/active", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const inputs = await storage.getActiveLLGasCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-gas-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      res.json(input);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]),
+        supplierName: z.string().min(1),
+        sourceReference: z.string().min(1),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        gasType: z.string().min(1),
+        packageType: z.enum(["cylinder", "mcp", "bulk", "other"]),
+        packageCode: z.string().optional(),
+        description: z.string().optional(),
+        deliveredPriceExGst: z.number().min(0),
+        dailyServiceChargeExGst: z.number().min(0).default(0),
+        unitCapacityValue: z.number().optional(),
+        unitCapacityUom: z.string().optional(),
+        usableFraction: z.number().min(0).max(1).default(0.95),
+        surchargePolicyJson: z.any().optional(),
+        derivedAssumptionsJson: z.any().optional(),
+        effectiveFrom: z.string().optional(),
+        effectiveTo: z.string().optional(),
+      }).parse(req.body);
+
+      const derivedCostPerLitre = (body.unitCapacityValue && body.unitCapacityValue > 0 && body.usableFraction > 0)
+        ? parseFloat((body.deliveredPriceExGst / (body.unitCapacityValue * body.usableFraction)).toFixed(6))
+        : null;
+
+      const created = await storage.createLLGasCostInput({
+        ...body,
+        divisionKey: "LL",
+        status: "draft",
+        createdBy: req.user.id,
+        derivedCostPerLitre,
+        effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : null,
+        effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: created.id,
+        eventType: "created",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Created gas cost input "${body.gasType} (${body.packageType})" from ${body.supplierName}`,
+      });
+
+      res.status(201).json(created);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-gas-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: "Only draft inputs can be edited" });
+
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]).optional(),
+        supplierName: z.string().min(1).optional(),
+        sourceReference: z.string().min(1).optional(),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        gasType: z.string().min(1).optional(),
+        packageType: z.enum(["cylinder", "mcp", "bulk", "other"]).optional(),
+        packageCode: z.string().optional(),
+        description: z.string().optional(),
+        deliveredPriceExGst: z.number().min(0).optional(),
+        dailyServiceChargeExGst: z.number().min(0).optional(),
+        unitCapacityValue: z.number().optional(),
+        unitCapacityUom: z.string().optional(),
+        usableFraction: z.number().min(0).max(1).optional(),
+        surchargePolicyJson: z.any().optional(),
+        derivedAssumptionsJson: z.any().optional(),
+      }).parse(req.body);
+
+      const mergedPrice = body.deliveredPriceExGst ?? input.deliveredPriceExGst;
+      const mergedCapacity = body.unitCapacityValue ?? input.unitCapacityValue;
+      const mergedFraction = body.usableFraction ?? input.usableFraction;
+      const recomputedDerived = (mergedCapacity && mergedCapacity > 0 && mergedFraction && mergedFraction > 0)
+        ? parseFloat((mergedPrice / (mergedCapacity * mergedFraction)).toFixed(6))
+        : null;
+
+      const updated = await storage.updateLLGasCostInput(req.params.id, { ...body, derivedCostPerLitre: recomputedDerived } as any);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs/:id/approve", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: `Only draft inputs can be approved. Current status: ${input.status}` });
+
+      await storage.updateLLGasCostInput(req.params.id, {
+        status: "approved",
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "approved",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Approved gas cost input "${input.gasType} (${input.packageType})"`,
+      });
+
+      const refreshed = await storage.getLLGasCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs/:id/activate", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status !== "approved") return res.status(400).json({ error: `Only approved inputs can be activated. Current status: ${input.status}` });
+
+      const actorId = req.user.id;
+      const actorName = req.user.displayName || req.user.username;
+      const now = new Date();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const { rows: activeRows } = await client.query(
+          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 AND package_code IS NOT DISTINCT FROM $3 RETURNING id`,
+          [now, input.gasType, input.packageCode || null]
+        );
+        for (const row of activeRows) {
+          await client.query(
+            `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
+            [row.id, actorId, actorName, `Superseded by activation of "${input.gasType} (${input.packageType})"`]
+          );
+        }
+
+        const { rowCount: activatedCount } = await client.query(
+          `UPDATE ll_gas_cost_inputs SET status = 'active', activated_by = $1, activated_at = $2, effective_from = $2, updated_at = $2 WHERE id = $3 AND status = 'approved' AND division_key = 'LL'`,
+          [actorId, now, req.params.id]
+        );
+        if (activatedCount !== 1) {
+          throw new Error("Failed to activate gas cost input: target row not found or not in approved state");
+        }
+
+        await client.query(
+          `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
+          [req.params.id, actorId, actorName, `Activated gas cost input "${input.gasType} (${input.packageType})"`]
+        );
+
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+
+      const refreshed = await storage.getLLGasCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-gas-cost-inputs/:id/archive", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLGasCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Gas cost input not found" });
+      if (input.status === "active") return res.status(400).json({ error: "Cannot archive the active input. Activate a replacement first." });
+
+      await storage.updateLLGasCostInput(req.params.id, { status: "archived" } as any);
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "archived",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Archived gas cost input "${input.gasType} (${input.packageType})"`,
+      });
+
+      const refreshed = await storage.getLLGasCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ── LL Consumables Cost Inputs ─────────────────────────────────────────
+
+  app.get("/api/ll-consumables-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const inputs = await storage.getAllLLConsumablesCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-consumables-cost-inputs/active", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const inputs = await storage.getActiveLLConsumablesCostInputs();
+      res.json(inputs);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/ll-consumables-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      res.json(input);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]),
+        supplierName: z.string().min(1),
+        sourceReference: z.string().min(1),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        sku: z.string().min(1),
+        description: z.string().min(1),
+        machineFamily: z.string().optional(),
+        machineModel: z.string().optional(),
+        consumableCategory: z.enum(["lens", "ceramic", "nozzle", "filter", "other"]),
+        purchaseCostExGst: z.number().min(0),
+        quantityPurchased: z.number().min(1).default(1),
+        unitCostExGst: z.number().min(0),
+        lifeModelType: z.enum(["hours", "pierces", "metres_cut", "sheets", "manual"]),
+        expectedLifeValue: z.number().min(0),
+        derivedAssumptionsJson: z.any().optional(),
+        effectiveFrom: z.string().optional(),
+        effectiveTo: z.string().optional(),
+      }).parse(req.body);
+
+      const derivedCostPerHour = (body.expectedLifeValue > 0 && body.unitCostExGst > 0)
+        ? parseFloat((body.unitCostExGst / body.expectedLifeValue).toFixed(4))
+        : null;
+
+      const created = await storage.createLLConsumablesCostInput({
+        ...body,
+        divisionKey: "LL",
+        status: "draft",
+        createdBy: req.user.id,
+        derivedCostPerHour,
+        effectiveFrom: body.effectiveFrom ? new Date(body.effectiveFrom) : null,
+        effectiveTo: body.effectiveTo ? new Date(body.effectiveTo) : null,
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: created.id,
+        eventType: "created",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Created consumable cost input "${body.description}" (${body.consumableCategory})`,
+      });
+
+      res.status(201).json(created);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/ll-consumables-cost-inputs/:id", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: "Only draft inputs can be edited" });
+
+      const body = z.object({
+        sourceType: z.enum(["agreement", "invoice", "manual_adjustment"]).optional(),
+        supplierName: z.string().min(1).optional(),
+        sourceReference: z.string().min(1).optional(),
+        sourceDocumentName: z.string().optional(),
+        sourceDate: z.string().optional(),
+        sourceNotes: z.string().optional(),
+        sku: z.string().min(1).optional(),
+        description: z.string().min(1).optional(),
+        machineFamily: z.string().optional(),
+        machineModel: z.string().optional(),
+        consumableCategory: z.enum(["lens", "ceramic", "nozzle", "filter", "other"]).optional(),
+        purchaseCostExGst: z.number().min(0).optional(),
+        quantityPurchased: z.number().min(1).optional(),
+        unitCostExGst: z.number().min(0).optional(),
+        lifeModelType: z.enum(["hours", "pierces", "metres_cut", "sheets", "manual"]).optional(),
+        expectedLifeValue: z.number().min(0).optional(),
+        derivedAssumptionsJson: z.any().optional(),
+      }).parse(req.body);
+
+      const mergedUnitCost = body.unitCostExGst ?? input.unitCostExGst;
+      const mergedLife = body.expectedLifeValue ?? input.expectedLifeValue;
+      const recomputedDerived = (mergedLife > 0 && mergedUnitCost > 0)
+        ? parseFloat((mergedUnitCost / mergedLife).toFixed(4))
+        : null;
+
+      const updated = await storage.updateLLConsumablesCostInput(req.params.id, { ...body, derivedCostPerHour: recomputedDerived } as any);
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs/:id/approve", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status !== "draft") return res.status(400).json({ error: `Only draft inputs can be approved. Current status: ${input.status}` });
+
+      await storage.updateLLConsumablesCostInput(req.params.id, {
+        status: "approved",
+        approvedBy: req.user.id,
+        approvedAt: new Date(),
+      } as any);
+
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "approved",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Approved consumable cost input "${input.description}"`,
+      });
+
+      const refreshed = await storage.getLLConsumablesCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs/:id/activate", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status !== "approved") return res.status(400).json({ error: `Only approved inputs can be activated. Current status: ${input.status}` });
+
+      const actorId = req.user.id;
+      const actorName = req.user.displayName || req.user.username;
+      const now = new Date();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const { rows: activeRows } = await client.query(
+          `UPDATE ll_consumables_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND sku = $2 RETURNING id`,
+          [now, input.sku]
+        );
+        for (const row of activeRows) {
+          await client.query(
+            `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
+            [row.id, actorId, actorName, `Superseded by activation of "${input.description}"`]
+          );
+        }
+
+        const { rowCount: activatedCount } = await client.query(
+          `UPDATE ll_consumables_cost_inputs SET status = 'active', activated_by = $1, activated_at = $2, effective_from = $2, updated_at = $2 WHERE id = $3 AND status = 'approved' AND division_key = 'LL'`,
+          [actorId, now, req.params.id]
+        );
+        if (activatedCount !== 1) {
+          throw new Error("Failed to activate consumable cost input: target row not found or not in approved state");
+        }
+
+        await client.query(
+          `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
+          [req.params.id, actorId, actorName, `Activated consumable cost input "${input.description}"`]
+        );
+
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
+
+      const refreshed = await storage.getLLConsumablesCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/ll-consumables-cost-inputs/:id/archive", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+      const input = await storage.getLLConsumablesCostInput(req.params.id);
+      if (!input) return res.status(404).json({ error: "Consumable cost input not found" });
+      if (input.status === "active") return res.status(400).json({ error: "Cannot archive the active input. Activate a replacement first." });
+
+      await storage.updateLLConsumablesCostInput(req.params.id, { status: "archived" } as any);
+      await storage.createLLPricingAuditEntry({
+        profileId: req.params.id,
+        eventType: "archived",
+        actorUserId: req.user.id,
+        actorDisplayName: req.user.displayName || req.user.username,
+        summary: `Archived consumable cost input "${input.description}"`,
+      });
+
+      const refreshed = await storage.getLLConsumablesCostInput(req.params.id);
+      res.json(refreshed);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ── LL Commercial Inputs Seed ──────────────────────────────────────────
+
+  app.post("/api/ll-commercial-inputs/seed", async (req, res) => {
+    try {
+      if (!req.user || !isPrivilegedUser(req)) return res.status(403).json({ error: "Forbidden" });
+
+      const existingGas = await storage.getAllLLGasCostInputs();
+      const existingCons = await storage.getAllLLConsumablesCostInputs();
+      if (existingGas.length > 0 || existingCons.length > 0) {
+        return res.status(409).json({ error: "Commercial inputs already exist. Seed is only available when no records exist." });
+      }
+
+      const seeded: any[] = [];
+      const actorId = req.user.id;
+      const actorName = req.user.displayName || req.user.username;
+
+      const bocGasInputs = [
+        { gasType: "oxygen", packageType: "cylinder" as const, packageCode: "100G2", description: "OXYGEN INDUSTRIAL SIZE G2", deliveredPriceExGst: 50.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G2 cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre" } },
+        { gasType: "oxygen", packageType: "mcp" as const, packageCode: "J15", description: "OXYGEN 200BAR J15 MANPACK (15 bottles, 154 m³)", deliveredPriceExGst: 200.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 154000, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { note: "J15 Manpack is a distinct package from G2 cylinder. Both O2 records maintained separately.", capacitySource: "Operator-confirmed: 15 bottles, total pack volume 154 m³ = 154,000 litres at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre" } },
+        { gasType: "nitrogen", packageType: "mcp" as const, packageCode: "152MP15", description: "NITROGEN 4.0 MANPACK MP15 (15 bottles, 187.30 m³)", deliveredPriceExGst: 500.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 187300, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "Operator-confirmed: 15 bottles × 12.49 m³ = 187.30 m³ total pack volume = 187,300 litres at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre", correctionReason: "Phase 4E T001 — operator-confirmed pack volumes replace placeholder estimates" } },
+        { gasType: "argon", packageType: "cylinder" as const, packageCode: "130G", description: "ARGON SIZE G", deliveredPriceExGst: 65.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. Business must confirm G capacity for argon." } },
+      ];
+
+      for (const input of bocGasInputs) {
+        const derived = input.unitCapacityValue && input.usableFraction
+          ? input.deliveredPriceExGst / (input.unitCapacityValue * input.usableFraction)
+          : undefined;
+
+        const created = await storage.createLLGasCostInput({
+          divisionKey: "LL",
+          sourceType: "agreement",
+          supplierName: "BOC",
+          sourceReference: "NZ11352442",
+          sourceDocumentName: "BOC 100593891 Agreement 1.pdf",
+          sourceDate: "2026-03-31",
+          sourceNotes: `BOC Industrial Gases Supply Agreement. Account 100593891. Commencement 31 March 2026. 1 year minimum period. Prices fixed for 12 months. Excludes GST and ETS.`,
+          ...input,
+          derivedCostPerLitre: derived ? parseFloat(derived.toFixed(6)) : null,
+          status: "draft",
+          createdBy: actorId,
+        } as any);
+        await storage.createLLPricingAuditEntry({
+          profileId: created.id,
+          eventType: "created",
+          actorUserId: actorId,
+          actorDisplayName: actorName,
+          summary: `Seeded from BOC agreement: ${input.description}`,
+        });
+        seeded.push(created);
+      }
+
+      const bodorConsumables = [
+        { sku: "LM-PLBODOR-37DN", description: "Bodor Protective Lens D37-N-15KW", consumableCategory: "lens" as const, purchaseCostExGst: 450.00, quantityPurchased: 10, unitCostExGst: 45.00, lifeModelType: "hours" as const, expectedLifeValue: 200, derivedAssumptionsJson: { lifeNote: "200 operating hours is an initial estimate. Business must confirm based on actual lens replacement frequency.", costBasis: "Invoice unit price $45.00 ex GST per lens", derivedCalc: "unitCost / expectedLifeHours = derived cost per machine hour" } },
+        { sku: "P0571-1051-00001", description: "KTB2 CON Laser Ceramic BODOR 1.5-6KW", consumableCategory: "ceramic" as const, purchaseCostExGst: 195.00, quantityPurchased: 5, unitCostExGst: 39.00, lifeModelType: "hours" as const, expectedLifeValue: 500, derivedAssumptionsJson: { lifeNote: "500 operating hours is an initial estimate. Business must confirm based on actual ceramic replacement frequency.", costBasis: "Invoice unit price $39.00 ex GST per ceramic", derivedCalc: "unitCost / expectedLifeHours = derived cost per machine hour" } },
+      ];
+
+      for (const input of bodorConsumables) {
+        const derived = input.expectedLifeValue > 0
+          ? input.unitCostExGst / input.expectedLifeValue
+          : undefined;
+
+        const created = await storage.createLLConsumablesCostInput({
+          divisionKey: "LL",
+          sourceType: "invoice",
+          supplierName: "Laser Machines Limited",
+          sourceReference: "INV-0226",
+          sourceDocumentName: "Invoice INV-0226.pdf",
+          sourceDate: "2025-08-18",
+          sourceNotes: `Invoice INV-0226 dated 18 Aug 2025 from Laser Machines Limited. Payment terms 7 days. GST 133-450-440.`,
+          machineFamily: "Bodor",
+          machineModel: "15KW Fiber Laser",
+          ...input,
+          derivedCostPerHour: derived ? parseFloat(derived.toFixed(4)) : null,
+          status: "draft",
+          createdBy: actorId,
+        } as any);
+        await storage.createLLPricingAuditEntry({
+          profileId: created.id,
+          eventType: "created",
+          actorUserId: actorId,
+          actorDisplayName: actorName,
+          summary: `Seeded from Bodor invoice: ${input.description}`,
+        });
+        seeded.push(created);
+      }
+
+      res.json({ seeded: seeded.length, records: seeded });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // ── LL Sheet Materials ─────────────────────────────────────────────────
+
   app.get("/api/ll-sheet-materials", async (req, res) => {
     try {
       const activeOnly = req.query.active === "true";
@@ -1128,9 +1905,141 @@ export async function registerRoutes(
     }
   });
 
+  // ── Laser Estimates (LL) ────────────────────────────────────────────────
+  app.get("/api/laser-estimates", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const estimates = await storage.getAllLaserEstimates();
+      const convertedIds = estimates.filter(e => e.status === "converted").map(e => e.id);
+      const linkedQuoteMap: Record<string, { id: string; number: string; status: string }> = {};
+      if (convertedIds.length > 0) {
+        const allQuotes = await storage.getAllQuotes();
+        for (const q of allQuotes) {
+          if (q.sourceLaserEstimateId && convertedIds.includes(q.sourceLaserEstimateId)) {
+            if (!linkedQuoteMap[q.sourceLaserEstimateId]) {
+              linkedQuoteMap[q.sourceLaserEstimateId] = { id: q.id, number: q.number, status: q.status };
+            }
+          }
+        }
+      }
+      const enriched = estimates.map(e => ({
+        ...e,
+        linkedQuote: linkedQuoteMap[e.id] || null,
+      }));
+      res.json(enriched);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get("/api/laser-estimates/:id", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const estimate = await storage.getLaserEstimate(req.params.id);
+      if (!estimate) return res.status(404).json({ error: "Laser estimate not found" });
+      let linkedQuote: { id: string; number: string; status: string } | null = null;
+      if (estimate.status === "converted") {
+        const allQuotes = await storage.getAllQuotes();
+        const match = allQuotes.find(q => q.sourceLaserEstimateId === estimate.id);
+        if (match) linkedQuote = { id: match.id, number: match.number, status: match.status };
+      }
+      res.json({ ...estimate, linkedQuote });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post("/api/laser-estimates", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const body = z.object({
+        customerName: z.string().min(1, "Customer name is required"),
+        projectAddress: z.string().optional().default(""),
+        itemsJson: z.array(z.any()).optional().default([]),
+        notes: z.string().optional().default(""),
+        customerId: z.string().optional(),
+        contactId: z.string().optional(),
+      }).parse(req.body);
+
+      const activeProfile = await storage.getActiveLLPricingProfile();
+      const now = new Date();
+      const estimateNumber = await storage.getNextLaserEstimateNumber();
+      const estimate = await storage.createLaserEstimate({
+        estimateNumber,
+        divisionCode: "LL",
+        customerName: body.customerName,
+        projectAddress: body.projectAddress,
+        itemsJson: body.itemsJson as any,
+        notes: body.notes,
+        customerId: body.customerId || null,
+        contactId: body.contactId || null,
+        status: "draft",
+        pricingProfileId: activeProfile?.id || null,
+        pricingProfileLabel: activeProfile ? `${activeProfile.profileName} (${activeProfile.versionLabel})` : null,
+        pricedAt: activeProfile ? now : null,
+      } as any);
+      res.status(201).json(estimate);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/laser-estimates/:id", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const body = z.object({
+        customerName: z.string().min(1).optional(),
+        projectAddress: z.string().optional(),
+        itemsJson: z.array(z.any()).optional(),
+        notes: z.string().optional(),
+        status: z.enum(["draft", "ready", "converted", "archived"]).optional(),
+        customerId: z.string().nullable().optional(),
+        contactId: z.string().nullable().optional(),
+      }).parse(req.body);
+
+      const activeProfile = await storage.getActiveLLPricingProfile();
+      const updateData: any = { ...body };
+      updateData.pricingProfileId = activeProfile?.id || null;
+      updateData.pricingProfileLabel = activeProfile ? `${activeProfile.profileName} (${activeProfile.versionLabel})` : null;
+      updateData.pricedAt = activeProfile ? new Date() : null;
+
+      const updated = await storage.updateLaserEstimate(req.params.id, updateData);
+      if (!updated) return res.status(404).json({ error: "Laser estimate not found" });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/laser-estimates/:id", async (req, res) => {
+    try {
+      if (!userCanAccessDivision(req, "LL")) {
+        return res.status(403).json({ error: "Access denied: LL division required" });
+      }
+      const existing = await storage.getLaserEstimate(req.params.id);
+      if (!existing) return res.status(404).json({ error: "Laser estimate not found" });
+      if (existing.status === "converted") {
+        return res.status(400).json({ error: "Cannot delete a converted estimate — it is linked to a quote" });
+      }
+      await storage.deleteLaserEstimate(req.params.id);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   const createQuoteBodySchema = z.object({
     snapshot: estimateSnapshotSchema,
     sourceJobId: z.string().optional(),
+    sourceLaserEstimateId: z.string().optional(),
     customer: z.string().min(1),
     divisionCode: z.string().min(1, "Division code is required"),
     mode: z.enum(["revision", "new_quote"]).optional().default("revision"),
@@ -1140,7 +2049,7 @@ export async function registerRoutes(
   app.post("/api/quotes", async (req, res) => {
     try {
       const parsed = createQuoteBodySchema.parse(req.body);
-      const { snapshot, sourceJobId, customer, divisionCode, mode, quoteType } = parsed;
+      const { snapshot, sourceJobId, sourceLaserEstimateId, customer, divisionCode, mode, quoteType } = parsed;
 
       const divSettings = await storage.getDivisionSettings(divisionCode);
       const templateKey = divSettings?.templateKey || "base_v1";
@@ -1275,10 +2184,20 @@ export async function registerRoutes(
           }
         }
 
+        let quotePricingProfileId: string | null = null;
+        let quotePricingProfileLabel: string | null = null;
+        if (divisionCode === "LL") {
+          const activeProfile = await storage.getActiveLLPricingProfile();
+          if (activeProfile) {
+            quotePricingProfileId = activeProfile.id;
+            quotePricingProfileLabel = `${activeProfile.profileName} (${activeProfile.versionLabel})`;
+          }
+        }
+
         const quoteInsert = await client.query(
-          `INSERT INTO quotes (id, number, source_job_id, division_id, customer, status, quote_type, total_value, customer_id, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, 'draft', $5, $6, $7, NOW(), NOW()) RETURNING *`,
-          [number, sourceJobId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId]
+          `INSERT INTO quotes (id, number, source_job_id, source_laser_estimate_id, division_id, customer, status, quote_type, total_value, customer_id, pricing_profile_id, pricing_profile_label, priced_at, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9, $10, NOW(), NOW(), NOW()) RETURNING *`,
+          [number, sourceJobId || null, sourceLaserEstimateId || null, divisionCode, customer, quoteType || null, newQuoteSellValue, autoCustomerId, quotePricingProfileId, quotePricingProfileLabel]
         );
         const quote = quoteInsert.rows[0];
 
@@ -1293,6 +2212,17 @@ export async function registerRoutes(
           `UPDATE quotes SET current_revision_id = $1 WHERE id = $2`,
           [revision.id, quote.id]
         );
+
+        if (sourceLaserEstimateId) {
+          const estUpdateResult = await client.query(
+            `UPDATE laser_estimates SET status = 'converted', updated_at = NOW() WHERE id = $1 AND division_code = 'LL' RETURNING id`,
+            [sourceLaserEstimateId]
+          );
+          if (estUpdateResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ error: "Source laser estimate not found or invalid" });
+          }
+        }
 
         await client.query(
           `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
@@ -1350,9 +2280,20 @@ export async function registerRoutes(
         if (job) jobNameMap[jid] = job.name;
       }
 
+      const laserEstIds = Array.from(new Set(filtered.map(q => q.sourceLaserEstimateId).filter(Boolean))) as string[];
+      const laserEstNameMap: Record<string, string> = {};
+      for (const leId of laserEstIds) {
+        const le = await storage.getLaserEstimate(leId);
+        if (le) laserEstNameMap[leId] = le.estimateNumber;
+      }
+
       const withEstimateName = filtered.map(q => ({
         ...q,
-        sourceEstimateName: q.sourceJobId ? (jobNameMap[q.sourceJobId] || null) : null,
+        sourceEstimateName: q.sourceJobId
+          ? (jobNameMap[q.sourceJobId] || null)
+          : q.sourceLaserEstimateId
+            ? (laserEstNameMap[q.sourceLaserEstimateId] || null)
+            : null,
       }));
 
       res.json(withEstimateName);
@@ -1370,7 +2311,15 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Access denied: different division" });
       }
       const revisions = await storage.getQuoteRevisions(quote.id);
-      res.json({ ...quote, revisions });
+      let sourceEstimateName: string | null = null;
+      if (quote.sourceLaserEstimateId) {
+        const le = await storage.getLaserEstimate(quote.sourceLaserEstimateId);
+        if (le) sourceEstimateName = le.estimateNumber;
+      } else if (quote.sourceJobId) {
+        const job = await storage.getJob(quote.sourceJobId);
+        if (job) sourceEstimateName = job.name;
+      }
+      res.json({ ...quote, revisions, sourceEstimateName });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

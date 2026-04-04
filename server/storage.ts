@@ -25,6 +25,11 @@ import {
   type XeroConnection,
   type Variation, type InsertVariation,
   type LlSheetMaterial, type InsertLlSheetMaterial,
+  type LaserEstimate, type InsertLaserEstimate,
+  type LLPricingProfile, type InsertLLPricingProfile,
+  type LLPricingAuditLog, type InsertLLPricingAuditLog,
+  type LLGasCostInput, type InsertLLGasCostInput,
+  type LLConsumablesCostInput, type InsertLLConsumablesCostInput,
   users, jobs, jobItems, libraryEntries,
   frameConfigurations, configurationProfiles, configurationAccessories, configurationLabor,
   numberSequences, quotes, quoteRevisions, auditLogs,
@@ -32,7 +37,9 @@ import {
   itemPhotos,
   userSessions, customers, customerContacts, projects, invoices, invoiceLines, opJobs,
   lifecycleTemplates, lifecycleInstances, lifecycleTaskStates,
-  xeroConnections, variations, llSheetMaterials,
+  xeroConnections, variations, llSheetMaterials, laserEstimates,
+  llPricingProfiles, llPricingAuditLog,
+  llGasCostInputs, llConsumablesCostInputs,
 } from "@shared/schema";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, asc, desc, and, or, sql, isNull, isNotNull, inArray, ilike } from "drizzle-orm";
@@ -256,6 +263,38 @@ export interface IStorage {
   updateVariation(id: string, data: Partial<InsertVariation>): Promise<Variation | undefined>;
   syncVariationStatus(variationId: string): Promise<void>;
 
+  // ── LL Pricing Profiles ─────────────────────────────────────────────────
+  getAllLLPricingProfiles(): Promise<LLPricingProfile[]>;
+  getLLPricingProfile(id: string): Promise<LLPricingProfile | undefined>;
+  getActiveLLPricingProfile(): Promise<LLPricingProfile | undefined>;
+  createLLPricingProfile(data: InsertLLPricingProfile): Promise<LLPricingProfile>;
+  updateLLPricingProfile(id: string, data: Partial<InsertLLPricingProfile>): Promise<LLPricingProfile | undefined>;
+  createLLPricingAuditEntry(data: InsertLLPricingAuditLog): Promise<LLPricingAuditLog>;
+  getLLPricingAuditLog(profileId: string): Promise<LLPricingAuditLog[]>;
+
+  // ── LL Gas Cost Inputs ──────────────────────────────────────────────────
+  getAllLLGasCostInputs(): Promise<LLGasCostInput[]>;
+  getLLGasCostInput(id: string): Promise<LLGasCostInput | undefined>;
+  getActiveLLGasCostInputs(): Promise<LLGasCostInput[]>;
+  createLLGasCostInput(data: InsertLLGasCostInput): Promise<LLGasCostInput>;
+  updateLLGasCostInput(id: string, data: Partial<InsertLLGasCostInput>): Promise<LLGasCostInput | undefined>;
+
+  // ── LL Consumables Cost Inputs ─────────────────────────────────────────
+  getAllLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]>;
+  getLLConsumablesCostInput(id: string): Promise<LLConsumablesCostInput | undefined>;
+  getActiveLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]>;
+  createLLConsumablesCostInput(data: InsertLLConsumablesCostInput): Promise<LLConsumablesCostInput>;
+  updateLLConsumablesCostInput(id: string, data: Partial<InsertLLConsumablesCostInput>): Promise<LLConsumablesCostInput | undefined>;
+
+  // ── Laser Estimates (LL) ─────────────────────────────────────────────────
+  getNextLaserEstimateNumber(): Promise<string>;
+  createLaserEstimate(data: InsertLaserEstimate): Promise<LaserEstimate>;
+  getLaserEstimate(id: string): Promise<LaserEstimate | undefined>;
+  getAllLaserEstimates(): Promise<LaserEstimate[]>;
+  updateLaserEstimate(id: string, data: Partial<InsertLaserEstimate>): Promise<LaserEstimate | undefined>;
+  archiveLaserEstimate(id: string): Promise<LaserEstimate | undefined>;
+  deleteLaserEstimate(id: string): Promise<void>;
+
   // ── Xero OAuth Connection ─────────────────────────────────────────────────
   getXeroConnection(): Promise<XeroConnection | undefined>;
   upsertXeroConnection(data: {
@@ -320,11 +359,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllJobs(): Promise<Job[]> {
-    return db.select().from(jobs).where(isNull(jobs.archivedAt));
+    return db.select().from(jobs).where(isNull(jobs.archivedAt)).orderBy(desc(jobs.createdAt));
   }
 
   async getArchivedJobs(): Promise<Job[]> {
-    return db.select().from(jobs).where(isNotNull(jobs.archivedAt));
+    return db.select().from(jobs).where(isNotNull(jobs.archivedAt)).orderBy(desc(jobs.createdAt));
   }
 
   async archiveJob(id: string): Promise<Job | undefined> {
@@ -1423,6 +1462,144 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllLlSheetMaterials(): Promise<void> {
     await db.delete(llSheetMaterials);
+  }
+
+  async getAllLLPricingProfiles(): Promise<LLPricingProfile[]> {
+    return db.select().from(llPricingProfiles).orderBy(desc(llPricingProfiles.createdAt));
+  }
+
+  async getLLPricingProfile(id: string): Promise<LLPricingProfile | undefined> {
+    const [profile] = await db.select().from(llPricingProfiles).where(eq(llPricingProfiles.id, id));
+    return profile;
+  }
+
+  async getActiveLLPricingProfile(): Promise<LLPricingProfile | undefined> {
+    const [profile] = await db.select().from(llPricingProfiles)
+      .where(eq(llPricingProfiles.status, "active"));
+    return profile;
+  }
+
+  async createLLPricingProfile(data: InsertLLPricingProfile): Promise<LLPricingProfile> {
+    const [created] = await db.insert(llPricingProfiles).values(data).returning();
+    return created;
+  }
+
+  async updateLLPricingProfile(id: string, data: Partial<InsertLLPricingProfile>): Promise<LLPricingProfile | undefined> {
+    const [updated] = await db.update(llPricingProfiles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(llPricingProfiles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createLLPricingAuditEntry(data: InsertLLPricingAuditLog): Promise<LLPricingAuditLog> {
+    const [created] = await db.insert(llPricingAuditLog).values(data).returning();
+    return created;
+  }
+
+  async getLLPricingAuditLog(profileId: string): Promise<LLPricingAuditLog[]> {
+    return db.select().from(llPricingAuditLog)
+      .where(eq(llPricingAuditLog.profileId, profileId))
+      .orderBy(desc(llPricingAuditLog.createdAt));
+  }
+
+  async getAllLLGasCostInputs(): Promise<LLGasCostInput[]> {
+    return db.select().from(llGasCostInputs).orderBy(desc(llGasCostInputs.createdAt));
+  }
+
+  async getLLGasCostInput(id: string): Promise<LLGasCostInput | undefined> {
+    const [input] = await db.select().from(llGasCostInputs).where(eq(llGasCostInputs.id, id));
+    return input;
+  }
+
+  async getActiveLLGasCostInputs(): Promise<LLGasCostInput[]> {
+    return db.select().from(llGasCostInputs)
+      .where(eq(llGasCostInputs.status, "active"))
+      .orderBy(llGasCostInputs.gasType);
+  }
+
+  async createLLGasCostInput(data: InsertLLGasCostInput): Promise<LLGasCostInput> {
+    const [created] = await db.insert(llGasCostInputs).values(data).returning();
+    return created;
+  }
+
+  async updateLLGasCostInput(id: string, data: Partial<InsertLLGasCostInput>): Promise<LLGasCostInput | undefined> {
+    const [updated] = await db.update(llGasCostInputs)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(llGasCostInputs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getAllLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]> {
+    return db.select().from(llConsumablesCostInputs).orderBy(desc(llConsumablesCostInputs.createdAt));
+  }
+
+  async getLLConsumablesCostInput(id: string): Promise<LLConsumablesCostInput | undefined> {
+    const [input] = await db.select().from(llConsumablesCostInputs).where(eq(llConsumablesCostInputs.id, id));
+    return input;
+  }
+
+  async getActiveLLConsumablesCostInputs(): Promise<LLConsumablesCostInput[]> {
+    return db.select().from(llConsumablesCostInputs)
+      .where(eq(llConsumablesCostInputs.status, "active"))
+      .orderBy(llConsumablesCostInputs.sku);
+  }
+
+  async createLLConsumablesCostInput(data: InsertLLConsumablesCostInput): Promise<LLConsumablesCostInput> {
+    const [created] = await db.insert(llConsumablesCostInputs).values(data).returning();
+    return created;
+  }
+
+  async updateLLConsumablesCostInput(id: string, data: Partial<InsertLLConsumablesCostInput>): Promise<LLConsumablesCostInput | undefined> {
+    const [updated] = await db.update(llConsumablesCostInputs)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(llConsumablesCostInputs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getNextLaserEstimateNumber(): Promise<string> {
+    await db.execute(sql`INSERT INTO number_sequences (id, current_value) VALUES ('laser_estimate', 0) ON CONFLICT DO NOTHING`);
+    const result = await db.execute(sql`UPDATE number_sequences SET current_value = current_value + 1 WHERE id = 'laser_estimate' RETURNING current_value`);
+    const seq = (result as any).rows?.[0]?.current_value ?? 1;
+    return `LL-EST-${String(seq).padStart(4, "0")}`;
+  }
+
+  async createLaserEstimate(data: InsertLaserEstimate): Promise<LaserEstimate> {
+    const [created] = await db.insert(laserEstimates).values(data).returning();
+    return created;
+  }
+
+  async getLaserEstimate(id: string): Promise<LaserEstimate | undefined> {
+    const [est] = await db.select().from(laserEstimates).where(eq(laserEstimates.id, id));
+    return est;
+  }
+
+  async getAllLaserEstimates(): Promise<LaserEstimate[]> {
+    return db.select().from(laserEstimates)
+      .where(isNull(laserEstimates.archivedAt))
+      .orderBy(desc(laserEstimates.createdAt));
+  }
+
+  async updateLaserEstimate(id: string, data: Partial<InsertLaserEstimate>): Promise<LaserEstimate | undefined> {
+    const [updated] = await db.update(laserEstimates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(laserEstimates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async archiveLaserEstimate(id: string): Promise<LaserEstimate | undefined> {
+    const [updated] = await db.update(laserEstimates)
+      .set({ archivedAt: new Date(), status: "archived" })
+      .where(eq(laserEstimates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLaserEstimate(id: string): Promise<void> {
+    await db.delete(laserEstimates).where(eq(laserEstimates.id, id));
   }
 }
 

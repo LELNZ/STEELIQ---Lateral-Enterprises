@@ -45,6 +45,9 @@ import InvoiceDetailPage from "@/pages/invoice-detail";
 import ProjectsList from "@/pages/projects-list";
 import ProjectDetail from "@/pages/project-detail";
 import LaserQuoteBuilder from "@/pages/laser-quote-builder";
+import LaserEstimatesList from "@/pages/laser-estimates-list";
+import LLPricingProfiles from "@/pages/ll-pricing-profiles";
+import LLCommercialInputs from "@/pages/ll-commercial-inputs";
 
 function QuickCreateMenu() {
   const [, navigate] = useLocation();
@@ -108,6 +111,9 @@ function Router() {
       <Route path="/job/:id/exec-summary" component={ExecSummary} />
       <Route path="/job/:id" component={QuoteBuilder} />
       <Route path="/quotes" component={QuotesList} />
+      <Route path="/laser-estimates" component={LaserEstimatesList} />
+      <Route path="/laser-estimate/new">{() => <LaserQuoteBuilder estimateMode />}</Route>
+      <Route path="/laser-estimate/:id">{() => <LaserQuoteBuilder estimateMode />}</Route>
       <Route path="/laser-quote/new" component={LaserQuoteBuilder} />
       <Route path="/laser-quote/:id" component={LaserQuoteBuilder} />
       <Route path="/quotes/:id/preview" component={QuotePreview} />
@@ -125,6 +131,8 @@ function Router() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/library" component={Library} />
       <Route path="/settings" component={Settings} />
+      <Route path="/ll-pricing-profiles">{() => { window.location.replace("/settings?division=LL&tab=pricing-governance"); return null; }}</Route>
+      <Route path="/ll-commercial-inputs">{() => { window.location.replace("/settings?division=LL&tab=commercial-inputs"); return null; }}</Route>
       <Route component={NotFound} />
     </Switch>
   );

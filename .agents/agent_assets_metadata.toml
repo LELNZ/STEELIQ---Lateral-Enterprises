@@ -54,3 +54,51 @@ id = "t9B__r3cAgK7AvuqIpj2b"
 uri = "file://.local/phase-3a-forensic-report.md"
 type = "text"
 title = "Phase 3A Forensic Report — LL Settings Foundation + Schema Seams"
+
+[[outputs]]
+id = "0O5IYkEsF3iKY0BiLxWMI"
+uri = "file://.local/multi-division-workflow-forensic-report.md"
+type = "text"
+title = "Multi-Division Workflow Forensic Report — Estimates to Quote to Completion"
+
+[[outputs]]
+id = "XohIvBNnOrPUlqAC359F2"
+uri = "file://reports/phase-3c-forensic-report.md"
+type = "text"
+title = "SteelIQ Phase 3C Forensic Report — LL Estimate Persistence Layer"
+
+[[outputs]]
+id = "DT_Dm-ZYvVHn5xqg-9fhi"
+uri = "file://reports/phase-3d-forensic-report.md"
+type = "text"
+title = "Phase 3D Forensic Report"
+
+[[outputs]]
+id = "owYBCNxzHYhb31Qg97HVm"
+uri = "file://reports/phase-4a-forensic-report.md"
+type = "text"
+title = "Phase 4A Forensic Report: LL Pricing Calibration (Enterprise Grade)"
+
+[[outputs]]
+id = "iXee4FbUcEZFmxoZ2Xvjf"
+uri = "file://reports/phase-4b-forensic-report.md"
+type = "text"
+title = "Phase 4B Forensic Report — LL Pricing Governance"
+
+[[outputs]]
+id = "BGcE13KZHaVBWug28Zvog"
+uri = "file://reports/phase-4c-hardening-forensic-report.md"
+type = "text"
+title = "Phase 4C Governance Hardening — Enterprise Forensic Report"
+
+[[outputs]]
+id = "sFvRLrcD8iDLe2giPnwIC"
+uri = "file://reports/phase-4d-forensic-report.md"
+type = "text"
+title = "Phase 4D Forensic Report — LL Commercial Inputs Governance"
+
+[[outputs]]
+id = "4bbQAwd7eeoMLVBYcS3Jx"
+uri = "file://reports/phase-4e-forensic-report.md"
+type = "text"
+title = "Phase 4E — Enterprise Forensic Report"

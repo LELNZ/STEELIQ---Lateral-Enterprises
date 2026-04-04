@@ -62,8 +62,8 @@ export function AppSidebar() {
     }
   }, [checkGuard, navigate]);
 
-  const isEstimatesActive = location === "/" || location.startsWith("/job");
-  const isQuotesActive = location === "/quotes" || location.startsWith("/quote/");
+  const isEstimatesActive = location === "/" || location.startsWith("/job") || location.startsWith("/laser-estimate");
+  const isQuotesActive = location === "/quotes" || location.startsWith("/quote/") || location.startsWith("/laser-quote/");
   const isJobsActive = location.startsWith("/op-jobs");
   const isContactsActive = location.startsWith("/contacts");
   const isLibraryActive = location.startsWith("/library");
@@ -118,8 +118,8 @@ export function AppSidebar() {
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                       <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild isActive={location.startsWith("/laser-quote")} data-testid="link-sidebar-ll-estimates">
-                          <Link href="/laser-quote/new" onClick={(e) => guardedClick(e, "/laser-quote/new")}>
+                        <SidebarMenuSubButton asChild isActive={location.startsWith("/laser-estimate")} data-testid="link-sidebar-ll-estimates">
+                          <Link href="/laser-estimates" onClick={(e) => guardedClick(e, "/laser-estimates")}>
                             <Briefcase className="w-3.5 h-3.5" />
                             <span>LL – Laser</span>
                           </Link>
@@ -269,6 +269,7 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

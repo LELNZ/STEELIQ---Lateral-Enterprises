@@ -370,6 +370,155 @@ export const insertJobItemSchema = createInsertSchema(jobItems).omit({ id: true 
 export type InsertJobItem = z.infer<typeof insertJobItemSchema>;
 export type JobItem = typeof jobItems.$inferSelect;
 
+export const LL_PRICING_PROFILE_STATUSES = ["draft", "approved", "active", "superseded", "archived"] as const;
+export type LLPricingProfileStatus = typeof LL_PRICING_PROFILE_STATUSES[number];
+
+export const llPricingProfiles = pgTable("ll_pricing_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  divisionKey: text("division_key").notNull().default("LL"),
+  profileName: text("profile_name").notNull(),
+  versionLabel: text("version_label").notNull(),
+  status: text("status").notNull().default("draft"),
+  effectiveFrom: timestamp("effective_from"),
+  notes: text("notes").default(""),
+  llPricingSettingsJson: jsonb("ll_pricing_settings_json").$type<LLPricingSettings>().notNull(),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  activatedBy: varchar("activated_by"),
+  activatedAt: timestamp("activated_at"),
+}, (table) => [
+  uniqueIndex("idx_ll_pricing_profiles_single_active").on(table.divisionKey).where(sql`status = 'active'`),
+]);
+
+export const insertLLPricingProfileSchema = createInsertSchema(llPricingProfiles).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, activatedAt: true });
+export type InsertLLPricingProfile = z.infer<typeof insertLLPricingProfileSchema>;
+export type LLPricingProfile = typeof llPricingProfiles.$inferSelect;
+
+export const llPricingAuditLog = pgTable("ll_pricing_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  profileId: varchar("profile_id").notNull(),
+  eventType: text("event_type").notNull(),
+  actorUserId: varchar("actor_user_id"),
+  actorDisplayName: text("actor_display_name"),
+  summary: text("summary").notNull(),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLLPricingAuditLogSchema = createInsertSchema(llPricingAuditLog).omit({ id: true, createdAt: true });
+export type InsertLLPricingAuditLog = z.infer<typeof insertLLPricingAuditLogSchema>;
+export type LLPricingAuditLog = typeof llPricingAuditLog.$inferSelect;
+
+export const LL_COMMERCIAL_INPUT_STATUSES = ["draft", "approved", "active", "superseded", "archived"] as const;
+export type LLCommercialInputStatus = typeof LL_COMMERCIAL_INPUT_STATUSES[number];
+
+export const llGasCostInputs = pgTable("ll_gas_cost_inputs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  divisionKey: text("division_key").notNull().default("LL"),
+  sourceType: text("source_type").notNull(),
+  supplierName: text("supplier_name").notNull(),
+  sourceReference: text("source_reference").notNull(),
+  sourceDocumentName: text("source_document_name"),
+  sourceDate: text("source_date"),
+  sourceNotes: text("source_notes"),
+  gasType: text("gas_type").notNull(),
+  packageType: text("package_type").notNull(),
+  packageCode: text("package_code"),
+  description: text("description"),
+  deliveredPriceExGst: real("delivered_price_ex_gst").notNull(),
+  dailyServiceChargeExGst: real("daily_service_charge_ex_gst").notNull().default(0),
+  unitCapacityValue: real("unit_capacity_value"),
+  unitCapacityUom: text("unit_capacity_uom"),
+  usableFraction: real("usable_fraction").default(0.95),
+  surchargePolicyJson: jsonb("surcharge_policy_json"),
+  derivedCostPerLitre: real("derived_cost_per_litre"),
+  derivedAssumptionsJson: jsonb("derived_assumptions_json"),
+  effectiveFrom: timestamp("effective_from"),
+  effectiveTo: timestamp("effective_to"),
+  status: text("status").notNull().default("draft"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  activatedBy: varchar("activated_by"),
+  activatedAt: timestamp("activated_at"),
+}, (table) => [
+  uniqueIndex("idx_ll_gas_cost_inputs_single_active").on(table.divisionKey, table.gasType, table.packageCode).where(sql`status = 'active'`),
+]);
+
+export const insertLLGasCostInputSchema = createInsertSchema(llGasCostInputs).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, activatedAt: true });
+export type InsertLLGasCostInput = z.infer<typeof insertLLGasCostInputSchema>;
+export type LLGasCostInput = typeof llGasCostInputs.$inferSelect;
+
+export const llConsumablesCostInputs = pgTable("ll_consumables_cost_inputs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  divisionKey: text("division_key").notNull().default("LL"),
+  sourceType: text("source_type").notNull(),
+  supplierName: text("supplier_name").notNull(),
+  sourceReference: text("source_reference").notNull(),
+  sourceDocumentName: text("source_document_name"),
+  sourceDate: text("source_date"),
+  sourceNotes: text("source_notes"),
+  sku: text("sku").notNull(),
+  description: text("description").notNull(),
+  machineFamily: text("machine_family"),
+  machineModel: text("machine_model"),
+  consumableCategory: text("consumable_category").notNull(),
+  purchaseCostExGst: real("purchase_cost_ex_gst").notNull(),
+  quantityPurchased: real("quantity_purchased").notNull().default(1),
+  unitCostExGst: real("unit_cost_ex_gst").notNull(),
+  lifeModelType: text("life_model_type").notNull(),
+  expectedLifeValue: real("expected_life_value").notNull(),
+  derivedCostPerHour: real("derived_cost_per_hour"),
+  derivedAssumptionsJson: jsonb("derived_assumptions_json"),
+  effectiveFrom: timestamp("effective_from"),
+  effectiveTo: timestamp("effective_to"),
+  status: text("status").notNull().default("draft"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  approvedBy: varchar("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  activatedBy: varchar("activated_by"),
+  activatedAt: timestamp("activated_at"),
+}, (table) => [
+  uniqueIndex("idx_ll_consumables_cost_inputs_single_active").on(table.divisionKey, table.sku).where(sql`status = 'active'`),
+]);
+
+export const insertLLConsumablesCostInputSchema = createInsertSchema(llConsumablesCostInputs).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, activatedAt: true });
+export type InsertLLConsumablesCostInput = z.infer<typeof insertLLConsumablesCostInputSchema>;
+export type LLConsumablesCostInput = typeof llConsumablesCostInputs.$inferSelect;
+
+export const LASER_ESTIMATE_STATUSES = ["draft", "ready", "converted", "archived"] as const;
+export type LaserEstimateStatus = typeof LASER_ESTIMATE_STATUSES[number];
+
+export const laserEstimates = pgTable("laser_estimates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  estimateNumber: text("estimate_number").notNull().unique(),
+  divisionCode: text("division_code").notNull().default("LL"),
+  customerName: text("customer_name").notNull(),
+  projectAddress: text("project_address").default(""),
+  status: text("status").notNull().default("draft"),
+  itemsJson: jsonb("items_json").$type<LaserQuoteItem[]>().notNull().default(sql`'[]'::jsonb`),
+  customerId: varchar("customer_id"),
+  contactId: varchar("contact_id"),
+  notes: text("notes").default(""),
+  pricingProfileId: varchar("pricing_profile_id"),
+  pricingProfileLabel: text("pricing_profile_label"),
+  pricedAt: timestamp("priced_at"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLaserEstimateSchema = createInsertSchema(laserEstimates).omit({ id: true, archivedAt: true, createdAt: true, updatedAt: true });
+export type InsertLaserEstimate = z.infer<typeof insertLaserEstimateSchema>;
+export type LaserEstimate = typeof laserEstimates.$inferSelect;
+
 export const libraryEntries = pgTable("library_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   type: text("type").notNull(),
@@ -487,6 +636,7 @@ export const quotes = pgTable("quotes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   number: text("number").notNull().unique(),
   sourceJobId: varchar("source_job_id"),
+  sourceLaserEstimateId: varchar("source_laser_estimate_id"),
   tenantId: varchar("tenant_id"),
   divisionId: varchar("division_id"),
   customer: text("customer").notNull(),
@@ -508,6 +658,9 @@ export const quotes = pgTable("quotes", {
   isDemoRecord: boolean("is_demo_record").default(false),
   retentionPercentage: real("retention_percentage"),
   retentionHeldValue: real("retention_held_value"),
+  pricingProfileId: varchar("pricing_profile_id"),
+  pricingProfileLabel: text("pricing_profile_label"),
+  pricedAt: timestamp("priced_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

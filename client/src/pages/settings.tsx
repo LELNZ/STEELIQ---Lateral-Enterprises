@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,9 @@ import {
 } from "@/lib/quote-template";
 import { Slider } from "@/components/ui/slider";
 import type { LLPricingSettings, LLMachineProfile, LLProcessRateEntry } from "@shared/schema";
+import LLPricingProfilesPage from "@/pages/ll-pricing-profiles";
+import LLCommercialInputsPage from "@/pages/ll-commercial-inputs";
+import { DollarSign, Flame, Layers } from "lucide-react";
 
 interface OrgSettings {
   id: string;
@@ -619,7 +623,9 @@ function LogoUploadField({ logoUrl, onLogoChange }: { logoUrl: string; onLogoCha
 
 function DivisionSettingsTab() {
   const { toast } = useToast();
-  const [selectedCode, setSelectedCode] = useState("LJ");
+  const [, navigate] = useLocation();
+  const urlParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [selectedCode, setSelectedCode] = useState(urlParams.get("division") || "LJ");
 
   const { data: div, isLoading } = useQuery<DivisionSettings>({
     queryKey: ["/api/settings/divisions", selectedCode],
@@ -707,285 +713,30 @@ function DivisionSettingsTab() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
+      ) : selectedCode === "LL" ? (
+        <LLDivisionSettings
+          div={div}
+          form={form}
+          setForm={setForm}
+          handleSave={handleSave}
+          isLoading={isLoading}
+          mutation={mutation}
+          visibleSpecs={visibleSpecs}
+          currentDefaults={currentDefaults}
+          selectedCode={selectedCode}
+          defaultTab={urlParams.get("tab") || "division"}
+        />
       ) : (
         <>
-          {/* ── SECTION 1: Quote Presentation — Division Overrides ── */}
-          <div className="space-y-1 mt-2" data-testid="section-quote-presentation">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Quote Presentation</h3>
-            </div>
-            <p className="text-xs text-muted-foreground pl-6">
-              These settings override the company quote template for this division. The base template is managed in the Template tab.
-            </p>
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                Inherited Company Template
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/50 border border-border rounded-md" data-testid="info-base-template">
-                <span className="text-sm font-medium text-foreground">Company Master Template</span>
-                <span className="text-xs text-muted-foreground bg-background border px-1.5 py-0.5 rounded font-mono">{form.templateKey || "company_master_v2"}</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2 pl-0.5">
-                Managed at company level. Divisions inherit this template and can override approved presentation settings below.
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Division Branding</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Division-specific logo, name, and legal line used on customer quotes.</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Trading Name</Label>
-                <Input
-                  value={form.tradingName || ""}
-                  onChange={(e) => setForm({ ...form, tradingName: e.target.value })}
-                  data-testid="input-div-tradingName"
-                />
-              </div>
-              <LogoUploadField
-                logoUrl={form.logoUrl || ""}
-                onLogoChange={(url) => setForm({ ...form, logoUrl: url })}
-              />
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Required Legal Line</Label>
-                <Input
-                  value={form.requiredLegalLine || ""}
-                  onChange={(e) => setForm({ ...form, requiredLegalLine: e.target.value })}
-                  data-testid="input-div-requiredLegalLine"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Layout Overrides</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Override how schedule items and totals are arranged on this division's quotes.</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium mb-1 block">Schedule Layout</Label>
-                  <Select
-                    value={form.scheduleLayoutVariant || ""}
-                    onValueChange={(v) => setForm({ ...form, scheduleLayoutVariant: v })}
-                  >
-                    <SelectTrigger data-testid="select-div-scheduleLayout">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="image_left_specs_right_v1">Image Left, Specs Right (v1)</SelectItem>
-                      <SelectItem value="specs_only_v1">Specs Only (v1)</SelectItem>
-                      <SelectItem value="image_top_specs_below_v1">Image Top, Specs Below (v1)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-1 block">Totals Layout</Label>
-                  <Select
-                    value={form.totalsLayoutVariant || ""}
-                    onValueChange={(v) => setForm({ ...form, totalsLayoutVariant: v })}
-                  >
-                    <SelectTrigger data-testid="select-div-totalsLayout">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="totals_block_v1">Totals Block (v1)</SelectItem>
-                      <SelectItem value="totals_inline_v1">Totals Inline (v1)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Theme Overrides</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Override fonts, colours, and header style for this division. Leave blank to inherit from company template.</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium mb-1 block">Font Family</Label>
-                  <Input
-                    value={form.fontFamily || ""}
-                    onChange={(e) => setForm({ ...form, fontFamily: e.target.value })}
-                    placeholder="e.g. Inter, sans-serif"
-                    data-testid="input-div-fontFamily"
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-1 block">Accent Colour</Label>
-                  <Input
-                    value={form.accentColor || ""}
-                    onChange={(e) => setForm({ ...form, accentColor: e.target.value })}
-                    placeholder="e.g. #1a5276"
-                    data-testid="input-div-accentColor"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium mb-1 block">Logo Position</Label>
-                  <Select
-                    value={form.logoPosition || ""}
-                    onValueChange={(v) => setForm({ ...form, logoPosition: v })}
-                  >
-                    <SelectTrigger data-testid="select-div-logoPosition">
-                      <SelectValue placeholder="Inherit from company" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="left">Left</SelectItem>
-                      <SelectItem value="center">Centre</SelectItem>
-                      <SelectItem value="right">Right</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-1 block">Header Variant</Label>
-                  <Select
-                    value={form.headerVariant || ""}
-                    onValueChange={(v) => setForm({ ...form, headerVariant: v })}
-                  >
-                    <SelectTrigger data-testid="select-div-headerVariant">
-                      <SelectValue placeholder="Inherit from company" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="standard">Standard</SelectItem>
-                      <SelectItem value="compact">Compact</SelectItem>
-                      <SelectItem value="full_width">Full Width</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Content Overrides</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Override the organisation-level text blocks for this division. Leave blank to use the company default.</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Terms Override</Label>
-                <RichTextEditor
-                  value={form.termsOverrideBlock || ""}
-                  onChange={(v) => setForm(prev => ({ ...prev, termsOverrideBlock: v }))}
-                  rows={3}
-                  data-testid="input-div-termsOverrideBlock"
-                />
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Header Notes Override</Label>
-                <RichTextEditor
-                  value={form.headerNotesOverrideBlock || ""}
-                  onChange={(v) => setForm(prev => ({ ...prev, headerNotesOverrideBlock: v }))}
-                  rows={3}
-                  data-testid="input-div-headerNotesOverrideBlock"
-                />
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Exclusions Override</Label>
-                <RichTextEditor
-                  value={form.exclusionsOverrideBlock || ""}
-                  onChange={(v) => setForm(prev => ({ ...prev, exclusionsOverrideBlock: v }))}
-                  rows={3}
-                  data-testid="input-div-exclusionsOverrideBlock"
-                />
-              </div>
-              <div>
-                <Label className="text-sm font-medium mb-1 block">Additional Capabilities</Label>
-                <p className="text-xs text-muted-foreground mb-2">Cross-promotes other Lateral divisions on the quote. Use **bold** for service headings and a blank line between each service block.</p>
-                <RichTextEditor
-                  value={form.additionalCapabilitiesBlock || ""}
-                  onChange={(v) => setForm(prev => ({ ...prev, additionalCapabilitiesBlock: v }))}
-                  rows={6}
-                  placeholder={"Many of our clients also engage us across multiple stages.\n\n**Lateral Engineering**\nStructural steel fabrication, general engineering, repairs and custom manufacturing.\n\n**Lateral Laser Cutting**\nCNC fibre laser cutting, folded components, sheet processing and small-batch production."}
-                  data-testid="input-div-additionalCapabilitiesBlock"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {visibleSpecs.length > 0 ? (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Spec Display Defaults</CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">Select which specs appear by default on customer quotes for {selectedCode}.</p>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {visibleSpecs.map((entry) => {
-                    const checked = currentDefaults.includes(entry.key);
-                    return (
-                      <div key={entry.key} className="flex items-center gap-2">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(v) => {
-                            const isChecked = v === true;
-                            const next = isChecked
-                              ? [...currentDefaults, entry.key]
-                              : currentDefaults.filter(k => k !== entry.key);
-                            setForm({ ...form, specDisplayDefaultsJson: next });
-                          }}
-                          data-testid={`checkbox-spec-${entry.key}`}
-                        />
-                        <Label className="text-sm font-normal">{entry.label}</Label>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="py-6 text-center text-muted-foreground" data-testid="text-spec-placeholder">
-                Spec dictionary not configured for {selectedCode} yet
-              </CardContent>
-            </Card>
-          )}
-
-          {isJoineryDomain && (
-            <>
-              <Separator className="my-6" />
-
-              {/* ── SECTION 2: On-Site Estimate Defaults (Joinery only) ── */}
-              <div className="space-y-1" data-testid="section-estimate-defaults">
-                <div className="flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">On-Site Estimate Defaults</h3>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  These defaults are used in Quote Builder to prefill item specifics when Renovation or New Build is selected. They speed up on-site quote creation. Items can still be reviewed and edited later.
-                </p>
-              </div>
-
-              <JobTypePresetsCard
-                divisionCode={selectedCode}
-                presetsConfig={resolvedPresets}
-                onPresetsChange={(updated) => setForm({ ...form, jobTypePresetsJson: updated })}
-              />
-            </>
-          )}
-
-          {selectedCode === "LL" && (
-            <>
-              <Separator className="my-6" />
-              <LLPricingSettingsViewer settings={(div as any)?.llPricingSettingsJson as LLPricingSettings | null} />
-            </>
-          )}
+          <DivisionFormContent
+            form={form}
+            setForm={setForm}
+            visibleSpecs={visibleSpecs}
+            currentDefaults={currentDefaults}
+            selectedCode={selectedCode}
+            isJoineryDomain={isJoineryDomain}
+            resolvedPresets={resolvedPresets}
+          />
 
           <div className="flex justify-end pt-2">
             <Button onClick={handleSave} disabled={isLoading || mutation.isPending} data-testid="button-save-division">
@@ -998,6 +749,381 @@ function DivisionSettingsTab() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function DivisionFormContent({
+  form, setForm, visibleSpecs, currentDefaults, selectedCode, isJoineryDomain, resolvedPresets,
+}: {
+  form: Partial<DivisionSettings>;
+  setForm: (v: Partial<DivisionSettings> | ((prev: Partial<DivisionSettings>) => Partial<DivisionSettings>)) => void;
+  visibleSpecs: SpecEntry[];
+  currentDefaults: string[];
+  selectedCode: string;
+  isJoineryDomain?: boolean;
+  resolvedPresets?: JobTypePresetsConfig;
+}) {
+  return (
+    <>
+      <div className="space-y-1 mt-2" data-testid="section-quote-presentation">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Quote Presentation</h3>
+        </div>
+        <p className="text-xs text-muted-foreground pl-6">
+          These settings override the company quote template for this division. The base template is managed in the Template tab.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+            Inherited Company Template
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 px-3 py-2.5 bg-muted/50 border border-border rounded-md" data-testid="info-base-template">
+            <span className="text-sm font-medium text-foreground">Company Master Template</span>
+            <span className="text-xs text-muted-foreground bg-background border px-1.5 py-0.5 rounded font-mono">{form.templateKey || "company_master_v2"}</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2 pl-0.5">
+            Managed at company level. Divisions inherit this template and can override approved presentation settings below.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Division Branding</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Division-specific logo, name, and legal line used on customer quotes.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Trading Name</Label>
+            <Input
+              value={form.tradingName || ""}
+              onChange={(e) => setForm({ ...form, tradingName: e.target.value })}
+              data-testid="input-div-tradingName"
+            />
+          </div>
+          <LogoUploadField
+            logoUrl={form.logoUrl || ""}
+            onLogoChange={(url) => setForm({ ...form, logoUrl: url })}
+          />
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Required Legal Line</Label>
+            <Input
+              value={form.requiredLegalLine || ""}
+              onChange={(e) => setForm({ ...form, requiredLegalLine: e.target.value })}
+              data-testid="input-div-requiredLegalLine"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Layout Overrides</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Override how schedule items and totals are arranged on this division's quotes.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Schedule Layout</Label>
+              <Select
+                value={form.scheduleLayoutVariant || ""}
+                onValueChange={(v) => setForm({ ...form, scheduleLayoutVariant: v })}
+              >
+                <SelectTrigger data-testid="select-div-scheduleLayout">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="image_left_specs_right_v1">Image Left, Specs Right (v1)</SelectItem>
+                  <SelectItem value="specs_only_v1">Specs Only (v1)</SelectItem>
+                  <SelectItem value="image_top_specs_below_v1">Image Top, Specs Below (v1)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Totals Layout</Label>
+              <Select
+                value={form.totalsLayoutVariant || ""}
+                onValueChange={(v) => setForm({ ...form, totalsLayoutVariant: v })}
+              >
+                <SelectTrigger data-testid="select-div-totalsLayout">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="totals_block_v1">Totals Block (v1)</SelectItem>
+                  <SelectItem value="totals_inline_v1">Totals Inline (v1)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Theme Overrides</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Override fonts, colours, and header style for this division. Leave blank to inherit from company template.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Font Family</Label>
+              <Input
+                value={form.fontFamily || ""}
+                onChange={(e) => setForm({ ...form, fontFamily: e.target.value })}
+                placeholder="e.g. Inter, sans-serif"
+                data-testid="input-div-fontFamily"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Accent Colour</Label>
+              <Input
+                value={form.accentColor || ""}
+                onChange={(e) => setForm({ ...form, accentColor: e.target.value })}
+                placeholder="e.g. #1a5276"
+                data-testid="input-div-accentColor"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Logo Position</Label>
+              <Select
+                value={form.logoPosition || ""}
+                onValueChange={(v) => setForm({ ...form, logoPosition: v })}
+              >
+                <SelectTrigger data-testid="select-div-logoPosition">
+                  <SelectValue placeholder="Inherit from company" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="left">Left</SelectItem>
+                  <SelectItem value="center">Centre</SelectItem>
+                  <SelectItem value="right">Right</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium mb-1 block">Header Variant</Label>
+              <Select
+                value={form.headerVariant || ""}
+                onValueChange={(v) => setForm({ ...form, headerVariant: v })}
+              >
+                <SelectTrigger data-testid="select-div-headerVariant">
+                  <SelectValue placeholder="Inherit from company" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Standard</SelectItem>
+                  <SelectItem value="compact">Compact</SelectItem>
+                  <SelectItem value="full_width">Full Width</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Content Overrides</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">Override the organisation-level text blocks for this division. Leave blank to use the company default.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Terms Override</Label>
+            <RichTextEditor
+              value={form.termsOverrideBlock || ""}
+              onChange={(v) => setForm(prev => ({ ...prev, termsOverrideBlock: v }))}
+              rows={3}
+              data-testid="input-div-termsOverrideBlock"
+            />
+          </div>
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Header Notes Override</Label>
+            <RichTextEditor
+              value={form.headerNotesOverrideBlock || ""}
+              onChange={(v) => setForm(prev => ({ ...prev, headerNotesOverrideBlock: v }))}
+              rows={3}
+              data-testid="input-div-headerNotesOverrideBlock"
+            />
+          </div>
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Exclusions Override</Label>
+            <RichTextEditor
+              value={form.exclusionsOverrideBlock || ""}
+              onChange={(v) => setForm(prev => ({ ...prev, exclusionsOverrideBlock: v }))}
+              rows={3}
+              data-testid="input-div-exclusionsOverrideBlock"
+            />
+          </div>
+          <div>
+            <Label className="text-sm font-medium mb-1 block">Additional Capabilities</Label>
+            <p className="text-xs text-muted-foreground mb-2">Cross-promotes other Lateral divisions on the quote. Use **bold** for service headings and a blank line between each service block.</p>
+            <RichTextEditor
+              value={form.additionalCapabilitiesBlock || ""}
+              onChange={(v) => setForm(prev => ({ ...prev, additionalCapabilitiesBlock: v }))}
+              rows={6}
+              placeholder={"Many of our clients also engage us across multiple stages.\n\n**Lateral Engineering**\nStructural steel fabrication, general engineering, repairs and custom manufacturing.\n\n**Lateral Laser Cutting**\nCNC fibre laser cutting, folded components, sheet processing and small-batch production."}
+              data-testid="input-div-additionalCapabilitiesBlock"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {visibleSpecs.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Spec Display Defaults</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">Select which specs appear by default on customer quotes for {selectedCode}.</p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {visibleSpecs.map((entry) => {
+                const checked = currentDefaults.includes(entry.key);
+                return (
+                  <div key={entry.key} className="flex items-center gap-2">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) => {
+                        const isChecked = v === true;
+                        const next = isChecked
+                          ? [...currentDefaults, entry.key]
+                          : currentDefaults.filter(k => k !== entry.key);
+                        setForm({ ...form, specDisplayDefaultsJson: next });
+                      }}
+                      data-testid={`checkbox-spec-${entry.key}`}
+                    />
+                    <Label className="text-sm font-normal">{entry.label}</Label>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="py-6 text-center text-muted-foreground" data-testid="text-spec-placeholder">
+            Spec dictionary not configured for {selectedCode} yet
+          </CardContent>
+        </Card>
+      )}
+
+      {isJoineryDomain && resolvedPresets && (
+        <>
+          <Separator className="my-6" />
+          <div className="space-y-1" data-testid="section-estimate-defaults">
+            <div className="flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">On-Site Estimate Defaults</h3>
+            </div>
+            <p className="text-xs text-muted-foreground pl-6">
+              These defaults are used in Quote Builder to prefill item specifics when Renovation or New Build is selected.
+            </p>
+          </div>
+          <JobTypePresetsCard
+            divisionCode={selectedCode}
+            presetsConfig={resolvedPresets}
+            onPresetsChange={(updated) => setForm({ ...form, jobTypePresetsJson: updated })}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+
+function LLDivisionSettings({
+  div, form, setForm, handleSave, isLoading, mutation, visibleSpecs, currentDefaults, selectedCode, defaultTab,
+}: {
+  div: DivisionSettings | undefined;
+  form: Partial<DivisionSettings>;
+  setForm: (v: Partial<DivisionSettings> | ((prev: Partial<DivisionSettings>) => Partial<DivisionSettings>)) => void;
+  handleSave: () => void;
+  isLoading: boolean;
+  mutation: { isPending: boolean };
+  visibleSpecs: SpecEntry[];
+  currentDefaults: string[];
+  selectedCode: string;
+  defaultTab?: string;
+}) {
+  const [llTab, setLlTab] = useState(defaultTab || "division");
+  return (
+    <div className="space-y-4" data-testid="ll-division-settings">
+      <Tabs value={llTab} onValueChange={setLlTab}>
+        <TabsList className="mb-4" data-testid="ll-settings-tabs">
+          <TabsTrigger value="division" data-testid="tab-ll-division">
+            <SettingsIcon className="w-3.5 h-3.5 mr-1.5" />
+            Division Settings
+          </TabsTrigger>
+          <TabsTrigger value="pricing-governance" data-testid="tab-ll-pricing-governance">
+            <DollarSign className="w-3.5 h-3.5 mr-1.5" />
+            Pricing Governance
+          </TabsTrigger>
+          <TabsTrigger value="commercial-inputs" data-testid="tab-ll-commercial-inputs">
+            <Flame className="w-3.5 h-3.5 mr-1.5" />
+            Commercial Inputs
+          </TabsTrigger>
+        </TabsList>
+
+        <Card className="mb-4 border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-900" data-testid="ll-precedence-banner">
+          <CardContent className="py-3">
+            <div className="flex items-start gap-2">
+              <Layers className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wide">LL Pricing Precedence</h4>
+                <ol className="text-xs text-blue-700 dark:text-blue-400 space-y-0.5 list-decimal pl-4">
+                  <li><strong>Commercial Inputs</strong> govern gas and consumables source-cost truth (supplier-backed)</li>
+                  <li><strong>Pricing Profile</strong> governs costing policy, rates, markup, and commercial rules</li>
+                  <li><strong>Materials Library</strong> governs material/sheet selection and material cost context</li>
+                  <li><strong>Fallback</strong> only if no approved active governed data is present</li>
+                </ol>
+                <p className="text-[10px] text-blue-600 dark:text-blue-500 pt-1">
+                  Daily service charges are <strong>excluded</strong> from derived per-litre gas cost. They are a rental/logistics charge, not a consumption cost, and are not allocated to individual cuts.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <TabsContent value="division" className="space-y-4">
+          <DivisionFormContent
+            form={form}
+            setForm={setForm}
+            visibleSpecs={visibleSpecs}
+            currentDefaults={currentDefaults}
+            selectedCode={selectedCode}
+          />
+
+          <Separator className="my-4" />
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium">LL Pricing Settings (Legacy View)</h3>
+          </div>
+          <LLPricingSettingsViewer settings={(div as any)?.llPricingSettingsJson as LLPricingSettings | null} />
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={handleSave} disabled={isLoading || mutation.isPending} data-testid="button-save-division">
+              {mutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+              ) : (
+                <><Save className="w-4 h-4 mr-2" /> Save LL Settings</>
+              )}
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="pricing-governance">
+          <LLPricingProfilesPage embedded />
+        </TabsContent>
+
+        <TabsContent value="commercial-inputs">
+          <LLCommercialInputsPage embedded />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -1115,7 +1241,7 @@ function LLPricingSettingsViewer({ settings }: { settings: LLPricingSettings | n
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card data-testid="ll-settings-gas-costs">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Gas Costs</CardTitle>
+            <CardTitle className="text-sm">Gas Costs <Badge variant="outline" className="ml-2 text-[9px] text-blue-600 border-blue-300">Fallback — governed by Commercial Inputs</Badge></CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Oxygen (O₂)</span><span>${settings.gasCosts.o2PricePerLitre.toFixed(4)}/L</span></div>
@@ -1126,7 +1252,7 @@ function LLPricingSettingsViewer({ settings }: { settings: LLPricingSettings | n
 
         <Card data-testid="ll-settings-consumables">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Consumables & Labour</CardTitle>
+            <CardTitle className="text-sm">Consumables & Labour <Badge variant="outline" className="ml-2 text-[9px] text-blue-600 border-blue-300">Consumables governed by Commercial Inputs</Badge></CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Consumables</span><span>${settings.consumableCosts.consumableCostPerMachineHour.toFixed(2)}/hr</span></div>
@@ -3508,7 +3634,7 @@ export default function Settings() {
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="max-w-3xl mx-auto">
-          <Tabs defaultValue="application">
+          <Tabs defaultValue={new URLSearchParams(window.location.search).has("division") ? "divisions" : "application"}>
             <TabsList className="mb-4 overflow-x-auto">
               <TabsTrigger value="application" data-testid="tab-application">Application</TabsTrigger>
               <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation</TabsTrigger>

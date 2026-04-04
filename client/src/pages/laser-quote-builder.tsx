@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,15 +36,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, Loader2, ChevronDown, ChevronRight, Calculator } from "lucide-react";
-import type { LaserQuoteItem, LLPricingSettings, DivisionSettings } from "@shared/schema";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle } from "lucide-react";
+import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
   computeLLPricing,
   resolveRatesFromSettings,
   type LLMaterialTruth,
   type LLPricingBreakdown,
+  type LLGovernedInputs,
 } from "@/lib/ll-pricing";
+import type { LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
 
 interface SheetMaterialRef {
   id: string;
@@ -118,6 +121,7 @@ function computeItemPricing(
   item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
   materials: SheetMaterialRef[],
   settings?: LLPricingSettings | null,
+  governed?: LLGovernedInputs,
 ): LLPricingBreakdown {
   const matched = findMatchingMaterial(materials, item);
   return computeLLPricing({
@@ -131,7 +135,7 @@ function computeItemPricing(
     handlingMinutes: item.handlingMinutes,
     markupPercent: item.markupPercent,
     utilisationFactor: item.utilisationFactor,
-  }, settings);
+  }, settings, governed);
 }
 
 function itemToSnapshotItem(
@@ -139,8 +143,9 @@ function itemToSnapshotItem(
   index: number,
   materials: SheetMaterialRef[],
   settings?: LLPricingSettings | null,
+  governed?: LLGovernedInputs,
 ): LaserSnapshotItem {
-  const pricing = computeItemPricing(item, materials, settings);
+  const pricing = computeItemPricing(item, materials, settings, governed);
   const matched = findMatchingMaterial(materials, item);
   const matTruth = matched ? materialToTruth(matched) : null;
   return {
@@ -209,29 +214,69 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
 }
 
 function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPricingBreakdown; supplierName: string }) {
-  const rows = [
+  const isTimeBased = breakdown.processMode === "time-based";
+  const rows: Array<{ label: string; value: string; bold?: boolean }> = [
     { label: "Supplier", value: supplierName || "—" },
     { label: "Sheet Area", value: breakdown.sheetAreaMm2 > 0 ? `${(breakdown.sheetAreaMm2 / 1_000_000).toFixed(3)} m²` : "—" },
     { label: "Part Area (each)", value: breakdown.partAreaMm2 > 0 ? `${(breakdown.partAreaMm2 / 1_000_000).toFixed(4)} m²` : "—" },
-    { label: "Total Part Area", value: breakdown.totalNetPartArea > 0 ? `${(breakdown.totalNetPartArea / 1_000_000).toFixed(4)} m²` : "—" },
-    { label: "Utilisation Factor", value: `${(breakdown.utilisationFactor * 100).toFixed(0)}%` },
+    { label: "Parts/Sheet", value: breakdown.partsPerSheet > 0 ? `${breakdown.partsPerSheet}` : "—" },
     { label: "Est. Sheets Required", value: breakdown.estimatedSheets > 0 ? `${breakdown.estimatedSheets} sheet${breakdown.estimatedSheets !== 1 ? "s" : ""}` : "—" },
     { label: "Material Cost", value: `$${breakdown.materialCostTotal.toFixed(2)}` },
-    { label: "Cut Cost (per unit)", value: `$${breakdown.cutCost.toFixed(2)}` },
-    { label: "Pierce Cost (per unit)", value: `$${breakdown.pierceCost.toFixed(2)}` },
-    { label: "Process Cost (total)", value: `$${breakdown.processCostTotal.toFixed(2)}` },
+  ];
+
+  if (isTimeBased) {
+    rows.push(
+      { label: "Machine Time", value: `${breakdown.machineTimeMinutes.toFixed(1)} min` },
+      { label: "Machine Cost", value: `$${breakdown.machineTimeCost.toFixed(2)}` },
+      { label: `Gas Cost${breakdown.gasCostPerLitre ? ` @ $${breakdown.gasCostPerLitre.toFixed(6)}/L` : ""}`, value: `$${breakdown.gasCost.toFixed(2)}` },
+      { label: `Consumables${breakdown.consumablesCostPerHourRate ? ` @ $${breakdown.consumablesCostPerHourRate.toFixed(2)}/hr` : ""}`, value: `$${breakdown.consumablesCost.toFixed(2)}` },
+    );
+  } else {
+    rows.push(
+      { label: "Cut Cost (per unit)", value: `$${breakdown.cutCost.toFixed(2)}` },
+      { label: "Pierce Cost (per unit)", value: `$${breakdown.pierceCost.toFixed(2)}` },
+    );
+  }
+
+  rows.push(
+    { label: `Process Cost (${isTimeBased ? "time" : "flat"})`, value: `$${breakdown.processCostTotal.toFixed(2)}` },
     { label: "Setup/Handling", value: `$${breakdown.setupHandlingCost.toFixed(2)}` },
-    { label: "Internal Subtotal", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true },
+  );
+
+  if (breakdown.minimumLineChargeApplied) {
+    rows.push({ label: "Min. Line Charge Applied", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true });
+  } else {
+    rows.push({ label: "Internal Subtotal", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true });
+  }
+
+  rows.push(
     { label: `Markup (${breakdown.markupPercent}%)`, value: `$${breakdown.markupAmount.toFixed(2)}` },
     { label: "Sell Total", value: `$${breakdown.sellTotal.toFixed(2)}`, bold: true },
     { label: "Unit Sell", value: `$${breakdown.unitSell.toFixed(2)}`, bold: true },
-  ];
+  );
   return (
     <div className="bg-muted/50 border rounded-md p-3 space-y-1" data-testid="pricing-breakdown-panel">
       <div className="flex items-center gap-1.5 mb-2">
         <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Internal Pricing Breakdown</span>
+        <Badge variant={isTimeBased ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 ml-auto" data-testid="process-mode-badge">
+          {isTimeBased ? "Time-Based" : "Flat Rate"}
+        </Badge>
       </div>
+      {isTimeBased && (breakdown.gasSource || breakdown.consumablesSource) && (
+        <div className="flex flex-wrap gap-1 mb-1.5" data-testid="governed-source-badges">
+          {breakdown.gasSource && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200" data-testid="gas-source-badge">
+              Gas: {breakdown.gasSource}
+            </Badge>
+          )}
+          {breakdown.consumablesSource && (
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200" data-testid="consumables-source-badge">
+              Consumables: {breakdown.consumablesSource}
+            </Badge>
+          )}
+        </div>
+      )}
       {rows.map((r, i) => (
         <div key={i} className={`flex justify-between text-xs ${r.bold ? 'font-semibold border-t pt-1 mt-1' : 'text-muted-foreground'}`}>
           <span>{r.label}</span>
@@ -242,9 +287,10 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
   );
 }
 
-export default function LaserQuoteBuilder() {
+export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boolean } = {}) {
   const params = useParams<{ id?: string }>();
-  const quoteId = params.id;
+  const quoteId = estimateMode ? undefined : params.id;
+  const estimateId = estimateMode ? params.id : undefined;
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -259,17 +305,44 @@ export default function LaserQuoteBuilder() {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   const isEditMode = !!quoteId;
+  const isEstimateEdit = estimateMode && !!estimateId;
 
   const { data: llDivisionSettings } = useQuery<DivisionSettings>({
     queryKey: ["/api/settings/divisions", "LL"],
     staleTime: Infinity,
   });
-  const llPricingSettings = (llDivisionSettings?.llPricingSettingsJson ?? null) as LLPricingSettings | null;
+
+  const { data: activePricingProfile } = useQuery<LLPricingProfile | null>({
+    queryKey: ["/api/ll-pricing-profiles", "active"],
+    queryFn: () => fetch("/api/ll-pricing-profiles/active", { credentials: "include" }).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const llPricingSettings = (activePricingProfile?.llPricingSettingsJson ?? llDivisionSettings?.llPricingSettingsJson ?? null) as LLPricingSettings | null;
+  const pricingProfileId = activePricingProfile?.id ?? null;
+  const pricingProfileLabel = activePricingProfile ? `${activePricingProfile.profileName} (${activePricingProfile.versionLabel})` : null;
 
   const { data: sheetMaterials = [] } = useQuery<SheetMaterialRef[]>({
     queryKey: ["/api/ll-sheet-materials", "active"],
     queryFn: () => fetch("/api/ll-sheet-materials?active=true", { credentials: "include" }).then(r => r.json()),
   });
+
+  const { data: activeGasInputs = [] } = useQuery<LLGasCostInput[]>({
+    queryKey: ["/api/ll-gas-cost-inputs", "active"],
+    queryFn: () => fetch("/api/ll-gas-cost-inputs/active", { credentials: "include" }).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const { data: activeConsumableInputs = [] } = useQuery<LLConsumablesCostInput[]>({
+    queryKey: ["/api/ll-consumables-cost-inputs", "active"],
+    queryFn: () => fetch("/api/ll-consumables-cost-inputs/active", { credentials: "include" }).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const governedInputs: LLGovernedInputs = useMemo(() => ({
+    gasInputs: activeGasInputs.length > 0 ? activeGasInputs : undefined,
+    consumableInputs: activeConsumableInputs.length > 0 ? activeConsumableInputs : undefined,
+  }), [activeGasInputs, activeConsumableInputs]);
 
   const materialFamilies = useMemo(() =>
     [...new Set(sheetMaterials.map(m => m.materialFamily))].sort(),
@@ -303,20 +376,41 @@ export default function LaserQuoteBuilder() {
     )].sort((a, b) => parseFloat(a) - parseFloat(b));
   }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish]);
 
-  const selectedMaterialRow = useMemo(() => {
-    return findMatchingMaterial(sheetMaterials, {
-      ...formData,
-      llSheetMaterialId: formData.llSheetMaterialId,
+  const sheetSizesForSelection = useMemo(() => {
+    if (!formData.materialType || !formData.materialGrade || !formData.thickness) return [];
+    return sheetMaterials.filter(
+      m => m.materialFamily === formData.materialType &&
+        m.grade === formData.materialGrade &&
+        (!formData.finish || m.finish === formData.finish) &&
+        parseFloat(m.thickness) === formData.thickness
+    ).sort((a, b) => {
+      const areaA = parseFloat(a.sheetLength) * parseFloat(a.sheetWidth);
+      const areaB = parseFloat(b.sheetLength) * parseFloat(b.sheetWidth);
+      return areaA - areaB;
     });
-  }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish, formData.thickness, formData.llSheetMaterialId]);
+  }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish, formData.thickness]);
+
+  const selectedMaterialRow = useMemo(() => {
+    if (formData.llSheetMaterialId) {
+      const byId = sheetMaterials.find(m => m.id === formData.llSheetMaterialId);
+      if (byId) return byId;
+    }
+    if (sheetSizesForSelection.length === 1) return sheetSizesForSelection[0];
+    return undefined;
+  }, [sheetMaterials, sheetSizesForSelection, formData.llSheetMaterialId]);
 
   const dialogPricing = useMemo(() => {
-    return computeItemPricing(formData, sheetMaterials, llPricingSettings);
-  }, [formData, sheetMaterials, llPricingSettings]);
+    return computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
+  }, [formData, sheetMaterials, llPricingSettings, governedInputs]);
 
   const { data: quoteData, isLoading: quoteLoading } = useQuery<any>({
     queryKey: ["/api/quotes", quoteId],
     enabled: isEditMode,
+  });
+
+  const { data: estimateData, isLoading: estimateLoading } = useQuery<any>({
+    queryKey: ["/api/laser-estimates", estimateId],
+    enabled: isEstimateEdit,
   });
 
   useEffect(() => {
@@ -337,13 +431,24 @@ export default function LaserQuoteBuilder() {
     }
   }, [quoteData, isEditMode]);
 
+  useEffect(() => {
+    if (estimateData && isEstimateEdit) {
+      setCustomerName(estimateData.customerName || "");
+      setProjectAddress(estimateData.projectAddress || "");
+      const savedItems = estimateData.itemsJson;
+      if (Array.isArray(savedItems) && savedItems.length > 0) {
+        setItems(savedItems.map((it: any) => ({ ...it, id: it.id || crypto.randomUUID() })));
+      }
+    }
+  }, [estimateData, isEstimateEdit]);
+
   const itemPricings = useMemo(() => {
     const map = new Map<string, LLPricingBreakdown>();
     for (const item of items) {
-      map.set(item.id, computeItemPricing(item, sheetMaterials, llPricingSettings));
+      map.set(item.id, computeItemPricing(item, sheetMaterials, llPricingSettings, governedInputs));
     }
     return map;
-  }, [items, sheetMaterials, llPricingSettings]);
+  }, [items, sheetMaterials, llPricingSettings, governedInputs]);
 
   const totalValue = useMemo(() => {
     let total = 0;
@@ -354,7 +459,7 @@ export default function LaserQuoteBuilder() {
   }, [itemPricings]);
 
   const buildSnapshot = () => {
-    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings));
+    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings, governedInputs));
     return {
       customer: customerName,
       projectAddress,
@@ -423,16 +528,99 @@ export default function LaserQuoteBuilder() {
     },
   });
 
+  const createEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/laser-estimates", {
+        customerName: customerName.trim(),
+        projectAddress,
+        itemsJson: items,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Estimate saved", description: `${data.estimateNumber} created successfully` });
+      navigate(`/laser-estimate/${data.id}`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/laser-estimates/${estimateId}`, {
+        customerName: customerName.trim(),
+        projectAddress,
+        itemsJson: items,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Saved", description: "Estimate updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const generateQuoteFromEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const snapshot = buildSnapshot();
+      const res = await apiRequest("POST", "/api/quotes", {
+        snapshot,
+        sourceLaserEstimateId: estimateId,
+        customer: customerName,
+        divisionCode: "LL",
+        mode: "new_quote",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      toast({ title: "Quote generated", description: `${data.quote.number} created from estimate` });
+      navigate(`/laser-quote/${data.quote.id}`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleSave = () => {
     if (!customerName.trim()) {
       toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
       return;
     }
-    if (isEditMode) {
+    if (estimateMode) {
+      if (isEstimateEdit) {
+        updateEstimateMutation.mutate();
+      } else {
+        createEstimateMutation.mutate();
+      }
+    } else if (isEditMode) {
       saveRevisionMutation.mutate();
     } else {
       createQuoteMutation.mutate();
     }
+  };
+
+  const handleGenerateQuote = () => {
+    if (!customerName.trim()) {
+      toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
+      return;
+    }
+    if (items.length === 0) {
+      toast({ title: "Required", description: "Add at least one item before generating a quote", variant: "destructive" });
+      return;
+    }
+    generateQuoteFromEstimateMutation.mutate();
   };
 
   const openAddDialog = () => {
@@ -472,7 +660,7 @@ export default function LaserQuoteBuilder() {
       toast({ title: "Required", description: "Item reference and title are required", variant: "destructive" });
       return;
     }
-    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings);
+    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
     const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
     const updatedData = {
       ...formData,
@@ -503,9 +691,11 @@ export default function LaserQuoteBuilder() {
     });
   };
 
-  const isSaving = createQuoteMutation.isPending || saveRevisionMutation.isPending;
+  const isSaving = createQuoteMutation.isPending || saveRevisionMutation.isPending
+    || createEstimateMutation.isPending || updateEstimateMutation.isPending
+    || generateQuoteFromEstimateMutation.isPending;
 
-  if (isEditMode && quoteLoading) {
+  if ((isEditMode && quoteLoading) || (isEstimateEdit && estimateLoading)) {
     return (
       <div className="flex items-center justify-center h-full" data-testid="loading-laser-builder">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -513,7 +703,18 @@ export default function LaserQuoteBuilder() {
     );
   }
 
-  const quoteNumber = quoteData?.number || "New Laser Quote";
+  const pageTitle = estimateMode
+    ? (isEstimateEdit ? (estimateData?.estimateNumber || "Loading…") : "New Laser Estimate")
+    : (quoteData?.number || "New Laser Quote");
+  const pageSubtitle = estimateMode ? "Lateral Laser — Estimate Builder" : "Lateral Laser — Quote Builder";
+  const backPath = estimateMode ? "/laser-estimates" : "/quotes";
+
+  const getSaveLabel = () => {
+    if (estimateMode) {
+      return isEstimateEdit ? "Save Estimate" : "Save New Estimate";
+    }
+    return isEditMode ? "Save Revision" : "Create Quote";
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -522,18 +723,29 @@ export default function LaserQuoteBuilder() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/quotes")}
-            data-testid="button-back-quotes"
+            onClick={() => navigate(backPath)}
+            data-testid="button-back"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-lg font-semibold" data-testid="text-quote-number">{quoteNumber}</h1>
-            <p className="text-xs text-muted-foreground">Lateral Laser — Quote Builder</p>
+            <h1 className="text-lg font-semibold" data-testid="text-page-title">{pageTitle}</h1>
+            <p className="text-xs text-muted-foreground">{pageSubtitle}</p>
           </div>
+          {activePricingProfile ? (
+            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-300" data-testid="badge-pricing-profile">
+              <ShieldCheck className="h-3 w-3 mr-1" />
+              {activePricingProfile.profileName} ({activePricingProfile.versionLabel})
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300" data-testid="badge-pricing-fallback">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Fallback Pricing
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {isEditMode && (
+          {isEditMode && !estimateMode && (
             <Button
               variant="outline"
               size="sm"
@@ -544,19 +756,70 @@ export default function LaserQuoteBuilder() {
               Preview
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={isSaving}
-            data-testid="button-save-quote"
-          >
-            {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-            {isEditMode ? "Save Revision" : "Create Quote"}
-          </Button>
+          {isEstimateEdit && estimateData?.status === "converted" && estimateData?.linkedQuote && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}`)}
+              data-testid="button-open-linked-quote"
+            >
+              <Eye className="h-4 w-4 mr-1" />
+              Open Quote {estimateData.linkedQuote.number}
+            </Button>
+          )}
+          {isEstimateEdit && estimateData?.status !== "converted" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateQuote}
+              disabled={isSaving || items.length === 0}
+              data-testid="button-generate-quote"
+            >
+              {generateQuoteFromEstimateMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <ArrowRightCircle className="h-4 w-4 mr-1" />}
+              Generate Quote
+            </Button>
+          )}
+          {!(estimateMode && estimateData?.status === "converted") && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={isSaving}
+              data-testid="button-save"
+            >
+              {isSaving && !generateQuoteFromEstimateMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <Save className="h-4 w-4 mr-1" />}
+              {getSaveLabel()}
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
+        {isEstimateEdit && estimateData?.status === "converted" && (
+          <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3 flex items-center justify-between" data-testid="banner-converted">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-300 dark:border-green-700 text-xs">Converted</Badge>
+              <span className="text-sm text-green-800 dark:text-green-300">
+                This estimate has been converted to quote <strong>{estimateData.linkedQuote?.number || "—"}</strong>
+              </span>
+            </div>
+            {estimateData.linkedQuote && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-green-300 dark:border-green-700 text-green-800 dark:text-green-300"
+                onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}`)}
+                data-testid="banner-open-quote"
+              >
+                <ArrowRightCircle className="h-3.5 w-3.5 mr-1" />
+                Open Quote
+              </Button>
+            )}
+          </div>
+        )}
         <Card data-testid="card-quote-details">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Quote Details</CardTitle>
@@ -811,34 +1074,70 @@ export default function LaserQuoteBuilder() {
                 </div>
                 <div>
                   <Label htmlFor="thickness">Thickness (mm)</Label>
+                  {thicknessesForSelection.length > 0 ? (
+                    <Select
+                      key={`thickness-${formData.materialType}-${formData.materialGrade}-${formData.finish}`}
+                      value={formData.thickness > 0 ? String(formData.thickness) : undefined}
+                      onValueChange={(v) => {
+                        const t = parseFloat(v) || 0;
+                        const matchingSheets = sheetMaterials.filter(
+                          m => m.materialFamily === formData.materialType &&
+                            m.grade === formData.materialGrade &&
+                            (!formData.finish || m.finish === formData.finish) &&
+                            parseFloat(m.thickness) === t
+                        );
+                        setFormData(prev => ({
+                          ...prev,
+                          thickness: t,
+                          llSheetMaterialId: matchingSheets.length === 1 ? matchingSheets[0].id : "",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger data-testid="select-thickness">
+                        <SelectValue placeholder="Select thickness..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {thicknessesForSelection.map(t => (
+                          <SelectItem key={t} value={t}>{t}mm</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="h-9 flex items-center px-3 border rounded-md bg-muted/50 text-sm text-muted-foreground" data-testid="select-thickness-disabled">
+                      {formData.materialGrade ? "No thicknesses available" : "Select grade first"}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && (
+                <div>
+                  <Label>Sheet Size</Label>
                   <Select
-                    value={formData.thickness ? String(formData.thickness) : ""}
+                    key={`sheet-${formData.materialType}-${formData.thickness}`}
+                    value={formData.llSheetMaterialId || undefined}
                     onValueChange={(v) => {
-                      const t = parseFloat(v) || 0;
-                      const matched = sheetMaterials.find(
-                        m => m.materialFamily === formData.materialType &&
-                          m.grade === formData.materialGrade &&
-                          m.finish === formData.finish &&
-                          parseFloat(m.thickness) === t
-                      );
-                      setFormData(prev => ({
-                        ...prev,
-                        thickness: t,
-                        llSheetMaterialId: matched?.id || "",
-                      }));
+                      setFormData(prev => ({ ...prev, llSheetMaterialId: v }));
                     }}
                   >
-                    <SelectTrigger data-testid="select-thickness">
-                      <SelectValue placeholder={formData.materialGrade ? "Select..." : "Select grade first"} />
+                    <SelectTrigger data-testid="select-sheet-size">
+                      <SelectValue placeholder="Select sheet size..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {thicknessesForSelection.map(t => (
-                        <SelectItem key={t} value={t}>{t}mm</SelectItem>
+                      {sheetSizesForSelection.map(m => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.sheetLength}mm x {m.sheetWidth}mm — ${parseFloat(m.pricePerSheetExGst).toFixed(2)} ({m.supplierName})
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{sheetSizesForSelection.length} sheet sizes available for this combination</p>
                 </div>
-              </div>
+              )}
+              {formData.thickness > 0 && sheetSizesForSelection.length === 0 && (
+                <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5" data-testid="no-sheets-warning">
+                  No valid sheet found for this material/thickness combination. Check the sheet materials library.
+                </div>
+              )}
               {selectedMaterialRow && (
                 <div className="text-xs text-muted-foreground bg-background border rounded px-2 py-1.5 space-y-0.5" data-testid="material-identity-display">
                   <div className="flex justify-between">
@@ -849,6 +1148,11 @@ export default function LaserQuoteBuilder() {
                     <span>Price/Sheet: <strong>${parseFloat(selectedMaterialRow.pricePerSheetExGst).toFixed(2)}</strong> ex GST</span>
                     <span className="text-[10px] text-muted-foreground/60 font-mono">ID: {selectedMaterialRow.id.slice(0, 8)}</span>
                   </div>
+                </div>
+              )}
+              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && !formData.llSheetMaterialId && (
+                <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1.5" data-testid="sheet-size-required-warning">
+                  Please select a sheet size to proceed with accurate pricing.
                 </div>
               )}
             </div>
