@@ -298,16 +298,16 @@ export default function InvoicesPage() {
       {search ? "No invoices match your search." : "No invoices yet. Invoices are created from accepted quotes."}
     </div>
   ) : (
-    <div className="rounded-lg border bg-card">
+    <div className="rounded-lg border bg-card overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted/50">
-            <TableHead className="w-[140px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice</TableHead>
-            <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
-            <TableHead className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Customer / Project</TableHead>
-            <TableHead className="text-right w-[120px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
-            <TableHead className="hidden lg:table-cell text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Xero / Payment</TableHead>
-            <TableHead className="w-[120px] text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
+            <TableHead className="w-[140px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Invoice</TableHead>
+            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer / Project</TableHead>
+            <TableHead className="text-right w-[120px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+            <TableHead className="hidden lg:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Xero / Payment</TableHead>
+            <TableHead className="w-[120px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -321,8 +321,8 @@ export default function InvoicesPage() {
                         {inv.number}
                       </span>
                       {isAdmin && inv.isDemoRecord && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0 font-sans" data-testid={`badge-demo-invoice-${inv.id}`}>
-                          <FlaskConical className="h-2 w-2 mr-0.5" />Demo
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0" data-testid={`badge-demo-invoice-${inv.id}`}>
+                          <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
                         </Badge>
                       )}
                     </div>

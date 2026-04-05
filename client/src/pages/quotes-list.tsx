@@ -19,7 +19,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  FileText, ArrowRight, Search, ArrowUpDown, Filter, Calendar, X, Trash2, BookOpen, FlaskConical,
+  FileText, ArrowRight, Search, ArrowUpDown, Filter, Calendar, X, Trash2, BookOpen, FlaskConical, Building2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -436,25 +436,25 @@ function QuoteBadges({ quote }: { quote: EnrichedQuote }) {
 
 function DesktopQuoteTable({ quotes, isAdmin, demoFlagMutation }: { quotes: EnrichedQuote[]; isAdmin: boolean; demoFlagMutation: any }) {
   return (
-    <div className="rounded-lg border bg-card">
+    <div className="rounded-lg border bg-card overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-[120px]">Quote #</TableHead>
-            <TableHead>Customer</TableHead>
-            <TableHead className="hidden xl:table-cell w-[140px]">Source Estimate</TableHead>
-            <TableHead className="hidden lg:table-cell w-[90px]">Type</TableHead>
-            <TableHead className="hidden lg:table-cell w-[90px]">Division</TableHead>
-            <TableHead className="w-[120px] text-right">Value</TableHead>
-            <TableHead className="w-[170px]">Status</TableHead>
-            <TableHead className="hidden xl:table-cell w-[100px]">Updated</TableHead>
+          <TableRow className="bg-muted/50">
+            <TableHead className="w-[120px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quote #</TableHead>
+            <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</TableHead>
+            <TableHead className="hidden xl:table-cell w-[140px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Source Estimate</TableHead>
+            <TableHead className="hidden lg:table-cell w-[90px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</TableHead>
+            <TableHead className="hidden lg:table-cell w-[90px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Division</TableHead>
+            <TableHead className="w-[120px] text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Value</TableHead>
+            <TableHead className="w-[170px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+            <TableHead className="hidden xl:table-cell w-[100px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Updated</TableHead>
             <TableHead className="w-[50px]" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {quotes.map((q) => (
-            <TableRow key={q.id} data-testid={`row-quote-${q.id}`}>
-              <TableCell className="font-mono font-medium" data-testid={`text-quote-number-${q.id}`}>
+            <TableRow key={q.id} className="hover:bg-muted/30" data-testid={`row-quote-${q.id}`}>
+              <TableCell className="font-mono font-medium py-2.5" data-testid={`text-quote-number-${q.id}`}>
                 <div className="flex items-center gap-1.5">
                   {q.number}
                   {isAdmin && q.isDemoRecord && (
@@ -464,26 +464,32 @@ function DesktopQuoteTable({ quotes, isAdmin, demoFlagMutation }: { quotes: Enri
                   )}
                 </div>
               </TableCell>
-              <TableCell data-testid={`text-quote-customer-${q.id}`}>{q.customer}</TableCell>
-              <TableCell className="hidden xl:table-cell text-sm text-muted-foreground" data-testid={`text-quote-source-${q.id}`}>
+              <TableCell className="py-2.5" data-testid={`text-quote-customer-${q.id}`}>
+                {q.customer ? (
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />{q.customer}
+                  </span>
+                ) : <span className="text-xs text-muted-foreground italic">—</span>}
+              </TableCell>
+              <TableCell className="hidden xl:table-cell text-sm text-muted-foreground py-2.5" data-testid={`text-quote-source-${q.id}`}>
                 {q.sourceEstimateName || "—"}
               </TableCell>
-              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground" data-testid={`text-quote-type-${q.id}`}>
+              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground py-2.5" data-testid={`text-quote-type-${q.id}`}>
                 {formatQuoteType(q.quoteType, q.divisionId)}
               </TableCell>
-              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground" data-testid={`text-quote-division-${q.id}`}>
+              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground py-2.5" data-testid={`text-quote-division-${q.id}`}>
                 {q.divisionId || "—"}
               </TableCell>
-              <TableCell className="text-right font-mono text-sm" data-testid={`text-quote-value-${q.id}`}>
+              <TableCell className="text-right font-mono text-sm py-2.5" data-testid={`text-quote-value-${q.id}`}>
                 {q.totalValue != null ? `$${fmt(q.totalValue)}` : "—"}
               </TableCell>
-              <TableCell>
+              <TableCell className="py-2.5">
                 <QuoteBadges quote={q} />
               </TableCell>
-              <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">
+              <TableCell className="hidden xl:table-cell text-sm text-muted-foreground py-2.5">
                 {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString("en-NZ") : q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-NZ") : "—"}
               </TableCell>
-              <TableCell>
+              <TableCell className="py-2.5">
                 <div className="flex items-center justify-end gap-1">
                   {isAdmin && (
                     <Button

@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical, FileText } from "lucide-react";
+import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical, FileText, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { routes } from "@/lib/routes";
@@ -250,9 +250,10 @@ export default function JobsList() {
               <div className="rounded-lg border bg-card overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="bg-muted/50">
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Estimate #</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Customer</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Date</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Items</TableHead>
@@ -281,6 +282,13 @@ export default function JobsList() {
                               </Badge>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground py-2.5 hidden lg:table-cell" data-testid={`text-job-customer-${job.id}`}>
+                          {job.clientName ? (
+                            <span className="flex items-center gap-1.5">
+                              <Building2 className="w-3 h-3 shrink-0" />{job.clientName}
+                            </span>
+                          ) : <span className="text-xs italic">—</span>}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground py-2.5 hidden md:table-cell">
                           {job.address ? (
@@ -382,7 +390,7 @@ export default function JobsList() {
               <div className="rounded-lg border bg-card overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="bg-muted/50">
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Estimate #</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>

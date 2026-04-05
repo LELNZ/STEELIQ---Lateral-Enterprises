@@ -22,7 +22,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Search, User, Pencil, Archive, Flag } from "lucide-react";
+import { Plus, Search, User, Pencil, Archive, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -341,7 +341,7 @@ export default function Contacts() {
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-lg border bg-card overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -371,8 +371,8 @@ export default function Contacts() {
                           <span className="font-medium text-sm" data-testid={`text-contact-name-${contact.id}`}>{contactDisplayName(contact)}</span>
                           {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
                           {(contact as any).isDemoRecord && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400">
-                              <Flag className="h-2.5 w-2.5 mr-1" />Test/Demo
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0">
+                              <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
                             </Badge>
                           )}
                         </div>
@@ -400,13 +400,13 @@ export default function Contacts() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className={`h-7 w-7 p-0 ${(contact as any).isDemoRecord ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500"}`}
-                          title={(contact as any).isDemoRecord ? "Remove test/demo flag" : "Flag as test/demo"}
+                          className={`h-7 w-7 p-0 ${(contact as any).isDemoRecord ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+                          title={(contact as any).isDemoRecord ? "Remove demo flag" : "Flag as demo"}
                           onClick={() => demoFlagMutation.mutate({ id: contact.id, isDemoRecord: !(contact as any).isDemoRecord })}
                           disabled={demoFlagMutation.isPending}
                           data-testid={`button-demo-flag-contact-${contact.id}`}
                         >
-                          <Flag className="h-3.5 w-3.5" />
+                          <FlaskConical className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       <Button

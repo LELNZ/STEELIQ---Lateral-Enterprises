@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
-  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen, Building2, Search, Flag, Shield,
+  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen, Building2, Search, FlaskConical, Shield,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -245,8 +245,8 @@ function CustomerRow({ customer }: { customer: Customer }) {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-sm">{customer.name}</span>
               {(customer as any).isDemoRecord && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400">
-                  <Flag className="h-2.5 w-2.5 mr-1" />Test/Demo
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0">
+                  <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
                 </Badge>
               )}
             </div>
@@ -357,7 +357,7 @@ function CustomerRow({ customer }: { customer: Customer }) {
                     </div>
                     <div className="flex items-center justify-between py-1 px-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                       <div className="flex items-center gap-2 text-xs">
-                        <Flag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <FlaskConical className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                         <div>
                           <span className="font-medium text-amber-900 dark:text-amber-200">Test / Demo Record</span>
                           <p className="text-amber-700 dark:text-amber-400 text-[11px] leading-tight mt-0.5">
@@ -713,7 +713,7 @@ export default function Customers() {
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-lg border bg-card overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
