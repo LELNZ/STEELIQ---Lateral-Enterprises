@@ -245,7 +245,7 @@ Library + Source Costs + Pricing Model → Estimate Builder → Quote
 | LJ workflows | No | No files in LJ workflow paths were modified |
 | LE workflows | No | No files in LE workflow paths were modified |
 | QuoteDocument → QuoteRenderModel → Preview/PDF | No | `quote-detail.tsx` provenance is display-only in the interactive view; no changes to document rendering, snapshot structure, or PDF generation |
-| Revision continuity behaviour | No | No changes to revision logic, snapshot creation, or revision numbering |
+| Revision continuity behaviour | Additive only | LL revision path now refreshes provenance fields (`pricingProfileId`, `pricingProfileLabel`, `pricedAt`) from active profile. No changes to revision numbering, snapshot creation, or non-LL quote revisions. |
 | Quote lifecycle semantics | No | No changes to quote status transitions, atomic numbering, or server-side status enforcement |
 | Estimate → Quote linkage | No | `sourceLaserEstimateId` linkage unchanged |
 | Server-side estimate stamping | No | `pricingProfileId`/`pricingProfileLabel`/`pricedAt` stamping logic unchanged |
@@ -300,6 +300,7 @@ Library + Source Costs + Pricing Model → Estimate Builder → Quote
 | 6 | No pricing provenance visible in LL quote detail | User could not see what pricing model priced the quote without opening the builder | Added "Pricing Basis" card showing profile label and pricing date |
 | 7 | Legacy redirect routes targeted old tab names (`pricing-governance`, `commercial-inputs`) | Redirects would open wrong tab if old tab names removed | Updated to target new tab names (`pricing-model`, `source-costs`) |
 | 8 | Package selection policy (cheapest active per gas type) was undocumented in UI | Users had no visibility into how the system selects between multiple active packages | Added explicit "temporary bounded rule" note in Source Costs tab header |
+| 9 | LL quote revision did not refresh pricing provenance | After repricing an LL estimate and saving a revision, the quote's `pricingProfileId`/`pricingProfileLabel`/`pricedAt` could become stale | Updated `POST /api/quotes` revision path to resolve active profile and refresh provenance fields for LL revisions |
 
 ---
 
