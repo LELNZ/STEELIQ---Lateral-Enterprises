@@ -52,6 +52,7 @@ export default function LLCommercialInputs({ embedded }: { embedded?: boolean } 
   const [showCreateConsumable, setShowCreateConsumable] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ type: string; id: string; name: string } | null>(null);
   const [gasStatusFilter, setGasStatusFilter] = useState<string>("active");
+  const [gasSupplierFilter, setGasSupplierFilter] = useState<string>("all");
   const [consumableStatusFilter, setConsumableStatusFilter] = useState<string>("active");
   const { toast } = useToast();
 
@@ -75,12 +76,17 @@ export default function LLCommercialInputs({ embedded }: { embedded?: boolean } 
 
   const gasInputs = gasQuery.data || [];
   const consumableInputs = consumablesQuery.data || [];
-  const filteredGas = gasStatusFilter === "all" ? gasInputs : gasInputs.filter(g => g.status === gasStatusFilter);
+  const statusFilteredGas = gasStatusFilter === "all" ? gasInputs : gasInputs.filter(g => g.status === gasStatusFilter);
+  const filteredGas = gasSupplierFilter === "all" ? statusFilteredGas : statusFilteredGas.filter(g => g.supplierName === gasSupplierFilter);
   const filteredConsumables = consumableStatusFilter === "all" ? consumableInputs : consumableInputs.filter(c => c.status === consumableStatusFilter);
   const selectedGas = gasInputs.find(g => g.id === selectedGasId);
   const selectedConsumable = consumableInputs.find(c => c.id === selectedConsumableId);
 
   const hasNoData = gasInputs.length === 0 && consumableInputs.length === 0;
+
+  const gasSuppliers = useMemo(() => {
+    return Array.from(new Set(gasInputs.map(g => g.supplierName))).sort();
+  }, [gasInputs]);
 
   const gasStatusCounts = useMemo(() => {
     const counts: Record<string, number> = { active: 0, draft: 0, approved: 0, superseded: 0, archived: 0 };
@@ -116,7 +122,7 @@ export default function LLCommercialInputs({ embedded }: { embedded?: boolean } 
         <div className="flex items-center justify-between pb-3">
           <div>
             <h3 className="text-sm font-semibold">Gas & Consumable Source Costs</h3>
-            <p className="text-xs text-muted-foreground">Supplier-backed source cost records with contract traceability — not library material records</p>
+            <p className="text-xs text-muted-foreground">Supplier-scoped source costs — BOC, Air Liquide, Coregas records coexist independently. Activation supersedes within same supplier + gas + package only.</p>
           </div>
           <div className="flex gap-2">
             {hasNoData && (
@@ -148,7 +154,7 @@ export default function LLCommercialInputs({ embedded }: { embedded?: boolean } 
                 <Plus className="h-3.5 w-3.5" /> New Gas Cost Input
               </Button>
               <div className="flex items-center gap-1 pt-1" data-testid="gas-status-filter">
-                <Filter className="h-3 w-3 text-muted-foreground" />
+                <Filter className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                 <Select value={gasStatusFilter} onValueChange={setGasStatusFilter}>
                   <SelectTrigger className="h-7 text-[11px] flex-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -158,6 +164,15 @@ export default function LLCommercialInputs({ embedded }: { embedded?: boolean } 
                     <SelectItem value="approved">Approved ({gasStatusCounts.approved})</SelectItem>
                     <SelectItem value="superseded">Superseded ({gasStatusCounts.superseded})</SelectItem>
                     <SelectItem value="archived">Archived ({gasStatusCounts.archived})</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-1" data-testid="gas-supplier-filter">
+                <Select value={gasSupplierFilter} onValueChange={setGasSupplierFilter}>
+                  <SelectTrigger className="h-7 text-[11px] flex-1"><SelectValue placeholder="All suppliers" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Suppliers</SelectItem>
+                    {gasSuppliers.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -175,8 +190,13 @@ export default function LLCommercialInputs({ embedded }: { embedded?: boolean } 
                     <span className="font-medium">{gasTypeLabels[g.gasType] || g.gasType.toUpperCase()}</span>
                     <Badge variant="outline" className={`text-[10px] ${statusColors[g.status]}`}>{g.status}</Badge>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{packageTypeLabels[g.packageType] || g.packageType}</div>
-                  <div className="text-[10px] text-muted-foreground">{g.supplierName} — {g.packageCode || "no code"}</div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span className="text-xs font-medium text-blue-700 dark:text-blue-400">{g.supplierName}</span>
+                    {g.derivedCostPerLitre != null && (
+                      <span className="text-[10px] font-mono text-muted-foreground">${g.derivedCostPerLitre.toFixed(4)}/L</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">{packageTypeLabels[g.packageType] || g.packageType} — {g.packageCode || "no code"}</div>
                   {g.sourceType === "manual_adjustment" && (
                     <Badge variant="outline" className="text-[9px] mt-1 bg-yellow-50 text-yellow-700 border-yellow-300">Provisional</Badge>
                   )}
@@ -258,7 +278,10 @@ function GasInputDetail({ input, onConfirmAction }: { input: LLGasCostInput; onC
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold" data-testid="text-gas-detail-title">{displayName}</h2>
-          <p className="text-sm text-muted-foreground">{input.description || input.packageCode || "No description"}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-sm font-medium text-blue-700 dark:text-blue-400" data-testid="text-gas-supplier">{input.supplierName}</span>
+            <span className="text-xs text-muted-foreground">{input.description || input.packageCode || "No description"}</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isProvisional && <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-300">Provisional / Manual</Badge>}
@@ -546,6 +569,7 @@ function CreateGasDialog({ open, onClose, onCreated }: { open: boolean; onClose:
     packageCode: "", description: "", deliveredPriceExGst: 0, dailyServiceChargeExGst: 0,
     unitCapacityValue: 0, unitCapacityUom: "litres", usableFraction: 0.95,
   });
+  const [supplierMode, setSupplierMode] = useState<"preset" | "custom">("preset");
 
   const isCompressedAir = form.gasType === "compressed_air";
   const isProvisional = form.sourceType === "manual_adjustment";
@@ -652,7 +676,34 @@ function CreateGasDialog({ open, onClose, onCreated }: { open: boolean; onClose:
               </div>
               <div>
                 <Label className="text-xs">Supplier</Label>
-                <Input value={form.supplierName} onChange={e => setForm(f => ({ ...f, supplierName: e.target.value }))} placeholder={isProvisional ? "e.g. Internal estimate" : "e.g. BOC"} data-testid="input-supplier" />
+                {isProvisional ? (
+                  <Input value={form.supplierName} onChange={e => setForm(f => ({ ...f, supplierName: e.target.value }))} placeholder="e.g. Internal estimate" data-testid="input-supplier" />
+                ) : (
+                  <>
+                    <Select value={supplierMode === "custom" ? "__custom" : form.supplierName} onValueChange={v => {
+                      if (v === "__custom") {
+                        setSupplierMode("custom");
+                        setForm(f => ({ ...f, supplierName: "" }));
+                      } else {
+                        setSupplierMode("preset");
+                        setForm(f => ({ ...f, supplierName: v }));
+                      }
+                    }}>
+                      <SelectTrigger data-testid="select-supplier"><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BOC">BOC</SelectItem>
+                        <SelectItem value="Air Liquide">Air Liquide</SelectItem>
+                        <SelectItem value="Coregas">Coregas</SelectItem>
+                        <SelectItem value="Supagas">Supagas</SelectItem>
+                        <SelectItem value="__custom">Other (type manually)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {supplierMode === "custom" && (
+                      <Input value={form.supplierName} onChange={e => setForm(f => ({ ...f, supplierName: e.target.value }))} placeholder="Type supplier name" className="mt-1" data-testid="input-supplier-custom" />
+                    )}
+                  </>
+                )}
+                <p className="text-[10px] text-muted-foreground mt-0.5">Supplier scopes the supersede boundary — different suppliers can coexist for the same gas/package</p>
               </div>
               <div>
                 <Label className="text-xs">Reference</Label>

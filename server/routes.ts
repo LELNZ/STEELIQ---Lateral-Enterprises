@@ -1480,13 +1480,13 @@ export async function registerRoutes(
         await client.query("BEGIN");
 
         const { rows: activeRows } = await client.query(
-          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 AND package_code IS NOT DISTINCT FROM $3 RETURNING id`,
-          [now, input.gasType, input.packageCode || null]
+          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 AND package_code IS NOT DISTINCT FROM $3 AND supplier_name = $4 RETURNING id`,
+          [now, input.gasType, input.packageCode || null, input.supplierName]
         );
         for (const row of activeRows) {
           await client.query(
             `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
-            [row.id, actorId, actorName, `Superseded by activation of "${input.gasType} (${input.packageType})"`]
+            [row.id, actorId, actorName, `Superseded by activation of "${input.supplierName} ${input.gasType} (${input.packageType})"`]
           );
         }
 
@@ -1500,7 +1500,7 @@ export async function registerRoutes(
 
         await client.query(
           `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
-          [req.params.id, actorId, actorName, `Activated gas cost input "${input.gasType} (${input.packageType})"`]
+          [req.params.id, actorId, actorName, `Activated gas cost input "${input.supplierName} ${input.gasType} (${input.packageType})"`]
         );
 
         await client.query("COMMIT");
