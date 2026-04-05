@@ -39,7 +39,7 @@ import { Slider } from "@/components/ui/slider";
 import type { LLPricingSettings, LLMachineProfile, LLProcessRateEntry } from "@shared/schema";
 import LLPricingProfilesPage from "@/pages/ll-pricing-profiles";
 import LLCommercialInputsPage from "@/pages/ll-commercial-inputs";
-import { DollarSign, Flame, Layers, BookOpen, Receipt, Cpu } from "lucide-react";
+import { DollarSign, Flame, Layers, BookOpen, Receipt, Cpu, Plus } from "lucide-react";
 
 interface OrgSettings {
   id: string;
@@ -1163,13 +1163,24 @@ function LLDivisionSettings({
               <div className="flex items-start gap-2">
                 <Receipt className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wide">Source Costs</h4>
+                  <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wide">Source Costs — Governed Gas & Consumable Truth</h4>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                     Supplier-backed source cost records for gas and consumables. These governed records provide the cost truth used by the pricing engine. They are not library material records and do not own pricing policy.
                   </p>
-                  <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1">
-                    <strong>Package selection policy:</strong> When multiple active packages exist for the same gas type, the system currently selects the lowest-cost package automatically. This is a temporary bounded rule — not final enterprise logic.
-                  </p>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="rounded border border-amber-200 dark:border-amber-800 bg-white dark:bg-amber-950/30 p-2 text-[11px]" data-testid="ll-source-costs-lifecycle-info">
+                      <span className="font-semibold text-amber-800 dark:text-amber-300">Record Lifecycle:</span>
+                      <span className="text-amber-700 dark:text-amber-400 ml-1">Draft → Approved → Active. When a new record is activated, the previous active record for the same gas type + package is automatically moved to Superseded status. Superseded records remain visible for audit.</span>
+                    </div>
+                    <div className="rounded border border-amber-200 dark:border-amber-800 bg-white dark:bg-amber-950/30 p-2 text-[11px]">
+                      <span className="font-semibold text-amber-800 dark:text-amber-300">Package Selection:</span>
+                      <span className="text-amber-700 dark:text-amber-400 ml-1">When multiple active packages exist for the same gas type, the system selects the lowest-cost package. This is a temporary bounded rule — not final enterprise logic.</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 rounded border border-amber-200 dark:border-amber-800 bg-white dark:bg-amber-950/30 p-2 text-[11px]" data-testid="ll-source-costs-required-coverage">
+                    <span className="font-semibold text-amber-800 dark:text-amber-300">Required Coverage:</span>
+                    <span className="text-amber-700 dark:text-amber-400 ml-1">Oxygen (Manpack + Cylinder), Nitrogen (Manpack + Cylinder), Compressed Air. Use the status filter below to review active, superseded, and draft records.</span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1183,10 +1194,24 @@ function LLDivisionSettings({
               <div className="flex items-start gap-2">
                 <Cpu className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <h4 className="text-xs font-semibold text-green-800 dark:text-green-300 uppercase tracking-wide">Pricing Model</h4>
+                  <h4 className="text-xs font-semibold text-green-800 dark:text-green-300 uppercase tracking-wide">Pricing Model — Governed Profiles & Machine Configuration</h4>
                   <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                    Approved pricing rules and costing policy used by LL estimates and quotes. Owns machine profiles, process rates, labour/shop rates, markup, minimums, nesting defaults, and expedite tiers. Gas and consumable cost values embedded in profiles are fallback only — active Source Costs take precedence.
+                    Owns machine profiles, process rates, labour/shop rates, markup, minimums, nesting defaults, and expedite tiers. Gas and consumable cost values embedded in profiles are fallback only — active Source Costs take precedence.
                   </p>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div className="rounded border border-green-200 dark:border-green-800 bg-white dark:bg-green-950/30 p-2 text-[11px]" data-testid="ll-pricing-workflow-guide">
+                      <span className="font-semibold text-green-800 dark:text-green-300">Workflow:</span>
+                      <span className="text-green-700 dark:text-green-400 ml-1">Create or Duplicate → Edit (draft only) → Approve → Activate. Activation supersedes the previous active profile.</span>
+                    </div>
+                    <div className="rounded border border-green-200 dark:border-green-800 bg-white dark:bg-green-950/30 p-2 text-[11px]" data-testid="ll-pricing-machine-guide">
+                      <span className="font-semibold text-green-800 dark:text-green-300">Machines:</span>
+                      <span className="text-green-700 dark:text-green-400 ml-1">Machine profiles are configured inside each pricing profile. Edit a draft profile to add or modify machine settings (bed size, hourly rate).</span>
+                    </div>
+                    <div className="rounded border border-green-200 dark:border-green-800 bg-white dark:bg-green-950/30 p-2 text-[11px]" data-testid="ll-pricing-gas-guide">
+                      <span className="font-semibold text-green-800 dark:text-green-300">Gas Control:</span>
+                      <span className="text-green-700 dark:text-green-400 ml-1">The Process Rate Table defines which gas type is used for each material/thickness combination (assistGasType column).</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1202,10 +1227,13 @@ function LLLibraryTab() {
   const { data: materials = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/ll-sheet-materials"],
   });
-  const navigate = (path: string) => { window.location.href = path; };
+  const [, navigate] = useLocation();
+  const [familyFilter, setFamilyFilter] = useState<string>("all");
 
-  const families = [...new Set(materials.map((m: any) => m.materialFamily))].sort();
+  const families = Array.from(new Set(materials.map((m: any) => m.materialFamily))).sort();
   const activeMaterials = materials.filter((m: any) => m.isActive !== false);
+  const filtered = familyFilter === "all" ? activeMaterials : activeMaterials.filter((m: any) => m.materialFamily === familyFilter);
+  const filteredFamilies = familyFilter === "all" ? families : families.filter(f => f === familyFilter);
 
   return (
     <>
@@ -1213,67 +1241,91 @@ function LLLibraryTab() {
         <CardContent className="py-3">
           <div className="flex items-start gap-2">
             <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <h4 className="text-xs font-semibold text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">Library</h4>
-              <p className="text-xs text-indigo-700 dark:text-indigo-400 mt-0.5">
-                Operational master data used for material and sheet selection. Owns material families, grades, finishes, thicknesses, sheet sizes, and supplier material records. Does not own gas/consumable source costs or pricing policy.
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">LL Material Library</h4>
+                <Button variant="outline" size="sm" onClick={() => navigate("/library?division=LL")} data-testid="button-open-library">
+                  <BookOpen className="w-3.5 h-3.5 mr-1.5" />
+                  Open Full Library (LL)
+                </Button>
+              </div>
+              <p className="text-xs text-indigo-700 dark:text-indigo-400 mt-1">
+                LL-scoped operational master data for sheet materials. Owns material families, grades, finishes, thicknesses, sheet sizes, and supplier records. Does not own gas/consumable source costs or pricing policy.
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card data-testid="ll-library-summary">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center justify-between">
-            <span>Sheet Materials Summary</span>
-            <Badge variant="outline" className="text-[10px]">{activeMaterials.length} active records</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading materials...
-            </div>
-          ) : families.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">No sheet materials configured. Add materials via the Library page.</p>
-          ) : (
-            <div className="space-y-3">
-              {families.map(fam => {
-                const famMats = materials.filter((m: any) => m.materialFamily === fam);
-                const grades = [...new Set(famMats.map((m: any) => m.grade))];
-                const thicknesses = [...new Set(famMats.map((m: any) => m.thickness))].sort((a: string, b: string) => parseFloat(a) - parseFloat(b));
-                return (
-                  <div key={fam} className="rounded border p-2.5" data-testid={`ll-library-family-${fam.toLowerCase().replace(/\s+/g, '-')}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold">{fam}</span>
-                      <Badge variant="secondary" className="text-[10px]">{famMats.length} sheets</Badge>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground space-y-0.5">
-                      <div>Grades: {grades.join(", ")}</div>
-                      <div>Thicknesses: {thicknesses.map((t: string) => `${t}mm`).join(", ")}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="pt-3 border-t mt-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/library")}
-              data-testid="button-open-library"
-            >
-              <BookOpen className="w-3.5 h-3.5 mr-1.5" />
-              Open Full Library
+      <div className="flex items-center gap-3 mb-3" data-testid="ll-library-filters">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">Material Family:</Label>
+          <Select value={familyFilter} onValueChange={setFamilyFilter}>
+            <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Families ({families.length})</SelectItem>
+              {families.map(f => (
+                <SelectItem key={f} value={f}>{f}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Badge variant="outline" className="text-[10px]">{filtered.length} active records</Badge>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading LL sheet materials...
+        </div>
+      ) : families.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">No sheet materials configured for LL.</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/library?division=LL")} data-testid="button-add-materials">
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Add Materials in Library
             </Button>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Full material CRUD, supplier records, and sheet management are available in the Library page.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="border rounded-lg overflow-hidden" data-testid="ll-library-table">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left p-2.5 text-xs font-medium text-muted-foreground">Family</th>
+                <th className="text-left p-2.5 text-xs font-medium text-muted-foreground">Grade</th>
+                <th className="text-left p-2.5 text-xs font-medium text-muted-foreground">Finish</th>
+                <th className="text-right p-2.5 text-xs font-medium text-muted-foreground">Thickness</th>
+                <th className="text-right p-2.5 text-xs font-medium text-muted-foreground">Sheet Size</th>
+                <th className="text-right p-2.5 text-xs font-medium text-muted-foreground">Cost/Sheet</th>
+                <th className="text-left p-2.5 text-xs font-medium text-muted-foreground">Supplier</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredFamilies.map(fam => {
+                const famMats = filtered.filter((m: any) => m.materialFamily === fam).sort((a: any, b: any) => {
+                  if (a.grade !== b.grade) return a.grade.localeCompare(b.grade);
+                  return parseFloat(a.thickness) - parseFloat(b.thickness);
+                });
+                return famMats.map((m: any, idx: number) => (
+                  <tr key={m.id} className={`border-b last:border-0 ${idx === 0 ? "border-t-2 border-t-muted" : ""}`} data-testid={`ll-library-row-${m.id}`}>
+                    <td className="p-2.5 text-xs font-medium">{idx === 0 ? fam : ""}</td>
+                    <td className="p-2.5 text-xs">{m.grade}</td>
+                    <td className="p-2.5 text-xs">{m.finish || "—"}</td>
+                    <td className="p-2.5 text-xs text-right">{m.thickness}mm</td>
+                    <td className="p-2.5 text-xs text-right">{m.sheetLengthMm && m.sheetWidthMm ? `${m.sheetLengthMm}×${m.sheetWidthMm}mm` : "—"}</td>
+                    <td className="p-2.5 text-xs text-right">{m.costPerSheetExGst != null ? `$${parseFloat(m.costPerSheetExGst).toFixed(2)}` : "—"}</td>
+                    <td className="p-2.5 text-xs">{m.supplierName || "—"}</td>
+                  </tr>
+                ));
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground mt-2">
+        To add, edit, or delete sheet materials, use the full Library page. This view is read-only and shows active LL records only.
+      </p>
     </>
   );
 }
@@ -1296,7 +1348,7 @@ function LLPricingSettingsViewer({ settings }: { settings: LLPricingSettings | n
     return "Compressed Air";
   };
 
-  const materialFamilies = [...new Set(settings.processRateTables.map(r => r.materialFamily))].sort();
+  const materialFamilies = Array.from(new Set(settings.processRateTables.map(r => r.materialFamily))).sort();
 
   return (
     <div className="space-y-4" data-testid="ll-pricing-settings-viewer">
@@ -3783,7 +3835,7 @@ export default function Settings() {
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <div className="max-w-3xl mx-auto">
+        <div className={`mx-auto ${new URLSearchParams(window.location.search).get("division") === "LL" ? "max-w-6xl" : "max-w-3xl"}`}>
           <Tabs defaultValue={new URLSearchParams(window.location.search).has("division") ? "divisions" : "application"}>
             <TabsList className="mb-4 overflow-x-auto">
               <TabsTrigger value="application" data-testid="tab-application">Application</TabsTrigger>

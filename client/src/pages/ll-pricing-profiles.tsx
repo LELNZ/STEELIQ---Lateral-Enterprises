@@ -110,8 +110,17 @@ export default function LLPricingProfiles({ embedded }: { embedded?: boolean } =
         </div>
       )}
 
-      <div className={`flex ${embedded ? "h-[600px]" : "flex-1"} overflow-hidden border rounded-lg`}>
-        <div className="w-80 border-r overflow-y-auto">
+      {embedded && (
+        <div className="flex items-start gap-2 p-2.5 mb-3 bg-green-50/50 dark:bg-green-950/10 border border-green-200 dark:border-green-800 rounded text-xs text-green-800 dark:text-green-300" data-testid="pricing-workflow-steps">
+          <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <div>
+            <strong>How to update pricing:</strong> 1) Duplicate the active profile or create new → 2) Edit the draft (rates, machines, policies) → 3) Approve when ready → 4) Activate to go live. The previously active profile moves to "superseded" and remains for audit.
+          </div>
+        </div>
+      )}
+
+      <div className={`flex ${embedded ? "h-[700px]" : "flex-1"} overflow-hidden border rounded-lg`}>
+        <div className="w-72 border-r overflow-y-auto">
           <div className="p-3 space-y-1">
             {profiles.length === 0 && (
               <p className="text-sm text-muted-foreground p-4 text-center" data-testid="text-no-profiles">
@@ -135,7 +144,7 @@ export default function LLPricingProfiles({ embedded }: { embedded?: boolean } =
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">{profile.versionLabel}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
-                  {new Date(profile.createdAt).toLocaleDateString()}
+                  {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "—"}
                 </div>
               </button>
             ))}
@@ -293,18 +302,18 @@ function ProfileDetail({
       <div className="grid grid-cols-3 gap-3 text-xs">
         <div className="p-2 bg-muted/50 rounded">
           <span className="text-muted-foreground">Created</span>
-          <div className="font-medium">{new Date(profile.createdAt).toLocaleString()}</div>
+          <div className="font-medium">{profile.createdAt ? new Date(profile.createdAt).toLocaleString() : "—"}</div>
         </div>
         {profile.approvedAt && (
           <div className="p-2 bg-muted/50 rounded">
             <span className="text-muted-foreground">Approved</span>
-            <div className="font-medium">{new Date(profile.approvedAt).toLocaleString()}</div>
+            <div className="font-medium">{new Date(String(profile.approvedAt)).toLocaleString()}</div>
           </div>
         )}
         {profile.activatedAt && (
           <div className="p-2 bg-muted/50 rounded">
             <span className="text-muted-foreground">Activated</span>
-            <div className="font-medium">{new Date(profile.activatedAt).toLocaleString()}</div>
+            <div className="font-medium">{new Date(String(profile.activatedAt)).toLocaleString()}</div>
           </div>
         )}
       </div>
@@ -437,37 +446,72 @@ function PricingSettingsEditor({
       </SettingsSection>
 
       <SettingsSection title={`Machine Profiles (${settings.machineProfiles.length})`}>
+        <p className="text-[10px] text-muted-foreground mb-2">Each machine defines a laser cutter's physical bed size and hourly rate. These are used in estimate calculations.</p>
         {settings.machineProfiles.map((mp, idx) => (
-          <div key={mp.id} className="p-2 bg-muted/30 rounded mb-2">
-            <div className="text-xs font-medium mb-1">{mp.name} {mp.isDefault ? "(Default)" : ""}</div>
-            <div className="grid grid-cols-3 gap-2">
+          <div key={mp.id} className="p-3 bg-muted/30 rounded mb-2 border">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={mp.name}
+                  onChange={e => update(`machineProfiles.${idx}.name`, e.target.value)}
+                  className="h-7 text-xs font-medium w-48"
+                  data-testid={`input-machine-name-${idx}`}
+                />
+                {mp.isDefault && <Badge variant="outline" className="text-[9px]">Default</Badge>}
+              </div>
+              {mp.isDefault && <span className="text-[10px] text-muted-foreground">Used for estimates</span>}
+            </div>
+            <div className="grid grid-cols-5 gap-2">
               {numField("Hourly Rate", `machineProfiles.${idx}.hourlyMachineRate`, mp.hourlyMachineRate, "$/hr")}
               {numField("Bed Length", `machineProfiles.${idx}.bedLengthMm`, mp.bedLengthMm, "mm")}
               {numField("Bed Width", `machineProfiles.${idx}.bedWidthMm`, mp.bedWidthMm, "mm")}
+              {numField("Usable Length", `machineProfiles.${idx}.usableLengthMm`, mp.usableLengthMm || 0, "mm")}
+              {numField("Usable Width", `machineProfiles.${idx}.usableWidthMm`, mp.usableWidthMm || 0, "mm")}
             </div>
           </div>
         ))}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-1"
+          onClick={() => {
+            const copy = JSON.parse(JSON.stringify(settings));
+            copy.machineProfiles.push({
+              id: `machine-${Date.now()}`,
+              name: `New Machine ${copy.machineProfiles.length + 1}`,
+              bedLengthMm: 3000, bedWidthMm: 1500,
+              usableLengthMm: 2900, usableWidthMm: 1400,
+              hourlyMachineRate: 0, isDefault: false, isActive: true,
+              maxThicknessByMaterialFamily: {},
+            });
+            onChange(copy);
+          }}
+          data-testid="button-add-machine"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add Machine Profile
+        </Button>
       </SettingsSection>
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
-        <div className="max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-muted-foreground mb-2">Defines cut speed, pierce time, and <strong>assist gas type</strong> for each material/thickness combination. The gas type here determines which gas source cost is used during pricing.</p>
+        <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-xs">
-            <thead>
+            <thead className="sticky top-0 bg-background">
               <tr className="border-b">
-                <th className="text-left p-1">Material</th>
-                <th className="text-left p-1">Thickness</th>
-                <th className="text-left p-1">Cut Speed</th>
-                <th className="text-left p-1">Pierce Time</th>
-                <th className="text-left p-1">Gas</th>
-                <th className="text-left p-1">Gas L/min</th>
+                <th className="text-left p-1.5 font-medium">Material Family</th>
+                <th className="text-left p-1.5 font-medium">Thickness</th>
+                <th className="text-left p-1.5 font-medium">Cut Speed (mm/min)</th>
+                <th className="text-left p-1.5 font-medium">Pierce (sec)</th>
+                <th className="text-left p-1.5 font-medium">Assist Gas Type</th>
+                <th className="text-left p-1.5 font-medium">Gas (L/min)</th>
               </tr>
             </thead>
             <tbody>
               {settings.processRateTables.map((entry, idx) => (
-                <tr key={idx} className="border-b border-muted">
-                  <td className="p-1">{entry.materialFamily}</td>
-                  <td className="p-1">{entry.thickness}mm</td>
-                  <td className="p-1">
+                <tr key={idx} className="border-b border-muted hover:bg-muted/30">
+                  <td className="p-1.5">{entry.materialFamily}</td>
+                  <td className="p-1.5">{entry.thickness}mm</td>
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       step="any"
@@ -476,7 +520,7 @@ function PricingSettingsEditor({
                       className="h-6 text-xs w-20"
                     />
                   </td>
-                  <td className="p-1">
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       step="any"
@@ -485,8 +529,10 @@ function PricingSettingsEditor({
                       className="h-6 text-xs w-16"
                     />
                   </td>
-                  <td className="p-1">{entry.assistGasType}</td>
-                  <td className="p-1">{entry.gasConsumptionLPerMin}</td>
+                  <td className="p-1.5">
+                    <Badge variant="outline" className="text-[10px]">{entry.assistGasType}</Badge>
+                  </td>
+                  <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
                 </tr>
               ))}
             </tbody>
@@ -640,7 +686,7 @@ function AuditTrail({ entries }: { entries: LLPricingAuditLog[] }) {
             <div>
               <span className="font-medium">{entry.actorDisplayName}</span>
               <span className="text-muted-foreground ml-1">{entry.summary}</span>
-              <div className="text-muted-foreground mt-0.5">{new Date(entry.createdAt).toLocaleString()}</div>
+              <div className="text-muted-foreground mt-0.5">{entry.createdAt ? new Date(String(entry.createdAt)).toLocaleString() : ""}</div>
             </div>
           </div>
         ))}
