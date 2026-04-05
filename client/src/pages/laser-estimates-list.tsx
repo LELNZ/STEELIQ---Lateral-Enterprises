@@ -67,11 +67,16 @@ export default function LaserEstimatesList() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between border-b px-4 py-3 bg-background" data-testid="laser-estimates-header">
-        <div>
-          <h1 className="text-lg font-semibold" data-testid="text-page-title">LL – Laser Estimates</h1>
-          <p className="text-xs text-muted-foreground">Lateral Laser — Estimate workspace</p>
+    <div className="flex flex-col h-full bg-background">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0" data-testid="laser-estimates-header">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <FileText className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold tracking-tight" data-testid="text-page-title">LL – Laser Estimates</h1>
+            <p className="text-[11px] text-muted-foreground leading-tight">Lateral Laser — Estimate workspace</p>
+          </div>
         </div>
         <Button
           size="sm"
@@ -81,9 +86,9 @@ export default function LaserEstimatesList() {
           <Plus className="h-4 w-4 mr-1" />
           New Estimate
         </Button>
-      </div>
+      </header>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
         {estimates.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="empty-state-laser-estimates">
             <FileText className="h-12 w-12 text-muted-foreground/40 mb-3" />

@@ -495,7 +495,7 @@ export default function Users() {
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
 
       {showRoleGuide && (
         <div className="rounded-lg border bg-muted/20 p-4 space-y-3">

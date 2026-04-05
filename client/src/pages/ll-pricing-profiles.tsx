@@ -28,7 +28,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle,
+  Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle, Shield,
   ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info,
 } from "lucide-react";
 import type {
@@ -81,21 +81,24 @@ export default function LLPricingProfiles({ embedded }: { embedded?: boolean } =
   return (
     <div className={embedded ? "flex flex-col" : "flex flex-col h-full"} data-testid="ll-pricing-profiles-page">
       {!embedded && (
-        <div className="flex items-center justify-between border-b px-4 py-3 bg-background">
+        <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} data-testid="button-back-settings">
               <ArrowLeft className="h-4 w-4" />
             </Button>
+            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+              <Shield className="w-4 h-4 text-primary-foreground" />
+            </div>
             <div>
-              <h1 className="text-lg font-semibold" data-testid="text-page-title">LL Pricing Profiles</h1>
-              <p className="text-xs text-muted-foreground">Pricing governance for Lateral Laser</p>
+              <h1 className="text-base font-semibold tracking-tight" data-testid="text-page-title">LL Pricing Profiles</h1>
+              <p className="text-[11px] text-muted-foreground leading-tight">Pricing governance for Lateral Laser</p>
             </div>
           </div>
           <Button size="sm" onClick={() => { setDuplicateSourceId(null); setCreateDialogOpen(true); }} data-testid="button-new-profile">
             <Plus className="h-4 w-4 mr-1" />
             New Profile
           </Button>
-        </div>
+        </header>
       )}
       {embedded && (
         <div className="flex items-center justify-between pb-3">
@@ -622,8 +625,13 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
         </SettingsSection>
       )}
 
-      {settings.processRateTables && settings.processRateTables.length > 0 && (
-        <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
+      <SettingsSection title={`Process Rate Tables (${settings.processRateTables?.length ?? 0} entries)`}>
+        {!settings.processRateTables || settings.processRateTables.length === 0 ? (
+          <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400" data-testid="empty-process-rates-warning">
+            <p className="font-medium">No process rate entries defined</p>
+            <p className="mt-0.5 text-[10px]">This profile cannot produce accurate cut-time or gas-consumption estimates without process rate data. Edit the profile to add material/thickness entries.</p>
+          </div>
+        ) : (
           <div className="max-h-48 overflow-y-auto">
             <table className="w-full text-xs">
               <thead>
@@ -632,7 +640,7 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
                   <th className="text-left p-1">Thickness</th>
                   <th className="text-left p-1">Cut Speed (mm/min)</th>
                   <th className="text-left p-1">Pierce (sec)</th>
-                  <th className="text-left p-1">Gas</th>
+                  <th className="text-left p-1">Assist Gas</th>
                   <th className="text-left p-1">Gas (L/min)</th>
                 </tr>
               </thead>
@@ -643,15 +651,18 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
                     <td className="p-1">{entry.thickness}mm</td>
                     <td className="p-1">{entry.cutSpeedMmPerMin}</td>
                     <td className="p-1">{entry.pierceTimeSec}</td>
-                    <td className="p-1">{entry.assistGasType}</td>
+                    <td className="p-1">
+                      <Badge variant="outline" className="text-[10px]">{entry.assistGasType === 'compressed_air' ? 'Air' : entry.assistGasType}</Badge>
+                    </td>
                     <td className="p-1">{entry.gasConsumptionLPerMin}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </SettingsSection>
-      )}
+        )}
+        <p className="text-[10px] text-muted-foreground mt-1">Assist gas type per row determines which source gas cost is applied during pricing.</p>
+      </SettingsSection>
     </div>
   );
 }

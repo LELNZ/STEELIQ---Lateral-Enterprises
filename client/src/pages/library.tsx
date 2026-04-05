@@ -274,16 +274,16 @@ export default function Library() {
 
   return (
     <div className="flex flex-col h-full bg-background" data-testid="library-page">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4 bg-card shrink-0 flex-wrap">
+      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0 flex-wrap">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary shrink-0">
-            <BookOpen className="w-5 h-5 text-primary-foreground" />
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+            <BookOpen className="w-4 h-4 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight" data-testid="text-library-title">
+            <h1 className="text-base font-semibold tracking-tight" data-testid="text-library-title">
               Item Library
             </h1>
-            <p className="text-xs text-muted-foreground hidden sm:block">Manage reference data for quotes</p>
+            <p className="text-[11px] text-muted-foreground leading-tight hidden sm:block">Manage reference data for quotes</p>
           </div>
         </div>
       </header>

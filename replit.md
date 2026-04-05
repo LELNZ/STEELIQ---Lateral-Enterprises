@@ -29,7 +29,7 @@ Do not make changes to the folder `shared` EXCEPT shared/schema.ts and shared/es
 **CRM Workflow**: Project-centric CRM with automatic customer linking from quotes, project creation linked to quotes, and sub-query endpoints.
 **Invoice Management**: Manages invoices with detailed line items, full CRUD operations, automated status demotion, and Xero integration.
 **Job/Quote/Invoice Linkage**: Resolves job name and variation title through linked records and auto-populates invoice references from the source job name.
-**UI/UX**: Features responsive tables, polished spec row formatting in PDFs, project dashboard guidance, customer relink safeguards, and an enterprise app shell with workflow-domain grouped navigation.
+**UI/UX**: Features responsive tables, polished spec row formatting in PDFs, project dashboard guidance, customer relink safeguards, and an enterprise app shell with workflow-domain grouped navigation. All list pages follow a standardized header contract: `w-8 h-8` icon badge, `text-base` title, `text-[11px]` subtitle (Phase 5D). Settings and Users pages use `max-w-7xl` enterprise width. Junk/test records are flagged with `isDemoRecord` and hidden from non-privileged users. LL pricing profile viewer shows explicit empty-state warning when process rate tables are empty, with assist gas type badges and clarification notes.
 
 ## External Dependencies
 - **PostgreSQL**: Primary relational database.
