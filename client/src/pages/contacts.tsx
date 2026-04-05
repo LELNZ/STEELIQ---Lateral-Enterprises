@@ -1,5 +1,5 @@
 import { useState, useDeferredValue } from "react";
-import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact } from "@shared/schema";
@@ -179,7 +179,6 @@ function ContactForm({
 
 export default function Contacts() {
   const { toast } = useToast();
-  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const deferredSearch = useDeferredValue(search);
@@ -210,12 +209,11 @@ export default function Contacts() {
   const searchParams = new URLSearchParams();
   if (deferredSearch.trim()) searchParams.set("q", deferredSearch.trim());
   if (deferredCategory !== "all") searchParams.set("category", deferredCategory);
-  if (canToggleDemo && showDemo) searchParams.set("showDemo", "true");
   const queryString = searchParams.toString();
 
   const { data: contacts = [], isLoading } = useQuery<CustomerContact[]>({
-    queryKey: ["/api/contacts", deferredSearch.trim(), deferredCategory, showDemo],
-    queryFn: () => fetch(`/api/contacts${queryString ? `?${queryString}` : ""}`, { credentials: "include" }).then((r) => r.json()),
+    queryKey: ["/api/contacts", deferredSearch.trim(), deferredCategory],
+    queryFn: () => fetch(`/api/contacts${queryString ? `?${queryString}` : ""}`).then((r) => r.json()),
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -304,7 +302,6 @@ export default function Contacts() {
         titleTestId="text-contacts-heading"
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input

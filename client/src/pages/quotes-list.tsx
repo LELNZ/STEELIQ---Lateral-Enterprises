@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { type Quote } from "@shared/schema";
@@ -78,14 +78,8 @@ function isArchived(q: EnrichedQuote): boolean {
 }
 
 export default function QuotesList() {
-  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const { data: quotes, isLoading } = useQuery<EnrichedQuote[]>({
-    queryKey: ["/api/quotes", { showDemo }],
-    queryFn: async () => {
-      const res = await fetch(`/api/quotes${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load quotes");
-      return res.json();
-    },
+    queryKey: ["/api/quotes"],
   });
   const isMobile = useIsMobile();
   const { user } = useAuth();
@@ -237,7 +231,7 @@ export default function QuotesList() {
         title="Quotes"
         subtitle="All formal quotes across divisions"
         titleTestId="text-quotes-heading"
-        actions={canToggleDemo ? <DemoToggle showDemo={showDemo} onToggle={toggleDemo} /> : undefined}
+        actions={undefined}
       />
       <WorklistBody className="space-y-4">
 

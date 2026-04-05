@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { Link } from "wouter";
 import type { Project, Customer, Quote, OpJob, Invoice } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
@@ -19,22 +19,16 @@ type ProjectWithSummary = Project & {
 };
 
 export default function ProjectsList() {
-  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("active");
 
   const { data: rawProjects = [], isLoading: loadingProjects } = useQuery<Project[]>({
-    queryKey: ["/api/projects", { showDemo }],
-    queryFn: async () => {
-      const res = await fetch(`/api/projects${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load projects");
-      return res.json();
-    },
+    queryKey: ["/api/projects"],
   });
   const { data: archivedProjects = [], isLoading: loadingArchived } = useQuery<Project[]>({
-    queryKey: ["/api/projects", "archived", { showDemo }],
+    queryKey: ["/api/projects", "archived"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects?scope=archived${queryParam ? `&${queryParam}` : ""}`, { credentials: "include" });
+      const res = await fetch("/api/projects?scope=archived", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch archived projects");
       return res.json();
     },
@@ -97,7 +91,6 @@ export default function ProjectsList() {
         subtitle="Contract-level projects linked to customers and quotes"
         actions={
           <div className="flex items-center gap-2">
-            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
             <div className="relative hidden sm:block">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input

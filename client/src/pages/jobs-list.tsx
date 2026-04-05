@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
@@ -83,7 +83,6 @@ export default function JobsList() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
-  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const [cascadeDialog, setCascadeDialog] = useState<CascadeDialogState>({ type: "none" });
   const [activeTab, setActiveTab] = useState("active");
 
@@ -106,18 +105,13 @@ export default function JobsList() {
   });
 
   const { data: activeJobs = [], isLoading: loadingActive } = useQuery<JobWithCount[]>({
-    queryKey: ["/api/jobs", { showDemo }],
-    queryFn: async () => {
-      const res = await fetch(`/api/jobs${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load estimates");
-      return res.json();
-    },
+    queryKey: ["/api/jobs"],
   });
 
   const { data: archivedJobs = [], isLoading: loadingArchived } = useQuery<JobWithCount[]>({
-    queryKey: ["/api/jobs", { scope: "archived", showDemo }],
+    queryKey: ["/api/jobs", "archived"],
     queryFn: async () => {
-      const res = await fetch(`/api/jobs?scope=archived${queryParam ? `&${queryParam}` : ""}`, { credentials: "include" });
+      const res = await fetch("/api/jobs?scope=archived", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load archived estimates");
       return res.json();
     },
@@ -218,14 +212,11 @@ export default function JobsList() {
         badge={<Badge variant="outline" className="text-xs" data-testid="badge-division-lj">LJ</Badge>}
         titleTestId="text-app-title"
         actions={
-          <>
-            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
-            <Link href={routes.jobNew()}>
-              <Button size="sm" data-testid="button-new-job">
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> New Estimate
-              </Button>
-            </Link>
-          </>
+          <Link href={routes.jobNew()}>
+            <Button size="sm" data-testid="button-new-job">
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> New Estimate
+            </Button>
+          </Link>
         }
       />
       <WorklistBody>

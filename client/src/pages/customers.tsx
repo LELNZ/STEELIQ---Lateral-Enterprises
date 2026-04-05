@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact, Project } from "@shared/schema";
 import { CONTACT_CATEGORIES } from "@shared/schema";
@@ -654,18 +654,12 @@ function CustomerRow({ customer }: { customer: Customer }) {
 
 export default function Customers() {
   const { toast } = useToast();
-  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const [showCreate, setShowCreate] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", notes: "" });
 
   const { data: customers = [], isLoading } = useQuery<Customer[]>({
-    queryKey: ["/api/customers", { showDemo }],
-    queryFn: async () => {
-      const res = await fetch(`/api/customers${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load customers");
-      return res.json();
-    },
+    queryKey: ["/api/customers"],
   });
 
   const createMutation = useMutation({
@@ -691,7 +685,6 @@ export default function Customers() {
         titleTestId="text-customers-heading"
         actions={
           <div className="flex items-center gap-2">
-            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input

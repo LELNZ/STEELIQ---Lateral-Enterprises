@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Invoice } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
@@ -255,15 +255,8 @@ export default function InvoicesPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
-  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
-
   const { data: invoices = [], isLoading } = useQuery<EnrichedInvoice[]>({
-    queryKey: ["/api/invoices", { showDemo }],
-    queryFn: async () => {
-      const res = await fetch(`/api/invoices${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load invoices");
-      return res.json();
-    },
+    queryKey: ["/api/invoices"],
   });
 
   const demoFlagMutation = useMutation({
@@ -437,18 +430,15 @@ export default function InvoicesPage() {
         subtitle="All invoices across projects and quotes"
         badge={!isLoading ? <span className="text-xs text-muted-foreground">({invoices.length})</span> : undefined}
         actions={
-          <div className="flex items-center gap-2">
-            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                className="pl-8 h-8 text-sm w-56"
-                placeholder="Search invoices…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                data-testid="input-invoices-search"
-              />
-            </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              className="pl-8 h-8 text-sm w-56"
+              placeholder="Search invoices…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="input-invoices-search"
+            />
           </div>
         }
       />

@@ -341,10 +341,6 @@ export async function registerRoutes(
       let allJobs = scope === "archived"
         ? await storage.getArchivedJobs()
         : await storage.getAllJobs();
-      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
-      if (!showDemo) {
-        allJobs = allJobs.filter(j => !j.isDemoRecord);
-      }
       const jobIds = allJobs.map(j => j.id);
       let quotesByJob: Record<string, { id: string; number: string; status: string; revisionCount: number }[]> = {};
       if (jobIds.length > 0) {
@@ -2281,11 +2277,6 @@ export async function registerRoutes(
       let filtered = isUserAllDivision(req)
         ? enriched
         : enriched.filter(q => userCanAccessDivision(req, q.divisionId || null));
-      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
-      if (!showDemo) {
-        filtered = filtered.filter(q => !q.isDemoRecord);
-      }
-
       const jobIds = Array.from(new Set(filtered.map(q => q.sourceJobId).filter(Boolean))) as string[];
       const jobNameMap: Record<string, string> = {};
       for (const jid of jobIds) {
@@ -3710,11 +3701,7 @@ export async function registerRoutes(
   // ─── Customer Routes ─────────────────────────────────────────────────────
   app.get("/api/customers", async (req, res) => {
     try {
-      let all = await storage.getAllCustomers();
-      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
-      if (!showDemo) {
-        all = all.filter(c => !c.isDemoRecord);
-      }
+      const all = await storage.getAllCustomers();
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3770,11 +3757,7 @@ export async function registerRoutes(
       const customerId = req.query.customerId as string | undefined;
       const category = req.query.category as string | undefined;
       const search = req.query.q as string | undefined;
-      let all = await storage.listContacts({ customerId, category, search });
-      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
-      if (!showDemo) {
-        all = all.filter(c => !c.isDemoRecord);
-      }
+      const all = await storage.listContacts({ customerId, category, search });
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3785,7 +3768,6 @@ export async function registerRoutes(
     try {
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Not found" });
-      if (contact.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
       return res.json(contact);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3867,13 +3849,9 @@ export async function registerRoutes(
   app.get("/api/projects", async (req, res) => {
     try {
       const scope = req.query.scope as string | undefined;
-      let all = scope === "archived"
+      const all = scope === "archived"
         ? await storage.getArchivedProjects()
         : await storage.getAllProjects();
-      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
-      if (!showDemo) {
-        all = all.filter(p => !p.isDemoRecord);
-      }
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -4109,11 +4087,7 @@ export async function registerRoutes(
   app.get("/api/invoices", async (req, res) => {
     try {
       const all = await storage.getAllInvoicesEnriched();
-      let filtered = isUserAllDivision(req) ? all : all.filter(i => userCanAccessDivision(req, i.divisionCode || null));
-      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
-      if (!showDemo) {
-        filtered = filtered.filter(i => !i.isDemoRecord);
-      }
+      const filtered = isUserAllDivision(req) ? all : all.filter(i => userCanAccessDivision(req, i.divisionCode || null));
       return res.json(filtered);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -5249,19 +5223,15 @@ export async function registerRoutes(
   // ─── Op Jobs Routes ────────────────────────────────────────────────────────
   app.get("/api/op-jobs", async (req, res) => {
     try {
-      const privileged = isPrivilegedUser(req);
       const allDiv = isUserAllDivision(req);
       const scope = req.query.scope as string | undefined;
-      const showDemo = privileged && req.query.showDemo === "true";
       if (scope === "archived") {
         let all = await storage.getArchivedOpJobs();
         if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
-        if (!showDemo) all = all.filter(j => !j.isDemoRecord);
         return res.json(all);
       }
       let all = await storage.getAllOpJobs();
       if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
-      if (!showDemo) all = all.filter(j => !j.isDemoRecord);
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
