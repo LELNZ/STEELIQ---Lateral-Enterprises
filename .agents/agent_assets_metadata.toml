@@ -120,3 +120,9 @@ id = "bj467-xY6aukTNlwJcKIL"
 uri = "file://reports/phase-5c-forensic-report.md"
 type = "text"
 title = "Phase 5C — Enterprise Forensic Report"
+
+[[outputs]]
+id = "JkgfOAAufWzme0O-D7gsx"
+uri = "file://reports/phase-5d-forensic-report.md"
+type = "text"
+title = "Phase 5D Forensic Report"
