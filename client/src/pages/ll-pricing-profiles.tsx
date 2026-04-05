@@ -37,6 +37,7 @@ import type {
   LLPricingSettings,
   LLMachineProfile,
   LLProcessRateEntry,
+  LLProcessRateSource,
   DivisionSettings,
 } from "@shared/schema";
 import { useLocation, Link } from "wouter";
@@ -507,6 +508,7 @@ function PricingSettingsEditor({
                 <th className="text-left p-1.5 font-medium">Pierce (sec)</th>
                 <th className="text-left p-1.5 font-medium">Assist Gas Type</th>
                 <th className="text-left p-1.5 font-medium">Gas (L/min)</th>
+                <th className="text-left p-1.5 font-medium">Source</th>
               </tr>
             </thead>
             <tbody>
@@ -536,6 +538,7 @@ function PricingSettingsEditor({
                     <Badge variant="outline" className="text-[10px]">{entry.assistGasType}</Badge>
                   </td>
                   <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
+                  <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
                 </tr>
               ))}
             </tbody>
@@ -642,6 +645,7 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
                   <th className="text-left p-1">Pierce (sec)</th>
                   <th className="text-left p-1">Assist Gas</th>
                   <th className="text-left p-1">Gas (L/min)</th>
+                  <th className="text-left p-1">Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -655,6 +659,7 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
                       <Badge variant="outline" className="text-[10px]">{entry.assistGasType === 'compressed_air' ? 'Air' : entry.assistGasType}</Badge>
                     </td>
                     <td className="p-1">{entry.gasConsumptionLPerMin}</td>
+                    <td className="p-1"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -664,6 +669,28 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
         <p className="text-[10px] text-muted-foreground mt-1">Assist gas type per row determines which source gas cost is applied during pricing.</p>
       </SettingsSection>
     </div>
+  );
+}
+
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+  architecture_default: { label: "Default", color: "text-orange-600 bg-orange-100 dark:text-orange-400 dark:bg-orange-950/40" },
+  bodor_spec: { label: "Bodor Spec", color: "text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-950/40" },
+  empirical_test: { label: "Tested", color: "text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-950/40" },
+  operator_input: { label: "Operator", color: "text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-950/40" },
+  manual_override: { label: "Override", color: "text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-950/40" },
+};
+
+function ProvenanceBadge({ source, note }: { source?: string; note?: string }) {
+  const info = source ? SOURCE_LABELS[source] : undefined;
+  if (!info) return <span className="text-[9px] text-muted-foreground">—</span>;
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${info.color}`}
+      title={note || ""}
+      data-testid="badge-provenance"
+    >
+      {info.label}
+    </span>
   );
 }
 

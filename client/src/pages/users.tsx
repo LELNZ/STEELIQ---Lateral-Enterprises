@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { type User } from "@shared/schema";
 import { useAuth } from "@/lib/auth-context";
@@ -473,28 +474,24 @@ export default function Users() {
   const hasBootstrapAdmin = users.some(u => u.username === "admin" && u.mustChangePassword === false);
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <UsersIcon className="w-4 h-4 text-primary-foreground" />
+    <PageShell>
+      <PageHeader
+        icon={<UsersIcon className="w-4 h-4 text-primary-foreground" />}
+        title="User Management"
+        subtitle="Team access and permissions across all divisions"
+        titleTestId="heading-users"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowRoleGuide(!showRoleGuide)} data-testid="button-role-guide">
+              <Info className="h-4 w-4 mr-1" /> Role Guide
+            </Button>
+            <Button size="sm" onClick={() => setShowCreate(true)} data-testid="button-create-user">
+              <Plus className="h-4 w-4 mr-1.5" /> Add User
+            </Button>
           </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight" data-testid="heading-users">User Management</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight">Team access and permissions across all divisions</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowRoleGuide(!showRoleGuide)} data-testid="button-role-guide">
-            <Info className="h-4 w-4 mr-1" /> Role Guide
-          </Button>
-          <Button size="sm" onClick={() => setShowCreate(true)} data-testid="button-create-user">
-            <Plus className="h-4 w-4 mr-1.5" /> Add User
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        }
+      />
+      <WorklistBody>
       <div className="max-w-7xl mx-auto space-y-6">
 
       {showRoleGuide && (
@@ -625,7 +622,7 @@ export default function Users() {
       </div>
 
       </div>
-      </div>
+      </WorklistBody>
 
 
       <CreateUserDialog open={showCreate} onOpenChange={setShowCreate} onCreated={(info) => setOnboardingInfo(info)} />
@@ -634,6 +631,6 @@ export default function Users() {
       {onboardingInfo && (
         <OnboardingDialog info={onboardingInfo} open={!!onboardingInfo} onOpenChange={(v) => !v && setOnboardingInfo(null)} />
       )}
-    </div>
+    </PageShell>
   );
 }

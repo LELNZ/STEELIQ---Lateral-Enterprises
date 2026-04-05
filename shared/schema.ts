@@ -1030,6 +1030,8 @@ export interface LLMachineProfile {
   isActive: boolean;
 }
 
+export type LLProcessRateSource = "architecture_default" | "bodor_spec" | "empirical_test" | "operator_input" | "manual_override";
+
 export interface LLProcessRateEntry {
   materialFamily: string;
   thickness: number;
@@ -1037,6 +1039,8 @@ export interface LLProcessRateEntry {
   pierceTimeSec: number;
   assistGasType: "O2" | "N2" | "compressed_air";
   gasConsumptionLPerMin: number;
+  dataSource?: LLProcessRateSource;
+  dataSourceNote?: string;
 }
 
 export interface LLGasCosts {

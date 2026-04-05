@@ -251,6 +251,7 @@ export async function registerRoutes(
   await correctLibraryScoping();
   await seedLlSheetMaterials();
   await seedLlPricingSettings();
+  await backfillProcessRateProvenance();
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
@@ -340,7 +341,8 @@ export async function registerRoutes(
       let allJobs = scope === "archived"
         ? await storage.getArchivedJobs()
         : await storage.getAllJobs();
-      if (!isPrivilegedUser(req)) {
+      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
+      if (!showDemo) {
         allJobs = allJobs.filter(j => !j.isDemoRecord);
       }
       const jobIds = allJobs.map(j => j.id);
@@ -2279,7 +2281,8 @@ export async function registerRoutes(
       let filtered = isUserAllDivision(req)
         ? enriched
         : enriched.filter(q => userCanAccessDivision(req, q.divisionId || null));
-      if (!isPrivilegedUser(req)) {
+      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
+      if (!showDemo) {
         filtered = filtered.filter(q => !q.isDemoRecord);
       }
 
@@ -3708,7 +3711,8 @@ export async function registerRoutes(
   app.get("/api/customers", async (req, res) => {
     try {
       let all = await storage.getAllCustomers();
-      if (!isPrivilegedUser(req)) {
+      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
+      if (!showDemo) {
         all = all.filter(c => !c.isDemoRecord);
       }
       return res.json(all);
@@ -3767,7 +3771,8 @@ export async function registerRoutes(
       const category = req.query.category as string | undefined;
       const search = req.query.q as string | undefined;
       let all = await storage.listContacts({ customerId, category, search });
-      if (!isPrivilegedUser(req)) {
+      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
+      if (!showDemo) {
         all = all.filter(c => !c.isDemoRecord);
       }
       return res.json(all);
@@ -3865,7 +3870,8 @@ export async function registerRoutes(
       let all = scope === "archived"
         ? await storage.getArchivedProjects()
         : await storage.getAllProjects();
-      if (!isPrivilegedUser(req)) {
+      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
+      if (!showDemo) {
         all = all.filter(p => !p.isDemoRecord);
       }
       return res.json(all);
@@ -4104,7 +4110,8 @@ export async function registerRoutes(
     try {
       const all = await storage.getAllInvoicesEnriched();
       let filtered = isUserAllDivision(req) ? all : all.filter(i => userCanAccessDivision(req, i.divisionCode || null));
-      if (!isPrivilegedUser(req)) {
+      const showDemo = isPrivilegedUser(req) && req.query.showDemo === "true";
+      if (!showDemo) {
         filtered = filtered.filter(i => !i.isDemoRecord);
       }
       return res.json(filtered);
@@ -5245,15 +5252,16 @@ export async function registerRoutes(
       const privileged = isPrivilegedUser(req);
       const allDiv = isUserAllDivision(req);
       const scope = req.query.scope as string | undefined;
+      const showDemo = privileged && req.query.showDemo === "true";
       if (scope === "archived") {
         let all = await storage.getArchivedOpJobs();
         if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
-        if (!privileged) all = all.filter(j => !j.isDemoRecord);
+        if (!showDemo) all = all.filter(j => !j.isDemoRecord);
         return res.json(all);
       }
       let all = await storage.getAllOpJobs();
       if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
-      if (!privileged) all = all.filter(j => !j.isDemoRecord);
+      if (!showDemo) all = all.filter(j => !j.isDemoRecord);
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -7295,11 +7303,23 @@ async function seedLlPricingSettings() {
   if (!existing) return;
   const existingSettings = (existing as any).llPricingSettingsJson;
   if (existingSettings) {
+    let dirty = false;
     if (existingSettings.commercialPolicy && existingSettings.commercialPolicy.defaultRatePerMmCut == null) {
       existingSettings.commercialPolicy.defaultRatePerMmCut = 0.012;
       existingSettings.commercialPolicy.defaultRatePerPierce = 0.50;
-      await storage.upsertDivisionSettings("LL", { llPricingSettingsJson: existingSettings });
+      dirty = true;
       console.log("[ll-pricing-settings] Migrated: added defaultRatePerMmCut/defaultRatePerPierce to commercial policy");
+    }
+    if (existingSettings.processRateTables?.length && !existingSettings.processRateTables[0].dataSource) {
+      for (const entry of existingSettings.processRateTables) {
+        entry.dataSource = "architecture_default";
+        entry.dataSourceNote = "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data";
+      }
+      dirty = true;
+      console.log(`[ll-pricing-settings] Migrated: stamped dataSource provenance on ${existingSettings.processRateTables.length} division-settings process rates`);
+    }
+    if (dirty) {
+      await storage.upsertDivisionSettings("LL", { llPricingSettingsJson: existingSettings });
     }
     return;
   }
@@ -7327,50 +7347,50 @@ async function seedLlPricingSettings() {
       }
     ],
     processRateTables: [
-      { materialFamily: "Mild Steel", thickness: 1.6, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Mild Steel", thickness: 2.0, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Mild Steel", thickness: 3.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Mild Steel", thickness: 4.5, cutSpeedMmPerMin: 4200, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Mild Steel", thickness: 6.0, cutSpeedMmPerMin: 3200, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20 },
-      { materialFamily: "Mild Steel", thickness: 8.0, cutSpeedMmPerMin: 2400, pierceTimeSec: 1.0, assistGasType: "O2", gasConsumptionLPerMin: 22 },
-      { materialFamily: "Mild Steel", thickness: 10.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.2, assistGasType: "O2", gasConsumptionLPerMin: 25 },
-      { materialFamily: "Mild Steel", thickness: 12.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 1.5, assistGasType: "O2", gasConsumptionLPerMin: 28 },
-      { materialFamily: "Mild Steel", thickness: 16.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.0, assistGasType: "O2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Mild Steel", thickness: 20.0, cutSpeedMmPerMin: 600, pierceTimeSec: 3.0, assistGasType: "O2", gasConsumptionLPerMin: 35 },
+      { materialFamily: "Mild Steel", thickness: 1.6, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 2.0, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 3.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 4.5, cutSpeedMmPerMin: 4200, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 6.0, cutSpeedMmPerMin: 3200, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 8.0, cutSpeedMmPerMin: 2400, pierceTimeSec: 1.0, assistGasType: "O2", gasConsumptionLPerMin: 22, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 10.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.2, assistGasType: "O2", gasConsumptionLPerMin: 25, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 12.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 1.5, assistGasType: "O2", gasConsumptionLPerMin: 28, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 16.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.0, assistGasType: "O2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 20.0, cutSpeedMmPerMin: 600, pierceTimeSec: 3.0, assistGasType: "O2", gasConsumptionLPerMin: 35, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Stainless Steel", thickness: 1.2, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Stainless Steel", thickness: 1.5, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Stainless Steel", thickness: 2.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35 },
-      { materialFamily: "Stainless Steel", thickness: 3.0, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 40 },
-      { materialFamily: "Stainless Steel", thickness: 4.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 45 },
-      { materialFamily: "Stainless Steel", thickness: 6.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 50 },
-      { materialFamily: "Stainless Steel", thickness: 8.0, cutSpeedMmPerMin: 1100, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 55 },
-      { materialFamily: "Stainless Steel", thickness: 10.0, cutSpeedMmPerMin: 700, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 60 },
+      { materialFamily: "Stainless Steel", thickness: 1.2, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 1.5, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 2.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 3.0, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 40, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 4.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 45, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 6.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 50, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 8.0, cutSpeedMmPerMin: 1100, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 55, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 10.0, cutSpeedMmPerMin: 700, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 60, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Aluminium", thickness: 1.6, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25 },
-      { materialFamily: "Aluminium", thickness: 2.0, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25 },
-      { materialFamily: "Aluminium", thickness: 3.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Aluminium", thickness: 4.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35 },
-      { materialFamily: "Aluminium", thickness: 5.0, cutSpeedMmPerMin: 3500, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 38 },
-      { materialFamily: "Aluminium", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 40 },
-      { materialFamily: "Aluminium", thickness: 8.0, cutSpeedMmPerMin: 2000, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 45 },
-      { materialFamily: "Aluminium", thickness: 10.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 50 },
-      { materialFamily: "Aluminium", thickness: 12.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 55 },
-      { materialFamily: "Aluminium", thickness: 16.0, cutSpeedMmPerMin: 500, pierceTimeSec: 3.0, assistGasType: "N2", gasConsumptionLPerMin: 60 },
+      { materialFamily: "Aluminium", thickness: 1.6, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 2.0, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 3.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 4.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 5.0, cutSpeedMmPerMin: 3500, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 38, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 40, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 8.0, cutSpeedMmPerMin: 2000, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 45, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 10.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 50, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 12.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 55, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 16.0, cutSpeedMmPerMin: 500, pierceTimeSec: 3.0, assistGasType: "N2", gasConsumptionLPerMin: 60, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Galvanised", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Galvanised", thickness: 1.6, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Galvanised", thickness: 2.0, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Galvanised", thickness: 3.0, cutSpeedMmPerMin: 5000, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Galvanised", thickness: 4.5, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Galvanised", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20 },
+      { materialFamily: "Galvanised", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 1.6, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 2.0, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 3.0, cutSpeedMmPerMin: 5000, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 4.5, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Zincanneal", thickness: 0.55, cutSpeedMmPerMin: 10000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10 },
-      { materialFamily: "Zincanneal", thickness: 0.8, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10 },
-      { materialFamily: "Zincanneal", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12 },
-      { materialFamily: "Zincanneal", thickness: 1.6, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12 },
-      { materialFamily: "Zincanneal", thickness: 2.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Zincanneal", thickness: 3.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
+      { materialFamily: "Zincanneal", thickness: 0.55, cutSpeedMmPerMin: 10000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 0.8, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 1.6, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 2.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 3.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
     ],
     gasCosts: {
       o2PricePerLitre: 0.003,
@@ -7445,4 +7465,27 @@ async function seedLlSheetMaterials() {
     });
   }
   console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
+}
+
+async function backfillProcessRateProvenance() {
+  try {
+    const profiles = await storage.getAllLLPricingProfiles();
+    let updated = 0;
+    for (const profile of profiles) {
+      const settings = profile.llPricingSettingsJson;
+      if (!settings?.processRateTables?.length) continue;
+      if (settings.processRateTables[0].dataSource) continue;
+      for (const entry of settings.processRateTables) {
+        entry.dataSource = "architecture_default";
+        entry.dataSourceNote = "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data";
+      }
+      await storage.updateLLPricingProfile(profile.id, { llPricingSettingsJson: settings });
+      updated++;
+    }
+    if (updated > 0) {
+      console.log(`[ll-provenance] Backfilled dataSource provenance on ${updated} pricing profile(s)`);
+    }
+  } catch (err) {
+    console.error("[ll-provenance] Backfill error:", err);
+  }
 }

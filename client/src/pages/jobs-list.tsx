@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
@@ -82,6 +83,7 @@ export default function JobsList() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const [cascadeDialog, setCascadeDialog] = useState<CascadeDialogState>({ type: "none" });
   const [activeTab, setActiveTab] = useState("active");
 
@@ -104,13 +106,18 @@ export default function JobsList() {
   });
 
   const { data: activeJobs = [], isLoading: loadingActive } = useQuery<JobWithCount[]>({
-    queryKey: ["/api/jobs"],
+    queryKey: ["/api/jobs", { showDemo }],
+    queryFn: async () => {
+      const res = await fetch(`/api/jobs${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load estimates");
+      return res.json();
+    },
   });
 
   const { data: archivedJobs = [], isLoading: loadingArchived } = useQuery<JobWithCount[]>({
-    queryKey: ["/api/jobs", { scope: "archived" }],
+    queryKey: ["/api/jobs", { scope: "archived", showDemo }],
     queryFn: async () => {
-      const res = await fetch("/api/jobs?scope=archived", { credentials: "include" });
+      const res = await fetch(`/api/jobs?scope=archived${queryParam ? `&${queryParam}` : ""}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load archived estimates");
       return res.json();
     },
@@ -203,28 +210,25 @@ export default function JobsList() {
   const isLoading = activeTab === "archived" ? loadingArchived : loadingActive;
 
   return (
-    <div className="flex flex-col h-full bg-background" data-testid="jobs-list">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <LayoutGrid className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">Estimates</h1>
-              <Badge variant="outline" className="text-xs" data-testid="badge-division-lj">LJ</Badge>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">Joinery quotation estimates</p>
-          </div>
-        </div>
-        <Link href={routes.jobNew()}>
-          <Button size="sm" data-testid="button-new-job">
-            <Plus className="w-3.5 h-3.5 mr-1.5" /> New Estimate
-          </Button>
-        </Link>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+    <PageShell testId="jobs-list">
+      <PageHeader
+        icon={<LayoutGrid className="w-4 h-4 text-primary-foreground" />}
+        title="Estimates"
+        subtitle="Joinery quotation estimates"
+        badge={<Badge variant="outline" className="text-xs" data-testid="badge-division-lj">LJ</Badge>}
+        titleTestId="text-app-title"
+        actions={
+          <>
+            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
+            <Link href={routes.jobNew()}>
+              <Button size="sm" data-testid="button-new-job">
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> New Estimate
+              </Button>
+            </Link>
+          </>
+        }
+      />
+      <WorklistBody>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4" data-testid="tabs-estimates">
             <TabsTrigger value="active" data-testid="tab-estimates-active">
@@ -476,7 +480,7 @@ export default function JobsList() {
           {jobs.length} estimate{jobs.length !== 1 ? "s" : ""}
           {activeTab === "archived" ? " archived" : " active"}
         </p>
-      </div>
+      </WorklistBody>
 
       <Dialog
         open={cascadeDialog.type === "delete"}
@@ -585,6 +589,6 @@ export default function JobsList() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

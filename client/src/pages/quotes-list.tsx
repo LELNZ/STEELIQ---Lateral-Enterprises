@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { type Quote } from "@shared/schema";
@@ -77,7 +78,15 @@ function isArchived(q: EnrichedQuote): boolean {
 }
 
 export default function QuotesList() {
-  const { data: quotes, isLoading } = useQuery<EnrichedQuote[]>({ queryKey: ["/api/quotes"] });
+  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
+  const { data: quotes, isLoading } = useQuery<EnrichedQuote[]>({
+    queryKey: ["/api/quotes", { showDemo }],
+    queryFn: async () => {
+      const res = await fetch(`/api/quotes${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load quotes");
+      return res.json();
+    },
+  });
   const isMobile = useIsMobile();
   const { user } = useAuth();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
@@ -222,18 +231,15 @@ export default function QuotesList() {
   const noQuotesAtAll = !quotes || quotes.length === 0;
 
   return (
-    <div className="flex flex-col h-full bg-background" data-testid="quotes-list-page">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center gap-3 bg-card shrink-0">
-        <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-          <BookOpen className="w-4 h-4 text-primary-foreground" />
-        </div>
-        <div>
-          <h1 className="text-base font-semibold tracking-tight" data-testid="text-quotes-heading">Quotes</h1>
-          <p className="text-[11px] text-muted-foreground leading-tight">All formal quotes across divisions</p>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-4">
+    <PageShell testId="quotes-list-page">
+      <PageHeader
+        icon={<BookOpen className="w-4 h-4 text-primary-foreground" />}
+        title="Quotes"
+        subtitle="All formal quotes across divisions"
+        titleTestId="text-quotes-heading"
+        actions={canToggleDemo ? <DemoToggle showDemo={showDemo} onToggle={toggleDemo} /> : undefined}
+      />
+      <WorklistBody className="space-y-4">
 
       {noQuotesAtAll ? (
         <div className="text-center py-16 text-muted-foreground" data-testid="text-no-quotes-empty">
@@ -413,8 +419,8 @@ export default function QuotesList() {
           ))}
         </Tabs>
       )}
-      </div>
-    </div>
+      </WorklistBody>
+    </PageShell>
   );
 }
 

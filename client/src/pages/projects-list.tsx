@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
 import { Link } from "wouter";
 import type { Project, Customer, Quote, OpJob, Invoice } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
@@ -18,16 +19,22 @@ type ProjectWithSummary = Project & {
 };
 
 export default function ProjectsList() {
+  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("active");
 
   const { data: rawProjects = [], isLoading: loadingProjects } = useQuery<Project[]>({
-    queryKey: ["/api/projects"],
+    queryKey: ["/api/projects", { showDemo }],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load projects");
+      return res.json();
+    },
   });
   const { data: archivedProjects = [], isLoading: loadingArchived } = useQuery<Project[]>({
-    queryKey: ["/api/projects", "archived"],
+    queryKey: ["/api/projects", "archived", { showDemo }],
     queryFn: async () => {
-      const res = await fetch("/api/projects?scope=archived", { credentials: "include" });
+      const res = await fetch(`/api/projects?scope=archived${queryParam ? `&${queryParam}` : ""}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch archived projects");
       return res.json();
     },
@@ -83,38 +90,34 @@ export default function ProjectsList() {
   const fmt = (n: number) => n.toLocaleString("en-NZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <FolderOpen className="w-4 h-4 text-primary-foreground" />
+    <PageShell>
+      <PageHeader
+        icon={<FolderOpen className="w-4 h-4 text-primary-foreground" />}
+        title="Projects"
+        subtitle="Contract-level projects linked to customers and quotes"
+        actions={
+          <div className="flex items-center gap-2">
+            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
+            <div className="relative hidden sm:block">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-8 text-sm w-56"
+                placeholder="Search projects…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                data-testid="input-search-projects"
+              />
+            </div>
+            <Link href="/customers">
+              <Button variant="outline" size="sm" data-testid="button-manage-customers">
+                <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                Customers
+              </Button>
+            </Link>
           </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight">Projects</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight">Contract-level projects linked to customers and quotes</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative hidden sm:block">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              className="pl-8 h-8 text-sm w-56"
-              placeholder="Search projects…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="input-search-projects"
-            />
-          </div>
-          <Link href="/customers">
-            <Button variant="outline" size="sm" data-testid="button-manage-customers">
-              <Building2 className="h-3.5 w-3.5 mr-1.5" />
-              Customers
-            </Button>
-          </Link>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        }
+      />
+      <WorklistBody>
       <div className="sm:hidden relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -244,7 +247,7 @@ export default function ProjectsList() {
       <p className="text-xs text-muted-foreground text-right mt-2">
         {filtered.length} {filtered.length === 1 ? "project" : "projects"}{search ? ` matching "${search}"` : ""}{tab === "archived" ? " (archived)" : ""}
       </p>
-      </div>
-    </div>
+      </WorklistBody>
+    </PageShell>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useDeferredValue } from "react";
+import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact } from "@shared/schema";
@@ -178,6 +179,7 @@ function ContactForm({
 
 export default function Contacts() {
   const { toast } = useToast();
+  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const deferredSearch = useDeferredValue(search);
@@ -208,11 +210,12 @@ export default function Contacts() {
   const searchParams = new URLSearchParams();
   if (deferredSearch.trim()) searchParams.set("q", deferredSearch.trim());
   if (deferredCategory !== "all") searchParams.set("category", deferredCategory);
+  if (canToggleDemo && showDemo) searchParams.set("showDemo", "true");
   const queryString = searchParams.toString();
 
   const { data: contacts = [], isLoading } = useQuery<CustomerContact[]>({
-    queryKey: ["/api/contacts", deferredSearch.trim(), deferredCategory],
-    queryFn: () => fetch(`/api/contacts${queryString ? `?${queryString}` : ""}`).then((r) => r.json()),
+    queryKey: ["/api/contacts", deferredSearch.trim(), deferredCategory, showDemo],
+    queryFn: () => fetch(`/api/contacts${queryString ? `?${queryString}` : ""}`, { credentials: "include" }).then((r) => r.json()),
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -293,45 +296,43 @@ export default function Contacts() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <User className="w-4 h-4 text-primary-foreground" />
+    <PageShell>
+      <PageHeader
+        icon={<User className="w-4 h-4 text-primary-foreground" />}
+        title="Contacts"
+        subtitle="People linked to customers across the business."
+        titleTestId="text-contacts-heading"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-8 text-sm w-52"
+                placeholder="Search name, email, phone…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                data-testid="input-contacts-search"
+              />
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-contacts-category-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {CONTACT_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={() => { setCreateForm({ ...emptyForm }); setCreateOpen(true); }} data-testid="button-new-contact">
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> New Contact
+            </Button>
           </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight" data-testid="text-contacts-heading">Contacts</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight">People linked to customers across the business.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              className="pl-8 h-8 text-sm w-52"
-              placeholder="Search name, email, phone…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="input-contacts-search"
-            />
-          </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-contacts-category-filter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {CONTACT_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" onClick={() => { setCreateForm({ ...emptyForm }); setCreateOpen(true); }} data-testid="button-new-contact">
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> New Contact
-          </Button>
-        </div>
-      </header>
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        }
+      />
+      <WorklistBody>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -479,7 +480,7 @@ export default function Contacts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
-    </div>
+      </WorklistBody>
+    </PageShell>
   );
 }

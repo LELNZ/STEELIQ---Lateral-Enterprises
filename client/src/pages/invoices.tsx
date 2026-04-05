@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { PageShell, PageHeader, WorklistBody, useDemoToggle, DemoToggle } from "@/components/ui/platform-layout";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Invoice } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
@@ -254,9 +255,15 @@ export default function InvoicesPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const { isAdmin: canToggleDemo, showDemo, queryParam, toggle: toggleDemo } = useDemoToggle();
 
   const { data: invoices = [], isLoading } = useQuery<EnrichedInvoice[]>({
-    queryKey: ["/api/invoices"],
+    queryKey: ["/api/invoices", { showDemo }],
+    queryFn: async () => {
+      const res = await fetch(`/api/invoices${queryParam ? `?${queryParam}` : ""}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load invoices");
+      return res.json();
+    },
   });
 
   const demoFlagMutation = useMutation({
@@ -423,32 +430,29 @@ export default function InvoicesPage() {
   );
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <ReceiptText className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold tracking-tight">Invoices</h1>
-              {!isLoading && <span className="text-xs text-muted-foreground">({invoices.length})</span>}
+    <PageShell>
+      <PageHeader
+        icon={<ReceiptText className="w-4 h-4 text-primary-foreground" />}
+        title="Invoices"
+        subtitle="All invoices across projects and quotes"
+        badge={!isLoading ? <span className="text-xs text-muted-foreground">({invoices.length})</span> : undefined}
+        actions={
+          <div className="flex items-center gap-2">
+            {canToggleDemo && <DemoToggle showDemo={showDemo} onToggle={toggleDemo} />}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-8 text-sm w-56"
+                placeholder="Search invoices…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                data-testid="input-invoices-search"
+              />
             </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">All invoices across projects and quotes</p>
           </div>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            className="pl-8 h-8 text-sm w-56"
-            placeholder="Search invoices…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            data-testid="input-invoices-search"
-          />
-        </div>
-      </header>
-      <div className="flex-1 overflow-auto p-4 sm:p-6">{tableContent}</div>
-    </div>
+        }
+      />
+      <WorklistBody>{tableContent}</WorklistBody>
+    </PageShell>
   );
 }
