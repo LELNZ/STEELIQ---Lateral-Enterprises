@@ -108,3 +108,9 @@ id = "iBFtZ3WB_t8o0Ac1ufUy7"
 uri = "file://reports/phase-5a-forensic-report.md"
 type = "text"
 title = "Phase 5A — Enterprise Forensic Report"
+
+[[outputs]]
+id = "QEIKXLc7oOGX_3MZCFpmZ"
+uri = "file://reports/phase-5b-forensic-report.md"
+type = "text"
+title = "Phase 5B Forensic Report — LL Source Cost Truth Hardening + Operational Admin UX"
