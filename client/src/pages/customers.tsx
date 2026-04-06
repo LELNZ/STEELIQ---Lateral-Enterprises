@@ -230,7 +230,7 @@ function CustomerRow({ customer }: { customer: Customer }) {
   return (
     <>
       <TableRow
-        className="cursor-pointer hover:bg-muted/50"
+        className="cursor-pointer hover:bg-muted/30"
         onClick={() => setExpanded((v) => !v)}
         data-testid={`row-customer-${customer.id}`}
       >

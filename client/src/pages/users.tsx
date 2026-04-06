@@ -517,7 +517,7 @@ export default function Users() {
         </Alert>
       )}
 
-      <div className="rounded-lg border bg-card overflow-x-auto">
+      <div className="rounded-lg border bg-card overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">

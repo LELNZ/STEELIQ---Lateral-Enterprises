@@ -97,50 +97,50 @@ export default function LaserEstimatesList() {
             </Button>
           </div>
         ) : (
-          <div className="rounded-md border">
+          <div className="rounded-lg border bg-card overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[140px]">Estimate #</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead className="w-[80px] text-center">Items</TableHead>
-                  <TableHead className="w-[100px]">Status</TableHead>
-                  <TableHead className="w-[110px]">Created</TableHead>
-                  <TableHead className="w-[110px]">Updated</TableHead>
-                  <TableHead className="w-[140px] hidden md:table-cell">Linked Quote</TableHead>
-                  <TableHead className="w-[100px] text-right">Actions</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[140px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Estimate #</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</TableHead>
+                  <TableHead className="w-[80px] text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Items</TableHead>
+                  <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                  <TableHead className="w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Created</TableHead>
+                  <TableHead className="w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Updated</TableHead>
+                  <TableHead className="w-[140px] hidden md:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Linked Quote</TableHead>
+                  <TableHead className="w-[100px] text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {estimates.map((est) => {
                   const style = STATUS_STYLES[est.status] || STATUS_STYLES.draft;
                   return (
-                    <TableRow key={est.id} data-testid={`row-laser-estimate-${est.id}`}>
-                      <TableCell>
+                    <TableRow key={est.id} className="hover:bg-muted/30" data-testid={`row-laser-estimate-${est.id}`}>
+                      <TableCell className="py-2.5">
                         <Link href={`/laser-estimate/${est.id}`}>
                           <span className="text-sm font-medium text-primary hover:underline cursor-pointer" data-testid={`link-estimate-${est.id}`}>
                             {est.estimateNumber}
                           </span>
                         </Link>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <span className="text-sm" data-testid={`text-customer-${est.id}`}>{est.customerName}</span>
                       </TableCell>
-                      <TableCell className="text-center">
+                      <TableCell className="text-center py-2.5">
                         <span className="text-sm text-muted-foreground" data-testid={`text-items-${est.id}`}>{itemCount(est)}</span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${style.className}`} data-testid={`badge-status-${est.id}`}>
                           {style.label}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <span className="text-xs text-muted-foreground">{formatDate(est.createdAt)}</span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <span className="text-xs text-muted-foreground">{formatDate(est.updatedAt)}</span>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden md:table-cell py-2.5">
                         {est.linkedQuote ? (
                           <Link href={`/quote/${est.linkedQuote.id}`}>
                             <span className="text-xs font-medium text-primary hover:underline cursor-pointer" data-testid={`link-quote-${est.id}`}>
@@ -151,7 +151,7 @@ export default function LaserEstimatesList() {
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right py-2.5">
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
