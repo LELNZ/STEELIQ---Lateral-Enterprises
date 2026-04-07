@@ -3,6 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical } from "lucide-react";
 import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
@@ -293,6 +294,8 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   const estimateId = estimateMode ? params.id : undefined;
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
 
   const [items, setItems] = useState<LaserQuoteItem[]>([]);
   const [customerName, setCustomerName] = useState("");
@@ -411,6 +414,20 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   const { data: estimateData, isLoading: estimateLoading } = useQuery<any>({
     queryKey: ["/api/laser-estimates", estimateId],
     enabled: isEstimateEdit,
+  });
+
+  const demoToggleMutation = useMutation({
+    mutationFn: async (isDemoRecord: boolean) => {
+      const res = await apiRequest("PATCH", `/api/laser-estimates/${estimateId}/demo-flag`, { isDemoRecord });
+      if (!res.ok) throw new Error("Failed to update demo flag");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -829,6 +846,49 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
             )}
           </div>
         )}
+
+        {isEstimateEdit && estimateData?.isDemoRecord && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 flex items-center justify-between" data-testid="banner-demo-record">
+            <div className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-sm text-amber-800 dark:text-amber-300">
+                This estimate is marked as <strong>demo/test data</strong> and may be archived or deleted through governance.
+              </span>
+            </div>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300"
+                onClick={() => demoToggleMutation.mutate(false)}
+                disabled={demoToggleMutation.isPending}
+                title="Remove demo flag"
+                data-testid="button-remove-demo-flag"
+              >
+                <FlaskConical className="h-3.5 w-3.5 mr-1" />
+                Remove Demo Flag
+              </Button>
+            )}
+          </div>
+        )}
+
+        {isEstimateEdit && isAdmin && !estimateData?.isDemoRecord && estimateData && (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => demoToggleMutation.mutate(true)}
+              disabled={demoToggleMutation.isPending}
+              title="Flag as demo"
+              data-testid="button-flag-as-demo"
+            >
+              <FlaskConical className="h-3.5 w-3.5 mr-1" />
+              Flag as Demo
+            </Button>
+          </div>
+        )}
+
         <Card data-testid="card-quote-details">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Quote Details</CardTitle>

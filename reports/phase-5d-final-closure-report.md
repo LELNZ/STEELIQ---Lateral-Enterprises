@@ -250,4 +250,77 @@ This is consistent across all entity types including the newly added laser estim
 
 ---
 
-*End of Phase 5D Final Corrective Closure Report*
+---
+
+## 14. Phase 5D Corrective Pass Addendum (Session 2)
+
+Six remaining gaps were addressed in this corrective session:
+
+### T001: LL Estimate Detail — Demo Banner + Toggle
+
+| Item | Status |
+|------|--------|
+| Amber demo banner on `laser-quote-builder.tsx` (estimate edit mode) | YES |
+| FlaskConical icon + "This is a demo/test data record" text | YES |
+| "Remove Demo Flag" button (admin only, data-testid="button-remove-demo-flag") | YES |
+| "Flag as Demo" ghost button (admin only, data-testid="button-flag-as-demo") | YES |
+| `demoToggleMutation` PATCH to `/api/laser-estimates/:id/demo-flag` | YES |
+| Banner persists across page refresh | YES |
+
+### T002: Governance Panel Labels for LL Estimates
+
+| Item | Status |
+|------|--------|
+| `settings.tsx` label resolution checks `estimateNumber` first | YES |
+| Sub-label checks `customerName` first | YES |
+| Applied to both `actionableItems.map` and `archivedItems.map` | YES |
+| LL estimates show "LE-XXXX" format labels in governance panel | YES |
+
+### T003: Governance Activity Record Text
+
+| Item | Status |
+|------|--------|
+| Audit history Record column checks `metadata.estimateNumber`, `number`, `jobNumber`, `name` | YES |
+| PATCH demo-flag endpoints store business-readable identifiers in metadata | YES |
+| Project demo-flag: stores `name` | YES |
+| Invoice demo-flag: stores `number` | YES |
+| Customer demo-flag: stores `name` | YES |
+| Contact demo-flag: stores full name | YES |
+| Audit history API enriches old records by looking up entity labels from DB | YES |
+| Entity type normalization handles all variants (camelCase/snake_case) | YES |
+
+### T004: LL Quote — Carry customerId from Laser Estimate
+
+| Item | Status |
+|------|--------|
+| `else if (sourceLaserEstimateId)` block added to quote creation route | YES |
+| Carries `customer_id` from laser estimate to new quote | YES |
+| Falls back to `customer_name` matching/creation when no `customer_id` | YES |
+| Back-links `customer_id` to laser estimate when resolved from name | YES |
+| Enables "Create Project" button on accepted LL quotes | YES |
+
+### T005: Verification + Forensic Report
+
+| Item | Status |
+|------|--------|
+| E2E tests pass for all 6 corrective items | YES |
+| Code review completed with entity-type normalization fix applied | YES |
+| Forensic report updated | YES |
+
+---
+
+## 15. Updated Final Sign-Off Checklist
+
+| # | Verification Point | Status |
+|---|-------------------|--------|
+| 1–18 | Original Phase 5D items (see Section 13) | ALL YES |
+| 19 | LL estimate detail demo banner with toggle | YES |
+| 20 | Governance panel shows readable LL labels | YES |
+| 21 | Governance activity shows readable record text | YES |
+| 22 | LL quote carries customerId from laser estimate | YES |
+| 23 | Audit history API enriches legacy records | YES |
+| 24 | Entity type normalization (camelCase + snake_case) | YES |
+
+**All 24 verification points: YES**
+
+*End of Phase 5D Final Corrective Closure Report (Updated)*

@@ -2424,10 +2424,10 @@ function GovernanceEntitySection({
           <div className="divide-y">
           {actionableItems.map((item: any) => {
             const id = item.id;
-            const label = item.number || item.jobNumber || item.name || item.title
+            const label = item.estimateNumber || item.number || item.jobNumber || item.name || item.title
               || (item.firstName || item.lastName ? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() : null)
               || id;
-            const sub = item.customer || item.status || "";
+            const sub = item.customerName || item.customer || item.status || "";
             const isArchived = !!item.archivedAt;
             const chain = item._chain;
             const xeroLinked = item._xeroLinked || (chain?.xeroLinkedInvoiceCount > 0) || item._isolation?.xeroLinked;
@@ -2831,10 +2831,10 @@ function GovernanceEntitySection({
               <div className="divide-y opacity-70">
                 {archivedItems.map((item: any) => {
                   const id = item.id;
-                  const label = item.number || item.jobNumber || item.name || item.title
+                  const label = item.estimateNumber || item.number || item.jobNumber || item.name || item.title
                     || (item.firstName || item.lastName ? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim() : null)
                     || id;
-                  const sub = item.customer || item.status || "";
+                  const sub = item.customerName || item.customer || item.status || "";
                   return (
                     <div key={id} className="px-4 py-2.5" data-testid={`governance-row-archived-${entityType}-${id}`}>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -3206,8 +3206,10 @@ function GovernanceSection() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{formatGovernanceEntityType(entry.entityType)}</td>
-                      <td className="px-3 py-2 text-muted-foreground font-mono hidden sm:table-cell truncate max-w-[120px]">
-                        {entry.entityId.slice(0, 8)}…
+                      <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell truncate max-w-[160px]" title={entry.entityId}>
+                        {entry.metadata?.estimateNumber || entry.metadata?.number || entry.metadata?.jobNumber || entry.metadata?.name || (
+                          <span className="font-mono">{entry.entityId.slice(0, 8)}…</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">{entry.actorName}</td>
                       <td className="px-3 py-2 text-muted-foreground whitespace-nowrap" title={entry.createdAt ?? ""}>

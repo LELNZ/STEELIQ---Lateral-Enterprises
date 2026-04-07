@@ -2190,6 +2190,26 @@ export async function registerRoutes(
               }
             }
           }
+        } else if (sourceLaserEstimateId) {
+          const srcEst = await client.query(`SELECT customer_id, customer_name FROM laser_estimates WHERE id = $1`, [sourceLaserEstimateId]);
+          if (srcEst.rows.length > 0) {
+            if (srcEst.rows[0].customer_id) {
+              autoCustomerId = srcEst.rows[0].customer_id;
+            } else if (srcEst.rows[0].customer_name) {
+              const existingCustomers = await storage.getAllCustomers();
+              const nameLower = srcEst.rows[0].customer_name.trim().toLowerCase();
+              const match = existingCustomers.find((c) => c.name.toLowerCase() === nameLower);
+              if (match) {
+                autoCustomerId = match.id;
+              } else {
+                const newCustomer = await storage.createCustomer({
+                  name: srcEst.rows[0].customer_name.trim(),
+                });
+                autoCustomerId = newCustomer.id;
+              }
+              await client.query(`UPDATE laser_estimates SET customer_id = $1 WHERE id = $2`, [autoCustomerId, sourceLaserEstimateId]);
+            }
+          }
         }
 
         let quotePricingProfileId: string | null = null;
@@ -5494,7 +5514,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, number: quote.number },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5517,7 +5537,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, jobNumber: job.jobNumber },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5540,7 +5560,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, name: updated.name },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5563,7 +5583,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, name: updated.name },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5587,7 +5607,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord, xeroInvoiceId: invoice.xeroInvoiceId },
+        metadataJson: { isDemoRecord, number: invoice.number, xeroInvoiceId: invoice.xeroInvoiceId },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5610,7 +5630,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord, xeroContactId: cust.xeroContactId },
+        metadataJson: { isDemoRecord, name: cust.name, xeroContactId: cust.xeroContactId },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5633,7 +5653,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord, customerId: contact.customerId },
+        metadataJson: { isDemoRecord, name: `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim(), customerId: contact.customerId },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5955,15 +5975,62 @@ export async function registerRoutes(
       const userMap: Record<string, string> = {};
       allUsers.forEach(u => { userMap[u.id] = u.displayName || u.username; });
 
-      const enriched = entries.map(entry => ({
-        id: entry.id,
-        entityType: entry.entityType,
-        entityId: entry.entityId,
-        action: entry.action,
-        actorId: entry.performedByUserId ?? null,
-        actorName: entry.performedByUserId ? (userMap[entry.performedByUserId] ?? "Unknown User") : "System",
-        metadata: entry.metadataJson,
-        createdAt: entry.createdAt,
+      const entityLabelCache: Record<string, string | null> = {};
+      async function resolveEntityLabel(entityType: string, entityId: string, metadata: any): Promise<string | null> {
+        if (metadata?.estimateNumber || metadata?.number || metadata?.jobNumber || metadata?.name) {
+          return metadata.estimateNumber || metadata.number || metadata.jobNumber || metadata.name;
+        }
+        const cacheKey = `${entityType}:${entityId}`;
+        if (cacheKey in entityLabelCache) return entityLabelCache[cacheKey];
+        let label: string | null = null;
+        const et = entityType.toLowerCase();
+        try {
+          if (et === "job" || et === "estimate") {
+            const j = await storage.getJob(entityId);
+            if (j) label = j.name || null;
+          } else if (et === "quote") {
+            const q = await storage.getQuote(entityId);
+            if (q) label = q.number || null;
+          } else if (et === "op_job" || et === "opjob") {
+            const oj = await storage.getOpJob(entityId);
+            if (oj) label = (oj as any).jobNumber || null;
+          } else if (et === "project") {
+            const p = await storage.getProject(entityId);
+            if (p) label = p.name || null;
+          } else if (et === "invoice") {
+            const inv = await storage.getInvoice(entityId);
+            if (inv) label = (inv as any).number || null;
+          } else if (et === "customer") {
+            const c = await storage.getCustomer(entityId);
+            if (c) label = c.name || null;
+          } else if (et === "customercontact" || et === "contact") {
+            const cc = await storage.getContact(entityId);
+            if (cc) label = `${cc.firstName ?? ""} ${cc.lastName ?? ""}`.trim() || null;
+          } else if (et === "laser_estimate" || et === "laserestimate") {
+            const le = await storage.getLaserEstimate(entityId);
+            if (le) label = (le as any).estimateNumber || null;
+          }
+        } catch {}
+        entityLabelCache[cacheKey] = label;
+        return label;
+      }
+
+      const enriched = await Promise.all(entries.map(async (entry) => {
+        const resolvedLabel = await resolveEntityLabel(entry.entityType, entry.entityId, entry.metadataJson);
+        const finalMetadata = { ...((entry.metadataJson as any) ?? {}) };
+        if (resolvedLabel && !finalMetadata.estimateNumber && !finalMetadata.number && !finalMetadata.jobNumber && !finalMetadata.name) {
+          finalMetadata.name = resolvedLabel;
+        }
+        return {
+          id: entry.id,
+          entityType: entry.entityType,
+          entityId: entry.entityId,
+          action: entry.action,
+          actorId: entry.performedByUserId ?? null,
+          actorName: entry.performedByUserId ? (userMap[entry.performedByUserId] ?? "Unknown User") : "System",
+          metadata: finalMetadata,
+          createdAt: entry.createdAt,
+        };
       }));
 
       res.json({ entries: enriched });
