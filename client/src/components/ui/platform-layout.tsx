@@ -1,5 +1,4 @@
-import { type ReactNode, useState, useCallback } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { type ReactNode } from "react";
 
 interface PageShellProps {
   children: ReactNode;
@@ -78,33 +77,6 @@ interface SettingsFormGridProps {
   children: ReactNode;
   columns?: 1 | 2 | 3;
   className?: string;
-}
-
-export function useDemoToggle() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const [showDemo, setShowDemo] = useState(false);
-  const queryParam = isAdmin && showDemo ? "showDemo=true" : "";
-  const toggle = useCallback(() => setShowDemo(v => !v), []);
-  return { isAdmin, showDemo, queryParam, toggle };
-}
-
-export function DemoToggle({ showDemo, onToggle }: { showDemo: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium border transition-colors ${
-        showDemo
-          ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700"
-          : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-      }`}
-      data-testid="toggle-show-demo"
-    >
-      <span className={`inline-block w-2 h-2 rounded-full ${showDemo ? "bg-amber-500" : "bg-muted-foreground/30"}`} />
-      {showDemo ? "Demo visible" : "Demo hidden"}
-    </button>
-  );
 }
 
 export function SettingsFormGrid({ children, columns = 2, className }: SettingsFormGridProps) {

@@ -5334,6 +5334,7 @@ export async function registerRoutes(
         invoices: { archived: 0, skipped: 0, skipReasons: [] as string[] },
         customers: { archived: 0, skipped: 0, skipReasons: [] as string[] },
         contacts: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        laserEstimates: { archived: 0, skipped: 0, skipReasons: [] as string[] },
       };
 
       const demoEstimates = await storage.getDemoJobs();
@@ -5415,6 +5416,14 @@ export async function registerRoutes(
         results.customers.archived++;
       }
 
+      const demoLaserEsts = await storage.getDemoLaserEstimates();
+      for (const le of demoLaserEsts) {
+        if (!le.archivedAt) {
+          await storage.archiveLaserEstimate(le.id);
+          results.laserEstimates.archived++;
+        }
+      }
+
       const demoContacts = await storage.getDemoContacts();
       for (const ct of demoContacts) {
         if (ct.archivedAt) continue;
@@ -5445,7 +5454,7 @@ export async function registerRoutes(
       }
 
       const totalArchived = results.estimates.archived + results.quotes.archived + results.opJobs.archived +
-        results.projects.archived + results.invoices.archived + results.customers.archived + results.contacts.archived;
+        results.projects.archived + results.invoices.archived + results.customers.archived + results.contacts.archived + results.laserEstimates.archived;
       const totalSkipped = Object.values(results).reduce((sum, r) => sum + r.skipped, 0);
 
       await storage.createAuditLog({
@@ -5632,6 +5641,29 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/laser-estimates/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const estimate = await storage.getLaserEstimate(req.params.id);
+      if (!estimate) return res.status(404).json({ error: "Laser estimate not found" });
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateLaserEstimateDemoFlag(req.params.id, isDemoRecord);
+      await storage.createAuditLog({
+        entityType: "laserEstimate",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord, estimateNumber: estimate.estimateNumber },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   // ─── Governance: Summary of all flagged records ────────────────────────────
   app.get("/api/admin/governance/summary", async (req, res) => {
     try {
@@ -5639,7 +5671,7 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices, demoCustomers, demoContacts] = await Promise.all([
+      const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices, demoCustomers, demoContacts, demoLaserEstimates] = await Promise.all([
         storage.getDemoQuotes(),
         storage.getDemoOpJobs(),
         storage.getDemoJobs(),
@@ -5647,6 +5679,7 @@ export async function registerRoutes(
         storage.getDemoInvoices(),
         storage.getDemoCustomers(),
         storage.getDemoContacts(),
+        storage.getDemoLaserEstimates(),
       ]);
 
       // For each flagged record, resolve linked chain context
@@ -5887,6 +5920,7 @@ export async function registerRoutes(
         })),
         customers: customersWithIsolation,
         contacts: contactsWithIsolation,
+        laserEstimates: demoLaserEstimates,
         counts: {
           estimates: demoJobs.length,
           quotes: demoQuotes.length,
@@ -5895,6 +5929,7 @@ export async function registerRoutes(
           invoices: demoInvoices.length,
           customers: demoCustomers.length,
           contacts: demoContacts.length,
+          laserEstimates: demoLaserEstimates.length,
         },
       });
     } catch (e: any) {
@@ -5945,7 +5980,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
       const { entityType, entityId } = z.object({
-        entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice", "customer", "contact"]),
+        entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice", "customer", "contact", "laserEstimate"]),
         entityId: z.string(),
       }).parse(req.body);
 
@@ -6046,6 +6081,12 @@ export async function registerRoutes(
           }
         }
         await storage.archiveContact(entityId);
+        result = "archived";
+      } else if (entityType === "laserEstimate") {
+        const le = await storage.getLaserEstimate(entityId);
+        if (!le) return res.status(404).json({ error: "Laser estimate not found" });
+        if (!le.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        await storage.archiveLaserEstimate(entityId);
         result = "archived";
       } else {
         return res.status(400).json({ error: "Unknown entity type" });
@@ -6299,6 +6340,17 @@ export async function registerRoutes(
           }
         }
         await storage.deleteContact(entityId);
+      } else if (entityType === "laserEstimate") {
+        const le = await storage.getLaserEstimate(entityId);
+        if (!le) return res.status(404).json({ error: "Laser estimate not found" });
+        if (!le.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        if ((le as any).status === "converted") {
+          return res.status(400).json({
+            error: "This laser estimate has been converted to a quote and cannot be deleted. Archive it instead, or delete the linked quote first.",
+            code: "CONVERTED_ESTIMATE",
+          });
+        }
+        await storage.deleteLaserEstimate(entityId);
       } else {
         return res.status(400).json({ error: "Unknown entity type" });
       }

@@ -334,7 +334,7 @@ export default function JobsList() {
                                 onClick={() => demoFlagMutation.mutate({ id: job.id, isDemoRecord: !job.isDemoRecord })}
                                 disabled={demoFlagMutation.isPending}
                                 data-testid={`button-toggle-demo-estimate-${job.id}`}
-                                title={job.isDemoRecord ? "Remove demo/test flag" : "Flag as demo/test"}
+                                title={job.isDemoRecord ? "Remove demo flag" : "Flag as demo"}
                               >
                                 <FlaskConical className="w-3 h-3" />
                               </Button>

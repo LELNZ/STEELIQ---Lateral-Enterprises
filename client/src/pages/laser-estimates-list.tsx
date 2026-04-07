@@ -11,8 +11,9 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, FolderOpen, Loader2, FileText, ArrowRightCircle, Eye } from "lucide-react";
+import { Plus, Trash2, FolderOpen, Loader2, FileText, ArrowRightCircle, Eye, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import type { LaserEstimate } from "@shared/schema";
 
 type EnrichedLaserEstimate = LaserEstimate & {
@@ -28,11 +29,26 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
 
 export default function LaserEstimatesList() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
   const [, navigate] = useLocation();
   const [deleteTarget, setDeleteTarget] = useState<EnrichedLaserEstimate | null>(null);
 
   const { data: estimates = [], isLoading } = useQuery<EnrichedLaserEstimate[]>({
     queryKey: ["/api/laser-estimates"],
+  });
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async ({ id, isDemoRecord }: { id: string; isDemoRecord: boolean }) => {
+      await apiRequest("PATCH", `/api/laser-estimates/${id}/demo-flag`, { isDemoRecord });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -117,11 +133,18 @@ export default function LaserEstimatesList() {
                   return (
                     <TableRow key={est.id} className="hover:bg-muted/30" data-testid={`row-laser-estimate-${est.id}`}>
                       <TableCell className="py-2.5">
-                        <Link href={`/laser-estimate/${est.id}`}>
-                          <span className="text-sm font-medium text-primary hover:underline cursor-pointer" data-testid={`link-estimate-${est.id}`}>
-                            {est.estimateNumber}
-                          </span>
-                        </Link>
+                        <div className="flex items-center gap-1.5">
+                          <Link href={`/laser-estimate/${est.id}`}>
+                            <span className="text-sm font-medium text-primary hover:underline cursor-pointer" data-testid={`link-estimate-${est.id}`}>
+                              {est.estimateNumber}
+                            </span>
+                          </Link>
+                          {isAdmin && est.isDemoRecord && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0" data-testid={`badge-demo-laser-${est.id}`}>
+                              <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="py-2.5">
                         <span className="text-sm" data-testid={`text-customer-${est.id}`}>{est.customerName}</span>
@@ -153,6 +176,18 @@ export default function LaserEstimatesList() {
                       </TableCell>
                       <TableCell className="text-right py-2.5">
                         <div className="flex items-center justify-end gap-1">
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-7 w-7 ${est.isDemoRecord ? "text-amber-600" : "text-muted-foreground"}`}
+                              onClick={() => demoFlagMutation.mutate({ id: est.id, isDemoRecord: !est.isDemoRecord })}
+                              title={est.isDemoRecord ? "Remove demo flag" : "Flag as demo"}
+                              data-testid={`button-toggle-demo-${est.id}`}
+                            >
+                              <FlaskConical className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"

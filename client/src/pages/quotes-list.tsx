@@ -499,7 +499,7 @@ function DesktopQuoteTable({ quotes, isAdmin, demoFlagMutation }: { quotes: Enri
                       onClick={() => demoFlagMutation.mutate({ id: q.id, isDemoRecord: !q.isDemoRecord })}
                       disabled={demoFlagMutation.isPending}
                       data-testid={`button-toggle-demo-quote-${q.id}`}
-                      title={q.isDemoRecord ? "Remove demo/test flag" : "Flag as demo/test"}
+                      title={q.isDemoRecord ? "Remove demo flag" : "Flag as demo"}
                     >
                       <FlaskConical className="w-3 h-3" />
                     </Button>

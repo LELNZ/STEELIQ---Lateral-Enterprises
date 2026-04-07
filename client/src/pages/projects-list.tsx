@@ -81,7 +81,8 @@ export default function ProjectsList() {
     return (
       p.name.toLowerCase().includes(s) ||
       p.customer?.name.toLowerCase().includes(s) ||
-      p.address?.toLowerCase().includes(s)
+      p.address?.toLowerCase().includes(s) ||
+      p.projectNumber?.toLowerCase().includes(s)
     );
   });
 
@@ -173,12 +174,11 @@ export default function ProjectsList() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((p, idx) => {
-                      const projDisplayNum = `PRJ-${String(filtered.length - idx).padStart(4, "0")}`;
+                    {filtered.map((p) => {
                       return (
                       <TableRow key={p.id} className="hover:bg-muted/30" data-testid={`row-project-${p.id}`}>
                         <TableCell className="py-2.5">
-                          <span className="text-xs font-mono text-muted-foreground" data-testid={`text-project-number-${p.id}`}>{projDisplayNum}</span>
+                          <span className="text-xs font-mono text-muted-foreground" data-testid={`text-project-number-${p.id}`}>{p.projectNumber ?? "—"}</span>
                         </TableCell>
                         <TableCell className="py-2.5">
                           <div className="flex items-center gap-1.5 flex-wrap">

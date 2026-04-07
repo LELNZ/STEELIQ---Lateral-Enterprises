@@ -99,10 +99,10 @@ function CustomerRow({ customer }: { customer: Customer }) {
     onSuccess: (_data, isDemoRecord) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
       toast({
-        title: isDemoRecord ? "Flagged as test/demo" : "Demo flag removed",
+        title: "Demo flag updated",
         description: isDemoRecord
-          ? `"${customer.name}" is now marked as test/demo data and visible in governance review.`
-          : `"${customer.name}" is no longer marked as test/demo data.`,
+          ? `"${customer.name}" is now marked as demo data and visible in governance review.`
+          : `"${customer.name}" is no longer marked as demo data.`,
       });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -234,10 +234,10 @@ function CustomerRow({ customer }: { customer: Customer }) {
         onClick={() => setExpanded((v) => !v)}
         data-testid={`row-customer-${customer.id}`}
       >
-        <TableCell className="w-8 py-3">
+        <TableCell className="w-8 py-2.5">
           {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
         </TableCell>
-        <TableCell className="py-3">
+        <TableCell className="py-2.5">
           <div className="flex items-center gap-2.5">
             <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 select-none">
               {customer.name[0]?.toUpperCase() ?? "?"}
@@ -252,9 +252,9 @@ function CustomerRow({ customer }: { customer: Customer }) {
             </div>
           </div>
         </TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-3">{customer.email ?? "—"}</TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-3">{customer.phone ?? "—"}</TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden lg:table-cell truncate max-w-[180px] py-3">{customer.address ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-2.5">{customer.email ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-2.5">{customer.phone ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden lg:table-cell truncate max-w-[180px] py-2.5">{customer.address ?? "—"}</TableCell>
       </TableRow>
       {expanded && (
         <TableRow>
@@ -362,8 +362,8 @@ function CustomerRow({ customer }: { customer: Customer }) {
                           <span className="font-medium text-amber-900 dark:text-amber-200">Test / Demo Record</span>
                           <p className="text-amber-700 dark:text-amber-400 text-[11px] leading-tight mt-0.5">
                             {(customer as any).isDemoRecord
-                              ? "This customer is flagged as test/demo data and will appear in governance review."
-                              : "Flag this customer as test/demo data to include it in governance review for cleanup."}
+                              ? "This customer is flagged as demo data and will appear in governance review."
+                              : "Flag this customer as demo data to include it in governance review for cleanup."}
                           </p>
                         </div>
                       </div>

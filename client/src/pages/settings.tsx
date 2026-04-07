@@ -2270,7 +2270,7 @@ function EnvironmentInfoSection() {
   );
 }
 
-type GovernanceEntityType = "estimate" | "quote" | "opJob" | "project" | "invoice" | "customer" | "contact";
+type GovernanceEntityType = "estimate" | "quote" | "opJob" | "project" | "invoice" | "customer" | "contact" | "laserEstimate";
 
 function GovernanceEntitySection({
   title,
@@ -2877,14 +2877,16 @@ function formatGovernanceAction(action: string): string {
 
 function formatGovernanceEntityType(entityType: string): string {
   switch (entityType) {
-    case "estimate":  return "Estimate";
-    case "quote":     return "Quote";
-    case "op_job":    return "Op-Job";
-    case "job":       return "Estimate";
-    case "project":   return "Project";
-    case "invoice":   return "Invoice";
-    case "customer":  return "Customer";
-    case "contact":   return "Contact";
+    case "estimate":        return "Estimate (LJ)";
+    case "quote":           return "Quote";
+    case "op_job":          return "Op-Job";
+    case "job":             return "Estimate (LJ)";
+    case "project":         return "Project";
+    case "invoice":         return "Invoice";
+    case "customer":        return "Customer";
+    case "contact":         return "Contact";
+    case "customerContact": return "Contact";
+    case "laserEstimate":   return "Estimate (LL)";
     default: return entityType;
   }
 }
@@ -2950,7 +2952,7 @@ function GovernanceSection() {
     },
   });
 
-  const totalFlagged = summary ? (summary.counts.estimates + summary.counts.quotes + summary.counts.opJobs + summary.counts.projects + summary.counts.invoices + (summary.counts.customers ?? 0) + (summary.counts.contacts ?? 0)) : 0;
+  const totalFlagged = summary ? (summary.counts.estimates + summary.counts.quotes + summary.counts.opJobs + summary.counts.projects + summary.counts.invoices + (summary.counts.customers ?? 0) + (summary.counts.contacts ?? 0) + (summary.counts.laserEstimates ?? 0)) : 0;
 
   return (
     <div className="space-y-4" data-testid="governance-section">
@@ -3001,9 +3003,15 @@ function GovernanceSection() {
           ) : (
             <div className="space-y-2">
               <GovernanceEntitySection
-                title="Estimates"
+                title="Estimates (LJ)"
                 entityType="estimate"
                 items={summary.estimates}
+                onRefresh={() => refetch()}
+              />
+              <GovernanceEntitySection
+                title="Estimates (LL Laser)"
+                entityType="laserEstimate"
+                items={summary.laserEstimates ?? []}
                 onRefresh={() => refetch()}
               />
               <GovernanceEntitySection
@@ -3056,7 +3064,7 @@ function GovernanceSection() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Archive all currently active demo-flagged records across all entity types — estimates, quotes, op-jobs, projects, invoices, customers, and contacts. Records are removed from operational views but preserved historically. Xero-linked invoices are automatically skipped. This action cannot be undone without individually unarchiving records.
+                  Archive all currently active demo-flagged records across all entity types — estimates (LJ & LL), quotes, op-jobs, projects, invoices, customers, and contacts. Records are removed from operational views but preserved historically. Xero-linked invoices are automatically skipped. This action cannot be undone without individually unarchiving records.
                 </p>
                 {!bulkConfirm ? (
                   <Button
@@ -3074,7 +3082,7 @@ function GovernanceSection() {
                     <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                       <div>
-                        <p>This will archive all active demo-flagged records across: estimates, quotes, op-jobs, projects, invoices, customers, and contacts.</p>
+                        <p>This will archive all active demo-flagged records across: estimates (LJ & LL), quotes, op-jobs, projects, invoices, customers, and contacts.</p>
                         <p className="mt-1"><strong>Protected:</strong> Xero-linked invoices will be skipped automatically.</p>
                       </div>
                     </div>

@@ -102,6 +102,7 @@ export type CustomerContact = typeof customerContacts.$inferSelect;
 
 export const projects = pgTable("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectNumber: text("project_number").unique(),
   customerId: varchar("customer_id").notNull(),
   name: text("name").notNull(),
   address: text("address"),
@@ -511,6 +512,7 @@ export const laserEstimates = pgTable("laser_estimates", {
   pricingProfileLabel: text("pricing_profile_label"),
   pricedAt: timestamp("priced_at"),
   archivedAt: timestamp("archived_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

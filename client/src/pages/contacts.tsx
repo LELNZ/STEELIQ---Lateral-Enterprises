@@ -201,7 +201,7 @@ export default function Contacts() {
     },
     onSuccess: (_data, { isDemoRecord }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      toast({ title: isDemoRecord ? "Flagged as test/demo" : "Demo flag removed" });
+      toast({ title: "Demo flag updated" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -361,7 +361,7 @@ export default function Contacts() {
                   .join("") || "?";
                 return (
                 <TableRow key={contact.id} className="hover:bg-muted/30" data-testid={`row-contact-${contact.id}`}>
-                  <TableCell className="py-3">
+                  <TableCell className="py-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 select-none">
                         {initials}
@@ -380,21 +380,21 @@ export default function Contacts() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="py-2.5">
                     <Badge variant={CATEGORY_VARIANTS[contact.category || "other"] ?? "outline"} className="text-xs" data-testid={`badge-contact-category-${contact.id}`}>
                       {CATEGORY_LABELS[contact.category || "other"] ?? contact.category}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm py-3" data-testid={`text-contact-customer-${contact.id}`}>
+                  <TableCell className="text-sm py-2.5" data-testid={`text-contact-customer-${contact.id}`}>
                     <span className="font-medium">{customerMap[contact.customerId] ?? "—"}</span>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-3">
+                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-2.5">
                     {contact.email ?? <span className="text-xs opacity-50">—</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-3">
+                  <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-2.5">
                     {contact.phone ?? contact.mobile ?? <span className="text-xs opacity-50">—</span>}
                   </TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="py-2.5">
                     <div className="flex items-center gap-1">
                       {isOwnerOrAdmin && (
                         <Button
