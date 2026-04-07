@@ -23,7 +23,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle, ChevronDown, ChevronUp, MapPin, ShieldCheck, Percent } from "lucide-react";
+import { ArrowLeftCircle, Archive, Clock, Download, Eye, FileText, History, Loader2, CheckCircle2, ReceiptText, AlertTriangle, Plus, Briefcase, Building2, FolderOpen, Link2, ExternalLink, Send, Mail, Trash2, RotateCcw, XCircle, ChevronDown, ChevronUp, MapPin, ShieldCheck, Percent, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, type ReactNode } from "react";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG, type TotalsDisplayConfig } from "@/lib/quote-document";
@@ -578,7 +578,7 @@ export default function QuoteDetail() {
         <WorkflowProgress quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} />
       )}
 
-      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} quoteLabel={quote.customer ?? quote.number} />
+      <CustomerProjectSection quoteId={quote.id} customerId={quote.customerId} projectId={quote.projectId} quoteStatus={quote.status} sourceJobId={quote.sourceJobId ?? undefined} quoteLabel={quote.customer ?? quote.number} quoteCustomerName={quote.customer || undefined} />
 
       {currentRevisionForDetails && (
         <CollapsibleCard title="Customer-facing Details" defaultOpen={true} data-testid="section-details-quick-edit">
@@ -1027,6 +1027,7 @@ function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string;
   const hasInvoice = invoices.length > 0;
 
   const steps = [
+    { label: "Customer", done: !!customerId, blocked: false },
     { label: "Project", done: hasProject, blocked: !customerId, blockedMsg: "Link a customer first" },
     { label: "Job", done: hasJob, blocked: !hasProject, blockedMsg: "Create project first" },
     { label: "Invoice", done: hasInvoice, blocked: false },
@@ -1080,6 +1081,27 @@ function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string;
         <div data-testid="text-workflow-next-step">
           {nextStep.blocked ? (
             <p className="text-xs text-amber-600 dark:text-amber-400">{nextStep.blockedMsg}</p>
+          ) : nextStep.label === "Customer" ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Next: <strong>Link or create a customer</strong>
+              </p>
+              <Button
+                size="sm"
+                className="h-7 text-xs shrink-0"
+                onClick={() => {
+                  const btn = document.querySelector<HTMLButtonElement>('[data-testid="button-create-customer-cta"], [data-testid="button-link-existing-customer"]');
+                  if (btn) {
+                    btn.scrollIntoView({ behavior: "smooth", block: "center" });
+                    setTimeout(() => btn.focus(), 350);
+                  }
+                }}
+                data-testid="button-workflow-next-action"
+              >
+                <Building2 className="h-3 w-3 mr-1" />
+                Link Customer
+              </Button>
+            </div>
           ) : nextStep.label === "Job" ? (
             <div className="rounded-md border-2 border-blue-400 dark:border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 p-3 space-y-2">
               <div className="flex items-center justify-between gap-3">
@@ -1159,12 +1181,18 @@ function WorkflowProgress({ quoteId, customerId, projectId }: { quoteId: string;
   );
 }
 
-function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, sourceJobId, quoteLabel }: { quoteId: string; customerId?: string | null; projectId?: string | null; quoteStatus?: string; sourceJobId?: string; quoteLabel?: string }) {
+function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, sourceJobId, quoteLabel, quoteCustomerName }: { quoteId: string; customerId?: string | null; projectId?: string | null; quoteStatus?: string; sourceJobId?: string; quoteLabel?: string; quoteCustomerName?: string }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
   const [selCustomer, setSelCustomer] = useState(customerId ?? "__none__");
   const [selProject, setSelProject] = useState(projectId ?? "__none__");
   const [relinkWarningOpen, setRelinkWarningOpen] = useState(false);
+
+  const [createCustomerOpen, setCreateCustomerOpen] = useState(false);
+  const [ccName, setCcName] = useState("");
+  const [ccEmail, setCcEmail] = useState("");
+  const [ccPhone, setCcPhone] = useState("");
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: projects = [] } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
@@ -1250,8 +1278,47 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const createCustomerMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/customers", {
+        name: ccName.trim(),
+        email: ccEmail.trim() || null,
+        phone: ccPhone.trim() || null,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to create customer");
+      }
+      return res.json();
+    },
+    onSuccess: async (newCustomer: Customer) => {
+      const linkRes = await apiRequest("PATCH", `/api/quotes/${quoteId}/link`, {
+        customerId: newCustomer.id,
+        projectId: null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", quoteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      if (!linkRes.ok) {
+        toast({ title: "Customer created but linking failed", description: "The customer was created. Please use 'Link' to select them manually.", variant: "destructive" });
+        setCreateCustomerOpen(false);
+        return;
+      }
+      toast({ title: "Customer created and linked to quote" });
+      setCreateCustomerOpen(false);
+      setEditing(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const openCreateCustomer = () => {
+    setCcName(quoteCustomerName ?? "");
+    setCcEmail("");
+    setCcPhone("");
+    setCreateCustomerOpen(true);
+  };
+
   const openCreateProject = () => {
-    // Prefill priority: (a) source job/site name, (b) quote label/reference, (c) customer name fallback
     const defaultName = sourceJob?.name
       ? sourceJob.name
       : quoteLabel && quoteLabel !== customer?.name
@@ -1310,9 +1377,9 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
                 <p className="text-sm font-medium" data-testid="text-linked-customer">{customer.name}</p>
               ) : (
                 <div>
-                  <p className="text-sm text-muted-foreground italic">Not linked</p>
+                  <p className="text-sm text-muted-foreground italic" data-testid="text-customer-not-linked">Not linked</p>
                   {quoteStatus === "accepted" && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Link a customer to enable Xero invoicing</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Required before creating a project</p>
                   )}
                 </div>
               )}
@@ -1373,6 +1440,41 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
             </div>
           )}
 
+          {quoteStatus === "accepted" && !customerId && (
+            <div className="rounded-lg border-2 border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-950/30 p-4 space-y-2" data-testid="banner-link-customer-cta">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-blue-700 dark:text-blue-400 shrink-0" />
+                <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Next Step: Link or Create Customer</p>
+              </div>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                This quote has been accepted but has no linked customer. Link an existing customer or create a new one to unlock project creation and downstream delivery.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-400 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                  onClick={() => {
+                    setSelCustomer("__none__");
+                    setSelProject("__none__");
+                    setEditing(true);
+                  }}
+                  data-testid="button-link-existing-customer"
+                >
+                  <Link2 className="h-3.5 w-3.5 mr-1.5" /> Link Existing Customer
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={openCreateCustomer}
+                  data-testid="button-create-customer-cta"
+                >
+                  <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Create New Customer
+                </Button>
+              </div>
+            </div>
+          )}
+
           {quoteStatus === "accepted" && !projectId && customerId && (
             <div className="rounded-lg border-2 border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 p-4 space-y-2" data-testid="banner-create-project-cta">
               <div className="flex items-center gap-2">
@@ -1398,13 +1500,18 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Customer</Label>
-              <Select value={selCustomer} onValueChange={(v) => { setSelCustomer(v); setSelProject("__none__"); }}>
-                <SelectTrigger className="h-8 text-sm" data-testid="select-link-customer"><SelectValue placeholder="Select customer" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">— None —</SelectItem>
-                  {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-1.5">
+                <Select value={selCustomer} onValueChange={(v) => { setSelCustomer(v); setSelProject("__none__"); }}>
+                  <SelectTrigger className="h-8 text-sm flex-1" data-testid="select-link-customer"><SelectValue placeholder="Select customer" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None —</SelectItem>
+                    {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" className="h-8 px-2 shrink-0" onClick={openCreateCustomer} title="Create new customer" data-testid="button-create-customer-inline">
+                  <UserPlus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
             <div>
               <Label className="text-xs">Project</Label>
@@ -1510,6 +1617,62 @@ function CustomerProjectSection({ quoteId, customerId, projectId, quoteStatus, s
               data-testid="button-confirm-create-project"
             >
               {createProjectMutation.isPending ? "Creating…" : "Create Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Customer Dialog */}
+      <Dialog open={createCustomerOpen} onOpenChange={setCreateCustomerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4" /> Create Customer
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <Alert>
+              <AlertDescription>
+                A new customer will be created and automatically linked to this quote.
+              </AlertDescription>
+            </Alert>
+            <div>
+              <Label>Customer Name</Label>
+              <Input
+                value={ccName}
+                onChange={(e) => setCcName(e.target.value)}
+                placeholder="e.g. John Smith or Acme Ltd"
+                data-testid="input-create-customer-name"
+              />
+            </div>
+            <div>
+              <Label>Email <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                value={ccEmail}
+                onChange={(e) => setCcEmail(e.target.value)}
+                placeholder="customer@example.com"
+                type="email"
+                data-testid="input-create-customer-email"
+              />
+            </div>
+            <div>
+              <Label>Phone <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                value={ccPhone}
+                onChange={(e) => setCcPhone(e.target.value)}
+                placeholder="021 123 4567"
+                data-testid="input-create-customer-phone"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateCustomerOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => createCustomerMutation.mutate()}
+              disabled={!ccName.trim() || createCustomerMutation.isPending}
+              data-testid="button-confirm-create-customer"
+            >
+              {createCustomerMutation.isPending ? "Creating…" : "Create & Link Customer"}
             </Button>
           </DialogFooter>
         </DialogContent>
