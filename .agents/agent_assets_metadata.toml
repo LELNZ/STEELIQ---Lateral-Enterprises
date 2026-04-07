@@ -138,3 +138,9 @@ id = "CYEv29Dn-9djHbbQS2fY1"
 uri = "file://reports/phase-5d-corrective-rollback-forensic-report.md"
 type = "text"
 title = "Phase 5D Corrective Rollback — Full Forensic Report"
+
+[[outputs]]
+id = "XLY_XlTPMUfI3KvOBnMEQ"
+uri = "file://reports/phase-5d-final-closure-report.md"
+type = "text"
+title = "Phase 5D Final Corrective Closure Report"
