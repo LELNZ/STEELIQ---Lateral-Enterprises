@@ -144,3 +144,9 @@ id = "XLY_XlTPMUfI3KvOBnMEQ"
 uri = "file://reports/phase-5d-final-closure-report.md"
 type = "text"
 title = "Phase 5D Final Corrective Closure Report"
+
+[[outputs]]
+id = "zJOHvrFnBRv55ghHZH848"
+uri = "file://reports/phase-6a-ll-lifecycle-completion-report.md"
+type = "text"
+title = "Phase 6A — LL Accepted Quote Lifecycle Completion Report"
