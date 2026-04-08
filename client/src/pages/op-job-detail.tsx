@@ -347,11 +347,7 @@ export default function OpJobDetail() {
             )}
           </div>
         </div>
-        {!editing && !job.archivedAt && job.status !== "cancelled" && (
-          <Button variant="ghost" size="sm" onClick={startEdit} className="text-muted-foreground hover:text-foreground shrink-0" data-testid="button-change-status">
-            <Pencil className="h-3 w-3 mr-1.5" /> Change
-          </Button>
-        )}
+        
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -495,7 +491,7 @@ export default function OpJobDetail() {
               <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">ACTION REQUIRED</span>
             )}
           </div>
-          {!editing && !job.archivedAt && (
+          {!editing && !job.archivedAt && job.status !== "cancelled" && (
             <Button
               variant={(!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" ? "default" : "ghost"}
               size="sm"
@@ -503,7 +499,7 @@ export default function OpJobDetail() {
               onClick={startEdit}
               data-testid="button-edit-measurement"
             >
-              {(!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" ? "Set Now" : "Edit"}
+              {(!job.measurementRequirement || !job.dimensionSource) && job.measurementRequirement !== "not_required" ? "Set Measurement" : "Edit"}
             </Button>
           )}
         </div>

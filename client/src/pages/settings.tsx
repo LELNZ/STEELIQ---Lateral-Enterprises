@@ -3206,10 +3206,22 @@ function GovernanceSection() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{formatGovernanceEntityType(entry.entityType)}</td>
-                      <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell truncate max-w-[160px]" title={entry.entityId}>
-                        {entry.metadata?.estimateNumber || entry.metadata?.number || entry.metadata?.jobNumber || entry.metadata?.name || (
-                          <span className="font-mono">{entry.entityId.slice(0, 8)}…</span>
-                        )}
+                      <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell truncate max-w-[200px]" title={entry.entityId}>
+                        {(() => {
+                          const id = entry.metadata?.estimateNumber || entry.metadata?.number || entry.metadata?.jobNumber;
+                          const name = entry.metadata?.name;
+                          if (id && name && id !== name) {
+                            return (
+                              <span>
+                                <span className="font-mono font-medium text-foreground">{id}</span>
+                                <span className="text-muted-foreground"> — {name}</span>
+                              </span>
+                            );
+                          }
+                          if (id) return <span className="font-mono font-medium text-foreground">{id}</span>;
+                          if (name) return <span className="font-medium text-foreground">{name}</span>;
+                          return <span className="font-mono text-muted-foreground/60">{entry.entityId.slice(0, 8)}…</span>;
+                        })()}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">{entry.actorName}</td>
                       <td className="px-3 py-2 text-muted-foreground whitespace-nowrap" title={entry.createdAt ?? ""}>

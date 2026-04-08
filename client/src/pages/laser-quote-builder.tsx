@@ -825,25 +825,11 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
         {isEstimateEdit && estimateData?.status === "converted" && (
-          <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3 flex items-center justify-between" data-testid="banner-converted">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-300 dark:border-green-700 text-xs">Converted</Badge>
-              <span className="text-sm text-green-800 dark:text-green-300">
-                This estimate has been converted to quote <strong>{estimateData.linkedQuote?.number || "—"}</strong>
-              </span>
-            </div>
-            {estimateData.linkedQuote && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-green-300 dark:border-green-700 text-green-800 dark:text-green-300"
-                onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}`)}
-                data-testid="banner-open-quote"
-              >
-                <ArrowRightCircle className="h-3.5 w-3.5 mr-1" />
-                Open Quote
-              </Button>
-            )}
+          <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3 flex items-center gap-2" data-testid="banner-converted">
+            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-300 dark:border-green-700 text-xs">Converted</Badge>
+            <span className="text-sm text-green-800 dark:text-green-300">
+              This estimate has been converted to quote <strong>{estimateData.linkedQuote?.number || "—"}</strong>
+            </span>
           </div>
         )}
 
@@ -942,6 +928,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       <TableHead>Material</TableHead>
                       <TableHead className="text-right">Thickness</TableHead>
                       <TableHead className="text-right">L x W (mm)</TableHead>
+                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Unit Sell</TableHead>
                       <TableHead className="text-right">Line Total</TableHead>
                       <TableHead className="w-24"></TableHead>
@@ -968,11 +955,18 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                             <TableCell className="text-right text-xs">
                               {item.length > 0 && item.width > 0 ? `${item.length} x ${item.width}` : "—"}
                             </TableCell>
+                            <TableCell className="text-right font-mono" data-testid={`text-unit-cost-${idx}`}>
+                              {pricing ? (
+                                <span>${(pricing.internalCostSubtotal / (item.quantity || 1)).toFixed(2)}</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right font-mono" data-testid={`text-unit-sell-${idx}`}>
                               <span>${unitSell.toFixed(2)}</span>
                               {pricing && (
-                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-cost-indicator-${idx}`}>
-                                  cost ${(pricing.internalCostSubtotal / (item.quantity || 1)).toFixed(2)} +{pricing.markupPercent}%
+                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-markup-indicator-${idx}`}>
+                                  +{pricing.markupPercent}%
                                 </span>
                               )}
                             </TableCell>
@@ -1019,7 +1013,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                           </TableRow>
                           {isExpanded && pricing && (
                             <TableRow>
-                              <TableCell colSpan={10} className="p-2">
+                              <TableCell colSpan={11} className="p-2">
                                 <PricingBreakdownPanel
                                   breakdown={pricing}
                                   supplierName={matched?.supplierName || "—"}
