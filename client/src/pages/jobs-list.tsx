@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
@@ -16,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical, FileText } from "lucide-react";
+import { LayoutGrid, Plus, Trash2, FolderOpen, Archive, ArchiveRestore, ExternalLink, MapPin, Calendar, Square, FlaskConical, FileText, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { routes } from "@/lib/routes";
@@ -108,7 +109,7 @@ export default function JobsList() {
   });
 
   const { data: archivedJobs = [], isLoading: loadingArchived } = useQuery<JobWithCount[]>({
-    queryKey: ["/api/jobs", { scope: "archived" }],
+    queryKey: ["/api/jobs", "archived"],
     queryFn: async () => {
       const res = await fetch("/api/jobs?scope=archived", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load archived estimates");
@@ -203,28 +204,22 @@ export default function JobsList() {
   const isLoading = activeTab === "archived" ? loadingArchived : loadingActive;
 
   return (
-    <div className="flex flex-col h-full bg-background" data-testid="jobs-list">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <LayoutGrid className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">Estimates</h1>
-              <Badge variant="outline" className="text-xs" data-testid="badge-division-lj">LJ</Badge>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-tight">Joinery quotation estimates</p>
-          </div>
-        </div>
-        <Link href={routes.jobNew()}>
-          <Button size="sm" data-testid="button-new-job">
-            <Plus className="w-3.5 h-3.5 mr-1.5" /> New Estimate
-          </Button>
-        </Link>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+    <PageShell testId="jobs-list">
+      <PageHeader
+        icon={<LayoutGrid className="w-4 h-4 text-primary-foreground" />}
+        title="Estimates"
+        subtitle="Joinery quotation estimates"
+        badge={<Badge variant="outline" className="text-xs" data-testid="badge-division-lj">LJ</Badge>}
+        titleTestId="text-app-title"
+        actions={
+          <Link href={routes.jobNew()}>
+            <Button size="sm" data-testid="button-new-job">
+              <Plus className="w-3.5 h-3.5 mr-1.5" /> New Estimate
+            </Button>
+          </Link>
+        }
+      />
+      <WorklistBody>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4" data-testid="tabs-estimates">
             <TabsTrigger value="active" data-testid="tab-estimates-active">
@@ -255,9 +250,10 @@ export default function JobsList() {
               <div className="rounded-lg border bg-card overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="bg-muted/50">
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Estimate #</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Customer</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden sm:table-cell">Date</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-center">Items</TableHead>
@@ -286,6 +282,13 @@ export default function JobsList() {
                               </Badge>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground py-2.5 hidden lg:table-cell" data-testid={`text-job-customer-${job.id}`}>
+                          {job.clientName ? (
+                            <span className="flex items-center gap-1.5">
+                              <Building2 className="w-3 h-3 shrink-0" />{job.clientName}
+                            </span>
+                          ) : <span className="text-xs italic">—</span>}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground py-2.5 hidden md:table-cell">
                           {job.address ? (
@@ -331,7 +334,7 @@ export default function JobsList() {
                                 onClick={() => demoFlagMutation.mutate({ id: job.id, isDemoRecord: !job.isDemoRecord })}
                                 disabled={demoFlagMutation.isPending}
                                 data-testid={`button-toggle-demo-estimate-${job.id}`}
-                                title={job.isDemoRecord ? "Remove demo/test flag" : "Flag as demo/test"}
+                                title={job.isDemoRecord ? "Remove demo flag" : "Flag as demo"}
                               >
                                 <FlaskConical className="w-3 h-3" />
                               </Button>
@@ -387,7 +390,7 @@ export default function JobsList() {
               <div className="rounded-lg border bg-card overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                    <TableRow className="bg-muted/50">
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-[110px]">Estimate #</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
                       <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Address</TableHead>
@@ -476,7 +479,7 @@ export default function JobsList() {
           {jobs.length} estimate{jobs.length !== 1 ? "s" : ""}
           {activeTab === "archived" ? " archived" : " active"}
         </p>
-      </div>
+      </WorklistBody>
 
       <Dialog
         open={cascadeDialog.type === "delete"}
@@ -585,6 +588,6 @@ export default function JobsList() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

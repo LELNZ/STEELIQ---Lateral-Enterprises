@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Link, useLocation } from "wouter";
@@ -10,8 +11,9 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, FolderOpen, Loader2, FileText, ArrowRightCircle, Eye } from "lucide-react";
+import { Plus, Trash2, FolderOpen, Loader2, FileText, ArrowRightCircle, Eye, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import type { LaserEstimate } from "@shared/schema";
 
 type EnrichedLaserEstimate = LaserEstimate & {
@@ -27,11 +29,26 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
 
 export default function LaserEstimatesList() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
   const [, navigate] = useLocation();
   const [deleteTarget, setDeleteTarget] = useState<EnrichedLaserEstimate | null>(null);
 
   const { data: estimates = [], isLoading } = useQuery<EnrichedLaserEstimate[]>({
     queryKey: ["/api/laser-estimates"],
+  });
+
+  const demoFlagMutation = useMutation({
+    mutationFn: async ({ id, isDemoRecord }: { id: string; isDemoRecord: boolean }) => {
+      await apiRequest("PATCH", `/api/laser-estimates/${id}/demo-flag`, { isDemoRecord });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -67,23 +84,24 @@ export default function LaserEstimatesList() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between border-b px-4 py-3 bg-background" data-testid="laser-estimates-header">
-        <div>
-          <h1 className="text-lg font-semibold" data-testid="text-page-title">LL – Laser Estimates</h1>
-          <p className="text-xs text-muted-foreground">Lateral Laser — Estimate workspace</p>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => navigate("/laser-estimate/new")}
-          data-testid="button-new-laser-estimate"
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          New Estimate
-        </Button>
-      </div>
-
-      <div className="flex-1 overflow-auto p-4">
+    <PageShell>
+      <PageHeader
+        icon={<FileText className="w-4 h-4 text-primary-foreground" />}
+        title="LL – Laser Estimates"
+        subtitle="Lateral Laser — Estimate workspace"
+        titleTestId="text-page-title"
+        actions={
+          <Button
+            size="sm"
+            onClick={() => navigate("/laser-estimate/new")}
+            data-testid="button-new-laser-estimate"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New Estimate
+          </Button>
+        }
+      />
+      <WorklistBody>
         {estimates.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="empty-state-laser-estimates">
             <FileText className="h-12 w-12 text-muted-foreground/40 mb-3" />
@@ -95,50 +113,57 @@ export default function LaserEstimatesList() {
             </Button>
           </div>
         ) : (
-          <div className="rounded-md border">
+          <div className="rounded-lg border bg-card overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[140px]">Estimate #</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead className="w-[80px] text-center">Items</TableHead>
-                  <TableHead className="w-[100px]">Status</TableHead>
-                  <TableHead className="w-[110px]">Created</TableHead>
-                  <TableHead className="w-[110px]">Updated</TableHead>
-                  <TableHead className="w-[140px] hidden md:table-cell">Linked Quote</TableHead>
-                  <TableHead className="w-[100px] text-right">Actions</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[140px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Estimate #</TableHead>
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer</TableHead>
+                  <TableHead className="w-[80px] text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Items</TableHead>
+                  <TableHead className="w-[100px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                  <TableHead className="w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Created</TableHead>
+                  <TableHead className="w-[110px] text-xs font-semibold uppercase tracking-wider text-muted-foreground">Updated</TableHead>
+                  <TableHead className="w-[140px] hidden md:table-cell text-xs font-semibold uppercase tracking-wider text-muted-foreground">Linked Quote</TableHead>
+                  <TableHead className="w-[100px] text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {estimates.map((est) => {
                   const style = STATUS_STYLES[est.status] || STATUS_STYLES.draft;
                   return (
-                    <TableRow key={est.id} data-testid={`row-laser-estimate-${est.id}`}>
-                      <TableCell>
-                        <Link href={`/laser-estimate/${est.id}`}>
-                          <span className="text-sm font-medium text-primary hover:underline cursor-pointer" data-testid={`link-estimate-${est.id}`}>
-                            {est.estimateNumber}
-                          </span>
-                        </Link>
+                    <TableRow key={est.id} className="hover:bg-muted/30" data-testid={`row-laser-estimate-${est.id}`}>
+                      <TableCell className="py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <Link href={`/laser-estimate/${est.id}`}>
+                            <span className="text-sm font-medium text-primary hover:underline cursor-pointer" data-testid={`link-estimate-${est.id}`}>
+                              {est.estimateNumber}
+                            </span>
+                          </Link>
+                          {isAdmin && est.isDemoRecord && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0" data-testid={`badge-demo-laser-${est.id}`}>
+                              <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <span className="text-sm" data-testid={`text-customer-${est.id}`}>{est.customerName}</span>
                       </TableCell>
-                      <TableCell className="text-center">
+                      <TableCell className="text-center py-2.5">
                         <span className="text-sm text-muted-foreground" data-testid={`text-items-${est.id}`}>{itemCount(est)}</span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${style.className}`} data-testid={`badge-status-${est.id}`}>
                           {style.label}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <span className="text-xs text-muted-foreground">{formatDate(est.createdAt)}</span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-2.5">
                         <span className="text-xs text-muted-foreground">{formatDate(est.updatedAt)}</span>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden md:table-cell py-2.5">
                         {est.linkedQuote ? (
                           <Link href={`/quote/${est.linkedQuote.id}`}>
                             <span className="text-xs font-medium text-primary hover:underline cursor-pointer" data-testid={`link-quote-${est.id}`}>
@@ -149,8 +174,20 @@ export default function LaserEstimatesList() {
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right py-2.5">
                         <div className="flex items-center justify-end gap-1">
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-7 w-7 ${est.isDemoRecord ? "text-amber-600" : "text-muted-foreground"}`}
+                              onClick={() => demoFlagMutation.mutate({ id: est.id, isDemoRecord: !est.isDemoRecord })}
+                              title={est.isDemoRecord ? "Remove demo flag" : "Flag as demo"}
+                              data-testid={`button-toggle-demo-${est.id}`}
+                            >
+                              <FlaskConical className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -182,7 +219,7 @@ export default function LaserEstimatesList() {
             </Table>
           </div>
         )}
-      </div>
+      </WorklistBody>
 
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <DialogContent>
@@ -205,6 +242,6 @@ export default function LaserEstimatesList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

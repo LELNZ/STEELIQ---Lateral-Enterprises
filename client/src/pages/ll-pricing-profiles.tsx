@@ -28,7 +28,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle,
+  Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle, Shield,
   ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info,
 } from "lucide-react";
 import type {
@@ -37,6 +37,7 @@ import type {
   LLPricingSettings,
   LLMachineProfile,
   LLProcessRateEntry,
+  LLProcessRateSource,
   DivisionSettings,
 } from "@shared/schema";
 import { useLocation, Link } from "wouter";
@@ -81,27 +82,30 @@ export default function LLPricingProfiles({ embedded }: { embedded?: boolean } =
   return (
     <div className={embedded ? "flex flex-col" : "flex flex-col h-full"} data-testid="ll-pricing-profiles-page">
       {!embedded && (
-        <div className="flex items-center justify-between border-b px-4 py-3 bg-background">
+        <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} data-testid="button-back-settings">
               <ArrowLeft className="h-4 w-4" />
             </Button>
+            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
+              <Shield className="w-4 h-4 text-primary-foreground" />
+            </div>
             <div>
-              <h1 className="text-lg font-semibold" data-testid="text-page-title">LL Pricing Profiles</h1>
-              <p className="text-xs text-muted-foreground">Pricing governance for Lateral Laser</p>
+              <h1 className="text-base font-semibold tracking-tight" data-testid="text-page-title">LL Pricing Profiles</h1>
+              <p className="text-[11px] text-muted-foreground leading-tight">Pricing governance for Lateral Laser</p>
             </div>
           </div>
           <Button size="sm" onClick={() => { setDuplicateSourceId(null); setCreateDialogOpen(true); }} data-testid="button-new-profile">
             <Plus className="h-4 w-4 mr-1" />
             New Profile
           </Button>
-        </div>
+        </header>
       )}
       {embedded && (
         <div className="flex items-center justify-between pb-3">
           <div>
-            <h3 className="text-sm font-semibold">Pricing Profiles</h3>
-            <p className="text-xs text-muted-foreground">Process rates, machine settings, commercial policy, and markup rules</p>
+            <h3 className="text-sm font-semibold">LL Pricing Model — Profiles</h3>
+            <p className="text-xs text-muted-foreground">Process rates, machine settings, commercial policy, and markup rules — does not own gas/consumable source costs</p>
           </div>
           <Button size="sm" onClick={() => { setDuplicateSourceId(null); setCreateDialogOpen(true); }} data-testid="button-new-profile">
             <Plus className="h-4 w-4 mr-1" />
@@ -110,8 +114,17 @@ export default function LLPricingProfiles({ embedded }: { embedded?: boolean } =
         </div>
       )}
 
-      <div className={`flex ${embedded ? "h-[600px]" : "flex-1"} overflow-hidden border rounded-lg`}>
-        <div className="w-80 border-r overflow-y-auto">
+      {embedded && (
+        <div className="flex items-start gap-2 p-2.5 mb-3 bg-green-50/50 dark:bg-green-950/10 border border-green-200 dark:border-green-800 rounded text-xs text-green-800 dark:text-green-300" data-testid="pricing-workflow-steps">
+          <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <div>
+            <strong>How to update pricing:</strong> 1) Duplicate the active profile or create new → 2) Edit the draft (rates, machines, policies) → 3) Approve when ready → 4) Activate to go live. The previously active profile moves to "superseded" and remains for audit.
+          </div>
+        </div>
+      )}
+
+      <div className={`flex ${embedded ? "h-[700px]" : "flex-1"} overflow-hidden border rounded-lg`}>
+        <div className="w-72 border-r overflow-y-auto">
           <div className="p-3 space-y-1">
             {profiles.length === 0 && (
               <p className="text-sm text-muted-foreground p-4 text-center" data-testid="text-no-profiles">
@@ -135,7 +148,7 @@ export default function LLPricingProfiles({ embedded }: { embedded?: boolean } =
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">{profile.versionLabel}</div>
                 <div className="text-[10px] text-muted-foreground mt-1">
-                  {new Date(profile.createdAt).toLocaleDateString()}
+                  {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "—"}
                 </div>
               </button>
             ))}
@@ -293,18 +306,18 @@ function ProfileDetail({
       <div className="grid grid-cols-3 gap-3 text-xs">
         <div className="p-2 bg-muted/50 rounded">
           <span className="text-muted-foreground">Created</span>
-          <div className="font-medium">{new Date(profile.createdAt).toLocaleString()}</div>
+          <div className="font-medium">{profile.createdAt ? new Date(profile.createdAt).toLocaleString() : "—"}</div>
         </div>
         {profile.approvedAt && (
           <div className="p-2 bg-muted/50 rounded">
             <span className="text-muted-foreground">Approved</span>
-            <div className="font-medium">{new Date(profile.approvedAt).toLocaleString()}</div>
+            <div className="font-medium">{new Date(String(profile.approvedAt)).toLocaleString()}</div>
           </div>
         )}
         {profile.activatedAt && (
           <div className="p-2 bg-muted/50 rounded">
             <span className="text-muted-foreground">Activated</span>
-            <div className="font-medium">{new Date(profile.activatedAt).toLocaleString()}</div>
+            <div className="font-medium">{new Date(String(profile.activatedAt)).toLocaleString()}</div>
           </div>
         )}
       </div>
@@ -384,7 +397,7 @@ function PricingSettingsEditor({
       <SettingsSection title="Gas Costs">
         <div className="px-3 py-2 mb-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5" data-testid="gas-governed-notice">
           <Info className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>Gas costs are <strong>governed by active Commercial Inputs</strong> (supplier-backed). Profile values below are fallback only and do not override governed rates.</span>
+          <span>Gas costs are <strong>governed by active Source Costs</strong> (supplier-backed). Profile values below are fallback only and do not override governed rates.</span>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {numField("O2 (fallback)", "gasCosts.o2PricePerLitre", settings.gasCosts.o2PricePerLitre, "$/L")}
@@ -396,7 +409,7 @@ function PricingSettingsEditor({
       <SettingsSection title="Consumable Costs">
         <div className="px-3 py-2 mb-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5" data-testid="consumables-governed-notice">
           <Info className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>Consumable costs are <strong>governed by active Commercial Inputs</strong> (invoice-backed). Profile value below is fallback only.</span>
+          <span>Consumable costs are <strong>governed by active Source Costs</strong> (invoice-backed). Profile value below is fallback only.</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {numField("Cost per Machine Hour (fallback)", "consumableCosts.consumableCostPerMachineHour", settings.consumableCosts.consumableCostPerMachineHour, "$")}
@@ -437,37 +450,73 @@ function PricingSettingsEditor({
       </SettingsSection>
 
       <SettingsSection title={`Machine Profiles (${settings.machineProfiles.length})`}>
+        <p className="text-[10px] text-muted-foreground mb-2">Each machine defines a laser cutter's physical bed size and hourly rate. These are used in estimate calculations.</p>
         {settings.machineProfiles.map((mp, idx) => (
-          <div key={mp.id} className="p-2 bg-muted/30 rounded mb-2">
-            <div className="text-xs font-medium mb-1">{mp.name} {mp.isDefault ? "(Default)" : ""}</div>
-            <div className="grid grid-cols-3 gap-2">
+          <div key={mp.id} className="p-3 bg-muted/30 rounded mb-2 border">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={mp.name}
+                  onChange={e => update(`machineProfiles.${idx}.name`, e.target.value)}
+                  className="h-7 text-xs font-medium w-48"
+                  data-testid={`input-machine-name-${idx}`}
+                />
+                {mp.isDefault && <Badge variant="outline" className="text-[9px]">Default</Badge>}
+              </div>
+              {mp.isDefault && <span className="text-[10px] text-muted-foreground">Used for estimates</span>}
+            </div>
+            <div className="grid grid-cols-5 gap-2">
               {numField("Hourly Rate", `machineProfiles.${idx}.hourlyMachineRate`, mp.hourlyMachineRate, "$/hr")}
               {numField("Bed Length", `machineProfiles.${idx}.bedLengthMm`, mp.bedLengthMm, "mm")}
               {numField("Bed Width", `machineProfiles.${idx}.bedWidthMm`, mp.bedWidthMm, "mm")}
+              {numField("Usable Length", `machineProfiles.${idx}.usableLengthMm`, mp.usableLengthMm || 0, "mm")}
+              {numField("Usable Width", `machineProfiles.${idx}.usableWidthMm`, mp.usableWidthMm || 0, "mm")}
             </div>
           </div>
         ))}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-1"
+          onClick={() => {
+            const copy = JSON.parse(JSON.stringify(settings));
+            copy.machineProfiles.push({
+              id: `machine-${Date.now()}`,
+              name: `New Machine ${copy.machineProfiles.length + 1}`,
+              bedLengthMm: 3000, bedWidthMm: 1500,
+              usableLengthMm: 2900, usableWidthMm: 1400,
+              hourlyMachineRate: 0, isDefault: false, isActive: true,
+              maxThicknessByMaterialFamily: {},
+            });
+            onChange(copy);
+          }}
+          data-testid="button-add-machine"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add Machine Profile
+        </Button>
       </SettingsSection>
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
-        <div className="max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-muted-foreground mb-2">Defines cut speed, pierce time, and <strong>assist gas type</strong> for each material/thickness combination. The gas type here determines which gas source cost is used during pricing.</p>
+        <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-xs">
-            <thead>
+            <thead className="sticky top-0 bg-background">
               <tr className="border-b">
-                <th className="text-left p-1">Material</th>
-                <th className="text-left p-1">Thickness</th>
-                <th className="text-left p-1">Cut Speed</th>
-                <th className="text-left p-1">Pierce Time</th>
-                <th className="text-left p-1">Gas</th>
-                <th className="text-left p-1">Gas L/min</th>
+                <th className="text-left p-1.5 font-medium">Material Family</th>
+                <th className="text-left p-1.5 font-medium">Thickness</th>
+                <th className="text-left p-1.5 font-medium">Cut Speed (mm/min)</th>
+                <th className="text-left p-1.5 font-medium">Pierce (sec)</th>
+                <th className="text-left p-1.5 font-medium">Assist Gas Type</th>
+                <th className="text-left p-1.5 font-medium">Gas (L/min)</th>
+                <th className="text-left p-1.5 font-medium">Source</th>
               </tr>
             </thead>
             <tbody>
               {settings.processRateTables.map((entry, idx) => (
-                <tr key={idx} className="border-b border-muted">
-                  <td className="p-1">{entry.materialFamily}</td>
-                  <td className="p-1">{entry.thickness}mm</td>
-                  <td className="p-1">
+                <tr key={idx} className="border-b border-muted hover:bg-muted/30">
+                  <td className="p-1.5">{entry.materialFamily}</td>
+                  <td className="p-1.5">{entry.thickness}mm</td>
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       step="any"
@@ -476,7 +525,7 @@ function PricingSettingsEditor({
                       className="h-6 text-xs w-20"
                     />
                   </td>
-                  <td className="p-1">
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       step="any"
@@ -485,8 +534,11 @@ function PricingSettingsEditor({
                       className="h-6 text-xs w-16"
                     />
                   </td>
-                  <td className="p-1">{entry.assistGasType}</td>
-                  <td className="p-1">{entry.gasConsumptionLPerMin}</td>
+                  <td className="p-1.5">
+                    <Badge variant="outline" className="text-[10px]">{entry.assistGasType}</Badge>
+                  </td>
+                  <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
+                  <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
                 </tr>
               ))}
             </tbody>
@@ -576,8 +628,13 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
         </SettingsSection>
       )}
 
-      {settings.processRateTables && settings.processRateTables.length > 0 && (
-        <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
+      <SettingsSection title={`Process Rate Tables (${settings.processRateTables?.length ?? 0} entries)`}>
+        {!settings.processRateTables || settings.processRateTables.length === 0 ? (
+          <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400" data-testid="empty-process-rates-warning">
+            <p className="font-medium">No process rate entries defined</p>
+            <p className="mt-0.5 text-[10px]">This profile cannot produce accurate cut-time or gas-consumption estimates without process rate data. Edit the profile to add material/thickness entries.</p>
+          </div>
+        ) : (
           <div className="max-h-48 overflow-y-auto">
             <table className="w-full text-xs">
               <thead>
@@ -586,8 +643,9 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
                   <th className="text-left p-1">Thickness</th>
                   <th className="text-left p-1">Cut Speed (mm/min)</th>
                   <th className="text-left p-1">Pierce (sec)</th>
-                  <th className="text-left p-1">Gas</th>
+                  <th className="text-left p-1">Assist Gas</th>
                   <th className="text-left p-1">Gas (L/min)</th>
+                  <th className="text-left p-1">Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -597,16 +655,42 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
                     <td className="p-1">{entry.thickness}mm</td>
                     <td className="p-1">{entry.cutSpeedMmPerMin}</td>
                     <td className="p-1">{entry.pierceTimeSec}</td>
-                    <td className="p-1">{entry.assistGasType}</td>
+                    <td className="p-1">
+                      <Badge variant="outline" className="text-[10px]">{entry.assistGasType === 'compressed_air' ? 'Air' : entry.assistGasType}</Badge>
+                    </td>
                     <td className="p-1">{entry.gasConsumptionLPerMin}</td>
+                    <td className="p-1"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </SettingsSection>
-      )}
+        )}
+        <p className="text-[10px] text-muted-foreground mt-1">Assist gas type per row determines which source gas cost is applied during pricing.</p>
+      </SettingsSection>
     </div>
+  );
+}
+
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+  architecture_default: { label: "Default", color: "text-orange-600 bg-orange-100 dark:text-orange-400 dark:bg-orange-950/40" },
+  bodor_spec: { label: "Bodor Spec", color: "text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-950/40" },
+  empirical_test: { label: "Tested", color: "text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-950/40" },
+  operator_input: { label: "Operator", color: "text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-950/40" },
+  manual_override: { label: "Override", color: "text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-950/40" },
+};
+
+function ProvenanceBadge({ source, note }: { source?: string; note?: string }) {
+  const info = source ? SOURCE_LABELS[source] : undefined;
+  if (!info) return <span className="text-[9px] text-muted-foreground">—</span>;
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${info.color}`}
+      title={note || ""}
+      data-testid="badge-provenance"
+    >
+      {info.label}
+    </span>
   );
 }
 
@@ -640,7 +724,7 @@ function AuditTrail({ entries }: { entries: LLPricingAuditLog[] }) {
             <div>
               <span className="font-medium">{entry.actorDisplayName}</span>
               <span className="text-muted-foreground ml-1">{entry.summary}</span>
-              <div className="text-muted-foreground mt-0.5">{new Date(entry.createdAt).toLocaleString()}</div>
+              <div className="text-muted-foreground mt-0.5">{entry.createdAt ? new Date(String(entry.createdAt)).toLocaleString() : ""}</div>
             </div>
           </div>
         ))}

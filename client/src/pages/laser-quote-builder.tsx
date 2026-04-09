@@ -3,6 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -36,7 +37,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical } from "lucide-react";
 import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
@@ -293,6 +294,8 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   const estimateId = estimateMode ? params.id : undefined;
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
 
   const [items, setItems] = useState<LaserQuoteItem[]>([]);
   const [customerName, setCustomerName] = useState("");
@@ -411,6 +414,20 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   const { data: estimateData, isLoading: estimateLoading } = useQuery<any>({
     queryKey: ["/api/laser-estimates", estimateId],
     enabled: isEstimateEdit,
+  });
+
+  const demoToggleMutation = useMutation({
+    mutationFn: async (isDemoRecord: boolean) => {
+      const res = await apiRequest("PATCH", `/api/laser-estimates/${estimateId}/demo-flag`, { isDemoRecord });
+      if (!res.ok) throw new Error("Failed to update demo flag");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      toast({ title: "Demo flag updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -743,6 +760,15 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               Fallback Pricing
             </Badge>
           )}
+          {activeGasInputs.length > 0 || activeConsumableInputs.length > 0 ? (
+            <Badge variant="outline" className="ml-1 text-xs bg-blue-50 text-blue-700 border-blue-300" data-testid="badge-source-costs-active">
+              Source Costs: {activeGasInputs.length} gas, {activeConsumableInputs.length} consumable
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="ml-1 text-xs bg-gray-50 text-gray-500 border-gray-300" data-testid="badge-source-costs-none">
+              Source Costs: fallback
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isEditMode && !estimateMode && (
@@ -799,27 +825,56 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
         {isEstimateEdit && estimateData?.status === "converted" && (
-          <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3 flex items-center justify-between" data-testid="banner-converted">
+          <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-4 py-3 flex items-center gap-2" data-testid="banner-converted">
+            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-300 dark:border-green-700 text-xs">Converted</Badge>
+            <span className="text-sm text-green-800 dark:text-green-300">
+              This estimate has been converted to quote <strong>{estimateData.linkedQuote?.number || "—"}</strong>
+            </span>
+          </div>
+        )}
+
+        {isEstimateEdit && estimateData?.isDemoRecord && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 flex items-center justify-between" data-testid="banner-demo-record">
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300 dark:bg-green-950/40 dark:text-green-300 dark:border-green-700 text-xs">Converted</Badge>
-              <span className="text-sm text-green-800 dark:text-green-300">
-                This estimate has been converted to quote <strong>{estimateData.linkedQuote?.number || "—"}</strong>
+              <FlaskConical className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-sm text-amber-800 dark:text-amber-300">
+                This estimate is marked as <strong>demo/test data</strong> and may be archived or deleted through governance.
               </span>
             </div>
-            {estimateData.linkedQuote && (
+            {isAdmin && (
               <Button
                 variant="outline"
                 size="sm"
-                className="border-green-300 dark:border-green-700 text-green-800 dark:text-green-300"
-                onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}`)}
-                data-testid="banner-open-quote"
+                className="border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300"
+                onClick={() => demoToggleMutation.mutate(false)}
+                disabled={demoToggleMutation.isPending}
+                title="Remove demo flag"
+                data-testid="button-remove-demo-flag"
               >
-                <ArrowRightCircle className="h-3.5 w-3.5 mr-1" />
-                Open Quote
+                <FlaskConical className="h-3.5 w-3.5 mr-1" />
+                Remove Demo Flag
               </Button>
             )}
           </div>
         )}
+
+        {isEstimateEdit && isAdmin && !estimateData?.isDemoRecord && estimateData && (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => demoToggleMutation.mutate(true)}
+              disabled={demoToggleMutation.isPending}
+              title="Flag as demo"
+              data-testid="button-flag-as-demo"
+            >
+              <FlaskConical className="h-3.5 w-3.5 mr-1" />
+              Flag as Demo
+            </Button>
+          </div>
+        )}
+
         <Card data-testid="card-quote-details">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Quote Details</CardTitle>
@@ -873,6 +928,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       <TableHead>Material</TableHead>
                       <TableHead className="text-right">Thickness</TableHead>
                       <TableHead className="text-right">L x W (mm)</TableHead>
+                      <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Unit Sell</TableHead>
                       <TableHead className="text-right">Line Total</TableHead>
                       <TableHead className="w-24"></TableHead>
@@ -899,11 +955,18 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                             <TableCell className="text-right text-xs">
                               {item.length > 0 && item.width > 0 ? `${item.length} x ${item.width}` : "—"}
                             </TableCell>
+                            <TableCell className="text-right font-mono" data-testid={`text-unit-cost-${idx}`}>
+                              {pricing ? (
+                                <span>${(pricing.internalCostSubtotal / (item.quantity || 1)).toFixed(2)}</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right font-mono" data-testid={`text-unit-sell-${idx}`}>
                               <span>${unitSell.toFixed(2)}</span>
                               {pricing && (
-                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-cost-indicator-${idx}`}>
-                                  cost ${(pricing.internalCostSubtotal / (item.quantity || 1)).toFixed(2)} +{pricing.markupPercent}%
+                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-markup-indicator-${idx}`}>
+                                  +{pricing.markupPercent}%
                                 </span>
                               )}
                             </TableCell>
@@ -950,7 +1013,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                           </TableRow>
                           {isExpanded && pricing && (
                             <TableRow>
-                              <TableCell colSpan={10} className="p-2">
+                              <TableCell colSpan={11} className="p-2">
                                 <PricingBreakdownPanel
                                   breakdown={pricing}
                                   supplierName={matched?.supplierName || "—"}

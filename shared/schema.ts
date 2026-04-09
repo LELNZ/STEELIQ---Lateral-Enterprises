@@ -102,6 +102,7 @@ export type CustomerContact = typeof customerContacts.$inferSelect;
 
 export const projects = pgTable("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectNumber: text("project_number").unique(),
   customerId: varchar("customer_id").notNull(),
   name: text("name").notNull(),
   address: text("address"),
@@ -447,7 +448,7 @@ export const llGasCostInputs = pgTable("ll_gas_cost_inputs", {
   activatedBy: varchar("activated_by"),
   activatedAt: timestamp("activated_at"),
 }, (table) => [
-  uniqueIndex("idx_ll_gas_cost_inputs_single_active").on(table.divisionKey, table.gasType, table.packageCode).where(sql`status = 'active'`),
+  uniqueIndex("idx_ll_gas_cost_inputs_single_active").on(table.divisionKey, table.gasType, table.packageCode, table.supplierName).where(sql`status = 'active'`),
 ]);
 
 export const insertLLGasCostInputSchema = createInsertSchema(llGasCostInputs).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, activatedAt: true });
@@ -511,6 +512,7 @@ export const laserEstimates = pgTable("laser_estimates", {
   pricingProfileLabel: text("pricing_profile_label"),
   pricedAt: timestamp("priced_at"),
   archivedAt: timestamp("archived_at"),
+  isDemoRecord: boolean("is_demo_record").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1030,6 +1032,8 @@ export interface LLMachineProfile {
   isActive: boolean;
 }
 
+export type LLProcessRateSource = "architecture_default" | "bodor_spec" | "empirical_test" | "operator_input" | "manual_override";
+
 export interface LLProcessRateEntry {
   materialFamily: string;
   thickness: number;
@@ -1037,6 +1041,8 @@ export interface LLProcessRateEntry {
   pierceTimeSec: number;
   assistGasType: "O2" | "N2" | "compressed_air";
   gasConsumptionLPerMin: number;
+  dataSource?: LLProcessRateSource;
+  dataSourceNote?: string;
 }
 
 export interface LLGasCosts {

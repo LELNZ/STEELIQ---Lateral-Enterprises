@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact, Project } from "@shared/schema";
 import { CONTACT_CATEGORIES } from "@shared/schema";
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
-  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen, Building2, Search, Flag, Shield,
+  ChevronDown, ChevronRight, Plus, User, Phone, Mail, MapPin, Pencil, Trash2, FolderOpen, Building2, Search, FlaskConical, Shield,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -98,10 +99,10 @@ function CustomerRow({ customer }: { customer: Customer }) {
     onSuccess: (_data, isDemoRecord) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
       toast({
-        title: isDemoRecord ? "Flagged as test/demo" : "Demo flag removed",
+        title: "Demo flag updated",
         description: isDemoRecord
-          ? `"${customer.name}" is now marked as test/demo data and visible in governance review.`
-          : `"${customer.name}" is no longer marked as test/demo data.`,
+          ? `"${customer.name}" is now marked as demo data and visible in governance review.`
+          : `"${customer.name}" is no longer marked as demo data.`,
       });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -229,14 +230,14 @@ function CustomerRow({ customer }: { customer: Customer }) {
   return (
     <>
       <TableRow
-        className="cursor-pointer hover:bg-muted/50"
+        className="cursor-pointer hover:bg-muted/30"
         onClick={() => setExpanded((v) => !v)}
         data-testid={`row-customer-${customer.id}`}
       >
-        <TableCell className="w-8 py-3">
+        <TableCell className="w-8 py-2.5">
           {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
         </TableCell>
-        <TableCell className="py-3">
+        <TableCell className="py-2.5">
           <div className="flex items-center gap-2.5">
             <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 select-none">
               {customer.name[0]?.toUpperCase() ?? "?"}
@@ -244,16 +245,16 @@ function CustomerRow({ customer }: { customer: Customer }) {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium text-sm">{customer.name}</span>
               {(customer as any).isDemoRecord && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400">
-                  <Flag className="h-2.5 w-2.5 mr-1" />Test/Demo
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0">
+                  <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
                 </Badge>
               )}
             </div>
           </div>
         </TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-3">{customer.email ?? "—"}</TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-3">{customer.phone ?? "—"}</TableCell>
-        <TableCell className="text-sm text-muted-foreground hidden lg:table-cell truncate max-w-[180px] py-3">{customer.address ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-2.5">{customer.email ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-2.5">{customer.phone ?? "—"}</TableCell>
+        <TableCell className="text-sm text-muted-foreground hidden lg:table-cell truncate max-w-[180px] py-2.5">{customer.address ?? "—"}</TableCell>
       </TableRow>
       {expanded && (
         <TableRow>
@@ -356,13 +357,13 @@ function CustomerRow({ customer }: { customer: Customer }) {
                     </div>
                     <div className="flex items-center justify-between py-1 px-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                       <div className="flex items-center gap-2 text-xs">
-                        <Flag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <FlaskConical className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                         <div>
                           <span className="font-medium text-amber-900 dark:text-amber-200">Test / Demo Record</span>
                           <p className="text-amber-700 dark:text-amber-400 text-[11px] leading-tight mt-0.5">
                             {(customer as any).isDemoRecord
-                              ? "This customer is flagged as test/demo data and will appear in governance review."
-                              : "Flag this customer as test/demo data to include it in governance review for cleanup."}
+                              ? "This customer is flagged as demo data and will appear in governance review."
+                              : "Flag this customer as demo data to include it in governance review for cleanup."}
                           </p>
                         </div>
                       </div>
@@ -676,34 +677,31 @@ export default function Customers() {
   });
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <User className="w-4 h-4 text-primary-foreground" />
+    <PageShell>
+      <PageHeader
+        icon={<User className="w-4 h-4 text-primary-foreground" />}
+        title="Customers"
+        subtitle="Manage customers and contacts across all divisions."
+        titleTestId="text-customers-heading"
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-8 text-sm w-48"
+                placeholder="Search customers…"
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                data-testid="input-customers-search"
+              />
+            </div>
+            <Button size="sm" onClick={() => setShowCreate(true)} data-testid="button-new-customer">
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> New Customer
+            </Button>
           </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight" data-testid="text-customers-heading">Customers</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight">Manage customers and contacts across all divisions.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              className="pl-8 h-8 text-sm w-48"
-              placeholder="Search customers…"
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              data-testid="input-customers-search"
-            />
-          </div>
-          <Button size="sm" onClick={() => setShowCreate(true)} data-testid="button-new-customer">
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> New Customer
-          </Button>
-        </div>
-      </header>
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        }
+      />
+      <WorklistBody>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -715,7 +713,7 @@ export default function Customers() {
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-lg border bg-card overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -776,7 +774,7 @@ export default function Customers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
-    </div>
+      </WorklistBody>
+    </PageShell>
   );
 }

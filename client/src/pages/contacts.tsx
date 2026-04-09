@@ -1,4 +1,5 @@
 import { useState, useDeferredValue } from "react";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, CustomerContact } from "@shared/schema";
@@ -21,7 +22,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Search, User, Pencil, Archive, Flag } from "lucide-react";
+import { Plus, Search, User, Pencil, Archive, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -200,7 +201,7 @@ export default function Contacts() {
     },
     onSuccess: (_data, { isDemoRecord }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      toast({ title: isDemoRecord ? "Flagged as test/demo" : "Demo flag removed" });
+      toast({ title: "Demo flag updated" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -293,45 +294,42 @@ export default function Contacts() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <User className="w-4 h-4 text-primary-foreground" />
+    <PageShell>
+      <PageHeader
+        icon={<User className="w-4 h-4 text-primary-foreground" />}
+        title="Contacts"
+        subtitle="People linked to customers across the business."
+        titleTestId="text-contacts-heading"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-8 text-sm w-52"
+                placeholder="Search name, email, phone…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                data-testid="input-contacts-search"
+              />
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-contacts-category-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {CONTACT_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={() => { setCreateForm({ ...emptyForm }); setCreateOpen(true); }} data-testid="button-new-contact">
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> New Contact
+            </Button>
           </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight" data-testid="text-contacts-heading">Contacts</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight">People linked to customers across the business.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              className="pl-8 h-8 text-sm w-52"
-              placeholder="Search name, email, phone…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="input-contacts-search"
-            />
-          </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-contacts-category-filter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {CONTACT_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>{CATEGORY_LABELS[c]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button size="sm" onClick={() => { setCreateForm({ ...emptyForm }); setCreateOpen(true); }} data-testid="button-new-contact">
-            <Plus className="h-3.5 w-3.5 mr-1.5" /> New Contact
-          </Button>
-        </div>
-      </header>
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        }
+      />
+      <WorklistBody>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -343,7 +341,7 @@ export default function Contacts() {
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-lg border bg-card overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -363,7 +361,7 @@ export default function Contacts() {
                   .join("") || "?";
                 return (
                 <TableRow key={contact.id} className="hover:bg-muted/30" data-testid={`row-contact-${contact.id}`}>
-                  <TableCell className="py-3">
+                  <TableCell className="py-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0 select-none">
                         {initials}
@@ -373,8 +371,8 @@ export default function Contacts() {
                           <span className="font-medium text-sm" data-testid={`text-contact-name-${contact.id}`}>{contactDisplayName(contact)}</span>
                           {contact.isPrimary && <Badge variant="outline" className="text-xs px-1.5 py-0">Primary</Badge>}
                           {(contact as any).isDemoRecord && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400">
-                              <Flag className="h-2.5 w-2.5 mr-1" />Test/Demo
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0">
+                              <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
                             </Badge>
                           )}
                         </div>
@@ -382,33 +380,33 @@ export default function Contacts() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="py-2.5">
                     <Badge variant={CATEGORY_VARIANTS[contact.category || "other"] ?? "outline"} className="text-xs" data-testid={`badge-contact-category-${contact.id}`}>
                       {CATEGORY_LABELS[contact.category || "other"] ?? contact.category}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm py-3" data-testid={`text-contact-customer-${contact.id}`}>
+                  <TableCell className="text-sm py-2.5" data-testid={`text-contact-customer-${contact.id}`}>
                     <span className="font-medium">{customerMap[contact.customerId] ?? "—"}</span>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-3">
+                  <TableCell className="text-sm text-muted-foreground hidden sm:table-cell py-2.5">
                     {contact.email ?? <span className="text-xs opacity-50">—</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-3">
+                  <TableCell className="text-sm text-muted-foreground hidden md:table-cell py-2.5">
                     {contact.phone ?? contact.mobile ?? <span className="text-xs opacity-50">—</span>}
                   </TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="py-2.5">
                     <div className="flex items-center gap-1">
                       {isOwnerOrAdmin && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          className={`h-7 w-7 p-0 ${(contact as any).isDemoRecord ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground hover:text-amber-500"}`}
-                          title={(contact as any).isDemoRecord ? "Remove test/demo flag" : "Flag as test/demo"}
+                          className={`h-7 w-7 p-0 ${(contact as any).isDemoRecord ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+                          title={(contact as any).isDemoRecord ? "Remove demo flag" : "Flag as demo"}
                           onClick={() => demoFlagMutation.mutate({ id: contact.id, isDemoRecord: !(contact as any).isDemoRecord })}
                           disabled={demoFlagMutation.isPending}
                           data-testid={`button-demo-flag-contact-${contact.id}`}
                         >
-                          <Flag className="h-3.5 w-3.5" />
+                          <FlaskConical className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       <Button
@@ -479,7 +477,7 @@ export default function Contacts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </div>
-    </div>
+      </WorklistBody>
+    </PageShell>
   );
 }

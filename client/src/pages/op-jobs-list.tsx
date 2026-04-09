@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageShell, PageHeader, WorklistBody } from "@/components/ui/platform-layout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { type OpJob, type Customer, type Project, type Quote } from "@shared/schema";
@@ -12,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { HardHat, ExternalLink, RotateCcw } from "lucide-react";
+import { HardHat, ExternalLink, RotateCcw, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
@@ -56,20 +57,14 @@ export default function OpJobsList() {
   const quoteNumberMap = Object.fromEntries(quotes.map((q) => [q.id, q.number]));
 
   return (
-    <div className="flex flex-col h-full bg-background" data-testid="jobs-list-op">
-      <header className="border-b px-4 sm:px-6 py-3 flex items-center justify-between gap-3 bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary shrink-0">
-            <HardHat className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-base font-semibold tracking-tight" data-testid="heading-jobs">Jobs</h1>
-            <p className="text-[11px] text-muted-foreground leading-tight">Operational jobs converted from accepted quotes</p>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+    <PageShell testId="jobs-list-op">
+      <PageHeader
+        icon={<HardHat className="w-4 h-4 text-primary-foreground" />}
+        title="Jobs"
+        subtitle="Operational jobs converted from accepted quotes"
+        titleTestId="heading-jobs"
+      />
+      <WorklistBody>
       <Tabs value={tab} onValueChange={(v) => setTab(v as "active" | "archived")}>
         <TabsList>
           <TabsTrigger value="active" data-testid="tab-active-jobs">
@@ -104,8 +99,8 @@ export default function OpJobsList() {
           />
         </TabsContent>
       </Tabs>
-      </div>
-    </div>
+      </WorklistBody>
+    </PageShell>
   );
 }
 
@@ -145,7 +140,7 @@ function JobsTable({
 
   return (
     <>
-      <div className="rounded-lg border bg-card overflow-x-auto mt-4">
+      <div className="rounded-lg border bg-card overflow-hidden mt-4">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
@@ -186,29 +181,33 @@ function JobsTable({
             {jobs.map((job) => (
               <TableRow
                 key={job.id}
-                className="cursor-pointer hover:bg-muted/40"
+                className="cursor-pointer hover:bg-muted/30"
                 onClick={() => onNavigate(job.id)}
                 data-testid={`row-job-${job.id}`}
               >
-                <TableCell className="font-mono font-semibold text-sm py-3" data-testid={`text-job-number-${job.id}`}>
+                <TableCell className="font-mono font-semibold text-sm py-2.5" data-testid={`text-job-number-${job.id}`}>
                   {job.jobNumber}
                 </TableCell>
-                <TableCell className="font-medium text-sm py-3" data-testid={`text-job-title-${job.id}`}>
-                  {job.title}
-                  {job.isDemoRecord && (
-                    <Badge variant="secondary" className="ml-2 text-xs" data-testid={`badge-demo-${job.id}`}>Demo</Badge>
-                  )}
+                <TableCell className="font-medium text-sm py-2.5" data-testid={`text-job-title-${job.id}`}>
+                  <div className="flex items-center gap-1.5">
+                    {job.title}
+                    {job.isDemoRecord && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 shrink-0" data-testid={`badge-demo-${job.id}`}>
+                        <FlaskConical className="h-2.5 w-2.5 mr-0.5" />Demo
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
-                <TableCell className="text-sm py-3" data-testid={`text-job-customer-${job.id}`}>
-                  {job.customerId ? <span className="font-medium">{customerMap[job.customerId] ?? <span className="italic text-muted-foreground">Unknown</span>}</span> : <span className="italic text-xs text-muted-foreground">—</span>}
+                <TableCell className="text-sm py-2.5" data-testid={`text-job-customer-${job.id}`}>
+                  {job.customerId ? <span className="font-medium">{customerMap[job.customerId] ?? <span className="italic text-muted-foreground">—</span>}</span> : <span className="text-xs text-muted-foreground">—</span>}
                 </TableCell>
-                <TableCell className="text-sm py-3" data-testid={`text-job-project-${job.id}`}>
-                  {job.projectId ? <span className="text-muted-foreground">{projectMap[job.projectId] ?? <span className="italic">Unknown</span>}</span> : <span className="italic text-xs text-muted-foreground">—</span>}
+                <TableCell className="text-sm py-2.5" data-testid={`text-job-project-${job.id}`}>
+                  {job.projectId ? <span className="text-muted-foreground">{projectMap[job.projectId] ?? <span className="italic">—</span>}</span> : <span className="text-xs text-muted-foreground">—</span>}
                 </TableCell>
-                <TableCell className="text-sm font-mono py-3 hidden lg:table-cell" data-testid={`text-job-division-${job.id}`}>
+                <TableCell className="text-sm font-mono py-2.5 hidden lg:table-cell" data-testid={`text-job-division-${job.id}`}>
                   {job.divisionId ?? <span className="text-muted-foreground text-xs">—</span>}
                 </TableCell>
-                <TableCell className="py-3">
+                <TableCell className="py-2.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Badge variant={STATUS_VARIANTS[job.status] ?? "outline"} className="text-xs" data-testid={`badge-job-status-${job.id}`}>
                       {STATUS_LABELS[job.status] ?? job.status}
@@ -218,7 +217,7 @@ function JobsTable({
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="py-3 hidden md:table-cell" data-testid={`text-job-source-quote-${job.id}`}>
+                <TableCell className="py-2.5 hidden md:table-cell" data-testid={`text-job-source-quote-${job.id}`}>
                   {job.sourceQuoteId ? (
                     <span className="font-mono text-xs font-medium text-primary">
                       {quoteNumberMap[job.sourceQuoteId] ?? job.sourceQuoteId}
@@ -227,7 +226,7 @@ function JobsTable({
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground py-3 hidden sm:table-cell" data-testid={`text-job-created-${job.id}`}>
+                <TableCell className="text-xs text-muted-foreground py-2.5 hidden sm:table-cell" data-testid={`text-job-created-${job.id}`}>
                   {job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-NZ") : "—"}
                 </TableCell>
                 <TableCell>

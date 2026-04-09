@@ -179,6 +179,7 @@ export interface IStorage {
   getArchivedProjects(): Promise<Project[]>;
   getProjectsByCustomer(customerId: string): Promise<Project[]>;
   getProject(id: string): Promise<Project | undefined>;
+  getNextProjectNumber(): Promise<string>;
   createProject(data: InsertProject): Promise<Project>;
   updateProject(id: string, data: Partial<InsertProject>): Promise<Project | undefined>;
   archiveProject(id: string): Promise<Project | undefined>;
@@ -294,6 +295,8 @@ export interface IStorage {
   updateLaserEstimate(id: string, data: Partial<InsertLaserEstimate>): Promise<LaserEstimate | undefined>;
   archiveLaserEstimate(id: string): Promise<LaserEstimate | undefined>;
   deleteLaserEstimate(id: string): Promise<void>;
+  getDemoLaserEstimates(): Promise<LaserEstimate[]>;
+  updateLaserEstimateDemoFlag(id: string, isDemoRecord: boolean): Promise<LaserEstimate | undefined>;
 
   // ── Xero OAuth Connection ─────────────────────────────────────────────────
   getXeroConnection(): Promise<XeroConnection | undefined>;
@@ -892,7 +895,26 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async getNextProjectNumber(): Promise<string> {
+    const rows = await db.select({ projectNumber: projects.projectNumber })
+      .from(projects)
+      .where(sql`${projects.projectNumber} IS NOT NULL`);
+    let maxNum = 0;
+    for (const row of rows) {
+      if (!row.projectNumber) continue;
+      const match = row.projectNumber.match(/PRJ-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    return `PRJ-${String(maxNum + 1).padStart(4, "0")}`;
+  }
+
   async createProject(data: InsertProject): Promise<Project> {
+    if (!data.projectNumber) {
+      (data as any).projectNumber = await this.getNextProjectNumber();
+    }
     const [created] = await db.insert(projects).values(data).returning();
     return created;
   }
@@ -1600,6 +1622,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteLaserEstimate(id: string): Promise<void> {
     await db.delete(laserEstimates).where(eq(laserEstimates.id, id));
+  }
+
+  async getDemoLaserEstimates(): Promise<LaserEstimate[]> {
+    return db.select().from(laserEstimates)
+      .where(eq(laserEstimates.isDemoRecord, true))
+      .orderBy(desc(laserEstimates.createdAt));
+  }
+
+  async updateLaserEstimateDemoFlag(id: string, isDemoRecord: boolean): Promise<LaserEstimate | undefined> {
+    const [updated] = await db.update(laserEstimates)
+      .set({ isDemoRecord, updatedAt: new Date() })
+      .where(eq(laserEstimates.id, id))
+      .returning();
+    return updated;
   }
 }
 

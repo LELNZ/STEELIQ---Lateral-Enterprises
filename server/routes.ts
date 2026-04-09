@@ -251,6 +251,7 @@ export async function registerRoutes(
   await correctLibraryScoping();
   await seedLlSheetMaterials();
   await seedLlPricingSettings();
+  await backfillProcessRateProvenance();
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
@@ -340,9 +341,6 @@ export async function registerRoutes(
       let allJobs = scope === "archived"
         ? await storage.getArchivedJobs()
         : await storage.getAllJobs();
-      if (!isPrivilegedUser(req)) {
-        allJobs = allJobs.filter(j => !j.isDemoRecord);
-      }
       const jobIds = allJobs.map(j => j.id);
       let quotesByJob: Record<string, { id: string; number: string; status: string; revisionCount: number }[]> = {};
       if (jobIds.length > 0) {
@@ -1480,13 +1478,13 @@ export async function registerRoutes(
         await client.query("BEGIN");
 
         const { rows: activeRows } = await client.query(
-          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 AND package_code IS NOT DISTINCT FROM $3 RETURNING id`,
-          [now, input.gasType, input.packageCode || null]
+          `UPDATE ll_gas_cost_inputs SET status = 'superseded', updated_at = $1 WHERE status = 'active' AND division_key = 'LL' AND gas_type = $2 AND package_code IS NOT DISTINCT FROM $3 AND supplier_name = $4 RETURNING id`,
+          [now, input.gasType, input.packageCode || null, input.supplierName]
         );
         for (const row of activeRows) {
           await client.query(
             `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'superseded', $2, $3, $4)`,
-            [row.id, actorId, actorName, `Superseded by activation of "${input.gasType} (${input.packageType})"`]
+            [row.id, actorId, actorName, `Superseded by activation of "${input.supplierName} ${input.gasType} (${input.packageType})"`]
           );
         }
 
@@ -1500,7 +1498,7 @@ export async function registerRoutes(
 
         await client.query(
           `INSERT INTO ll_pricing_audit_log (profile_id, event_type, actor_user_id, actor_display_name, summary) VALUES ($1, 'activated', $2, $3, $4)`,
-          [req.params.id, actorId, actorName, `Activated gas cost input "${input.gasType} (${input.packageType})"`]
+          [req.params.id, actorId, actorName, `Activated gas cost input "${input.supplierName} ${input.gasType} (${input.packageType})"`]
         );
 
         await client.query("COMMIT");
@@ -2104,10 +2102,20 @@ export async function registerRoutes(
             );
             const revision = revInsert.rows[0];
             const snapshotSellValue = (snapshot as any).totals?.sell ?? null;
-            await client.query(
-              `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`,
-              [revision.id, divisionCode, snapshotSellValue, customer, existing.id]
-            );
+            const revisionUpdateParams: any[] = [revision.id, divisionCode, snapshotSellValue, customer, existing.id];
+            let revisionUpdateSql: string;
+            if (divisionCode === "LL") {
+              const activeProfile = await storage.getActiveLLPricingProfile();
+              if (activeProfile) {
+                revisionUpdateSql = `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, pricing_profile_id = $6, pricing_profile_label = $7, priced_at = $8, updated_at = NOW() WHERE id = $5`;
+                revisionUpdateParams.push(activeProfile.id, `${activeProfile.profileName} (${activeProfile.versionLabel})`, new Date().toISOString());
+              } else {
+                revisionUpdateSql = `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`;
+              }
+            } else {
+              revisionUpdateSql = `UPDATE quotes SET current_revision_id = $1, division_id = $2, total_value = $3, customer = $4, updated_at = NOW() WHERE id = $5`;
+            }
+            await client.query(revisionUpdateSql, revisionUpdateParams);
             await client.query(
               `INSERT INTO audit_logs (id, entity_type, entity_id, action, metadata_json, created_at)
                VALUES (gen_random_uuid(), 'quote', $1, 'revision_created', $2, NOW())`,
@@ -2180,6 +2188,26 @@ export async function registerRoutes(
                 // Back-link the customerId to the source job too
                 await client.query(`UPDATE jobs SET customer_id = $1 WHERE id = $2`, [autoCustomerId, sourceJobId]);
               }
+            }
+          }
+        } else if (sourceLaserEstimateId) {
+          const srcEst = await client.query(`SELECT customer_id, customer_name FROM laser_estimates WHERE id = $1`, [sourceLaserEstimateId]);
+          if (srcEst.rows.length > 0) {
+            if (srcEst.rows[0].customer_id) {
+              autoCustomerId = srcEst.rows[0].customer_id;
+            } else if (srcEst.rows[0].customer_name) {
+              const existingCustomers = await storage.getAllCustomers();
+              const nameLower = srcEst.rows[0].customer_name.trim().toLowerCase();
+              const match = existingCustomers.find((c) => c.name.toLowerCase() === nameLower);
+              if (match) {
+                autoCustomerId = match.id;
+              } else {
+                const newCustomer = await storage.createCustomer({
+                  name: srcEst.rows[0].customer_name.trim(),
+                });
+                autoCustomerId = newCustomer.id;
+              }
+              await client.query(`UPDATE laser_estimates SET customer_id = $1 WHERE id = $2`, [autoCustomerId, sourceLaserEstimateId]);
             }
           }
         }
@@ -2269,10 +2297,6 @@ export async function registerRoutes(
       let filtered = isUserAllDivision(req)
         ? enriched
         : enriched.filter(q => userCanAccessDivision(req, q.divisionId || null));
-      if (!isPrivilegedUser(req)) {
-        filtered = filtered.filter(q => !q.isDemoRecord);
-      }
-
       const jobIds = Array.from(new Set(filtered.map(q => q.sourceJobId).filter(Boolean))) as string[];
       const jobNameMap: Record<string, string> = {};
       for (const jid of jobIds) {
@@ -3697,10 +3721,7 @@ export async function registerRoutes(
   // ─── Customer Routes ─────────────────────────────────────────────────────
   app.get("/api/customers", async (req, res) => {
     try {
-      let all = await storage.getAllCustomers();
-      if (!isPrivilegedUser(req)) {
-        all = all.filter(c => !c.isDemoRecord);
-      }
+      const all = await storage.getAllCustomers();
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3756,10 +3777,7 @@ export async function registerRoutes(
       const customerId = req.query.customerId as string | undefined;
       const category = req.query.category as string | undefined;
       const search = req.query.q as string | undefined;
-      let all = await storage.listContacts({ customerId, category, search });
-      if (!isPrivilegedUser(req)) {
-        all = all.filter(c => !c.isDemoRecord);
-      }
+      const all = await storage.listContacts({ customerId, category, search });
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3770,7 +3788,6 @@ export async function registerRoutes(
     try {
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Not found" });
-      if (contact.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
       return res.json(contact);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -3852,12 +3869,9 @@ export async function registerRoutes(
   app.get("/api/projects", async (req, res) => {
     try {
       const scope = req.query.scope as string | undefined;
-      let all = scope === "archived"
+      const all = scope === "archived"
         ? await storage.getArchivedProjects()
         : await storage.getAllProjects();
-      if (!isPrivilegedUser(req)) {
-        all = all.filter(p => !p.isDemoRecord);
-      }
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -4093,10 +4107,7 @@ export async function registerRoutes(
   app.get("/api/invoices", async (req, res) => {
     try {
       const all = await storage.getAllInvoicesEnriched();
-      let filtered = isUserAllDivision(req) ? all : all.filter(i => userCanAccessDivision(req, i.divisionCode || null));
-      if (!isPrivilegedUser(req)) {
-        filtered = filtered.filter(i => !i.isDemoRecord);
-      }
+      const filtered = isUserAllDivision(req) ? all : all.filter(i => userCanAccessDivision(req, i.divisionCode || null));
       return res.json(filtered);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -5232,18 +5243,15 @@ export async function registerRoutes(
   // ─── Op Jobs Routes ────────────────────────────────────────────────────────
   app.get("/api/op-jobs", async (req, res) => {
     try {
-      const privileged = isPrivilegedUser(req);
       const allDiv = isUserAllDivision(req);
       const scope = req.query.scope as string | undefined;
       if (scope === "archived") {
         let all = await storage.getArchivedOpJobs();
         if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
-        if (!privileged) all = all.filter(j => !j.isDemoRecord);
         return res.json(all);
       }
       let all = await storage.getAllOpJobs();
       if (!allDiv) all = all.filter(j => userCanAccessDivision(req, j.divisionId || null));
-      if (!privileged) all = all.filter(j => !j.isDemoRecord);
       return res.json(all);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
@@ -5346,6 +5354,7 @@ export async function registerRoutes(
         invoices: { archived: 0, skipped: 0, skipReasons: [] as string[] },
         customers: { archived: 0, skipped: 0, skipReasons: [] as string[] },
         contacts: { archived: 0, skipped: 0, skipReasons: [] as string[] },
+        laserEstimates: { archived: 0, skipped: 0, skipReasons: [] as string[] },
       };
 
       const demoEstimates = await storage.getDemoJobs();
@@ -5427,6 +5436,14 @@ export async function registerRoutes(
         results.customers.archived++;
       }
 
+      const demoLaserEsts = await storage.getDemoLaserEstimates();
+      for (const le of demoLaserEsts) {
+        if (!le.archivedAt) {
+          await storage.archiveLaserEstimate(le.id);
+          results.laserEstimates.archived++;
+        }
+      }
+
       const demoContacts = await storage.getDemoContacts();
       for (const ct of demoContacts) {
         if (ct.archivedAt) continue;
@@ -5457,7 +5474,7 @@ export async function registerRoutes(
       }
 
       const totalArchived = results.estimates.archived + results.quotes.archived + results.opJobs.archived +
-        results.projects.archived + results.invoices.archived + results.customers.archived + results.contacts.archived;
+        results.projects.archived + results.invoices.archived + results.customers.archived + results.contacts.archived + results.laserEstimates.archived;
       const totalSkipped = Object.values(results).reduce((sum, r) => sum + r.skipped, 0);
 
       await storage.createAuditLog({
@@ -5497,7 +5514,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, number: quote.number },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5520,7 +5537,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, jobNumber: job.jobNumber },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5543,7 +5560,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, name: updated.name },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5566,7 +5583,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord },
+        metadataJson: { isDemoRecord, name: updated.name },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5590,7 +5607,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord, xeroInvoiceId: invoice.xeroInvoiceId },
+        metadataJson: { isDemoRecord, number: invoice.number, xeroInvoiceId: invoice.xeroInvoiceId },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5613,7 +5630,7 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord, xeroContactId: cust.xeroContactId },
+        metadataJson: { isDemoRecord, name: cust.name, xeroContactId: cust.xeroContactId },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5636,7 +5653,30 @@ export async function registerRoutes(
         entityId: req.params.id,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
-        metadataJson: { isDemoRecord, customerId: contact.customerId },
+        metadataJson: { isDemoRecord, name: `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim(), customerId: contact.customerId },
+      });
+      res.json(updated);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.patch("/api/laser-estimates/:id/demo-flag", async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== "admin" && user.role !== "owner")) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const estimate = await storage.getLaserEstimate(req.params.id);
+      if (!estimate) return res.status(404).json({ error: "Laser estimate not found" });
+      const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
+      const updated = await storage.updateLaserEstimateDemoFlag(req.params.id, isDemoRecord);
+      await storage.createAuditLog({
+        entityType: "laserEstimate",
+        entityId: req.params.id,
+        action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
+        performedByUserId: user.id,
+        metadataJson: { isDemoRecord, estimateNumber: estimate.estimateNumber },
       });
       res.json(updated);
     } catch (e: any) {
@@ -5651,7 +5691,7 @@ export async function registerRoutes(
       if (!user || (user.role !== "admin" && user.role !== "owner")) {
         return res.status(403).json({ error: "Admin access required" });
       }
-      const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices, demoCustomers, demoContacts] = await Promise.all([
+      const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices, demoCustomers, demoContacts, demoLaserEstimates] = await Promise.all([
         storage.getDemoQuotes(),
         storage.getDemoOpJobs(),
         storage.getDemoJobs(),
@@ -5659,6 +5699,7 @@ export async function registerRoutes(
         storage.getDemoInvoices(),
         storage.getDemoCustomers(),
         storage.getDemoContacts(),
+        storage.getDemoLaserEstimates(),
       ]);
 
       // For each flagged record, resolve linked chain context
@@ -5899,6 +5940,7 @@ export async function registerRoutes(
         })),
         customers: customersWithIsolation,
         contacts: contactsWithIsolation,
+        laserEstimates: demoLaserEstimates,
         counts: {
           estimates: demoJobs.length,
           quotes: demoQuotes.length,
@@ -5907,6 +5949,7 @@ export async function registerRoutes(
           invoices: demoInvoices.length,
           customers: demoCustomers.length,
           contacts: demoContacts.length,
+          laserEstimates: demoLaserEstimates.length,
         },
       });
     } catch (e: any) {
@@ -5932,15 +5975,62 @@ export async function registerRoutes(
       const userMap: Record<string, string> = {};
       allUsers.forEach(u => { userMap[u.id] = u.displayName || u.username; });
 
-      const enriched = entries.map(entry => ({
-        id: entry.id,
-        entityType: entry.entityType,
-        entityId: entry.entityId,
-        action: entry.action,
-        actorId: entry.performedByUserId ?? null,
-        actorName: entry.performedByUserId ? (userMap[entry.performedByUserId] ?? "Unknown User") : "System",
-        metadata: entry.metadataJson,
-        createdAt: entry.createdAt,
+      const entityLabelCache: Record<string, string | null> = {};
+      async function resolveEntityLabel(entityType: string, entityId: string, metadata: any): Promise<string | null> {
+        if (metadata?.estimateNumber || metadata?.number || metadata?.jobNumber || metadata?.name) {
+          return metadata.estimateNumber || metadata.number || metadata.jobNumber || metadata.name;
+        }
+        const cacheKey = `${entityType}:${entityId}`;
+        if (cacheKey in entityLabelCache) return entityLabelCache[cacheKey];
+        let label: string | null = null;
+        const et = entityType.toLowerCase();
+        try {
+          if (et === "job" || et === "estimate") {
+            const j = await storage.getJob(entityId);
+            if (j) label = j.name || null;
+          } else if (et === "quote") {
+            const q = await storage.getQuote(entityId);
+            if (q) label = q.number || null;
+          } else if (et === "op_job" || et === "opjob") {
+            const oj = await storage.getOpJob(entityId);
+            if (oj) label = (oj as any).jobNumber || null;
+          } else if (et === "project") {
+            const p = await storage.getProject(entityId);
+            if (p) label = p.name || null;
+          } else if (et === "invoice") {
+            const inv = await storage.getInvoice(entityId);
+            if (inv) label = (inv as any).number || null;
+          } else if (et === "customer") {
+            const c = await storage.getCustomer(entityId);
+            if (c) label = c.name || null;
+          } else if (et === "customercontact" || et === "contact") {
+            const cc = await storage.getContact(entityId);
+            if (cc) label = `${cc.firstName ?? ""} ${cc.lastName ?? ""}`.trim() || null;
+          } else if (et === "laser_estimate" || et === "laserestimate") {
+            const le = await storage.getLaserEstimate(entityId);
+            if (le) label = (le as any).estimateNumber || null;
+          }
+        } catch {}
+        entityLabelCache[cacheKey] = label;
+        return label;
+      }
+
+      const enriched = await Promise.all(entries.map(async (entry) => {
+        const resolvedLabel = await resolveEntityLabel(entry.entityType, entry.entityId, entry.metadataJson);
+        const finalMetadata = { ...((entry.metadataJson as any) ?? {}) };
+        if (resolvedLabel && !finalMetadata.estimateNumber && !finalMetadata.number && !finalMetadata.jobNumber && !finalMetadata.name) {
+          finalMetadata.name = resolvedLabel;
+        }
+        return {
+          id: entry.id,
+          entityType: entry.entityType,
+          entityId: entry.entityId,
+          action: entry.action,
+          actorId: entry.performedByUserId ?? null,
+          actorName: entry.performedByUserId ? (userMap[entry.performedByUserId] ?? "Unknown User") : "System",
+          metadata: finalMetadata,
+          createdAt: entry.createdAt,
+        };
       }));
 
       res.json({ entries: enriched });
@@ -5957,7 +6047,7 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Admin access required" });
       }
       const { entityType, entityId } = z.object({
-        entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice", "customer", "contact"]),
+        entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice", "customer", "contact", "laserEstimate"]),
         entityId: z.string(),
       }).parse(req.body);
 
@@ -6058,6 +6148,12 @@ export async function registerRoutes(
           }
         }
         await storage.archiveContact(entityId);
+        result = "archived";
+      } else if (entityType === "laserEstimate") {
+        const le = await storage.getLaserEstimate(entityId);
+        if (!le) return res.status(404).json({ error: "Laser estimate not found" });
+        if (!le.isDemoRecord) return res.status(400).json({ error: "Only demo/test flagged records can be archived via governance" });
+        await storage.archiveLaserEstimate(entityId);
         result = "archived";
       } else {
         return res.status(400).json({ error: "Unknown entity type" });
@@ -6311,6 +6407,17 @@ export async function registerRoutes(
           }
         }
         await storage.deleteContact(entityId);
+      } else if (entityType === "laserEstimate") {
+        const le = await storage.getLaserEstimate(entityId);
+        if (!le) return res.status(404).json({ error: "Laser estimate not found" });
+        if (!le.isDemoRecord) return res.status(400).json({ error: "Record is not flagged as demo/test. Flag it first before deleting." });
+        if ((le as any).status === "converted") {
+          return res.status(400).json({
+            error: "This laser estimate has been converted to a quote and cannot be deleted. Archive it instead, or delete the linked quote first.",
+            code: "CONVERTED_ESTIMATE",
+          });
+        }
+        await storage.deleteLaserEstimate(entityId);
       } else {
         return res.status(400).json({ error: "Unknown entity type" });
       }
@@ -7285,11 +7392,23 @@ async function seedLlPricingSettings() {
   if (!existing) return;
   const existingSettings = (existing as any).llPricingSettingsJson;
   if (existingSettings) {
+    let dirty = false;
     if (existingSettings.commercialPolicy && existingSettings.commercialPolicy.defaultRatePerMmCut == null) {
       existingSettings.commercialPolicy.defaultRatePerMmCut = 0.012;
       existingSettings.commercialPolicy.defaultRatePerPierce = 0.50;
-      await storage.upsertDivisionSettings("LL", { llPricingSettingsJson: existingSettings });
+      dirty = true;
       console.log("[ll-pricing-settings] Migrated: added defaultRatePerMmCut/defaultRatePerPierce to commercial policy");
+    }
+    if (existingSettings.processRateTables?.length && !existingSettings.processRateTables[0].dataSource) {
+      for (const entry of existingSettings.processRateTables) {
+        entry.dataSource = "architecture_default";
+        entry.dataSourceNote = "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data";
+      }
+      dirty = true;
+      console.log(`[ll-pricing-settings] Migrated: stamped dataSource provenance on ${existingSettings.processRateTables.length} division-settings process rates`);
+    }
+    if (dirty) {
+      await storage.upsertDivisionSettings("LL", { llPricingSettingsJson: existingSettings });
     }
     return;
   }
@@ -7317,50 +7436,50 @@ async function seedLlPricingSettings() {
       }
     ],
     processRateTables: [
-      { materialFamily: "Mild Steel", thickness: 1.6, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Mild Steel", thickness: 2.0, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Mild Steel", thickness: 3.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Mild Steel", thickness: 4.5, cutSpeedMmPerMin: 4200, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Mild Steel", thickness: 6.0, cutSpeedMmPerMin: 3200, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20 },
-      { materialFamily: "Mild Steel", thickness: 8.0, cutSpeedMmPerMin: 2400, pierceTimeSec: 1.0, assistGasType: "O2", gasConsumptionLPerMin: 22 },
-      { materialFamily: "Mild Steel", thickness: 10.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.2, assistGasType: "O2", gasConsumptionLPerMin: 25 },
-      { materialFamily: "Mild Steel", thickness: 12.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 1.5, assistGasType: "O2", gasConsumptionLPerMin: 28 },
-      { materialFamily: "Mild Steel", thickness: 16.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.0, assistGasType: "O2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Mild Steel", thickness: 20.0, cutSpeedMmPerMin: 600, pierceTimeSec: 3.0, assistGasType: "O2", gasConsumptionLPerMin: 35 },
+      { materialFamily: "Mild Steel", thickness: 1.6, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 2.0, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 3.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 4.5, cutSpeedMmPerMin: 4200, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 6.0, cutSpeedMmPerMin: 3200, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 8.0, cutSpeedMmPerMin: 2400, pierceTimeSec: 1.0, assistGasType: "O2", gasConsumptionLPerMin: 22, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 10.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.2, assistGasType: "O2", gasConsumptionLPerMin: 25, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 12.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 1.5, assistGasType: "O2", gasConsumptionLPerMin: 28, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 16.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.0, assistGasType: "O2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Mild Steel", thickness: 20.0, cutSpeedMmPerMin: 600, pierceTimeSec: 3.0, assistGasType: "O2", gasConsumptionLPerMin: 35, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Stainless Steel", thickness: 1.2, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Stainless Steel", thickness: 1.5, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Stainless Steel", thickness: 2.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35 },
-      { materialFamily: "Stainless Steel", thickness: 3.0, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 40 },
-      { materialFamily: "Stainless Steel", thickness: 4.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 45 },
-      { materialFamily: "Stainless Steel", thickness: 6.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 50 },
-      { materialFamily: "Stainless Steel", thickness: 8.0, cutSpeedMmPerMin: 1100, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 55 },
-      { materialFamily: "Stainless Steel", thickness: 10.0, cutSpeedMmPerMin: 700, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 60 },
+      { materialFamily: "Stainless Steel", thickness: 1.2, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 1.5, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 2.0, cutSpeedMmPerMin: 5500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 3.0, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 40, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 4.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 45, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 6.0, cutSpeedMmPerMin: 1800, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 50, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 8.0, cutSpeedMmPerMin: 1100, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 55, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Stainless Steel", thickness: 10.0, cutSpeedMmPerMin: 700, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 60, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Aluminium", thickness: 1.6, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25 },
-      { materialFamily: "Aluminium", thickness: 2.0, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25 },
-      { materialFamily: "Aluminium", thickness: 3.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 30 },
-      { materialFamily: "Aluminium", thickness: 4.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35 },
-      { materialFamily: "Aluminium", thickness: 5.0, cutSpeedMmPerMin: 3500, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 38 },
-      { materialFamily: "Aluminium", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 40 },
-      { materialFamily: "Aluminium", thickness: 8.0, cutSpeedMmPerMin: 2000, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 45 },
-      { materialFamily: "Aluminium", thickness: 10.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 50 },
-      { materialFamily: "Aluminium", thickness: 12.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 55 },
-      { materialFamily: "Aluminium", thickness: 16.0, cutSpeedMmPerMin: 500, pierceTimeSec: 3.0, assistGasType: "N2", gasConsumptionLPerMin: 60 },
+      { materialFamily: "Aluminium", thickness: 1.6, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 2.0, cutSpeedMmPerMin: 8000, pierceTimeSec: 0.3, assistGasType: "N2", gasConsumptionLPerMin: 25, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 3.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 30, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 4.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "N2", gasConsumptionLPerMin: 35, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 5.0, cutSpeedMmPerMin: 3500, pierceTimeSec: 0.8, assistGasType: "N2", gasConsumptionLPerMin: 38, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 1.0, assistGasType: "N2", gasConsumptionLPerMin: 40, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 8.0, cutSpeedMmPerMin: 2000, pierceTimeSec: 1.5, assistGasType: "N2", gasConsumptionLPerMin: 45, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 10.0, cutSpeedMmPerMin: 1400, pierceTimeSec: 2.0, assistGasType: "N2", gasConsumptionLPerMin: 50, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 12.0, cutSpeedMmPerMin: 900, pierceTimeSec: 2.5, assistGasType: "N2", gasConsumptionLPerMin: 55, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Aluminium", thickness: 16.0, cutSpeedMmPerMin: 500, pierceTimeSec: 3.0, assistGasType: "N2", gasConsumptionLPerMin: 60, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Galvanised", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Galvanised", thickness: 1.6, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Galvanised", thickness: 2.0, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Galvanised", thickness: 3.0, cutSpeedMmPerMin: 5000, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Galvanised", thickness: 4.5, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
-      { materialFamily: "Galvanised", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20 },
+      { materialFamily: "Galvanised", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 1.6, cutSpeedMmPerMin: 7500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 2.0, cutSpeedMmPerMin: 6500, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 3.0, cutSpeedMmPerMin: 5000, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 4.5, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Galvanised", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Zincanneal", thickness: 0.55, cutSpeedMmPerMin: 10000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10 },
-      { materialFamily: "Zincanneal", thickness: 0.8, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10 },
-      { materialFamily: "Zincanneal", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12 },
-      { materialFamily: "Zincanneal", thickness: 1.6, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12 },
-      { materialFamily: "Zincanneal", thickness: 2.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15 },
-      { materialFamily: "Zincanneal", thickness: 3.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18 },
+      { materialFamily: "Zincanneal", thickness: 0.55, cutSpeedMmPerMin: 10000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 0.8, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 1.6, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 2.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 3.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
     ],
     gasCosts: {
       o2PricePerLitre: 0.003,
@@ -7435,4 +7554,27 @@ async function seedLlSheetMaterials() {
     });
   }
   console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
+}
+
+async function backfillProcessRateProvenance() {
+  try {
+    const profiles = await storage.getAllLLPricingProfiles();
+    let updated = 0;
+    for (const profile of profiles) {
+      const settings = profile.llPricingSettingsJson;
+      if (!settings?.processRateTables?.length) continue;
+      if (settings.processRateTables[0].dataSource) continue;
+      for (const entry of settings.processRateTables) {
+        entry.dataSource = "architecture_default";
+        entry.dataSourceNote = "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data";
+      }
+      await storage.updateLLPricingProfile(profile.id, { llPricingSettingsJson: settings });
+      updated++;
+    }
+    if (updated > 0) {
+      console.log(`[ll-provenance] Backfilled dataSource provenance on ${updated} pricing profile(s)`);
+    }
+  } catch (err) {
+    console.error("[ll-provenance] Backfill error:", err);
+  }
 }
