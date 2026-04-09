@@ -95,6 +95,7 @@ export interface LLPricingBreakdown {
   markupPercent: number;
   markupAmount: number;
   sellTotal: number;
+  unitCost: number;
   unitSell: number;
 
   utilisationFactor: number;
@@ -440,6 +441,7 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     markupPercent,
     markupAmount,
     sellTotal,
+    unitCost: effectiveSubtotal / safeQty,
     unitSell,
     utilisationFactor: safeUtilisation,
     ratePerMmCut,

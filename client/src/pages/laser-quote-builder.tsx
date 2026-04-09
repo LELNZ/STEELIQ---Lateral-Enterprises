@@ -252,6 +252,7 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
   }
 
   rows.push(
+    { label: "Unit Cost", value: `$${breakdown.unitCost.toFixed(2)}`, bold: true },
     { label: `Markup (${breakdown.markupPercent}%)`, value: `$${breakdown.markupAmount.toFixed(2)}` },
     { label: "Sell Total", value: `$${breakdown.sellTotal.toFixed(2)}`, bold: true },
     { label: "Unit Sell", value: `$${breakdown.unitSell.toFixed(2)}`, bold: true },

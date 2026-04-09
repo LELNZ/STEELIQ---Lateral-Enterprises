@@ -4063,6 +4063,55 @@ export async function registerRoutes(
         revisionId: quote.currentRevisionId,
       });
 
+      // Auto-link or auto-create CRM customer from quote/estimate data
+      if (!quote.customerId && quote.customer) {
+        try {
+          const allCustomers = await storage.getAllCustomers();
+          const customerNameNorm = quote.customer.trim().toLowerCase();
+          let matchedCustomer = allCustomers.find(c =>
+            c.name.trim().toLowerCase() === customerNameNorm
+          );
+          if (!matchedCustomer && quote.sentToEmail) {
+            const emailNorm = quote.sentToEmail.trim().toLowerCase();
+            matchedCustomer = allCustomers.find(c =>
+              c.email && c.email.trim().toLowerCase() === emailNorm
+            );
+          }
+          if (matchedCustomer) {
+            await storage.updateQuote(quote.id, { customerId: matchedCustomer.id });
+            if (quote.sourceLaserEstimateId) {
+              await storage.updateLaserEstimate(quote.sourceLaserEstimateId, { customerId: matchedCustomer.id });
+            }
+            logActivity("customer_auto_linked", "quote", quote.id, userId, {
+              customerId: matchedCustomer.id,
+              customerName: matchedCustomer.name,
+              method: "name_or_email_match",
+            });
+          } else {
+            const newCustomerData: any = { name: quote.customer };
+            if (quote.sentToEmail) newCustomerData.email = quote.sentToEmail;
+            if (quote.sourceLaserEstimateId) {
+              const srcEstimate = await storage.getLaserEstimate(quote.sourceLaserEstimateId);
+              if (srcEstimate?.projectAddress) {
+                newCustomerData.address = srcEstimate.projectAddress;
+              }
+            }
+            const created = await storage.createCustomer(newCustomerData);
+            await storage.updateQuote(quote.id, { customerId: created.id });
+            if (quote.sourceLaserEstimateId) {
+              await storage.updateLaserEstimate(quote.sourceLaserEstimateId, { customerId: created.id });
+            }
+            logActivity("customer_auto_created", "quote", quote.id, userId, {
+              customerId: created.id,
+              customerName: created.name,
+              method: "auto_create_on_accept",
+            });
+          }
+        } catch (custErr: any) {
+          console.error("[auto-customer] Failed to auto-link/create customer on accept:", custErr.message);
+        }
+      }
+
       // Assign lifecycle template version at acceptance (audit-safe milestone)
       try {
         const divisionCode = quote.divisionId;
@@ -4084,7 +4133,8 @@ export async function registerRoutes(
         console.error("[lifecycle] Failed to create lifecycle instance on accept:", lcErr.message);
       }
 
-      return res.json(updated);
+      const freshQuote = await storage.getQuote(quote.id);
+      return res.json(freshQuote ?? updated);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
