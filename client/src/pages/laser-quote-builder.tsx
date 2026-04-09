@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { LLLifecycleStripFromEstimate } from "@/components/ll-lifecycle-strip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -251,6 +252,7 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
   }
 
   rows.push(
+    { label: "Unit Cost", value: `$${breakdown.unitCost.toFixed(2)}`, bold: true },
     { label: `Markup (${breakdown.markupPercent}%)`, value: `$${breakdown.markupAmount.toFixed(2)}` },
     { label: "Sell Total", value: `$${breakdown.sellTotal.toFixed(2)}`, bold: true },
     { label: "Unit Sell", value: `$${breakdown.unitSell.toFixed(2)}`, bold: true },
@@ -873,6 +875,14 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               Flag as Demo
             </Button>
           </div>
+        )}
+
+        {isEstimateEdit && estimateData && (
+          <LLLifecycleStripFromEstimate
+            estimateId={estimateId!}
+            estimateStatus={estimateData.status}
+            linkedQuote={estimateData.linkedQuote}
+          />
         )}
 
         <Card data-testid="card-quote-details">

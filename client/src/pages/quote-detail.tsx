@@ -3,6 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { routes } from "@/lib/routes";
+import { LLLifecycleStripFromQuote } from "@/components/ll-lifecycle-strip";
 import { type Quote, type QuoteRevision, type AuditLog, type Invoice, type Customer, type Project, type OpJob, VALID_STATUS_TRANSITIONS, type QuoteStatus, type Variation } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -316,7 +317,14 @@ export default function QuoteDetail() {
           </Button>
           <div>
             <h1 className="text-xl font-bold" data-testid="text-quote-number">{quote.number}</h1>
-            <p className="text-sm text-muted-foreground" data-testid="text-quote-customer">{quote.customer}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm text-muted-foreground" data-testid="text-quote-customer">{quote.customer}</p>
+              {quote.customerId ? (
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400" data-testid="badge-customer-linked" title="Linked to CRM customer record">linked</span>
+              ) : quote.customer && quote.status === "accepted" ? (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="badge-customer-text-only" title="Display name only — no CRM customer linked yet">text only</span>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -572,6 +580,16 @@ export default function QuoteDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {quote.divisionId === "LL" && (
+        <LLLifecycleStripFromQuote
+          quoteId={quote.id}
+          quoteStatus={quote.status}
+          customerId={quote.customerId}
+          projectId={quote.projectId}
+          sourceLaserEstimateId={quote.sourceLaserEstimateId}
+        />
       )}
 
       {quote.status === "accepted" && (

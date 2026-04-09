@@ -2,6 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { routes } from "@/lib/routes";
+import { LLLifecycleStripFromJob } from "@/components/ll-lifecycle-strip";
 import { type OpJob, type Customer, type Project, type Quote, type QuoteRevision, type Invoice, type Variation, OP_JOB_STATUSES, MEASUREMENT_REQUIREMENTS, DIMENSION_SOURCES } from "@shared/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -564,6 +565,18 @@ export default function OpJobDetail() {
           </div>
         </div>
       </div>
+
+      {job.divisionId === "LL" && (
+        <>
+          <Separator />
+          <LLLifecycleStripFromJob
+            jobId={jobId}
+            sourceQuoteId={job.sourceQuoteId}
+            customerId={job.customerId}
+            projectId={job.projectId}
+          />
+        </>
+      )}
 
       <Separator />
 
