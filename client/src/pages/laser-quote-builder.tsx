@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { LLLifecycleStripFromEstimate } from "@/components/ll-lifecycle-strip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -873,6 +874,14 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               Flag as Demo
             </Button>
           </div>
+        )}
+
+        {isEstimateEdit && estimateData && (
+          <LLLifecycleStripFromEstimate
+            estimateId={estimateId!}
+            estimateStatus={estimateData.status}
+            linkedQuote={estimateData.linkedQuote}
+          />
         )}
 
         <Card data-testid="card-quote-details">

@@ -2195,19 +2195,6 @@ export async function registerRoutes(
           if (srcEst.rows.length > 0) {
             if (srcEst.rows[0].customer_id) {
               autoCustomerId = srcEst.rows[0].customer_id;
-            } else if (srcEst.rows[0].customer_name) {
-              const existingCustomers = await storage.getAllCustomers();
-              const nameLower = srcEst.rows[0].customer_name.trim().toLowerCase();
-              const match = existingCustomers.find((c) => c.name.toLowerCase() === nameLower);
-              if (match) {
-                autoCustomerId = match.id;
-              } else {
-                const newCustomer = await storage.createCustomer({
-                  name: srcEst.rows[0].customer_name.trim(),
-                });
-                autoCustomerId = newCustomer.id;
-              }
-              await client.query(`UPDATE laser_estimates SET customer_id = $1 WHERE id = $2`, [autoCustomerId, sourceLaserEstimateId]);
             }
           }
         }
