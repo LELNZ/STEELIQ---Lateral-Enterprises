@@ -162,3 +162,9 @@ id = "HR_BWqOZVCbDl2TGbTmT3"
 uri = "file://reports/phase-6b-ll-material-filter-parity-report.md"
 type = "text"
 title = "Phase 6B — LL Material Filter Parity: Enterprise Forensic Report"
+
+[[outputs]]
+id = "KjMjSTDvRwsCDwE4Kqdjc"
+uri = "file://reports/phase-6b-ll-material-truth-reconciliation-report.md"
+type = "text"
+title = "Phase 6B — LL Material Truth Reconciliation Report"
