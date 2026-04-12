@@ -156,3 +156,9 @@ id = "ALs1YoT1fAPk_3QNV7zvf"
 uri = "file://reports/phase-6b-ll-workflow-visibility-and-ux-corrections-report.md"
 type = "text"
 title = "Phase 6B — LL Workflow Visibility and UX Corrections Report"
+
+[[outputs]]
+id = "HR_BWqOZVCbDl2TGbTmT3"
+uri = "file://reports/phase-6b-ll-material-filter-parity-report.md"
+type = "text"
+title = "Phase 6B — LL Material Filter Parity: Enterprise Forensic Report"
