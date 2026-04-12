@@ -186,3 +186,9 @@ id = "1fl2LjrfVrTE3odIdEsjy"
 uri = "file://reports/phase-6b-ll-material-governance-collision-detection-report.md"
 type = "text"
 title = "Phase 6B — LL Material Governance Collision Detection Report"
+
+[[outputs]]
+id = "IWpjsrhvI3WZN1HWZWbRO"
+uri = "file://reports/phase-6b-ll-material-package-staging-verification-report.md"
+type = "text"
+title = "LL Material Package Staging Verification Report"
