@@ -168,3 +168,9 @@ id = "KjMjSTDvRwsCDwE4Kqdjc"
 uri = "file://reports/phase-6b-ll-material-truth-reconciliation-report.md"
 type = "text"
 title = "Phase 6B — LL Material Truth Reconciliation Report"
+
+[[outputs]]
+id = "UbaWR97v39mloP_6UExXb"
+uri = "file://reports/phase-6b-ll-stucco-vs-mill-reconciliation-report.md"
+type = "text"
+title = "Phase 6B — LL Stucco vs Mill Reconciliation Report"
