@@ -180,3 +180,9 @@ id = "9Bgf8q62i3aSgeCRC_1-X"
 uri = "file://reports/phase-6b-ll-stainless-304-subfinish-reconciliation-report.md"
 type = "text"
 title = "Phase 6B — LL Stainless 304 Sub-Finish Reconciliation Report"
+
+[[outputs]]
+id = "1fl2LjrfVrTE3odIdEsjy"
+uri = "file://reports/phase-6b-ll-material-governance-collision-detection-report.md"
+type = "text"
+title = "Phase 6B — LL Material Governance Collision Detection Report"
