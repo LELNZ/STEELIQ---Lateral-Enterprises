@@ -1866,7 +1866,11 @@ export async function registerRoutes(
   app.get("/api/ll-sheet-materials", async (req, res) => {
     try {
       const activeOnly = req.query.active === "true";
-      const materials = await storage.getLlSheetMaterials(activeOnly);
+      const quoteableOnly = req.query.quoteable === "true";
+      let materials = await storage.getLlSheetMaterials(activeOnly);
+      if (quoteableOnly) {
+        materials = materials.filter(m => m.isQuoteable);
+      }
       res.json(materials);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -7602,33 +7606,91 @@ async function seedLlPricingSettings() {
 async function seedLlSheetMaterials() {
   const existing = await storage.getLlSheetMaterials();
   const hasDemoData = existing.some(r => r.supplierName === "NZ Steel" || r.supplierName === "Vulcan Steel" || r.supplierName === "Ullrich Aluminium");
-  const needsReseed = existing.length === 0 || hasDemoData;
-  if (!needsReseed) return;
+  const needsFullReseed = existing.length === 0 || hasDemoData;
 
   if (hasDemoData) {
     console.log(`[ll-material-seed] Purging ${existing.length} demo rows and replacing with real supplier data...`);
     await storage.deleteAllLlSheetMaterials();
   }
 
-  console.log(`[ll-material-seed] Seeding ${LL_SEED_MATERIALS.length} LL sheet material entries from real supplier data...`);
-  for (const mat of LL_SEED_MATERIALS) {
-    await storage.createLlSheetMaterial({
-      divisionScope: "LL",
-      supplierName: mat.supplierName,
-      materialFamily: mat.materialFamily,
-      productDescription: mat.productDescription,
-      grade: mat.grade,
-      finish: mat.finish,
-      thickness: mat.thickness,
-      sheetLength: mat.sheetLength,
-      sheetWidth: mat.sheetWidth,
-      pricePerSheetExGst: mat.pricePerSheetExGst,
-      isActive: true,
-      notes: "",
-      sourceReference: mat.sourceReference,
-    });
+  if (needsFullReseed) {
+    console.log(`[ll-material-seed] Seeding ${LL_SEED_MATERIALS.length} LL sheet material entries from real supplier data...`);
+    for (const mat of LL_SEED_MATERIALS) {
+      await storage.createLlSheetMaterial({
+        divisionScope: "LL",
+        supplierName: mat.supplierName,
+        materialFamily: mat.materialFamily,
+        productDescription: mat.productDescription,
+        grade: mat.grade,
+        finish: mat.finish,
+        thickness: mat.thickness,
+        sheetLength: mat.sheetLength,
+        sheetWidth: mat.sheetWidth,
+        pricePerSheetExGst: mat.pricePerSheetExGst,
+        pricePerKg: mat.pricePerKg ?? null,
+        supplierSku: mat.supplierSku ?? "",
+        supplierCategory: mat.supplierCategory ?? "",
+        formType: mat.formType ?? "",
+        isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
+        isActive: true,
+        notes: "",
+        sourceReference: mat.sourceReference,
+      });
+    }
+    console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
+    return;
   }
-  console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
+
+  const existingDescs = new Set(existing.map(r => r.productDescription));
+  const missing = LL_SEED_MATERIALS.filter(m => !existingDescs.has(m.productDescription));
+  if (missing.length > 0) {
+    console.log(`[ll-material-seed] Reconciling ${missing.length} missing rows into existing ${existing.length}-row dataset...`);
+    for (const mat of missing) {
+      await storage.createLlSheetMaterial({
+        divisionScope: "LL",
+        supplierName: mat.supplierName,
+        materialFamily: mat.materialFamily,
+        productDescription: mat.productDescription,
+        grade: mat.grade,
+        finish: mat.finish,
+        thickness: mat.thickness,
+        sheetLength: mat.sheetLength,
+        sheetWidth: mat.sheetWidth,
+        pricePerSheetExGst: mat.pricePerSheetExGst,
+        pricePerKg: mat.pricePerKg ?? null,
+        supplierSku: mat.supplierSku ?? "",
+        supplierCategory: mat.supplierCategory ?? "",
+        formType: mat.formType ?? "",
+        isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
+        isActive: true,
+        notes: "",
+        sourceReference: mat.sourceReference,
+      });
+    }
+    console.log(`[ll-material-seed] Reconciled ${missing.length} missing rows`);
+  }
+
+  const needsBackfill = existing.some(r => !r.formType && !r.supplierSku);
+  if (needsBackfill) {
+    const seedLookup = new Map(LL_SEED_MATERIALS.map(m => [m.productDescription, m]));
+    let backfilled = 0;
+    for (const row of existing) {
+      const seed = seedLookup.get(row.productDescription);
+      if (seed && (!row.formType || !row.supplierSku)) {
+        await storage.updateLlSheetMaterial(row.id, {
+          supplierSku: seed.supplierSku ?? "",
+          supplierCategory: seed.supplierCategory ?? "",
+          formType: seed.formType ?? "",
+          isQuoteable: seed.isQuoteable !== undefined ? seed.isQuoteable : true,
+          pricePerKg: seed.pricePerKg ?? null,
+        });
+        backfilled++;
+      }
+    }
+    if (backfilled > 0) {
+      console.log(`[ll-material-seed] Backfilled new fields on ${backfilled} existing rows`);
+    }
+  }
 }
 
 async function backfillProcessRateProvenance() {

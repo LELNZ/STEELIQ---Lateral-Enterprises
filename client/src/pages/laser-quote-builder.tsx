@@ -328,8 +328,8 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   const pricingProfileLabel = activePricingProfile ? `${activePricingProfile.profileName} (${activePricingProfile.versionLabel})` : null;
 
   const { data: sheetMaterials = [] } = useQuery<SheetMaterialRef[]>({
-    queryKey: ["/api/ll-sheet-materials", "active"],
-    queryFn: () => fetch("/api/ll-sheet-materials?active=true", { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/ll-sheet-materials", "active", "quoteable"],
+    queryFn: () => fetch("/api/ll-sheet-materials?active=true&quoteable=true", { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: activeGasInputs = [] } = useQuery<LLGasCostInput[]>({
