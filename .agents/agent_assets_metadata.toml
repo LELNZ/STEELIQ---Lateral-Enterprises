@@ -216,3 +216,9 @@ id = "1rxIGBJrTenNEh7u4gC1Y"
 uri = "file://reports/steeliq-ll-phase3-corrective-verification-report.md"
 type = "text"
 title = "Phase 3 Corrective Verification Report — Disputed Aluminium Rows, Collision Groups, Library Presentation"
+
+[[outputs]]
+id = "RWYTWeJ9hBdIrhhvkvGVQ"
+uri = "file://reports/wakefield-forensic-verification-report.md"
+type = "text"
+title = "Wakefield Metals Forensic Verification Report — Full Evidence"
