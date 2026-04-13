@@ -23,7 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck, ShieldCheck, AlertTriangle } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
@@ -3926,6 +3926,13 @@ interface SheetMaterial {
   sheetLength: string;
   sheetWidth: string;
   pricePerSheetExGst: string;
+  pricePerKg: string | null;
+  supplierSku: string;
+  supplierCategory: string;
+  formType: string;
+  stockBehaviour: string;
+  densityKgM3: string | null;
+  isQuoteable: boolean;
   isActive: boolean;
   notes: string;
   sourceReference: string;
@@ -3955,23 +3962,10 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
   const [filterFinish, setFilterFinish] = useState<string>("all");
   const [filterThickness, setFilterThickness] = useState<string>("all");
   const [filterSupplier, setFilterSupplier] = useState<string>("all");
+  const [filterStockType, setFilterStockType] = useState<string>("all");
 
   const { data: materials = [], isLoading } = useQuery<SheetMaterial[]>({
     queryKey: ["/api/ll-sheet-materials"],
-  });
-
-  const { data: collisionAudit } = useQuery<{
-    status: string;
-    collisionGroupCount: number;
-    totalRecordsScanned: number;
-    collisionGroups: Array<{
-      collisionKey: Record<string, string>;
-      recordCount: number;
-      records: Array<{ id: string; supplierName: string; productDescription: string; pricePerSheetExGst: string }>;
-    }>;
-  }>({
-    queryKey: ["/api/ll-sheet-materials/audit/collision-check"],
-    staleTime: 60000,
   });
 
   const familyMaterials = materials.filter(m => m.materialFamily === materialFamily);
@@ -3980,12 +3974,14 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
   const finishes = [...new Set(familyMaterials.map(m => m.finish).filter(Boolean))].sort();
   const thicknesses = [...new Set(familyMaterials.map(m => m.thickness))].sort((a, b) => parseFloat(a) - parseFloat(b));
   const suppliers = [...new Set(familyMaterials.map(m => m.supplierName))].sort();
+  const stockTypes = [...new Set(familyMaterials.map(m => m.stockBehaviour || "sheet"))].sort();
 
   let filtered = familyMaterials;
   if (filterGrade !== "all") filtered = filtered.filter(m => m.grade === filterGrade);
   if (filterFinish !== "all") filtered = filtered.filter(m => m.finish === filterFinish);
   if (filterThickness !== "all") filtered = filtered.filter(m => m.thickness === filterThickness);
   if (filterSupplier !== "all") filtered = filtered.filter(m => m.supplierName === filterSupplier);
+  if (filterStockType !== "all") filtered = filtered.filter(m => (m.stockBehaviour || "sheet") === filterStockType);
 
   const createMutation = useMutation({
     mutationFn: (data: typeof EMPTY_SHEET_MATERIAL) =>
@@ -4059,46 +4055,29 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  const familyCollisions = collisionAudit?.collisionGroups?.filter(g =>
-    g.collisionKey.materialFamily === materialFamily
-  ) ?? [];
-
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CardTitle data-testid="text-sheet-materials-title">{materialFamily} Sheet Materials</CardTitle>
-            {collisionAudit && (
-              familyCollisions.length === 0 ? (
-                <Badge variant="outline" className="text-green-600 border-green-300 gap-1" data-testid="badge-collision-clean">
-                  <ShieldCheck className="w-3 h-3" /> No collisions
-                </Badge>
-              ) : (
-                <Badge variant="destructive" className="gap-1" data-testid="badge-collision-warning">
-                  <AlertTriangle className="w-3 h-3" /> {familyCollisions.length} collision{familyCollisions.length !== 1 ? "s" : ""}
-                </Badge>
-              )
+            <CardTitle data-testid="text-sheet-materials-title">{materialFamily} Materials</CardTitle>
+            {stockTypes.length > 1 && (
+              <div className="flex gap-1">
+                {stockTypes.map(st => {
+                  const count = familyMaterials.filter(m => (m.stockBehaviour || "sheet") === st).length;
+                  return (
+                    <Badge key={st} variant="outline" className="text-[10px] px-1.5 py-0" data-testid={`badge-stock-type-${st}`}>
+                      {st} ({count})
+                    </Badge>
+                  );
+                })}
+              </div>
             )}
           </div>
           <Button size="sm" onClick={openAdd} data-testid="button-add-sheet-material">
             <Plus className="w-4 h-4 mr-1" /> Add Material
           </Button>
         </div>
-        {familyCollisions.length > 0 && (
-          <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm" data-testid="collision-details">
-            <p className="font-medium text-destructive mb-2">Same-key collision groups detected — review required</p>
-            {familyCollisions.map((g, i) => (
-              <div key={i} className="mb-2 p-2 bg-background rounded border text-xs">
-                <p className="font-medium">Key: {g.collisionKey.grade} / {g.collisionKey.finish} / {g.collisionKey.thickness}mm / {g.collisionKey.sheetLength}×{g.collisionKey.sheetWidth}</p>
-                <p className="text-muted-foreground">{g.recordCount} records sharing this key:</p>
-                {g.records.map(r => (
-                  <p key={r.id} className="ml-2">• {r.productDescription} — ${r.pricePerSheetExGst} ({r.supplierName})</p>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
         <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="sheet-material-filters">
           <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
           {suppliers.length > 1 && (
@@ -4145,6 +4124,17 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
               </SelectContent>
             </Select>
           )}
+          {stockTypes.length > 1 && (
+            <Select value={filterStockType} onValueChange={setFilterStockType}>
+              <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-filter-stock-type">
+                <SelectValue placeholder="Stock Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Stock Types</SelectItem>
+                {stockTypes.map(st => <SelectItem key={st} value={st}>{st}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           <span className="text-xs text-muted-foreground">{filtered.length} of {familyMaterials.length} materials</span>
         </div>
       </CardHeader>
@@ -4159,30 +4149,67 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Supplier</TableHead>
-                  <TableHead>Family</TableHead>
                   <TableHead>Grade</TableHead>
                   <TableHead>Finish</TableHead>
                   <TableHead className="text-right">Thickness</TableHead>
-                  <TableHead className="text-right">Sheet Size</TableHead>
+                  <TableHead>Stock</TableHead>
+                  <TableHead className="text-right">Dimensions</TableHead>
                   <TableHead className="text-right">Price (ex GST)</TableHead>
-                  <TableHead>Active</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(m => (
-                  <TableRow key={m.id} className={!m.isActive ? "opacity-50" : ""} data-testid={`row-material-${m.id}`}>
+                {filtered.map(m => {
+                  const sb = m.stockBehaviour || "sheet";
+                  const isCoil = sb === "coil";
+                  const isRefOnly = !m.isQuoteable;
+                  const isPerKgRef = isRefOnly && m.sheetLength === "1" && m.sheetWidth === "1";
+                  return (
+                  <TableRow key={m.id} className={`${!m.isActive ? "opacity-50" : ""} ${isRefOnly ? "bg-muted/30" : ""}`} data-testid={`row-material-${m.id}`}>
                     <TableCell className="text-xs">{m.supplierName}</TableCell>
-                    <TableCell>{m.materialFamily}</TableCell>
                     <TableCell>{m.grade}</TableCell>
                     <TableCell>{m.finish}</TableCell>
                     <TableCell className="text-right font-mono">{m.thickness}mm</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{m.sheetLength}×{m.sheetWidth}</TableCell>
-                    <TableCell className="text-right font-mono">${parseFloat(m.pricePerSheetExGst).toFixed(2)}</TableCell>
                     <TableCell>
-                      <Badge variant={m.isActive ? "default" : "secondary"} data-testid={`badge-active-${m.id}`}>
-                        {m.isActive ? "Yes" : "No"}
+                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${
+                        isCoil ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400" :
+                        sb === "plate" ? "border-orange-300 text-orange-700 dark:border-orange-700 dark:text-orange-400" :
+                        sb === "tread_plate" ? "border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-400" :
+                        ""
+                      }`} data-testid={`badge-stock-${m.id}`}>
+                        {sb}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {isCoil ? (
+                        <span>{m.sheetWidth}mm wide</span>
+                      ) : isPerKgRef ? (
+                        <span className="text-muted-foreground italic">per-kg ref</span>
+                      ) : (
+                        <span>{m.sheetLength}×{m.sheetWidth}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {isCoil ? (
+                        <span>${parseFloat(m.pricePerKg || "0").toFixed(4)}<span className="text-[10px] text-muted-foreground">/kg</span></span>
+                      ) : isPerKgRef ? (
+                        <span>${parseFloat(m.pricePerKg || "0").toFixed(2)}<span className="text-[10px] text-muted-foreground">/kg</span></span>
+                      ) : (
+                        <span>${parseFloat(m.pricePerSheetExGst).toFixed(2)}<span className="text-[10px] text-muted-foreground">/sht</span></span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {isRefOnly && (
+                          <Badge variant="secondary" className="text-[10px] px-1 py-0" data-testid={`badge-ref-only-${m.id}`}>
+                            Ref Only
+                          </Badge>
+                        )}
+                        <Badge variant={m.isActive ? "default" : "secondary"} className="text-[10px] px-1 py-0" data-testid={`badge-active-${m.id}`}>
+                          {m.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
@@ -4195,7 +4222,8 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

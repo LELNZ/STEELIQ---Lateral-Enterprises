@@ -210,3 +210,9 @@ id = "AfOyk2DvfvdhyONIf_1rT"
 uri = "file://reports/steeliq-ll-phase3-coil-support-enterprise-report.md"
 type = "text"
 title = "Phase 3: Coil Stock Support & Supplier-Native Visibility — Enterprise Report"
+
+[[outputs]]
+id = "1rxIGBJrTenNEh7u4gC1Y"
+uri = "file://reports/steeliq-ll-phase3-corrective-verification-report.md"
+type = "text"
+title = "Phase 3 Corrective Verification Report — Disputed Aluminium Rows, Collision Groups, Library Presentation"

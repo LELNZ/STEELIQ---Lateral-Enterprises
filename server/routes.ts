@@ -1913,22 +1913,25 @@ export async function registerRoutes(
       const materials = await storage.getLlSheetMaterials(activeOnly);
       const keyMap = new Map<string, typeof materials>();
       for (const m of materials) {
-        const key = [m.materialFamily, m.grade, m.finish, m.thickness, m.sheetLength, m.sheetWidth].join("|");
+        const key = [m.materialFamily, m.grade, m.finish, m.thickness, m.sheetLength, m.sheetWidth, m.stockBehaviour || "sheet"].join("|");
         if (!keyMap.has(key)) keyMap.set(key, []);
         keyMap.get(key)!.push(m);
       }
       const collisions: any[] = [];
       for (const [key, records] of keyMap) {
         if (records.length <= 1) continue;
-        const [materialFamily, grade, finish, thickness, sheetLength, sheetWidth] = key.split("|");
+        const [materialFamily, grade, finish, thickness, sheetLength, sheetWidth, stockBehaviour] = key.split("|");
         collisions.push({
-          collisionKey: { materialFamily, grade, finish, thickness, sheetLength, sheetWidth },
+          collisionKey: { materialFamily, grade, finish, thickness, sheetLength, sheetWidth, stockBehaviour },
           recordCount: records.length,
           records: records.map(r => ({
             id: r.id,
             supplierName: r.supplierName,
             productDescription: r.productDescription,
             pricePerSheetExGst: r.pricePerSheetExGst,
+            pricePerKg: r.pricePerKg,
+            supplierSku: r.supplierSku,
+            stockBehaviour: r.stockBehaviour || "sheet",
           })),
         });
       }
