@@ -23,7 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { BookOpen, Plus, Pencil, Trash2, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, ChevronRight, ChevronDown, Settings2, Wrench, Package, Filter, Camera, ImageIcon, X, List, Star, Circle, CircleCheck, ShieldCheck, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
@@ -3960,6 +3960,20 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
     queryKey: ["/api/ll-sheet-materials"],
   });
 
+  const { data: collisionAudit } = useQuery<{
+    status: string;
+    collisionGroupCount: number;
+    totalRecordsScanned: number;
+    collisionGroups: Array<{
+      collisionKey: Record<string, string>;
+      recordCount: number;
+      records: Array<{ id: string; supplierName: string; productDescription: string; pricePerSheetExGst: string }>;
+    }>;
+  }>({
+    queryKey: ["/api/ll-sheet-materials/audit/collision-check"],
+    staleTime: 60000,
+  });
+
   const familyMaterials = materials.filter(m => m.materialFamily === materialFamily);
 
   const grades = [...new Set(familyMaterials.map(m => m.grade))].sort();
@@ -4045,15 +4059,46 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const familyCollisions = collisionAudit?.collisionGroups?.filter(g =>
+    g.collisionKey.materialFamily === materialFamily
+  ) ?? [];
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle data-testid="text-sheet-materials-title">{materialFamily} Sheet Materials</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle data-testid="text-sheet-materials-title">{materialFamily} Sheet Materials</CardTitle>
+            {collisionAudit && (
+              familyCollisions.length === 0 ? (
+                <Badge variant="outline" className="text-green-600 border-green-300 gap-1" data-testid="badge-collision-clean">
+                  <ShieldCheck className="w-3 h-3" /> No collisions
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="gap-1" data-testid="badge-collision-warning">
+                  <AlertTriangle className="w-3 h-3" /> {familyCollisions.length} collision{familyCollisions.length !== 1 ? "s" : ""}
+                </Badge>
+              )
+            )}
+          </div>
           <Button size="sm" onClick={openAdd} data-testid="button-add-sheet-material">
             <Plus className="w-4 h-4 mr-1" /> Add Material
           </Button>
         </div>
+        {familyCollisions.length > 0 && (
+          <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm" data-testid="collision-details">
+            <p className="font-medium text-destructive mb-2">Same-key collision groups detected — review required</p>
+            {familyCollisions.map((g, i) => (
+              <div key={i} className="mb-2 p-2 bg-background rounded border text-xs">
+                <p className="font-medium">Key: {g.collisionKey.grade} / {g.collisionKey.finish} / {g.collisionKey.thickness}mm / {g.collisionKey.sheetLength}×{g.collisionKey.sheetWidth}</p>
+                <p className="text-muted-foreground">{g.recordCount} records sharing this key:</p>
+                {g.records.map(r => (
+                  <p key={r.id} className="ml-2">• {r.productDescription} — ${r.pricePerSheetExGst} ({r.supplierName})</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="sheet-material-filters">
           <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
           {suppliers.length > 1 && (

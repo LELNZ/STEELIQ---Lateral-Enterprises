@@ -1903,6 +1903,44 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/ll-sheet-materials/audit/collision-check", async (req, res) => {
+    try {
+      const activeOnly = req.query.active !== "false";
+      const materials = await storage.getLlSheetMaterials(activeOnly);
+      const keyMap = new Map<string, typeof materials>();
+      for (const m of materials) {
+        const key = [m.materialFamily, m.grade, m.finish, m.thickness, m.sheetLength, m.sheetWidth].join("|");
+        if (!keyMap.has(key)) keyMap.set(key, []);
+        keyMap.get(key)!.push(m);
+      }
+      const collisions: any[] = [];
+      for (const [key, records] of keyMap) {
+        if (records.length <= 1) continue;
+        const [materialFamily, grade, finish, thickness, sheetLength, sheetWidth] = key.split("|");
+        collisions.push({
+          collisionKey: { materialFamily, grade, finish, thickness, sheetLength, sheetWidth },
+          recordCount: records.length,
+          records: records.map(r => ({
+            id: r.id,
+            supplierName: r.supplierName,
+            productDescription: r.productDescription,
+            pricePerSheetExGst: r.pricePerSheetExGst,
+          })),
+        });
+      }
+      res.json({
+        auditType: "ll-sheet-material-collision-check",
+        scope: activeOnly ? "active-only" : "all-records",
+        totalRecordsScanned: materials.length,
+        collisionGroupCount: collisions.length,
+        status: collisions.length === 0 ? "CLEAN" : "COLLISIONS_DETECTED",
+        collisionGroups: collisions,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── Laser Estimates (LL) ────────────────────────────────────────────────
   app.get("/api/laser-estimates", async (req, res) => {
     try {

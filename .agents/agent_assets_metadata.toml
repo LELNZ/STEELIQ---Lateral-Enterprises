@@ -156,3 +156,39 @@ id = "ALs1YoT1fAPk_3QNV7zvf"
 uri = "file://reports/phase-6b-ll-workflow-visibility-and-ux-corrections-report.md"
 type = "text"
 title = "Phase 6B — LL Workflow Visibility and UX Corrections Report"
+
+[[outputs]]
+id = "HR_BWqOZVCbDl2TGbTmT3"
+uri = "file://reports/phase-6b-ll-material-filter-parity-report.md"
+type = "text"
+title = "Phase 6B — LL Material Filter Parity: Enterprise Forensic Report"
+
+[[outputs]]
+id = "KjMjSTDvRwsCDwE4Kqdjc"
+uri = "file://reports/phase-6b-ll-material-truth-reconciliation-report.md"
+type = "text"
+title = "Phase 6B — LL Material Truth Reconciliation Report"
+
+[[outputs]]
+id = "UbaWR97v39mloP_6UExXb"
+uri = "file://reports/phase-6b-ll-stucco-vs-mill-reconciliation-report.md"
+type = "text"
+title = "Phase 6B — LL Stucco vs Mill Reconciliation Report"
+
+[[outputs]]
+id = "9Bgf8q62i3aSgeCRC_1-X"
+uri = "file://reports/phase-6b-ll-stainless-304-subfinish-reconciliation-report.md"
+type = "text"
+title = "Phase 6B — LL Stainless 304 Sub-Finish Reconciliation Report"
+
+[[outputs]]
+id = "1fl2LjrfVrTE3odIdEsjy"
+uri = "file://reports/phase-6b-ll-material-governance-collision-detection-report.md"
+type = "text"
+title = "Phase 6B — LL Material Governance Collision Detection Report"
+
+[[outputs]]
+id = "IWpjsrhvI3WZN1HWZWbRO"
+uri = "file://reports/phase-6b-ll-material-package-staging-verification-report.md"
+type = "text"
+title = "LL Material Package Staging Verification Report"
