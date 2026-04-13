@@ -192,3 +192,9 @@ id = "IWpjsrhvI3WZN1HWZWbRO"
 uri = "file://reports/phase-6b-ll-material-package-staging-verification-report.md"
 type = "text"
 title = "LL Material Package Staging Verification Report"
+
+[[outputs]]
+id = "9uLxOU65SUEpfO2_d6xXg"
+uri = "file://reports/steeliq-ll-material-library-forensic-audit.md"
+type = "text"
+title = "SteelIQ LL Material Library Forensic Audit Report"
