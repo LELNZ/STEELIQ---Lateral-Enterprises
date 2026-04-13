@@ -198,3 +198,9 @@ id = "9uLxOU65SUEpfO2_d6xXg"
 uri = "file://reports/steeliq-ll-material-library-forensic-audit.md"
 type = "text"
 title = "SteelIQ LL Material Library Forensic Audit Report"
+
+[[outputs]]
+id = "rz14kImgXhBahqN6dIeXe"
+uri = "file://reports/steeliq-ll-material-library-corrective-implementation-report.md"
+type = "text"
+title = "LL Material Library — Corrective Implementation Report"
