@@ -7631,6 +7631,8 @@ async function seedLlSheetMaterials() {
         supplierSku: mat.supplierSku ?? "",
         supplierCategory: mat.supplierCategory ?? "",
         formType: mat.formType ?? "",
+        stockBehaviour: mat.stockBehaviour ?? "sheet",
+        densityKgM3: mat.densityKgM3 ?? null,
         isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
         isActive: true,
         notes: "",
@@ -7641,8 +7643,8 @@ async function seedLlSheetMaterials() {
     return;
   }
 
-  const existingDescs = new Set(existing.map(r => r.productDescription));
-  const missing = LL_SEED_MATERIALS.filter(m => !existingDescs.has(m.productDescription));
+  const existingKeys = new Set(existing.map(r => `${r.supplierName}|||${r.productDescription}|||${r.thickness}`));
+  const missing = LL_SEED_MATERIALS.filter(m => !existingKeys.has(`${m.supplierName}|||${m.productDescription}|||${m.thickness}`));
   if (missing.length > 0) {
     console.log(`[ll-material-seed] Reconciling ${missing.length} missing rows into existing ${existing.length}-row dataset...`);
     for (const mat of missing) {
@@ -7661,6 +7663,8 @@ async function seedLlSheetMaterials() {
         supplierSku: mat.supplierSku ?? "",
         supplierCategory: mat.supplierCategory ?? "",
         formType: mat.formType ?? "",
+        stockBehaviour: mat.stockBehaviour ?? "sheet",
+        densityKgM3: mat.densityKgM3 ?? null,
         isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
         isActive: true,
         notes: "",
@@ -7670,17 +7674,19 @@ async function seedLlSheetMaterials() {
     console.log(`[ll-material-seed] Reconciled ${missing.length} missing rows`);
   }
 
-  const needsBackfill = existing.some(r => !r.formType && !r.supplierSku);
+  const needsBackfill = existing.some(r => !r.formType || !r.stockBehaviour || !r.densityKgM3);
   if (needsBackfill) {
-    const seedLookup = new Map(LL_SEED_MATERIALS.map(m => [m.productDescription, m]));
+    const seedLookup = new Map(LL_SEED_MATERIALS.map(m => [`${m.supplierName}|||${m.productDescription}|||${m.thickness}`, m]));
     let backfilled = 0;
     for (const row of existing) {
-      const seed = seedLookup.get(row.productDescription);
-      if (seed && (!row.formType || !row.supplierSku)) {
+      const seed = seedLookup.get(`${row.supplierName}|||${row.productDescription}|||${row.thickness}`);
+      if (seed && (!row.formType || !row.stockBehaviour || !row.densityKgM3)) {
         await storage.updateLlSheetMaterial(row.id, {
           supplierSku: seed.supplierSku ?? "",
           supplierCategory: seed.supplierCategory ?? "",
           formType: seed.formType ?? "",
+          stockBehaviour: seed.stockBehaviour ?? "sheet",
+          densityKgM3: seed.densityKgM3 ?? null,
           isQuoteable: seed.isQuoteable !== undefined ? seed.isQuoteable : true,
           pricePerKg: seed.pricePerKg ?? null,
         });

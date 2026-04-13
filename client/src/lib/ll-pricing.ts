@@ -47,6 +47,9 @@ export interface LLMaterialTruth {
   sheetLength: number;
   sheetWidth: number;
   pricePerSheetExGst: number;
+  stockBehaviour: string;
+  pricePerKg: number;
+  densityKgM3: number;
 }
 
 export interface LLPricingInputs {
@@ -60,6 +63,7 @@ export interface LLPricingInputs {
   handlingMinutes: number;
   markupPercent: number;
   utilisationFactor: number;
+  coilLengthMm?: number;
 }
 
 export interface LLGovernedInputs {
@@ -107,6 +111,12 @@ export interface LLPricingBreakdown {
   gasCostPerLitre?: number;
   consumablesSource?: string;
   consumablesCostPerHourRate?: number;
+
+  stockBehaviour?: string;
+  coilLengthMm?: number;
+  coilWidthMm?: number;
+  coilWeightKg?: number;
+  coilPricePerKg?: number;
 }
 
 export const LL_PRICING_DEFAULTS = {
@@ -309,12 +319,14 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     handlingMinutes,
     markupPercent,
     utilisationFactor,
+    coilLengthMm,
   } = inputs;
 
   const safeQty = Math.max(quantity, 1);
   const safeUtilisation = Math.max(utilisationFactor, 0.1);
+  const isCoil = material?.stockBehaviour === "coil";
 
-  const sheetAreaMm2 = material ? material.sheetLength * material.sheetWidth : 0;
+  const sheetAreaMm2 = material && !isCoil ? material.sheetLength * material.sheetWidth : 0;
   const partAreaMm2 = partLengthMm * partWidthMm;
   const totalNetPartArea = partAreaMm2 * safeQty;
   const usableSheetArea = sheetAreaMm2 * safeUtilisation;
@@ -325,8 +337,26 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   let estimatedSheets = 0;
   let materialCostTotal = 0;
   let partsPerSheet = 0;
+  let coilWeightKg = 0;
+  let coilPricePerKgUsed = 0;
+  let coilWidthMm = 0;
+  let coilLengthMmUsed = 0;
 
-  if (material && partLengthMm > 0 && partWidthMm > 0) {
+  if (isCoil && material) {
+    coilWidthMm = material.sheetWidth;
+    coilPricePerKgUsed = material.pricePerKg || 0;
+    coilLengthMmUsed = coilLengthMm || 0;
+
+    if (coilLengthMmUsed > 0 && coilPricePerKgUsed > 0 && material.densityKgM3 > 0) {
+      const thicknessM = material.thickness / 1000;
+      const widthM = coilWidthMm / 1000;
+      const lengthM = coilLengthMmUsed / 1000;
+      const volumeM3 = thicknessM * widthM * lengthM;
+      coilWeightKg = volumeM3 * material.densityKgM3;
+      const costPerUnit = coilWeightKg * coilPricePerKgUsed;
+      materialCostTotal = costPerUnit * safeQty;
+    }
+  } else if (material && partLengthMm > 0 && partWidthMm > 0) {
     partsPerSheet = estimatePartsPerSheet(
       material.sheetLength, material.sheetWidth,
       partLengthMm, partWidthMm,
@@ -451,5 +481,10 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     gasCostPerLitre: gasCostPerLitre || undefined,
     consumablesSource: consumablesSource || undefined,
     consumablesCostPerHourRate: consumablesCostPerHourRate || undefined,
+    stockBehaviour: material?.stockBehaviour || "sheet",
+    coilLengthMm: coilLengthMmUsed || undefined,
+    coilWidthMm: coilWidthMm || undefined,
+    coilWeightKg: coilWeightKg || undefined,
+    coilPricePerKg: coilPricePerKgUsed || undefined,
   };
 }

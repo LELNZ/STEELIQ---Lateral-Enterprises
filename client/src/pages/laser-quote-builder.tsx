@@ -60,6 +60,12 @@ interface SheetMaterialRef {
   sheetLength: string;
   sheetWidth: string;
   pricePerSheetExGst: string;
+  pricePerKg: string | null;
+  supplierSku: string;
+  supplierCategory: string;
+  formType: string;
+  stockBehaviour: string;
+  densityKgM3: string | null;
 }
 
 function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<LaserQuoteItem, "id"> {
@@ -78,6 +84,7 @@ function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<Las
     internalNotes: "",
     unitPrice: 0,
     llSheetMaterialId: "",
+    coilLengthMm: 0,
     cutLengthMm: 0,
     pierceCount: 0,
     setupMinutes: rates.defaultSetupMinutes,
@@ -116,6 +123,9 @@ function materialToTruth(m: SheetMaterialRef): LLMaterialTruth {
     sheetLength: parseFloat(m.sheetLength),
     sheetWidth: parseFloat(m.sheetWidth),
     pricePerSheetExGst: parseFloat(m.pricePerSheetExGst),
+    stockBehaviour: m.stockBehaviour || "sheet",
+    pricePerKg: parseFloat(m.pricePerKg || "0"),
+    densityKgM3: parseFloat(m.densityKgM3 || "0"),
   };
 }
 
@@ -137,6 +147,7 @@ function computeItemPricing(
     handlingMinutes: item.handlingMinutes,
     markupPercent: item.markupPercent,
     utilisationFactor: item.utilisationFactor,
+    coilLengthMm: item.coilLengthMm || 0,
   }, settings, governed);
 }
 
@@ -171,6 +182,10 @@ function itemToSnapshotItem(
     sheetWidth: matTruth?.sheetWidth || 0,
     pricePerSheetExGst: matTruth?.pricePerSheetExGst || 0,
     cutLengthMm: item.cutLengthMm,
+    coilLengthMm: item.coilLengthMm ?? 0,
+    stockBehaviour: matTruth?.stockBehaviour || "sheet",
+    pricePerKg: matTruth?.pricePerKg || 0,
+    densityKgM3: matTruth?.densityKgM3 || 0,
     pierceCount: item.pierceCount,
     setupMinutes: item.setupMinutes,
     handlingMinutes: item.handlingMinutes,
@@ -206,6 +221,7 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
     unitPrice: si.unitPrice,
     llSheetMaterialId: si.llSheetMaterialId ?? "",
     cutLengthMm: si.cutLengthMm ?? 0,
+    coilLengthMm: si.coilLengthMm ?? 0,
     pierceCount: si.pierceCount ?? 0,
     setupMinutes: si.setupMinutes ?? rates.defaultSetupMinutes,
     handlingMinutes: si.handlingMinutes ?? rates.defaultHandlingMinutes,
@@ -381,19 +397,31 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     )].sort((a, b) => parseFloat(a) - parseFloat(b));
   }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish]);
 
-  const sheetSizesForSelection = useMemo(() => {
+  const matchingMaterialsForThickness = useMemo(() => {
     if (!formData.materialType || !formData.materialGrade || !formData.thickness) return [];
     return sheetMaterials.filter(
       m => m.materialFamily === formData.materialType &&
         m.grade === formData.materialGrade &&
         (!formData.finish || m.finish === formData.finish) &&
         parseFloat(m.thickness) === formData.thickness
-    ).sort((a, b) => {
-      const areaA = parseFloat(a.sheetLength) * parseFloat(a.sheetWidth);
-      const areaB = parseFloat(b.sheetLength) * parseFloat(b.sheetWidth);
-      return areaA - areaB;
-    });
+    );
   }, [sheetMaterials, formData.materialType, formData.materialGrade, formData.finish, formData.thickness]);
+
+  const sheetSizesForSelection = useMemo(() => {
+    return matchingMaterialsForThickness
+      .filter(m => m.stockBehaviour !== "coil")
+      .sort((a, b) => {
+        const areaA = parseFloat(a.sheetLength) * parseFloat(a.sheetWidth);
+        const areaB = parseFloat(b.sheetLength) * parseFloat(b.sheetWidth);
+        return areaA - areaB;
+      });
+  }, [matchingMaterialsForThickness]);
+
+  const coilOptionsForSelection = useMemo(() => {
+    return matchingMaterialsForThickness
+      .filter(m => m.stockBehaviour === "coil")
+      .sort((a, b) => parseFloat(a.sheetWidth) - parseFloat(b.sheetWidth));
+  }, [matchingMaterialsForThickness]);
 
   const selectedMaterialRow = useMemo(() => {
     if (formData.llSheetMaterialId) {
@@ -1182,7 +1210,46 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                   )}
                 </div>
               </div>
-              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && (
+              {formData.thickness > 0 && coilOptionsForSelection.length > 0 && (
+                <div className="space-y-2">
+                  <div>
+                    <Label>Coil Width</Label>
+                    <Select
+                      key={`coil-${formData.materialType}-${formData.thickness}`}
+                      value={formData.llSheetMaterialId || undefined}
+                      onValueChange={(v) => {
+                        setFormData(prev => ({ ...prev, llSheetMaterialId: v }));
+                      }}
+                    >
+                      <SelectTrigger data-testid="select-coil-width">
+                        <SelectValue placeholder="Select coil width..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {coilOptionsForSelection.map(m => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.sheetWidth}mm wide — ${parseFloat(m.pricePerKg || "0").toFixed(4)}/kg ({m.supplierName})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{coilOptionsForSelection.length} coil width{coilOptionsForSelection.length !== 1 ? "s" : ""} available</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="coilLengthMm">Required Cut Length (mm)</Label>
+                    <Input
+                      id="coilLengthMm"
+                      type="number"
+                      min={0}
+                      value={formData.coilLengthMm || ""}
+                      onChange={(e) => setFormData(prev => ({ ...prev, coilLengthMm: parseFloat(e.target.value) || 0 }))}
+                      placeholder="e.g. 2400"
+                      data-testid="input-coil-length"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Enter the length of material to cut from the coil</p>
+                  </div>
+                </div>
+              )}
+              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && coilOptionsForSelection.length === 0 && (
                 <div>
                   <Label>Sheet Size</Label>
                   <Select
@@ -1206,24 +1273,61 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                   <p className="text-[10px] text-muted-foreground mt-0.5">{sheetSizesForSelection.length} sheet sizes available for this combination</p>
                 </div>
               )}
-              {formData.thickness > 0 && sheetSizesForSelection.length === 0 && (
+              {formData.thickness > 0 && sheetSizesForSelection.length > 0 && coilOptionsForSelection.length > 0 && !formData.llSheetMaterialId && (
+                <div>
+                  <Label>Sheet Size (alternative to coil)</Label>
+                  <Select
+                    key={`sheet-alt-${formData.materialType}-${formData.thickness}`}
+                    value={formData.llSheetMaterialId || undefined}
+                    onValueChange={(v) => {
+                      setFormData(prev => ({ ...prev, llSheetMaterialId: v, coilLengthMm: 0 }));
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-sheet-size-alt">
+                      <SelectValue placeholder="Or select a fixed sheet..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sheetSizesForSelection.map(m => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.sheetLength}mm x {m.sheetWidth}mm — ${parseFloat(m.pricePerSheetExGst).toFixed(2)} ({m.supplierName})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {formData.thickness > 0 && sheetSizesForSelection.length === 0 && coilOptionsForSelection.length === 0 && (
                 <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5" data-testid="no-sheets-warning">
-                  No valid sheet found for this material/thickness combination. Check the sheet materials library.
+                  No valid sheet or coil found for this material/thickness combination. Check the materials library.
                 </div>
               )}
               {selectedMaterialRow && (
                 <div className="text-xs text-muted-foreground bg-background border rounded px-2 py-1.5 space-y-0.5" data-testid="material-identity-display">
                   <div className="flex justify-between">
                     <span>Supplier: <strong>{selectedMaterialRow.supplierName}</strong></span>
-                    <span>Sheet: {selectedMaterialRow.sheetLength}mm x {selectedMaterialRow.sheetWidth}mm</span>
+                    {selectedMaterialRow.stockBehaviour === "coil" ? (
+                      <span><Badge variant="outline" className="text-[9px] px-1 py-0">Coil</Badge> Width: {selectedMaterialRow.sheetWidth}mm</span>
+                    ) : (
+                      <span>Sheet: {selectedMaterialRow.sheetLength}mm x {selectedMaterialRow.sheetWidth}mm</span>
+                    )}
                   </div>
                   <div className="flex justify-between">
-                    <span>Price/Sheet: <strong>${parseFloat(selectedMaterialRow.pricePerSheetExGst).toFixed(2)}</strong> ex GST</span>
+                    {selectedMaterialRow.stockBehaviour === "coil" ? (
+                      <span>Price/kg: <strong>${parseFloat(selectedMaterialRow.pricePerKg || "0").toFixed(4)}</strong> ex GST</span>
+                    ) : (
+                      <span>Price/Sheet: <strong>${parseFloat(selectedMaterialRow.pricePerSheetExGst).toFixed(2)}</strong> ex GST</span>
+                    )}
                     <span className="text-[10px] text-muted-foreground/60 font-mono">ID: {selectedMaterialRow.id.slice(0, 8)}</span>
                   </div>
+                  {selectedMaterialRow.supplierSku && (
+                    <div className="flex justify-between text-[10px] text-muted-foreground/70 pt-0.5 border-t border-muted/50">
+                      <span>SKU: <span className="font-mono">{selectedMaterialRow.supplierSku}</span></span>
+                      <span>{selectedMaterialRow.formType} | {selectedMaterialRow.stockBehaviour}</span>
+                    </div>
+                  )}
                 </div>
               )}
-              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && !formData.llSheetMaterialId && (
+              {formData.thickness > 0 && sheetSizesForSelection.length > 1 && coilOptionsForSelection.length === 0 && !formData.llSheetMaterialId && (
                 <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1.5" data-testid="sheet-size-required-warning">
                   Please select a sheet size to proceed with accurate pricing.
                 </div>

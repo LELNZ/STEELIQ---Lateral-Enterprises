@@ -243,6 +243,7 @@ export const laserQuoteItemSchema = z.object({
   unitPrice: z.number().min(0).default(0),
 
   llSheetMaterialId: z.string().default(""),
+  coilLengthMm: z.number().min(0).default(0),
   cutLengthMm: z.number().min(0).default(0),
   pierceCount: z.number().int().min(0).default(0),
   setupMinutes: z.number().min(0).default(15),
@@ -549,6 +550,8 @@ export const llSheetMaterials = pgTable("ll_sheet_materials", {
   supplierSku: text("supplier_sku").default(""),
   supplierCategory: text("supplier_category").default(""),
   formType: text("form_type").default(""),
+  stockBehaviour: text("stock_behaviour").notNull().default("sheet"),
+  densityKgM3: numeric("density_kg_m3"),
   isQuoteable: boolean("is_quoteable").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
   notes: text("notes").default(""),
