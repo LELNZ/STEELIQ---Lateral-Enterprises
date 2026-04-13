@@ -204,3 +204,9 @@ id = "rz14kImgXhBahqN6dIeXe"
 uri = "file://reports/steeliq-ll-material-library-corrective-implementation-report.md"
 type = "text"
 title = "LL Material Library — Corrective Implementation Report"
+
+[[outputs]]
+id = "AfOyk2DvfvdhyONIf_1rT"
+uri = "file://reports/steeliq-ll-phase3-coil-support-enterprise-report.md"
+type = "text"
+title = "Phase 3: Coil Stock Support & Supplier-Native Visibility — Enterprise Report"
