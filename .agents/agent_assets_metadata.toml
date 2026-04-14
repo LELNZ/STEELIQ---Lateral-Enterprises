@@ -288,3 +288,9 @@ id = "0nFuMD9S3ZKLDFJoQ4W7t"
 uri = "file://reports/ll-dev-vs-live-parity-review.md"
 type = "text"
 title = "LL Dev-vs-Live Parity Review & Fix Report"
+
+[[outputs]]
+id = "FfrfxJ5RFhw7IXYmxeCcw"
+uri = "file://reports/ll-post-deploy-live-parity-confirmation.md"
+type = "text"
+title = "LL Post-Deploy Live Parity Confirmation Report"
