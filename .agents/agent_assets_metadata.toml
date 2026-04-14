@@ -246,3 +246,9 @@ id = "_mfdP1a0Pm9Lw6cGCplgs"
 uri = "file://reports/supplier-visibility-activation-report.md"
 type = "text"
 title = "Supplier-Visibility Activation Report — Wakefield Workbook Hidden-Row Analysis"
+
+[[outputs]]
+id = "37HxjZb4Yr4JidRHmm3tH"
+uri = "file://reports/wakefield-active-set-correction-report.md"
+type = "text"
+title = "Wakefield Active-Set Correction Report"
