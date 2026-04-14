@@ -1866,7 +1866,11 @@ export async function registerRoutes(
   app.get("/api/ll-sheet-materials", async (req, res) => {
     try {
       const activeOnly = req.query.active === "true";
-      const materials = await storage.getLlSheetMaterials(activeOnly);
+      const quoteableOnly = req.query.quoteable === "true";
+      let materials = await storage.getLlSheetMaterials(activeOnly);
+      if (quoteableOnly) {
+        materials = materials.filter(m => m.isQuoteable);
+      }
       res.json(materials);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -1909,22 +1913,25 @@ export async function registerRoutes(
       const materials = await storage.getLlSheetMaterials(activeOnly);
       const keyMap = new Map<string, typeof materials>();
       for (const m of materials) {
-        const key = [m.materialFamily, m.grade, m.finish, m.thickness, m.sheetLength, m.sheetWidth].join("|");
+        const key = [m.materialFamily, m.grade, m.finish, m.thickness, m.sheetLength, m.sheetWidth, m.stockBehaviour || "sheet"].join("|");
         if (!keyMap.has(key)) keyMap.set(key, []);
         keyMap.get(key)!.push(m);
       }
       const collisions: any[] = [];
       for (const [key, records] of keyMap) {
         if (records.length <= 1) continue;
-        const [materialFamily, grade, finish, thickness, sheetLength, sheetWidth] = key.split("|");
+        const [materialFamily, grade, finish, thickness, sheetLength, sheetWidth, stockBehaviour] = key.split("|");
         collisions.push({
-          collisionKey: { materialFamily, grade, finish, thickness, sheetLength, sheetWidth },
+          collisionKey: { materialFamily, grade, finish, thickness, sheetLength, sheetWidth, stockBehaviour },
           recordCount: records.length,
           records: records.map(r => ({
             id: r.id,
             supplierName: r.supplierName,
             productDescription: r.productDescription,
             pricePerSheetExGst: r.pricePerSheetExGst,
+            pricePerKg: r.pricePerKg,
+            supplierSku: r.supplierSku,
+            stockBehaviour: r.stockBehaviour || "sheet",
           })),
         });
       }
@@ -7602,33 +7609,106 @@ async function seedLlPricingSettings() {
 async function seedLlSheetMaterials() {
   const existing = await storage.getLlSheetMaterials();
   const hasDemoData = existing.some(r => r.supplierName === "NZ Steel" || r.supplierName === "Vulcan Steel" || r.supplierName === "Ullrich Aluminium");
-  const needsReseed = existing.length === 0 || hasDemoData;
-  if (!needsReseed) return;
+  const needsFullReseed = existing.length === 0 || hasDemoData;
 
   if (hasDemoData) {
     console.log(`[ll-material-seed] Purging ${existing.length} demo rows and replacing with real supplier data...`);
     await storage.deleteAllLlSheetMaterials();
   }
 
-  console.log(`[ll-material-seed] Seeding ${LL_SEED_MATERIALS.length} LL sheet material entries from real supplier data...`);
-  for (const mat of LL_SEED_MATERIALS) {
-    await storage.createLlSheetMaterial({
-      divisionScope: "LL",
-      supplierName: mat.supplierName,
-      materialFamily: mat.materialFamily,
-      productDescription: mat.productDescription,
-      grade: mat.grade,
-      finish: mat.finish,
-      thickness: mat.thickness,
-      sheetLength: mat.sheetLength,
-      sheetWidth: mat.sheetWidth,
-      pricePerSheetExGst: mat.pricePerSheetExGst,
-      isActive: true,
-      notes: "",
-      sourceReference: mat.sourceReference,
-    });
+  if (needsFullReseed) {
+    console.log(`[ll-material-seed] Seeding ${LL_SEED_MATERIALS.length} LL sheet material entries from real supplier data...`);
+    for (const mat of LL_SEED_MATERIALS) {
+      await storage.createLlSheetMaterial({
+        divisionScope: "LL",
+        supplierName: mat.supplierName,
+        materialFamily: mat.materialFamily,
+        productDescription: mat.productDescription,
+        grade: mat.grade,
+        finish: mat.finish,
+        thickness: mat.thickness,
+        sheetLength: mat.sheetLength,
+        sheetWidth: mat.sheetWidth,
+        pricePerSheetExGst: mat.pricePerSheetExGst,
+        pricePerKg: mat.pricePerKg ?? null,
+        supplierSku: mat.supplierSku ?? "",
+        supplierCategory: mat.supplierCategory ?? "",
+        formType: mat.formType ?? "",
+        stockBehaviour: mat.stockBehaviour ?? "sheet",
+        densityKgM3: mat.densityKgM3 ?? null,
+        isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
+        isActive: mat.isQuoteable !== false,
+        notes: "",
+        sourceReference: mat.sourceReference,
+      });
+    }
+    console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
+    return;
   }
-  console.log(`[ll-material-seed] Seeded ${LL_SEED_MATERIALS.length} LL sheet material entries`);
+
+  const existingKeys = new Set(existing.map(r => `${r.supplierName}|||${r.productDescription}|||${r.thickness}`));
+  const missing = LL_SEED_MATERIALS.filter(m => !existingKeys.has(`${m.supplierName}|||${m.productDescription}|||${m.thickness}`));
+  if (missing.length > 0) {
+    console.log(`[ll-material-seed] Reconciling ${missing.length} missing rows into existing ${existing.length}-row dataset...`);
+    for (const mat of missing) {
+      await storage.createLlSheetMaterial({
+        divisionScope: "LL",
+        supplierName: mat.supplierName,
+        materialFamily: mat.materialFamily,
+        productDescription: mat.productDescription,
+        grade: mat.grade,
+        finish: mat.finish,
+        thickness: mat.thickness,
+        sheetLength: mat.sheetLength,
+        sheetWidth: mat.sheetWidth,
+        pricePerSheetExGst: mat.pricePerSheetExGst,
+        pricePerKg: mat.pricePerKg ?? null,
+        supplierSku: mat.supplierSku ?? "",
+        supplierCategory: mat.supplierCategory ?? "",
+        formType: mat.formType ?? "",
+        stockBehaviour: mat.stockBehaviour ?? "sheet",
+        densityKgM3: mat.densityKgM3 ?? null,
+        isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
+        isActive: mat.isQuoteable !== false,
+        notes: "",
+        sourceReference: mat.sourceReference,
+      });
+    }
+    console.log(`[ll-material-seed] Reconciled ${missing.length} missing rows`);
+  }
+
+  const needsBackfill = existing.some(r => !r.formType || !r.stockBehaviour || !r.densityKgM3);
+  if (needsBackfill) {
+    const seedLookup = new Map(LL_SEED_MATERIALS.map(m => [`${m.supplierName}|||${m.productDescription}|||${m.thickness}`, m]));
+    let backfilled = 0;
+    for (const row of existing) {
+      const seed = seedLookup.get(`${row.supplierName}|||${row.productDescription}|||${row.thickness}`);
+      if (seed && (!row.formType || !row.stockBehaviour || !row.densityKgM3)) {
+        await storage.updateLlSheetMaterial(row.id, {
+          supplierSku: seed.supplierSku ?? "",
+          supplierCategory: seed.supplierCategory ?? "",
+          formType: seed.formType ?? "",
+          stockBehaviour: seed.stockBehaviour ?? "sheet",
+          densityKgM3: seed.densityKgM3 ?? null,
+          isQuoteable: seed.isQuoteable !== undefined ? seed.isQuoteable : true,
+          isActive: seed.isQuoteable !== false,
+          pricePerKg: seed.pricePerKg ?? null,
+        });
+        backfilled++;
+      }
+    }
+    if (backfilled > 0) {
+      console.log(`[ll-material-seed] Backfilled new fields on ${backfilled} existing rows`);
+    }
+  }
+
+  const driftRows = existing.filter(r => r.isQuoteable === false && r.isActive === true);
+  if (driftRows.length > 0) {
+    for (const row of driftRows) {
+      await storage.updateLlSheetMaterial(row.id, { isActive: false });
+    }
+    console.log(`[ll-material-seed] Activation policy enforced: ${driftRows.length} non-quoteable rows set inactive`);
+  }
 }
 
 async function backfillProcessRateProvenance() {

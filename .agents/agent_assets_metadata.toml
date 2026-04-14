@@ -192,3 +192,51 @@ id = "IWpjsrhvI3WZN1HWZWbRO"
 uri = "file://reports/phase-6b-ll-material-package-staging-verification-report.md"
 type = "text"
 title = "LL Material Package Staging Verification Report"
+
+[[outputs]]
+id = "9uLxOU65SUEpfO2_d6xXg"
+uri = "file://reports/steeliq-ll-material-library-forensic-audit.md"
+type = "text"
+title = "SteelIQ LL Material Library Forensic Audit Report"
+
+[[outputs]]
+id = "rz14kImgXhBahqN6dIeXe"
+uri = "file://reports/steeliq-ll-material-library-corrective-implementation-report.md"
+type = "text"
+title = "LL Material Library — Corrective Implementation Report"
+
+[[outputs]]
+id = "AfOyk2DvfvdhyONIf_1rT"
+uri = "file://reports/steeliq-ll-phase3-coil-support-enterprise-report.md"
+type = "text"
+title = "Phase 3: Coil Stock Support & Supplier-Native Visibility — Enterprise Report"
+
+[[outputs]]
+id = "1rxIGBJrTenNEh7u4gC1Y"
+uri = "file://reports/steeliq-ll-phase3-corrective-verification-report.md"
+type = "text"
+title = "Phase 3 Corrective Verification Report — Disputed Aluminium Rows, Collision Groups, Library Presentation"
+
+[[outputs]]
+id = "RWYTWeJ9hBdIrhhvkvGVQ"
+uri = "file://reports/wakefield-forensic-verification-report.md"
+type = "text"
+title = "Wakefield Metals Forensic Verification Report — Full Evidence"
+
+[[outputs]]
+id = "dQZYtUl6x2NDRI0YCnKcH"
+uri = "file://reports/coil-library-discoverability-report.md"
+type = "text"
+title = "Coil Library Discoverability — Runtime UX Correction Report"
+
+[[outputs]]
+id = "8AY1mN7H3nDqIenBacT8N"
+uri = "file://reports/full-supplier-reconciliation-report.md"
+type = "text"
+title = "Full Supplier-Truth Reconciliation Report — Wakefield + Macdonald vs App Library"
+
+[[outputs]]
+id = "qfM5LB9eVjqux7LdHTjqQ"
+uri = "file://reports/activation-state-governance-report.md"
+type = "text"
+title = "LL Material Library — Activation-State Governance Report"
