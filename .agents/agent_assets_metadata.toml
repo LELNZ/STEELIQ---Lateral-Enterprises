@@ -270,3 +270,21 @@ id = "QOSqIqkc3o1LrXbMRLrZV"
 uri = "file://reports/ll-quote-engine-validation-guards-report.md"
 type = "text"
 title = "LL Quote Engine Validation Guards — Enterprise Report"
+
+[[outputs]]
+id = "CXdSPGeWNlILB8xvvXmcb"
+uri = "file://reports/ll-commercial-hardening-closure-review.md"
+type = "text"
+title = "LL Commercial Hardening Closure Review"
+
+[[outputs]]
+id = "fS025-pR7Cx1QtANNK5Xi"
+uri = "file://reports/ll-phase-1-4-foundation-gate-review.md"
+type = "text"
+title = "LL Phase 1–4 Foundation Gate Review"
+
+[[outputs]]
+id = "0nFuMD9S3ZKLDFJoQ4W7t"
+uri = "file://reports/ll-dev-vs-live-parity-review.md"
+type = "text"
+title = "LL Dev-vs-Live Parity Review & Fix Report"
