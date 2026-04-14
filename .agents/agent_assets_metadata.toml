@@ -228,3 +228,9 @@ id = "dQZYtUl6x2NDRI0YCnKcH"
 uri = "file://reports/coil-library-discoverability-report.md"
 type = "text"
 title = "Coil Library Discoverability — Runtime UX Correction Report"
+
+[[outputs]]
+id = "8AY1mN7H3nDqIenBacT8N"
+uri = "file://reports/full-supplier-reconciliation-report.md"
+type = "text"
+title = "Full Supplier-Truth Reconciliation Report — Wakefield + Macdonald vs App Library"
