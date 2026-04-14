@@ -258,3 +258,15 @@ id = "d5XxYInd2uHFm2h_Yv7zh"
 uri = "file://reports/status-model-refinement-report.md"
 type = "text"
 title = "LL Material Library — Status Model Refinement Report"
+
+[[outputs]]
+id = "SL1_W3JfAvASrgQ7_rUkv"
+uri = "file://reports/ll-pricing-quote-engine-review.md"
+type = "text"
+title = "LL Pricing & Quote Engine - Enterprise Review Report"
+
+[[outputs]]
+id = "QOSqIqkc3o1LrXbMRLrZV"
+uri = "file://reports/ll-quote-engine-validation-guards-report.md"
+type = "text"
+title = "LL Quote Engine Validation Guards — Enterprise Report"
