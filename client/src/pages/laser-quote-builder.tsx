@@ -103,13 +103,15 @@ function findMatchingMaterial(
     const byId = materials.find(m => m.id === item.llSheetMaterialId);
     if (byId) return byId;
   }
-  return materials.find(
+  const candidates = materials.filter(
     m =>
       m.materialFamily === item.materialType &&
       m.grade === item.materialGrade &&
       m.finish === item.finish &&
       parseFloat(m.thickness) === item.thickness
   );
+  if (candidates.length === 1) return candidates[0];
+  return undefined;
 }
 
 function materialToTruth(m: SheetMaterialRef): LLMaterialTruth {
@@ -428,9 +430,9 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       const byId = sheetMaterials.find(m => m.id === formData.llSheetMaterialId);
       if (byId) return byId;
     }
-    if (sheetSizesForSelection.length === 1) return sheetSizesForSelection[0];
+    if (sheetSizesForSelection.length === 1 && coilOptionsForSelection.length === 0) return sheetSizesForSelection[0];
     return undefined;
-  }, [sheetMaterials, sheetSizesForSelection, formData.llSheetMaterialId]);
+  }, [sheetMaterials, sheetSizesForSelection, coilOptionsForSelection, formData.llSheetMaterialId]);
 
   const dialogPricing = useMemo(() => {
     return computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
@@ -645,6 +647,18 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
       return;
     }
+    if (!estimateMode && items.length > 0) {
+      const itemsMissingMaterial = items.filter(i => !i.llSheetMaterialId);
+      if (itemsMissingMaterial.length > 0) {
+        toast({ title: "Material Required", description: `${itemsMissingMaterial.length} item(s) have no material selected (${itemsMissingMaterial.map(i => i.itemRef || i.title).join(", ")}). Edit each item and select a material before saving.`, variant: "destructive" });
+        return;
+      }
+      const unmatchedItems = items.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
+      if (unmatchedItems.length > 0) {
+        toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
+        return;
+      }
+    }
     if (estimateMode) {
       if (isEstimateEdit) {
         updateEstimateMutation.mutate();
@@ -665,6 +679,16 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     }
     if (items.length === 0) {
       toast({ title: "Required", description: "Add at least one item before generating a quote", variant: "destructive" });
+      return;
+    }
+    const itemsMissingMaterial = items.filter(i => !i.llSheetMaterialId);
+    if (itemsMissingMaterial.length > 0) {
+      toast({ title: "Material Required", description: `${itemsMissingMaterial.length} item(s) have no material selected (${itemsMissingMaterial.map(i => i.itemRef || i.title).join(", ")}). Edit each item and select a material before generating a quote.`, variant: "destructive" });
+      return;
+    }
+    const unmatchedItems = items.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
+    if (unmatchedItems.length > 0) {
+      toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
       return;
     }
     generateQuoteFromEstimateMutation.mutate();
@@ -707,8 +731,12 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       toast({ title: "Required", description: "Item reference and title are required", variant: "destructive" });
       return;
     }
-    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
     const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
+    if (!materialId) {
+      toast({ title: "Material Required", description: "A material must be selected before saving. Please choose a material family, grade, finish, thickness, and sheet size or coil width.", variant: "destructive" });
+      return;
+    }
+    const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
     const updatedData = {
       ...formData,
       llSheetMaterialId: materialId,
@@ -979,11 +1007,21 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       const lineTotal = pricing?.sellTotal || 0;
                       const isExpanded = expandedItems.has(item.id);
                       const matched = findMatchingMaterial(sheetMaterials, item);
+                      const isFlatRate = pricing?.processMode === "flat-rate" && (item.cutLengthMm > 0 || item.pierceCount > 0);
+                      const isMaterialMissing = !item.llSheetMaterialId || !matched;
                       return (
                         <Fragment key={item.id}>
-                          <TableRow data-testid={`row-item-${idx}`}>
+                          <TableRow data-testid={`row-item-${idx}`} className={isMaterialMissing ? "bg-red-50/50 dark:bg-red-950/20" : isFlatRate ? "bg-amber-50/50 dark:bg-amber-950/20" : undefined}>
                             <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                            <TableCell className="font-mono text-xs" data-testid={`text-item-ref-${idx}`}>{item.itemRef}</TableCell>
+                            <TableCell className="font-mono text-xs" data-testid={`text-item-ref-${idx}`}>
+                              <span>{item.itemRef}</span>
+                              {isMaterialMissing && (
+                                <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 h-4 bg-red-50 text-red-700 border-red-300" data-testid={`badge-material-missing-${idx}`}>No Material</Badge>
+                              )}
+                              {isFlatRate && !isMaterialMissing && (
+                                <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 h-4 bg-amber-50 text-amber-700 border-amber-300" data-testid={`badge-flat-rate-${idx}`}>Flat Rate</Badge>
+                              )}
+                            </TableCell>
                             <TableCell data-testid={`text-item-title-${idx}`}>{item.title}</TableCell>
                             <TableCell className="text-center">{item.quantity}</TableCell>
                             <TableCell className="text-xs">
@@ -1181,16 +1219,21 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       value={formData.thickness > 0 ? String(formData.thickness) : undefined}
                       onValueChange={(v) => {
                         const t = parseFloat(v) || 0;
-                        const matchingSheets = sheetMaterials.filter(
+                        const allMatching = sheetMaterials.filter(
                           m => m.materialFamily === formData.materialType &&
                             m.grade === formData.materialGrade &&
                             (!formData.finish || m.finish === formData.finish) &&
                             parseFloat(m.thickness) === t
                         );
+                        const nonCoil = allMatching.filter(m => m.stockBehaviour !== "coil");
+                        const coils = allMatching.filter(m => m.stockBehaviour === "coil");
+                        const autoId = (allMatching.length === 1) ? allMatching[0].id
+                          : (nonCoil.length === 1 && coils.length === 0) ? nonCoil[0].id
+                          : "";
                         setFormData(prev => ({
                           ...prev,
                           thickness: t,
-                          llSheetMaterialId: matchingSheets.length === 1 ? matchingSheets[0].id : "",
+                          llSheetMaterialId: autoId,
                         }));
                       }}
                     >
@@ -1458,6 +1501,20 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                 </div>
               </CollapsibleContent>
             </Collapsible>
+
+            {!(selectedMaterialRow?.id || formData.llSheetMaterialId) && (
+              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2" data-testid="warning-no-material">
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                <span className="text-sm text-red-800 dark:text-red-300">No material selected. A material must be selected before this item can be saved.</span>
+              </div>
+            )}
+
+            {dialogPricing.processMode === "flat-rate" && (formData.cutLengthMm > 0 || formData.pierceCount > 0) && (
+              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2" data-testid="warning-flat-rate">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="text-sm text-amber-800 dark:text-amber-300">No governed process-rate match found for this material and thickness. Flat-rate pricing is being used. Process costs may not reflect actual machine time.</span>
+              </div>
+            )}
 
             <PricingBreakdownPanel
               breakdown={dialogPricing}

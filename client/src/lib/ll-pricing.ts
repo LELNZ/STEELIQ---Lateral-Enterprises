@@ -213,7 +213,7 @@ function findProcessRate(
       bestMatch = entry;
     }
   }
-  if (bestMatch && bestDist <= thickness * 0.5) return bestMatch;
+  if (bestMatch && bestDist <= thickness * 0.25) return bestMatch;
   return null;
 }
 
