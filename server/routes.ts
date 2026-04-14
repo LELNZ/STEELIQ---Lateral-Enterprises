@@ -7732,6 +7732,22 @@ async function seedLlSheetMaterials() {
     }
   }
 
+  const seedLookupForDrift = new Map(LL_SEED_MATERIALS.map(m => [`${m.supplierName}|||${m.productDescription}|||${m.thickness}`, m]));
+  let gradeFinishCorrected = 0;
+  for (const row of existing) {
+    const seed = seedLookupForDrift.get(`${row.supplierName}|||${row.productDescription}|||${row.thickness}`);
+    if (seed && (row.grade !== seed.grade || row.finish !== seed.finish)) {
+      await storage.updateLlSheetMaterial(row.id, {
+        grade: seed.grade,
+        finish: seed.finish,
+      });
+      gradeFinishCorrected++;
+    }
+  }
+  if (gradeFinishCorrected > 0) {
+    console.log(`[ll-material-seed] Corrected grade/finish drift on ${gradeFinishCorrected} existing rows`);
+  }
+
   let driftDeactivated = 0;
   let driftActivated = 0;
   for (const row of existing) {

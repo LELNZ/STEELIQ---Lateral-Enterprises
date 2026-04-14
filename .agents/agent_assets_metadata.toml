@@ -282,3 +282,9 @@ id = "fS025-pR7Cx1QtANNK5Xi"
 uri = "file://reports/ll-phase-1-4-foundation-gate-review.md"
 type = "text"
 title = "LL Phase 1–4 Foundation Gate Review"
+
+[[outputs]]
+id = "0nFuMD9S3ZKLDFJoQ4W7t"
+uri = "file://reports/ll-dev-vs-live-parity-review.md"
+type = "text"
+title = "LL Dev-vs-Live Parity Review & Fix Report"
