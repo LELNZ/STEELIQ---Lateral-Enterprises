@@ -252,3 +252,9 @@ id = "37HxjZb4Yr4JidRHmm3tH"
 uri = "file://reports/wakefield-active-set-correction-report.md"
 type = "text"
 title = "Wakefield Active-Set Correction Report"
+
+[[outputs]]
+id = "d5XxYInd2uHFm2h_Yv7zh"
+uri = "file://reports/status-model-refinement-report.md"
+type = "text"
+title = "LL Material Library — Status Model Refinement Report"

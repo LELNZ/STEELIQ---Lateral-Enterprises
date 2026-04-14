@@ -563,6 +563,28 @@ export const insertLlSheetMaterialSchema = createInsertSchema(llSheetMaterials).
 export type InsertLlSheetMaterial = z.infer<typeof insertLlSheetMaterialSchema>;
 export type LlSheetMaterial = typeof llSheetMaterials.$inferSelect;
 
+export const MATERIAL_STATUS = {
+  ACTIVE_QUOTEABLE: "active_quoteable",
+  ACTIVE_REFERENCE: "active_reference",
+  INACTIVE_PRESERVED: "inactive_preserved",
+} as const;
+
+export type MaterialStatus = typeof MATERIAL_STATUS[keyof typeof MATERIAL_STATUS];
+
+export function deriveMaterialStatus(isActive: boolean, isQuoteable: boolean): MaterialStatus {
+  if (!isActive) return MATERIAL_STATUS.INACTIVE_PRESERVED;
+  if (!isQuoteable) return MATERIAL_STATUS.ACTIVE_REFERENCE;
+  return MATERIAL_STATUS.ACTIVE_QUOTEABLE;
+}
+
+export const MATERIAL_STATUS_LABELS: Record<MaterialStatus, string> = {
+  [MATERIAL_STATUS.ACTIVE_QUOTEABLE]: "Quoteable",
+  [MATERIAL_STATUS.ACTIVE_REFERENCE]: "Reference",
+  [MATERIAL_STATUS.INACTIVE_PRESERVED]: "Preserved",
+};
+
+export type LlSheetMaterialWithStatus = LlSheetMaterial & { materialStatus: MaterialStatus };
+
 export const frameConfigurations = pgTable("frame_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   frameTypeId: varchar("frame_type_id").notNull(),

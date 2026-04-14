@@ -6,7 +6,7 @@ import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
-  insertLlSheetMaterialSchema,
+  insertLlSheetMaterialSchema, deriveMaterialStatus,
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
   VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
   VARIATION_STATUSES,
@@ -1871,7 +1871,11 @@ export async function registerRoutes(
       if (quoteableOnly) {
         materials = materials.filter(m => m.isQuoteable);
       }
-      res.json(materials);
+      const withStatus = materials.map(m => ({
+        ...m,
+        materialStatus: deriveMaterialStatus(m.isActive, m.isQuoteable ?? true),
+      }));
+      res.json(withStatus);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
