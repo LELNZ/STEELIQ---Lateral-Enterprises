@@ -270,3 +270,9 @@ id = "QOSqIqkc3o1LrXbMRLrZV"
 uri = "file://reports/ll-quote-engine-validation-guards-report.md"
 type = "text"
 title = "LL Quote Engine Validation Guards — Enterprise Report"
+
+[[outputs]]
+id = "CXdSPGeWNlILB8xvvXmcb"
+uri = "file://reports/ll-commercial-hardening-closure-review.md"
+type = "text"
+title = "LL Commercial Hardening Closure Review"
