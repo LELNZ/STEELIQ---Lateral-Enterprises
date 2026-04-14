@@ -234,3 +234,9 @@ id = "8AY1mN7H3nDqIenBacT8N"
 uri = "file://reports/full-supplier-reconciliation-report.md"
 type = "text"
 title = "Full Supplier-Truth Reconciliation Report — Wakefield + Macdonald vs App Library"
+
+[[outputs]]
+id = "qfM5LB9eVjqux7LdHTjqQ"
+uri = "file://reports/activation-state-governance-report.md"
+type = "text"
+title = "LL Material Library — Activation-State Governance Report"

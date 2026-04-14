@@ -7637,7 +7637,7 @@ async function seedLlSheetMaterials() {
         stockBehaviour: mat.stockBehaviour ?? "sheet",
         densityKgM3: mat.densityKgM3 ?? null,
         isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
-        isActive: true,
+        isActive: mat.isQuoteable !== false,
         notes: "",
         sourceReference: mat.sourceReference,
       });
@@ -7669,7 +7669,7 @@ async function seedLlSheetMaterials() {
         stockBehaviour: mat.stockBehaviour ?? "sheet",
         densityKgM3: mat.densityKgM3 ?? null,
         isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
-        isActive: true,
+        isActive: mat.isQuoteable !== false,
         notes: "",
         sourceReference: mat.sourceReference,
       });
@@ -7691,6 +7691,7 @@ async function seedLlSheetMaterials() {
           stockBehaviour: seed.stockBehaviour ?? "sheet",
           densityKgM3: seed.densityKgM3 ?? null,
           isQuoteable: seed.isQuoteable !== undefined ? seed.isQuoteable : true,
+          isActive: seed.isQuoteable !== false,
           pricePerKg: seed.pricePerKg ?? null,
         });
         backfilled++;
@@ -7699,6 +7700,14 @@ async function seedLlSheetMaterials() {
     if (backfilled > 0) {
       console.log(`[ll-material-seed] Backfilled new fields on ${backfilled} existing rows`);
     }
+  }
+
+  const driftRows = existing.filter(r => r.isQuoteable === false && r.isActive === true);
+  if (driftRows.length > 0) {
+    for (const row of driftRows) {
+      await storage.updateLlSheetMaterial(row.id, { isActive: false });
+    }
+    console.log(`[ll-material-seed] Activation policy enforced: ${driftRows.length} non-quoteable rows set inactive`);
   }
 }
 

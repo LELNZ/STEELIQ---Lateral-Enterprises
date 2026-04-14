@@ -3974,6 +3974,7 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
   const [filterThickness, setFilterThickness] = useState<string>("all");
   const [filterSupplier, setFilterSupplier] = useState<string>("all");
   const [filterStockType, setFilterStockType] = useState<string>("all");
+  const [showInactive, setShowInactive] = useState<boolean>(false);
 
   const { data: materials = [], isLoading } = useQuery<SheetMaterial[]>({
     queryKey: ["/api/ll-sheet-materials"],
@@ -3987,7 +3988,10 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
   const suppliers = [...new Set(familyMaterials.map(m => m.supplierName))].sort();
   const stockTypes = [...new Set(familyMaterials.map(m => m.stockBehaviour || "sheet"))].sort();
 
+  const inactiveCount = familyMaterials.filter(m => !m.isActive).length;
+
   let filtered = familyMaterials;
+  if (!showInactive) filtered = filtered.filter(m => m.isActive);
   if (filterGrade !== "all") filtered = filtered.filter(m => m.grade === filterGrade);
   if (filterFinish !== "all") filtered = filtered.filter(m => m.finish === filterFinish);
   if (filterThickness !== "all") filtered = filtered.filter(m => m.thickness === filterThickness);
@@ -4087,10 +4091,10 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
               onClick={() => setFilterStockType("all")}
               data-testid="button-stock-all"
             >
-              All ({familyMaterials.length})
+              All ({(showInactive ? familyMaterials : familyMaterials.filter(m => m.isActive)).length})
             </Button>
             {stockTypes.map(st => {
-              const count = familyMaterials.filter(m => (m.stockBehaviour || "sheet") === st).length;
+              const count = (showInactive ? familyMaterials : familyMaterials.filter(m => m.isActive)).filter(m => (m.stockBehaviour || "sheet") === st).length;
               const isActive = filterStockType === st;
               const colorClass = st === "coil"
                 ? isActive ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-600" : "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
@@ -4161,13 +4165,30 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
             </Select>
           )}
           <span className="text-xs text-muted-foreground">{filtered.length} of {familyMaterials.length} materials</span>
+          {inactiveCount > 0 && (
+            <div className="flex items-center gap-1.5 ml-2 pl-2 border-l">
+              <Checkbox
+                id="show-inactive"
+                checked={showInactive}
+                onCheckedChange={(v) => setShowInactive(!!v)}
+                data-testid="checkbox-show-inactive"
+              />
+              <Label htmlFor="show-inactive" className="text-xs text-muted-foreground cursor-pointer">
+                Show {inactiveCount} inactive
+              </Label>
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <p className="text-muted-foreground">Loading...</p>
         ) : filtered.length === 0 ? (
-          <p className="text-muted-foreground">No sheet materials found.</p>
+          <p className="text-muted-foreground">
+            {!showInactive && inactiveCount > 0 && familyMaterials.filter(m => m.isActive).length === 0
+              ? `No active materials found. ${inactiveCount} inactive material${inactiveCount > 1 ? "s" : ""} hidden — tick "Show inactive" to reveal.`
+              : "No materials match the current filters."}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <Table>
