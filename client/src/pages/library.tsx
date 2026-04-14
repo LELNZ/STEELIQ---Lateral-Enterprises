@@ -27,8 +27,9 @@ import { BookOpen, Plus, Pencil, Trash2, ChevronRight, ChevronDown, Settings2, W
 import { useToast } from "@/hooks/use-toast";
 import type {
   LibraryEntry, FrameConfiguration, ConfigurationProfile,
-  ConfigurationAccessory, ConfigurationLabor,
+  ConfigurationAccessory, ConfigurationLabor, MaterialStatus,
 } from "@shared/schema";
+import { MATERIAL_STATUS, MATERIAL_STATUS_LABELS, deriveMaterialStatus } from "@shared/schema";
 import { IGU_INFO, getThicknessColumnsForFamily } from "@shared/glass-library";
 import { HANDLE_CATEGORIES, LOCK_CATEGORIES, WINDOW_CATEGORIES } from "@shared/item-options";
 
@@ -4174,7 +4175,7 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
                 data-testid="checkbox-show-inactive"
               />
               <Label htmlFor="show-inactive" className="text-xs text-muted-foreground cursor-pointer">
-                Show {inactiveCount} inactive
+                Show {inactiveCount} preserved
               </Label>
             </div>
           )}
@@ -4186,7 +4187,7 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
         ) : filtered.length === 0 ? (
           <p className="text-muted-foreground">
             {!showInactive && inactiveCount > 0 && familyMaterials.filter(m => m.isActive).length === 0
-              ? `No active materials found. ${inactiveCount} inactive material${inactiveCount > 1 ? "s" : ""} hidden — tick "Show inactive" to reveal.`
+              ? `No active materials found. ${inactiveCount} preserved material${inactiveCount > 1 ? "s" : ""} hidden — tick "Show preserved" to reveal.`
               : "No materials match the current filters."}
           </p>
         ) : (
@@ -4211,8 +4212,10 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
                   const isCoil = sb === "coil";
                   const isRefOnly = !m.isQuoteable;
                   const isPerKgRef = isRefOnly && m.sheetLength === "1" && m.sheetWidth === "1";
+                  const status = (m as any).materialStatus as MaterialStatus | undefined
+                    ?? deriveMaterialStatus(m.isActive, m.isQuoteable ?? true);
                   return (
-                  <TableRow key={m.id} className={`${!m.isActive ? "opacity-50" : ""} ${isRefOnly ? "bg-muted/30" : ""}`} data-testid={`row-material-${m.id}`}>
+                  <TableRow key={m.id} className={`${status === MATERIAL_STATUS.INACTIVE_PRESERVED ? "opacity-50" : ""} ${status === MATERIAL_STATUS.ACTIVE_REFERENCE ? "bg-muted/30" : ""}`} data-testid={`row-material-${m.id}`}>
                     <TableCell className="text-xs">{m.supplierName}</TableCell>
                     <TableCell>{m.grade}</TableCell>
                     <TableCell>{m.finish}</TableCell>
@@ -4247,14 +4250,24 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        {isRefOnly && (
-                          <Badge variant="secondary" className="text-[10px] px-1 py-0" data-testid={`badge-ref-only-${m.id}`}>
-                            Ref Only
+                        <Badge
+                          variant={status === MATERIAL_STATUS.ACTIVE_QUOTEABLE ? "default" : "secondary"}
+                          className={`text-[10px] px-1 py-0 ${
+                            status === MATERIAL_STATUS.ACTIVE_REFERENCE
+                              ? "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400"
+                              : status === MATERIAL_STATUS.INACTIVE_PRESERVED
+                                ? "border-gray-300 text-gray-500 dark:border-gray-600 dark:text-gray-400"
+                                : ""
+                          }`}
+                          data-testid={`badge-status-${m.id}`}
+                        >
+                          {MATERIAL_STATUS_LABELS[status]}
+                        </Badge>
+                        {isCoil && status === MATERIAL_STATUS.ACTIVE_QUOTEABLE && (
+                          <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-400" data-testid={`badge-coil-live-${m.id}`}>
+                            Coil
                           </Badge>
                         )}
-                        <Badge variant={m.isActive ? "default" : "secondary"} className="text-[10px] px-1 py-0" data-testid={`badge-active-${m.id}`}>
-                          {m.isActive ? "Active" : "Inactive"}
-                        </Badge>
                       </div>
                     </TableCell>
                     <TableCell>

@@ -6,7 +6,7 @@ import {
   insertJobSchema, insertLibraryEntrySchema, quoteItemSchema,
   insertFrameConfigurationSchema, insertConfigurationProfileSchema,
   insertConfigurationAccessorySchema, insertConfigurationLaborSchema,
-  insertLlSheetMaterialSchema,
+  insertLlSheetMaterialSchema, deriveMaterialStatus,
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
   VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
   VARIATION_STATUSES,
@@ -1871,7 +1871,11 @@ export async function registerRoutes(
       if (quoteableOnly) {
         materials = materials.filter(m => m.isQuoteable);
       }
-      res.json(materials);
+      const withStatus = materials.map(m => ({
+        ...m,
+        materialStatus: deriveMaterialStatus(m.isActive, m.isQuoteable ?? true),
+      }));
+      res.json(withStatus);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -7606,6 +7610,32 @@ async function seedLlPricingSettings() {
   console.log("[ll-pricing-settings] Seeded LL pricing settings (initial architecture activation defaults)");
 }
 
+const WAKEFIELD_SUPPLIER_VISIBLE_SKUS = new Set([
+  "0000452","0000457","0000464","0000475","0000498","0000508","0000513","0000521","0000524","0000530",
+  "0000531","0000541","0000544","0000676","0000718","0000719","0000720","0000724","0000725","0000726",
+  "0000754","0000756","0000758","0000761","0002681","0002689","0002693","0002696","0002703","0002704",
+  "0002706","0002707","0002769","0002775","0002867","0012540","0012541","0012552","0012557","0012631",
+  "0012632","0012778","0013075","0013694","0013696","0013801","0013884","0013886","0013888","0013892",
+  "0013897","0014271","0014285","0014742","0014744","0014745","0014747","0014750","0014751","0014753",
+  "0014757","0014758","0014759","0014760","0015475","0017008","0017326","0018380","0018760","0018761",
+  "0018762","0018763","0018764","0018766","0018782","0018784","0018785","0018952","0019049","0019162",
+  "0019175","0019574","0019987","0021928","0022797","0022798","0023234","0024325","0024410","0024427",
+  "0024595","0024599","0024623","0024872","0024874","0024876","0024877","0024878","0024879","0024884",
+  "0024885","0024899","0024907","0024912","0024967","0024968","0025084","0025446","0025589","0025648",
+  "0025754","0025755","0025756","0025928","0025929","0025930","0025931","0026009","0026010","0026093",
+  "0026200","0026204","0026206","0026439","0026837","0026961","0027081","0027520","0027548","0027970",
+  "0028794","0028875","0029668","0029692","0029766","0029777","0030039","0030289","0030562","0030577",
+  "0030625","0030747","0030899","0030912","0031017","0031018","0031054","0031107","0031170",
+]);
+
+function resolveWakefieldActivation(mat: { supplierName: string; supplierSku?: string; isQuoteable?: boolean }): boolean {
+  if (mat.supplierName === "Wakefield Metals") {
+    if (!mat.supplierSku) return false;
+    return WAKEFIELD_SUPPLIER_VISIBLE_SKUS.has(mat.supplierSku);
+  }
+  return true;
+}
+
 async function seedLlSheetMaterials() {
   const existing = await storage.getLlSheetMaterials();
   const hasDemoData = existing.some(r => r.supplierName === "NZ Steel" || r.supplierName === "Vulcan Steel" || r.supplierName === "Ullrich Aluminium");
@@ -7637,7 +7667,7 @@ async function seedLlSheetMaterials() {
         stockBehaviour: mat.stockBehaviour ?? "sheet",
         densityKgM3: mat.densityKgM3 ?? null,
         isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
-        isActive: mat.isQuoteable !== false,
+        isActive: resolveWakefieldActivation(mat),
         notes: "",
         sourceReference: mat.sourceReference,
       });
@@ -7669,7 +7699,7 @@ async function seedLlSheetMaterials() {
         stockBehaviour: mat.stockBehaviour ?? "sheet",
         densityKgM3: mat.densityKgM3 ?? null,
         isQuoteable: mat.isQuoteable !== undefined ? mat.isQuoteable : true,
-        isActive: mat.isQuoteable !== false,
+        isActive: resolveWakefieldActivation(mat),
         notes: "",
         sourceReference: mat.sourceReference,
       });
@@ -7691,7 +7721,7 @@ async function seedLlSheetMaterials() {
           stockBehaviour: seed.stockBehaviour ?? "sheet",
           densityKgM3: seed.densityKgM3 ?? null,
           isQuoteable: seed.isQuoteable !== undefined ? seed.isQuoteable : true,
-          isActive: seed.isQuoteable !== false,
+          isActive: resolveWakefieldActivation(seed),
           pricePerKg: seed.pricePerKg ?? null,
         });
         backfilled++;
@@ -7702,12 +7732,25 @@ async function seedLlSheetMaterials() {
     }
   }
 
-  const driftRows = existing.filter(r => r.isQuoteable === false && r.isActive === true);
-  if (driftRows.length > 0) {
-    for (const row of driftRows) {
+  let driftDeactivated = 0;
+  let driftActivated = 0;
+  for (const row of existing) {
+    if (row.supplierName !== "Wakefield Metals") continue;
+    const shouldBeActive = resolveWakefieldActivation({
+      supplierName: row.supplierName,
+      supplierSku: row.supplierSku ?? undefined,
+      isQuoteable: row.isQuoteable ?? true,
+    });
+    if (row.isActive && !shouldBeActive) {
       await storage.updateLlSheetMaterial(row.id, { isActive: false });
+      driftDeactivated++;
+    } else if (!row.isActive && shouldBeActive) {
+      await storage.updateLlSheetMaterial(row.id, { isActive: true });
+      driftActivated++;
     }
-    console.log(`[ll-material-seed] Activation policy enforced: ${driftRows.length} non-quoteable rows set inactive`);
+  }
+  if (driftDeactivated > 0 || driftActivated > 0) {
+    console.log(`[ll-material-seed] Wakefield activation policy enforced: ${driftDeactivated} deactivated, ${driftActivated} activated`);
   }
 }
 
