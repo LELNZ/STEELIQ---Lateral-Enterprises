@@ -243,16 +243,22 @@ export default function Library() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const searchString = useSearch();
-  const [activeTab, setActiveTab] = useState<LibraryTab>("direct_materials");
-
   const parsedDivision = new URLSearchParams(searchString).get("division");
   const validDivision = parsedDivision && (DIVISION_CODES as readonly string[]).includes(parsedDivision) ? parsedDivision : null;
+
+  const initialTab = validDivision === "LL" ? "ll_aluminium" as LibraryTab : "direct_materials" as LibraryTab;
+  const [activeTab, setActiveTab] = useState<LibraryTab>(initialTab);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(validDivision);
 
   const visibleTabs = getVisibleTabs(selectedDivision);
 
   useEffect(() => {
     setSelectedDivision(validDivision);
+    if (validDivision === "LL") {
+      setActiveTab("ll_aluminium");
+    } else if (validDivision === "LJ") {
+      setActiveTab("direct_materials");
+    }
   }, [validDivision]);
 
   useEffect(() => {
@@ -263,6 +269,11 @@ export default function Library() {
 
   function setDivisionAndUrl(code: string | null) {
     setSelectedDivision(code);
+    if (code === "LL") {
+      setActiveTab("ll_aluminium");
+    } else if (code === "LJ") {
+      setActiveTab("direct_materials");
+    }
     const params = new URLSearchParams(searchString);
     if (code) {
       params.set("division", code);
@@ -4061,23 +4072,48 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CardTitle data-testid="text-sheet-materials-title">{materialFamily} Materials</CardTitle>
-            {stockTypes.length > 1 && (
-              <div className="flex gap-1">
-                {stockTypes.map(st => {
-                  const count = familyMaterials.filter(m => (m.stockBehaviour || "sheet") === st).length;
-                  return (
-                    <Badge key={st} variant="outline" className="text-[10px] px-1.5 py-0" data-testid={`badge-stock-type-${st}`}>
-                      {st} ({count})
-                    </Badge>
-                  );
-                })}
-              </div>
-            )}
           </div>
           <Button size="sm" onClick={openAdd} data-testid="button-add-sheet-material">
             <Plus className="w-4 h-4 mr-1" /> Add Material
           </Button>
         </div>
+        {stockTypes.length > 1 && (
+          <div className="flex items-center gap-1 mt-2" data-testid="stock-type-segments">
+            <span className="text-xs font-medium text-muted-foreground mr-1">Stock:</span>
+            <Button
+              size="sm"
+              variant={filterStockType === "all" ? "default" : "outline"}
+              className="h-7 px-3 text-xs"
+              onClick={() => setFilterStockType("all")}
+              data-testid="button-stock-all"
+            >
+              All ({familyMaterials.length})
+            </Button>
+            {stockTypes.map(st => {
+              const count = familyMaterials.filter(m => (m.stockBehaviour || "sheet") === st).length;
+              const isActive = filterStockType === st;
+              const colorClass = st === "coil"
+                ? isActive ? "bg-blue-600 hover:bg-blue-700 text-white border-blue-600" : "border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                : st === "plate"
+                ? isActive ? "bg-orange-600 hover:bg-orange-700 text-white border-orange-600" : "border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+                : st === "tread_plate"
+                ? isActive ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-600" : "border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950"
+                : "";
+              return (
+                <Button
+                  key={st}
+                  size="sm"
+                  variant="outline"
+                  className={`h-7 px-3 text-xs ${colorClass}`}
+                  onClick={() => setFilterStockType(isActive ? "all" : st)}
+                  data-testid={`button-stock-${st}`}
+                >
+                  {st === "tread_plate" ? "Tread" : st.charAt(0).toUpperCase() + st.slice(1)} ({count})
+                </Button>
+              );
+            })}
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="sheet-material-filters">
           <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
           {suppliers.length > 1 && (
@@ -4121,17 +4157,6 @@ function SheetMaterialsSection({ materialFamily }: { materialFamily: string }) {
               <SelectContent>
                 <SelectItem value="all">All Thicknesses</SelectItem>
                 {thicknesses.map(t => <SelectItem key={t} value={t}>{t}mm</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          {stockTypes.length > 1 && (
-            <Select value={filterStockType} onValueChange={setFilterStockType}>
-              <SelectTrigger className="w-[140px] h-8 text-xs" data-testid="select-filter-stock-type">
-                <SelectValue placeholder="Stock Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Stock Types</SelectItem>
-                {stockTypes.map(st => <SelectItem key={st} value={st}>{st}</SelectItem>)}
               </SelectContent>
             </Select>
           )}

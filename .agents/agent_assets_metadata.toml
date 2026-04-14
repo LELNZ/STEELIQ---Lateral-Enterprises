@@ -222,3 +222,9 @@ id = "RWYTWeJ9hBdIrhhvkvGVQ"
 uri = "file://reports/wakefield-forensic-verification-report.md"
 type = "text"
 title = "Wakefield Metals Forensic Verification Report — Full Evidence"
+
+[[outputs]]
+id = "dQZYtUl6x2NDRI0YCnKcH"
+uri = "file://reports/coil-library-discoverability-report.md"
+type = "text"
+title = "Coil Library Discoverability — Runtime UX Correction Report"
