@@ -240,3 +240,9 @@ id = "qfM5LB9eVjqux7LdHTjqQ"
 uri = "file://reports/activation-state-governance-report.md"
 type = "text"
 title = "LL Material Library — Activation-State Governance Report"
+
+[[outputs]]
+id = "_mfdP1a0Pm9Lw6cGCplgs"
+uri = "file://reports/supplier-visibility-activation-report.md"
+type = "text"
+title = "Supplier-Visibility Activation Report — Wakefield Workbook Hidden-Row Analysis"
