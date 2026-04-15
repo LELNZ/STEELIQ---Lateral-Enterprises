@@ -306,3 +306,9 @@ id = "dgpOV-ZQTWhkLcLrQsEQw"
 uri = "file://reports/ll-estimate-persistence-forensic-review.md"
 type = "text"
 title = "LL Estimate Persistence Forensic Review — LIVE"
+
+[[outputs]]
+id = "sNMjp2HFkwLk7e2XbatNd"
+uri = "file://reports/ll-source-cost-governance-prt-cleanup.md"
+type = "text"
+title = "LL Live Source Cost Governance + PRT Governance Cleanup Report"

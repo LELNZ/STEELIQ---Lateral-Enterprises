@@ -678,6 +678,7 @@ const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   empirical_test: { label: "Tested", color: "text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-950/40" },
   operator_input: { label: "Operator", color: "text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-950/40" },
   manual_override: { label: "Override", color: "text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-950/40" },
+  orphaned_no_library_match: { label: "Orphaned", color: "text-gray-500 bg-gray-100 dark:text-gray-400 dark:bg-gray-800/40" },
 };
 
 function ProvenanceBadge({ source, note }: { source?: string; note?: string }) {

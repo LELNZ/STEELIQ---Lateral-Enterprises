@@ -251,7 +251,9 @@ export async function registerRoutes(
   await correctLibraryScoping();
   await seedLlSheetMaterials();
   await seedLlPricingSettings();
+  await seedLlSourceCosts();
   await backfillProcessRateProvenance();
+  await governZincannealPrt();
 
   const existingAdmin = await storage.getUserByUsername("admin").catch(() => undefined);
   if (!existingAdmin) {
@@ -7564,12 +7566,12 @@ async function seedLlPricingSettings() {
       { materialFamily: "Galvanised", thickness: 4.5, cutSpeedMmPerMin: 3800, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
       { materialFamily: "Galvanised", thickness: 6.0, cutSpeedMmPerMin: 2800, pierceTimeSec: 0.8, assistGasType: "O2", gasConsumptionLPerMin: 20, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
 
-      { materialFamily: "Zincanneal", thickness: 0.55, cutSpeedMmPerMin: 10000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
-      { materialFamily: "Zincanneal", thickness: 0.8, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
-      { materialFamily: "Zincanneal", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
-      { materialFamily: "Zincanneal", thickness: 1.6, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
-      { materialFamily: "Zincanneal", thickness: 2.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
-      { materialFamily: "Zincanneal", thickness: 3.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "architecture_default", dataSourceNote: "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data" },
+      { materialFamily: "Zincanneal", thickness: 0.55, cutSpeedMmPerMin: 10000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "orphaned_no_library_match", dataSourceNote: "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library." },
+      { materialFamily: "Zincanneal", thickness: 0.8, cutSpeedMmPerMin: 9000, pierceTimeSec: 0.2, assistGasType: "compressed_air", gasConsumptionLPerMin: 10, dataSource: "orphaned_no_library_match", dataSourceNote: "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library." },
+      { materialFamily: "Zincanneal", thickness: 1.0, cutSpeedMmPerMin: 8500, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "orphaned_no_library_match", dataSourceNote: "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library." },
+      { materialFamily: "Zincanneal", thickness: 1.6, cutSpeedMmPerMin: 7000, pierceTimeSec: 0.3, assistGasType: "compressed_air", gasConsumptionLPerMin: 12, dataSource: "orphaned_no_library_match", dataSourceNote: "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library." },
+      { materialFamily: "Zincanneal", thickness: 2.0, cutSpeedMmPerMin: 6000, pierceTimeSec: 0.3, assistGasType: "O2", gasConsumptionLPerMin: 15, dataSource: "orphaned_no_library_match", dataSourceNote: "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library." },
+      { materialFamily: "Zincanneal", thickness: 3.0, cutSpeedMmPerMin: 4500, pierceTimeSec: 0.5, assistGasType: "O2", gasConsumptionLPerMin: 18, dataSource: "orphaned_no_library_match", dataSourceNote: "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library." },
     ],
     gasCosts: {
       o2PricePerLitre: 0.003,
@@ -7774,6 +7776,148 @@ async function seedLlSheetMaterials() {
   }
 }
 
+async function seedLlSourceCosts() {
+  try {
+    const existingGas = await storage.getAllLLGasCostInputs();
+    const existingCons = await storage.getAllLLConsumablesCostInputs();
+    if (existingGas.length > 0 || existingCons.length > 0) return;
+
+    const now = new Date();
+    const systemActorId = "system-seed";
+    const systemActorName = "System Startup Seed";
+
+    const bocGasInputs = [
+      { gasType: "oxygen", packageType: "cylinder" as const, packageCode: "100G2", description: "OXYGEN INDUSTRIAL SIZE G2", deliveredPriceExGst: 50.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G2 cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre" } },
+      { gasType: "oxygen", packageType: "mcp" as const, packageCode: "J15", description: "OXYGEN 200BAR J15 MANPACK (15 bottles, 154 m³)", deliveredPriceExGst: 200.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 154000, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { note: "J15 Manpack is a distinct package from G2 cylinder. Both O2 records maintained separately.", capacitySource: "Operator-confirmed: 15 bottles, total pack volume 154 m³ = 154,000 litres at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre" } },
+      { gasType: "nitrogen", packageType: "mcp" as const, packageCode: "152MP15", description: "NITROGEN 4.0 MANPACK MP15 (15 bottles, 187.30 m³)", deliveredPriceExGst: 500.00, dailyServiceChargeExGst: 3.00, unitCapacityValue: 187300, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "Operator-confirmed: 15 bottles × 12.49 m³ = 187.30 m³ total pack volume = 187,300 litres at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre", correctionReason: "Phase 4E T001 — operator-confirmed pack volumes replace placeholder estimates" } },
+      { gasType: "argon", packageType: "cylinder" as const, packageCode: "130G", description: "ARGON SIZE G", deliveredPriceExGst: 65.00, dailyServiceChargeExGst: 0.25, unitCapacityValue: 8600, unitCapacityUom: "litres", usableFraction: 0.95, derivedAssumptionsJson: { capacitySource: "BOC G cylinder nominal 8,600L at STP", usableFractionNote: "5% heel/residual assumed", conversionNote: "Delivered price ÷ (capacity × usable fraction) = derived cost per litre. Business must confirm G capacity for argon." } },
+    ];
+
+    const bodorConsumables = [
+      { sku: "LM-PLBODOR-37DN", description: "Bodor Protective Lens D37-N-15KW", consumableCategory: "lens" as const, purchaseCostExGst: 450.00, quantityPurchased: 10, unitCostExGst: 45.00, lifeModelType: "hours" as const, expectedLifeValue: 200, derivedAssumptionsJson: { lifeNote: "200 operating hours is an initial estimate. Business must confirm based on actual lens replacement frequency.", costBasis: "Invoice unit price $45.00 ex GST per lens", derivedCalc: "unitCost / expectedLifeHours = derived cost per machine hour" } },
+      { sku: "P0571-1051-00001", description: "KTB2 CON Laser Ceramic BODOR 1.5-6KW", consumableCategory: "ceramic" as const, purchaseCostExGst: 195.00, quantityPurchased: 5, unitCostExGst: 39.00, lifeModelType: "hours" as const, expectedLifeValue: 500, derivedAssumptionsJson: { lifeNote: "500 operating hours is an initial estimate. Business must confirm based on actual ceramic replacement frequency.", costBasis: "Invoice unit price $39.00 ex GST per ceramic", derivedCalc: "unitCost / expectedLifeHours = derived cost per machine hour" } },
+    ];
+
+    let seeded = 0;
+
+    for (const input of bocGasInputs) {
+      const derived = input.unitCapacityValue && input.usableFraction
+        ? input.deliveredPriceExGst / (input.unitCapacityValue * input.usableFraction)
+        : undefined;
+
+      const created = await storage.createLLGasCostInput({
+        divisionKey: "LL",
+        sourceType: "agreement",
+        supplierName: "BOC",
+        sourceReference: "NZ11352442",
+        sourceDocumentName: "BOC 100593891 Agreement 1.pdf",
+        sourceDate: "2026-03-31",
+        sourceNotes: "BOC Industrial Gases Supply Agreement. Account 100593891. Commencement 31 March 2026. 1 year minimum period. Prices fixed for 12 months. Excludes GST and ETS.",
+        ...input,
+        derivedCostPerLitre: derived ? parseFloat(derived.toFixed(6)) : null,
+        status: "active",
+        activatedBy: systemActorId,
+        activatedAt: now,
+        effectiveFrom: now,
+        createdBy: systemActorId,
+      } as any);
+      await storage.createLLPricingAuditEntry({
+        profileId: created.id,
+        eventType: "activated",
+        actorUserId: systemActorId,
+        actorDisplayName: systemActorName,
+        summary: `Auto-seeded and activated from BOC agreement: ${input.description}`,
+      });
+      seeded++;
+    }
+
+    for (const input of bodorConsumables) {
+      const derived = input.expectedLifeValue > 0
+        ? input.unitCostExGst / input.expectedLifeValue
+        : undefined;
+
+      const created = await storage.createLLConsumablesCostInput({
+        divisionKey: "LL",
+        sourceType: "invoice",
+        supplierName: "Laser Machines Limited",
+        sourceReference: "INV-0226",
+        sourceDocumentName: "Invoice INV-0226.pdf",
+        sourceDate: "2025-08-18",
+        sourceNotes: "Invoice INV-0226 dated 18 Aug 2025 from Laser Machines Limited. Payment terms 7 days. GST 133-450-440.",
+        machineFamily: "Bodor",
+        machineModel: "15KW Fiber Laser",
+        ...input,
+        derivedCostPerHour: derived ? parseFloat(derived.toFixed(4)) : null,
+        status: "active",
+        activatedBy: systemActorId,
+        activatedAt: now,
+        effectiveFrom: now,
+        createdBy: systemActorId,
+      } as any);
+      await storage.createLLPricingAuditEntry({
+        profileId: created.id,
+        eventType: "activated",
+        actorUserId: systemActorId,
+        actorDisplayName: systemActorName,
+        summary: `Auto-seeded and activated from Bodor invoice: ${input.description}`,
+      });
+      seeded++;
+    }
+
+    console.log(`[ll-source-costs] Seeded and activated ${seeded} governed source cost records (${bocGasInputs.length} gas + ${bodorConsumables.length} consumables)`);
+  } catch (err) {
+    console.error("[ll-source-costs] Seed error:", err);
+  }
+}
+
+async function governZincannealPrt() {
+  try {
+    const profiles = await storage.getAllLLPricingProfiles();
+    let updated = 0;
+    for (const profile of profiles) {
+      const settings = profile.llPricingSettingsJson;
+      if (!settings?.processRateTables?.length) continue;
+      let dirty = false;
+      for (const entry of settings.processRateTables) {
+        if (entry.materialFamily === "Zincanneal" && entry.dataSource !== "orphaned_no_library_match") {
+          entry.dataSource = "orphaned_no_library_match";
+          entry.dataSourceNote = "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library.";
+          dirty = true;
+        }
+      }
+      if (dirty) {
+        await storage.updateLLPricingProfile(profile.id, { llPricingSettingsJson: settings });
+        updated++;
+      }
+    }
+
+    const divSettings = await storage.getDivisionSettings("LL");
+    if (divSettings) {
+      const llSettings = (divSettings as any).llPricingSettingsJson;
+      if (llSettings?.processRateTables?.length) {
+        let divDirty = false;
+        for (const entry of llSettings.processRateTables) {
+          if (entry.materialFamily === "Zincanneal" && entry.dataSource !== "orphaned_no_library_match") {
+            entry.dataSource = "orphaned_no_library_match";
+            entry.dataSourceNote = "No Zincanneal materials exist in the LL sheet library. These PRT entries are inert and will not affect any pricing. Retained as a template for future use if Zincanneal materials are added to the library.";
+            divDirty = true;
+          }
+        }
+        if (divDirty) {
+          await storage.upsertDivisionSettings("LL", { llPricingSettingsJson: llSettings });
+          updated++;
+        }
+      }
+    }
+
+    if (updated > 0) {
+      console.log(`[ll-prt-governance] Annotated Zincanneal PRT entries as orphaned_no_library_match in ${updated} profile(s)/settings`);
+    }
+  } catch (err) {
+    console.error("[ll-prt-governance] Error:", err);
+  }
+}
+
 async function backfillProcessRateProvenance() {
   try {
     const profiles = await storage.getAllLLPricingProfiles();
@@ -7781,11 +7925,15 @@ async function backfillProcessRateProvenance() {
     for (const profile of profiles) {
       const settings = profile.llPricingSettingsJson;
       if (!settings?.processRateTables?.length) continue;
-      if (settings.processRateTables[0].dataSource) continue;
+      let entryUpdated = false;
       for (const entry of settings.processRateTables) {
-        entry.dataSource = "architecture_default";
-        entry.dataSourceNote = "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data";
+        if (!entry.dataSource) {
+          entry.dataSource = "architecture_default";
+          entry.dataSourceNote = "Seeded representative rate for Bodor 6kW fibre – replace with empirical test data";
+          entryUpdated = true;
+        }
       }
+      if (!entryUpdated) continue;
       await storage.updateLLPricingProfile(profile.id, { llPricingSettingsJson: settings });
       updated++;
     }

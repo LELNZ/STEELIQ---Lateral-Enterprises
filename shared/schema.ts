@@ -1062,7 +1062,7 @@ export interface LLMachineProfile {
   isActive: boolean;
 }
 
-export type LLProcessRateSource = "architecture_default" | "bodor_spec" | "empirical_test" | "operator_input" | "manual_override";
+export type LLProcessRateSource = "architecture_default" | "bodor_spec" | "empirical_test" | "operator_input" | "manual_override" | "orphaned_no_library_match";
 
 export interface LLProcessRateEntry {
   materialFamily: string;
