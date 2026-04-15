@@ -300,3 +300,9 @@ id = "voS0VDViamqwWSiXxrCwu"
 uri = "file://reports/ll-pricing-model-cleanup-review.md"
 type = "text"
 title = "LL Pricing Model Cleanup — Review + Correction Report"
+
+[[outputs]]
+id = "dgpOV-ZQTWhkLcLrQsEQw"
+uri = "file://reports/ll-estimate-persistence-forensic-review.md"
+type = "text"
+title = "LL Estimate Persistence Forensic Review — LIVE"

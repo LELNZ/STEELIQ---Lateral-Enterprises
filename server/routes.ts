@@ -2076,7 +2076,11 @@ export async function registerRoutes(
       if (existing.status === "converted") {
         return res.status(400).json({ error: "Cannot delete a converted estimate — it is linked to a quote" });
       }
-      await storage.deleteLaserEstimate(req.params.id);
+      if (existing.status === "archived") {
+        return res.status(400).json({ error: "Estimate is already archived" });
+      }
+      await storage.archiveLaserEstimate(req.params.id);
+      console.log(`[ll-estimate] Archived laser estimate ${existing.estimateNumber} (${req.params.id}) — soft-delete`);
       res.json({ ok: true });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
