@@ -336,3 +336,9 @@ id = "EhHNvFeoz1xFzMlrkoHYd"
 uri = "file://reports/ll-est-0003-forensic-investigation-report.md"
 type = "text"
 title = "LL-EST-0003 Forensic Investigation Report"
+
+[[outputs]]
+id = "MitjOlxa8XUbPF41Jb-_a"
+uri = "file://reports/ll-est-0003-evidence-hardening-release-gate-report.md"
+type = "text"
+title = "LL-EST-0003 Evidence Hardening + Release Gate Report"
