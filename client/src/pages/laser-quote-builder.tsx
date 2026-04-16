@@ -90,6 +90,8 @@ function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<Las
     setupMinutes: rates.defaultSetupMinutes,
     handlingMinutes: rates.defaultHandlingMinutes,
     markupPercent: rates.defaultMarkupPercent,
+    materialMarkupPercent: rates.defaultMaterialMarkupPercent,
+    consumablesMarkupPercent: rates.defaultConsumablesMarkupPercent,
     utilisationFactor: rates.defaultUtilisationFactor,
     geometrySource: "manual",
   };
@@ -138,6 +140,7 @@ function computeItemPricing(
   governed?: LLGovernedInputs,
 ): LLPricingBreakdown {
   const matched = findMatchingMaterial(materials, item);
+  const rates = resolveRatesFromSettings(settings);
   return computeLLPricing({
     material: matched ? materialToTruth(matched) : null,
     partLengthMm: item.length,
@@ -148,6 +151,8 @@ function computeItemPricing(
     setupMinutes: item.setupMinutes,
     handlingMinutes: item.handlingMinutes,
     markupPercent: item.markupPercent,
+    materialMarkupPercent: item.materialMarkupPercent ?? rates.defaultMaterialMarkupPercent,
+    consumablesMarkupPercent: item.consumablesMarkupPercent ?? rates.defaultConsumablesMarkupPercent,
     utilisationFactor: item.utilisationFactor,
     coilLengthMm: item.coilLengthMm || 0,
   }, settings, governed);
@@ -191,7 +196,9 @@ function itemToSnapshotItem(
     pierceCount: item.pierceCount,
     setupMinutes: item.setupMinutes,
     handlingMinutes: item.handlingMinutes,
-    markupPercent: item.markupPercent,
+    markupPercent: pricing.markupPercent,
+    materialMarkupPercent: pricing.materialMarkupPercent,
+    consumablesMarkupPercent: pricing.consumablesMarkupPercent,
     utilisationFactor: item.utilisationFactor,
     estimatedSheets: pricing.estimatedSheets,
     materialCostTotal: pricing.materialCostTotal,
@@ -200,8 +207,20 @@ function itemToSnapshotItem(
     internalCostSubtotal: pricing.internalCostSubtotal,
     markupAmount: pricing.markupAmount,
     sellTotal: pricing.sellTotal,
+    materialBuyCost: pricing.materialBuyCost,
+    materialSellCost: pricing.materialSellCost,
+    labourBuyCost: pricing.labourBuyCost,
+    labourSellCost: pricing.labourSellCost,
+    machineBuyCost: pricing.machineBuyCost,
+    machineSellCost: pricing.machineSellCost,
+    consumablesBuyCost: pricing.consumablesBuyCost,
+    consumablesSellCost: pricing.consumablesSellCost,
+    gasBuyCost: pricing.gasBuyCost,
+    totalBuyCost: pricing.totalBuyCost,
+    totalMargin: pricing.totalMargin,
+    totalMarginPercent: pricing.totalMarginPercent,
     geometrySource: item.geometrySource ?? "manual",
-    operations: [{ type: "laser" as const, enabled: true, costTotal: pricing.internalCostSubtotal }],
+    operations: [{ type: "laser" as const, enabled: true, costTotal: pricing.totalBuyCost }],
   };
 }
 
@@ -228,82 +247,124 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
     setupMinutes: si.setupMinutes ?? rates.defaultSetupMinutes,
     handlingMinutes: si.handlingMinutes ?? rates.defaultHandlingMinutes,
     markupPercent: si.markupPercent ?? rates.defaultMarkupPercent,
+    materialMarkupPercent: (si as any).materialMarkupPercent ?? rates.defaultMaterialMarkupPercent,
+    consumablesMarkupPercent: (si as any).consumablesMarkupPercent ?? rates.defaultConsumablesMarkupPercent,
     utilisationFactor: si.utilisationFactor ?? rates.defaultUtilisationFactor,
     geometrySource: (si as any).geometrySource ?? "manual",
   };
 }
 
+function BucketRow({ label, buy, sell, margin, bold }: { label: string; buy: string; sell: string; margin?: string; bold?: boolean }) {
+  return (
+    <div className={`grid grid-cols-[1fr_80px_80px_70px] gap-1 text-[11px] ${bold ? "font-semibold" : ""}`} data-testid={`bucket-row-${label.toLowerCase().replace(/[^a-z]/g, "-")}`}>
+      <span className="text-muted-foreground truncate">{label}</span>
+      <span className="text-right font-mono">{buy}</span>
+      <span className="text-right font-mono">{sell}</span>
+      <span className="text-right font-mono text-green-700 dark:text-green-400">{margin || ""}</span>
+    </div>
+  );
+}
+
 function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPricingBreakdown; supplierName: string }) {
   const isTimeBased = breakdown.processMode === "time-based";
-  const rows: Array<{ label: string; value: string; bold?: boolean }> = [
+  const infoRows: Array<{ label: string; value: string }> = [
     { label: "Supplier", value: supplierName || "—" },
-    { label: "Sheet Area", value: breakdown.sheetAreaMm2 > 0 ? `${(breakdown.sheetAreaMm2 / 1_000_000).toFixed(3)} m²` : "—" },
-    { label: "Part Area (each)", value: breakdown.partAreaMm2 > 0 ? `${(breakdown.partAreaMm2 / 1_000_000).toFixed(4)} m²` : "—" },
     { label: "Parts/Sheet", value: breakdown.partsPerSheet > 0 ? `${breakdown.partsPerSheet}` : "—" },
-    { label: "Est. Sheets Required", value: breakdown.estimatedSheets > 0 ? `${breakdown.estimatedSheets} sheet${breakdown.estimatedSheets !== 1 ? "s" : ""}` : "—" },
-    { label: "Material Cost", value: `$${breakdown.materialCostTotal.toFixed(2)}` },
+    { label: "Est. Sheets", value: breakdown.estimatedSheets > 0 ? `${breakdown.estimatedSheets}` : "—" },
   ];
-
   if (isTimeBased) {
-    rows.push(
-      { label: "Machine Time", value: `${breakdown.machineTimeMinutes.toFixed(1)} min` },
-      { label: "Machine Cost", value: `$${breakdown.machineTimeCost.toFixed(2)}` },
-      { label: `Gas Cost${breakdown.gasCostPerLitre ? ` @ $${breakdown.gasCostPerLitre.toFixed(6)}/L` : ""}`, value: `$${breakdown.gasCost.toFixed(2)}` },
-      { label: `Consumables${breakdown.consumablesCostPerHourRate ? ` @ $${breakdown.consumablesCostPerHourRate.toFixed(2)}/hr` : ""}`, value: `$${breakdown.consumablesCost.toFixed(2)}` },
-    );
-  } else {
-    rows.push(
-      { label: "Cut Cost (per unit)", value: `$${breakdown.cutCost.toFixed(2)}` },
-      { label: "Pierce Cost (per unit)", value: `$${breakdown.pierceCost.toFixed(2)}` },
-    );
+    infoRows.push({ label: "Machine Time", value: `${breakdown.machineTimeMinutes.toFixed(1)} min` });
   }
-
-  rows.push(
-    { label: `Process Cost (${isTimeBased ? "time" : "flat"})`, value: `$${breakdown.processCostTotal.toFixed(2)}` },
-    { label: "Setup/Handling", value: `$${breakdown.setupHandlingCost.toFixed(2)}` },
-  );
-
-  if (breakdown.minimumLineChargeApplied) {
-    rows.push({ label: "Min. Line Charge Applied", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true });
-  } else {
-    rows.push({ label: "Internal Subtotal", value: `$${breakdown.internalCostSubtotal.toFixed(2)}`, bold: true });
-  }
-
-  rows.push(
-    { label: "Unit Cost", value: `$${breakdown.unitCost.toFixed(2)}`, bold: true },
-    { label: `Markup (${breakdown.markupPercent}%)`, value: `$${breakdown.markupAmount.toFixed(2)}` },
-    { label: "Sell Total", value: `$${breakdown.sellTotal.toFixed(2)}`, bold: true },
-    { label: "Unit Sell", value: `$${breakdown.unitSell.toFixed(2)}`, bold: true },
-  );
   return (
-    <div className="bg-muted/50 border rounded-md p-3 space-y-1" data-testid="pricing-breakdown-panel">
-      <div className="flex items-center gap-1.5 mb-2">
+    <div className="bg-muted/50 border rounded-md p-3 space-y-2" data-testid="pricing-breakdown-panel">
+      <div className="flex items-center gap-1.5 mb-1">
         <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Internal Pricing Breakdown</span>
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bucketed Pricing Breakdown</span>
         <Badge variant={isTimeBased ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 ml-auto" data-testid="process-mode-badge">
           {isTimeBased ? "Time-Based" : "Flat Rate"}
         </Badge>
       </div>
       {isTimeBased && (breakdown.gasSource || breakdown.consumablesSource) && (
-        <div className="flex flex-wrap gap-1 mb-1.5" data-testid="governed-source-badges">
+        <div className="flex flex-wrap gap-1 mb-1" data-testid="governed-source-badges">
           {breakdown.gasSource && (
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200" data-testid="gas-source-badge">
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800" data-testid="gas-source-badge">
               Gas: {breakdown.gasSource}
             </Badge>
           )}
           {breakdown.consumablesSource && (
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200" data-testid="consumables-source-badge">
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" data-testid="consumables-source-badge">
               Consumables: {breakdown.consumablesSource}
             </Badge>
           )}
         </div>
       )}
-      {rows.map((r, i) => (
-        <div key={i} className={`flex justify-between text-xs ${r.bold ? 'font-semibold border-t pt-1 mt-1' : 'text-muted-foreground'}`}>
-          <span>{r.label}</span>
-          <span className="font-mono">{r.value}</span>
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground mb-1">
+        {infoRows.map((r, i) => (
+          <span key={i}><span className="font-medium">{r.label}:</span> {r.value}</span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-[1fr_80px_80px_70px] gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">
+        <span>Bucket</span>
+        <span className="text-right">Buy</span>
+        <span className="text-right">Sell</span>
+        <span className="text-right">Margin</span>
+      </div>
+
+      <BucketRow
+        label={`Material (${breakdown.materialMarkupPercent}% mkp)`}
+        buy={`$${breakdown.materialBuyCost.toFixed(2)}`}
+        sell={`$${breakdown.materialSellCost.toFixed(2)}`}
+        margin={`$${breakdown.materialMargin.toFixed(2)}`}
+      />
+      <BucketRow
+        label={`Machine ($${breakdown.machineBuyRatePerHour.toFixed(0)}→$${breakdown.machineSellRatePerHour.toFixed(0)}/hr)`}
+        buy={`$${breakdown.machineBuyCost.toFixed(2)}`}
+        sell={`$${breakdown.machineSellCost.toFixed(2)}`}
+        margin={`$${breakdown.machineMargin.toFixed(2)}`}
+      />
+      <BucketRow
+        label="Gas (pass-through)"
+        buy={`$${breakdown.gasBuyCost.toFixed(2)}`}
+        sell={`$${breakdown.gasSellCost.toFixed(2)}`}
+      />
+      <BucketRow
+        label={`Consumables (${breakdown.consumablesMarkupPercent}% mkp)`}
+        buy={`$${breakdown.consumablesBuyCost.toFixed(2)}`}
+        sell={`$${breakdown.consumablesSellCost.toFixed(2)}`}
+        margin={`$${breakdown.consumablesMargin.toFixed(2)}`}
+      />
+      <BucketRow
+        label={`Labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
+        buy={`$${breakdown.labourBuyCost.toFixed(2)}`}
+        sell={`$${breakdown.labourSellCost.toFixed(2)}`}
+        margin={`$${breakdown.labourMargin.toFixed(2)}`}
+      />
+
+      <div className="border-t pt-1 mt-1">
+        <BucketRow
+          label="TOTAL"
+          buy={`$${breakdown.totalBuyCost.toFixed(2)}`}
+          sell={`$${breakdown.sellTotal.toFixed(2)}`}
+          margin={`$${breakdown.totalMargin.toFixed(2)}`}
+          bold
+        />
+      </div>
+
+      {breakdown.minimumLineChargeApplied && (
+        <div className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5" data-testid="min-line-charge-notice">
+          Min. line charge applied ($50)
         </div>
-      ))}
+      )}
+
+      <div className="flex justify-between text-xs font-semibold border-t pt-1 mt-1">
+        <span>Unit Sell</span>
+        <span className="font-mono" data-testid="unit-sell-price">${breakdown.unitSell.toFixed(2)}</span>
+      </div>
+      <div className="flex justify-between text-[11px] text-muted-foreground">
+        <span>Margin %</span>
+        <span className="font-mono text-green-700 dark:text-green-400" data-testid="total-margin-percent">{breakdown.totalMarginPercent.toFixed(1)}%</span>
+      </div>
     </div>
   );
 }
@@ -342,6 +403,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   });
 
   const llPricingSettings = (activePricingProfile?.llPricingSettingsJson ?? llDivisionSettings?.llPricingSettingsJson ?? null) as LLPricingSettings | null;
+  const resolvedRates = useMemo(() => resolveRatesFromSettings(llPricingSettings), [llPricingSettings]);
   const pricingProfileId = activePricingProfile?.id ?? null;
   const pricingProfileLabel = activePricingProfile ? `${activePricingProfile.profileName} (${activePricingProfile.versionLabel})` : null;
 
@@ -716,12 +778,16 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       internalNotes: item.internalNotes,
       unitPrice: item.unitPrice,
       llSheetMaterialId: item.llSheetMaterialId,
+      coilLengthMm: item.coilLengthMm || 0,
       cutLengthMm: item.cutLengthMm,
       pierceCount: item.pierceCount,
       setupMinutes: item.setupMinutes,
       handlingMinutes: item.handlingMinutes,
       markupPercent: item.markupPercent,
+      materialMarkupPercent: item.materialMarkupPercent,
+      consumablesMarkupPercent: item.consumablesMarkupPercent,
       utilisationFactor: item.utilisationFactor,
+      geometrySource: item.geometrySource ?? "manual",
     });
     setDialogOpen(true);
   };
@@ -1042,15 +1108,15 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                               <span>${unitSell.toFixed(2)}</span>
                               {pricing && (
                                 <span className="block text-[10px] text-muted-foreground" data-testid={`text-markup-indicator-${idx}`}>
-                                  +{pricing.markupPercent}%
+                                  {pricing.totalMarginPercent.toFixed(0)}% margin
                                 </span>
                               )}
                             </TableCell>
                             <TableCell className="text-right font-mono font-medium" data-testid={`text-line-total-${idx}`}>
                               <span>${lineTotal.toFixed(2)}</span>
                               {pricing && (
-                                <span className="block text-[10px] text-muted-foreground" data-testid={`text-margin-indicator-${idx}`}>
-                                  margin ${(lineTotal - pricing.internalCostSubtotal).toFixed(2)}
+                                <span className="block text-[10px] text-green-700 dark:text-green-400" data-testid={`text-margin-indicator-${idx}`}>
+                                  +${pricing.totalMargin.toFixed(2)}
                                 </span>
                               )}
                             </TableCell>
@@ -1467,17 +1533,29 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <Label htmlFor="markupPercent">Markup %</Label>
+                      <Label htmlFor="materialMarkupPercent">Material Markup %</Label>
                       <Input
-                        id="markupPercent"
+                        id="materialMarkupPercent"
                         type="number"
                         min={0}
                         step={1}
-                        value={formData.markupPercent}
-                        onChange={(e) => setFormData(prev => ({ ...prev, markupPercent: parseFloat(e.target.value) || 0 }))}
-                        data-testid="input-markup-percent"
+                        value={formData.materialMarkupPercent ?? resolvedRates.defaultMaterialMarkupPercent}
+                        onChange={(e) => setFormData(prev => ({ ...prev, materialMarkupPercent: parseFloat(e.target.value) || 0 }))}
+                        data-testid="input-material-markup-percent"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="consumablesMarkupPercent">Consumables Markup %</Label>
+                      <Input
+                        id="consumablesMarkupPercent"
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={formData.consumablesMarkupPercent ?? resolvedRates.defaultConsumablesMarkupPercent}
+                        onChange={(e) => setFormData(prev => ({ ...prev, consumablesMarkupPercent: parseFloat(e.target.value) || 0 }))}
+                        data-testid="input-consumables-markup-percent"
                       />
                     </div>
                     <div>
@@ -1495,7 +1573,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                         }}
                         data-testid="input-utilisation-factor"
                       />
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Sheet utilisation (0.75 = 75%, bounded rectangular estimate)</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Sheet utilisation (0.75 = 75%)</p>
                     </div>
                   </div>
                 </div>

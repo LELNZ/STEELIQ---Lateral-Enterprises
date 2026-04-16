@@ -249,6 +249,8 @@ export const laserQuoteItemSchema = z.object({
   setupMinutes: z.number().min(0).default(15),
   handlingMinutes: z.number().min(0).default(10),
   markupPercent: z.number().min(0).default(35),
+  materialMarkupPercent: z.number().min(0).default(20).optional(),
+  consumablesMarkupPercent: z.number().min(0).default(25).optional(),
   utilisationFactor: z.number().min(0).max(1).default(0.75),
 
   geometrySource: z.enum(["manual", "dxf", "cam_import"]).default("manual"),
@@ -287,6 +289,8 @@ export interface LaserItemPayload {
   setupMinutes: number;
   handlingMinutes: number;
   markupPercent: number;
+  materialMarkupPercent?: number;
+  consumablesMarkupPercent?: number;
   utilisationFactor: number;
 }
 
@@ -1057,6 +1061,7 @@ export interface LLMachineProfile {
   usableLengthMm: number;
   usableWidthMm: number;
   hourlyMachineRate: number;
+  machineBuyCostPerHour?: number;
   maxThicknessByMaterialFamily: Record<string, number>;
   isDefault: boolean;
   isActive: boolean;
@@ -1103,6 +1108,8 @@ export interface LLExpediteTier {
 
 export interface LLCommercialPolicy {
   defaultMarkupPercent: number;
+  defaultMaterialMarkupPercent?: number;
+  defaultConsumablesMarkupPercent?: number;
   minimumMaterialCharge: number;
   minimumLineCharge: number;
   defaultRatePerMmCut: number;
