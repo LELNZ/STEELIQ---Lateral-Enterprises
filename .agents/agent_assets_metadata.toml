@@ -318,3 +318,9 @@ id = "J32X8lf1NrDHzWsTQwm9n"
 uri = "file://reports/ll-material-allocation-markup-review.md"
 type = "text"
 title = "LL Material Allocation + Markup Model Review and Correction Report"
+
+[[outputs]]
+id = "LS6BuzMWk6MRJRrww46k0"
+uri = "file://reports/ll-bucketed-commercial-pricing-architecture-review.md"
+type = "text"
+title = "LL Bucketed Commercial Pricing Architecture Review"
