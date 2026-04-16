@@ -312,3 +312,9 @@ id = "sNMjp2HFkwLk7e2XbatNd"
 uri = "file://reports/ll-source-cost-governance-prt-cleanup.md"
 type = "text"
 title = "LL Live Source Cost Governance + PRT Governance Cleanup Report"
+
+[[outputs]]
+id = "J32X8lf1NrDHzWsTQwm9n"
+uri = "file://reports/ll-material-allocation-markup-review.md"
+type = "text"
+title = "LL Material Allocation + Markup Model Review and Correction Report"

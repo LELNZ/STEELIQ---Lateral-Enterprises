@@ -9,11 +9,14 @@
  *   B. Pricing Engine Truth — derived costs, commercial rule, sell result
  *   C. Customer Output Truth — sell totals only, no internal cost leakage
  *
- * MATERIAL COST — RECTANGULAR PACKING MODEL (Phase 4A):
- *   Sheet count uses rectangular packing with kerf allowance when possible:
+ * MATERIAL COST — YIELD-BASED ALLOCATION (Phase 4A → corrected Phase 5):
+ *   Uses rectangular packing to determine parts-per-sheet, then allocates
+ *   material cost per unit based on yield:
  *     1. Effective part size = (partLength + kerfWidth) × (partWidth + kerfWidth)
  *     2. Parts per sheet = best of two orientations on usable sheet area
- *     3. Sheets required = ceil(quantity / partsPerSheet)
+ *     3. Material cost per unit = sheetPrice / partsPerSheet
+ *     4. Material cost total = materialCostPerUnit × quantity
+ *   Sheets required (ceil) is retained as an informational procurement field.
  *   Falls back to area-based model when part dimensions are not set.
  *   Minimum material charge ($25) is applied per line item, not per unit.
  *
@@ -365,11 +368,11 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     if (partsPerSheet > 0) {
       estimatedSheets = Math.ceil(safeQty / partsPerSheet);
+      materialCostTotal = (material.pricePerSheetExGst / partsPerSheet) * safeQty;
     } else if (usableSheetArea > 0 && totalNetPartArea > 0) {
       estimatedSheets = Math.ceil(totalNetPartArea / usableSheetArea);
+      materialCostTotal = estimatedSheets * material.pricePerSheetExGst;
     }
-
-    materialCostTotal = estimatedSheets * material.pricePerSheetExGst;
   }
 
   if (materialCostTotal > 0 && materialCostTotal < rates.minimumMaterialCharge) {
