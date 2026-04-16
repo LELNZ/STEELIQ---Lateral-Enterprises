@@ -102,14 +102,27 @@ export interface LLPricingBreakdown {
   consumablesCost: number;
   machineTimeCost: number;
   machineTimeMinutes: number;
+  cutTimeMinutes: number;
+  pierceTimeMinutes: number;
   processCostPerUnit: number;
   processCostTotal: number;
   processMode: "time-based" | "flat-rate";
 
   setupHandlingCost: number;
+  setupMinutes: number;
+  handlingMinutes: number;
 
   internalCostSubtotal: number;
   minimumLineChargeApplied: boolean;
+  minimumLineCharge: number;
+  minimumMaterialCharge: number;
+  minimumMaterialChargeApplied: boolean;
+  sheetPricePerSheet?: number;
+  gasType?: string;
+  gasConsumptionLPerMin?: number;
+  processRateThicknessMatched?: number;
+  processRateCutSpeedMmPerMin?: number;
+  processRatePierceTimeSec?: number;
 
   markupPercent: number;
   markupAmount: number;
@@ -431,8 +444,10 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     }
   }
 
+  let minimumMaterialChargeApplied = false;
   if (materialBuyCost > 0 && materialBuyCost < rates.minimumMaterialCharge) {
     materialBuyCost = rates.minimumMaterialCharge;
+    minimumMaterialChargeApplied = true;
   }
 
   const materialSellCost = materialBuyCost * (1 + materialMarkupPercent / 100);
@@ -454,6 +469,8 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   let machineSellCost = 0;
   let machineBuyCost = 0;
   let machineTimeMinutes = 0;
+  let cutTimeMinutes = 0;
+  let pierceTimeMinutes = 0;
   let processCostTotal = 0;
   let processCostPerUnit = 0;
   let processMode: "time-based" | "flat-rate" = "flat-rate";
@@ -461,6 +478,8 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   let gasCostPerLitre = 0;
   let consumablesSource = "";
   let consumablesCostPerHourRate = 0;
+  let gasTypeOut = "";
+  let gasConsumptionLPerMinOut = 0;
 
   if (processRate && (cutLengthMm > 0 || pierceCount > 0)) {
     processMode = "time-based";
@@ -470,6 +489,11 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     const totalPierces = pierceCount * safeQty;
     const pierceTimeMin = (totalPierces * processRate.pierceTimeSec) / 60;
+
+    cutTimeMinutes = cuttingTimeMin;
+    pierceTimeMinutes = pierceTimeMin;
+    gasTypeOut = processRate.assistGasType;
+    gasConsumptionLPerMinOut = processRate.gasConsumptionLPerMin;
 
     machineTimeMinutes = cuttingTimeMin + pierceTimeMin;
     const machineTimeHours = machineTimeMinutes / 60;
@@ -546,12 +570,25 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     consumablesCost: consumablesBuyCost,
     machineTimeCost: machineSellCost,
     machineTimeMinutes,
+    cutTimeMinutes,
+    pierceTimeMinutes,
     processCostPerUnit,
     processCostTotal,
     processMode,
     setupHandlingCost,
+    setupMinutes: Number(setupMinutes) || 0,
+    handlingMinutes: Number(handlingMinutes) || 0,
     internalCostSubtotal: totalBuyCost,
     minimumLineChargeApplied,
+    minimumLineCharge: rates.minimumLineCharge,
+    minimumMaterialCharge: rates.minimumMaterialCharge,
+    minimumMaterialChargeApplied,
+    sheetPricePerSheet: material?.pricePerSheetExGst,
+    gasType: gasTypeOut || undefined,
+    gasConsumptionLPerMin: gasConsumptionLPerMinOut || undefined,
+    processRateThicknessMatched: processRate?.thickness,
+    processRateCutSpeedMmPerMin: processRate?.cutSpeedMmPerMin,
+    processRatePierceTimeSec: processRate?.pierceTimeSec,
     markupPercent: Math.round(effectiveMarkupPercent * 100) / 100,
     markupAmount,
     sellTotal,

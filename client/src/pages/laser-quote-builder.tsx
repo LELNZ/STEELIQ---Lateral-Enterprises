@@ -38,7 +38,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical } from "lucide-react";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical, Info } from "lucide-react";
 import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
@@ -267,6 +267,7 @@ function BucketRow({ label, buy, sell, margin, bold }: { label: string; buy: str
 
 function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPricingBreakdown; supplierName: string }) {
   const isTimeBased = breakdown.processMode === "time-based";
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const infoRows: Array<{ label: string; value: string }> = [
     { label: "Supplier", value: supplierName || "—" },
     { label: "Parts/Sheet", value: breakdown.partsPerSheet > 0 ? `${breakdown.partsPerSheet}` : "—" },
@@ -281,9 +282,17 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bucketed Pricing Breakdown</span>
         <Badge variant={isTimeBased ? "default" : "secondary"} className="text-[10px] px-1.5 py-0 h-4 ml-auto" data-testid="process-mode-badge">
-          {isTimeBased ? "Time-Based" : "Flat Rate"}
+          {isTimeBased ? "Time-Based (Governed)" : "Flat-Rate Fallback"}
         </Badge>
       </div>
+      {!isTimeBased && (
+        <div className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-2 py-1.5" data-testid="flat-rate-fallback-warning">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+          <div className="text-[11px] text-amber-800 dark:text-amber-200 leading-snug">
+            <span className="font-semibold">No governed process rate</span> for this material/thickness. Using flat $/mm cut and $/pierce rates. Gas, consumables and machine time are not separately calculated.
+          </div>
+        </div>
+      )}
       {isTimeBased && (breakdown.gasSource || breakdown.consumablesSource) && (
         <div className="flex flex-wrap gap-1 mb-1" data-testid="governed-source-badges">
           {breakdown.gasSource && (
@@ -365,6 +374,88 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         <span>Margin %</span>
         <span className="font-mono text-green-700 dark:text-green-400" data-testid="total-margin-percent">{breakdown.totalMarginPercent.toFixed(1)}%</span>
       </div>
+
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center gap-1 w-full justify-center text-[10px] font-medium text-muted-foreground hover:text-foreground mt-1 pt-1 border-t"
+            data-testid="button-toggle-breakdown-details"
+          >
+            <Info className="h-3 w-3" />
+            {detailsOpen ? "Hide calculation details" : "Show calculation details"}
+            {detailsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-2 mt-2" data-testid="breakdown-details">
+          <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Material</div>
+            {breakdown.sheetPricePerSheet ? (
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Sheet price (ex-GST)</span><span className="font-mono" data-testid="detail-sheet-price">${breakdown.sheetPricePerSheet.toFixed(2)}</span></div>
+            ) : null}
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Parts per sheet</span><span className="font-mono">{breakdown.partsPerSheet || "—"}</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Estimated sheets</span><span className="font-mono">{breakdown.estimatedSheets || "—"}</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Sheet utilisation</span><span className="font-mono">{(breakdown.utilisationFactor * 100).toFixed(0)}%</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Effective material buy / part</span><span className="font-mono">${breakdown.materialCostPerUnit.toFixed(2)}</span></div>
+            {breakdown.minimumMaterialChargeApplied && (
+              <div className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="min-material-notice">
+                Min. material charge applied (${breakdown.minimumMaterialCharge.toFixed(2)})
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Machine Time</div>
+            {isTimeBased ? (
+              <>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Cut speed (governed)</span><span className="font-mono" data-testid="detail-cut-speed">{breakdown.processRateCutSpeedMmPerMin?.toLocaleString() ?? "—"} mm/min</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Pierce time</span><span className="font-mono">{breakdown.processRatePierceTimeSec?.toFixed(2) ?? "—"} s/pierce</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Cut time (line)</span><span className="font-mono" data-testid="detail-cut-time">{breakdown.cutTimeMinutes.toFixed(2)} min</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Pierce time (line)</span><span className="font-mono" data-testid="detail-pierce-time">{breakdown.pierceTimeMinutes.toFixed(2)} min</span></div>
+                <div className="flex justify-between text-[10px] font-semibold"><span className="text-muted-foreground">Total machine time</span><span className="font-mono">{breakdown.machineTimeMinutes.toFixed(2)} min</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Buy rate / Sell rate</span><span className="font-mono">${breakdown.machineBuyRatePerHour.toFixed(0)} / ${breakdown.machineSellRatePerHour.toFixed(0)} /hr</span></div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Flat cut rate</span><span className="font-mono">${breakdown.ratePerMmCut.toFixed(4)} /mm</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Flat pierce rate</span><span className="font-mono">${breakdown.ratePerPierce.toFixed(2)} /pierce</span></div>
+                <div className="text-[10px] text-muted-foreground italic">Machine time not computed in flat-rate mode.</div>
+              </>
+            )}
+          </div>
+
+          {isTimeBased && (
+            <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Gas &amp; Consumables</div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Assist gas</span><span className="font-mono" data-testid="detail-gas-type">{breakdown.gasType ?? "—"}</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Gas flow</span><span className="font-mono">{breakdown.gasConsumptionLPerMin?.toFixed(0) ?? "—"} L/min</span></div>
+              {breakdown.gasCostPerLitre != null && (
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Gas cost / litre</span><span className="font-mono">${breakdown.gasCostPerLitre.toFixed(4)}</span></div>
+              )}
+              {breakdown.gasSource && (
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Gas source</span><span className="font-mono text-[9px] text-right truncate max-w-[60%]">{breakdown.gasSource}</span></div>
+              )}
+              {breakdown.consumablesCostPerHourRate != null && (
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Consumables rate</span><span className="font-mono" data-testid="detail-consumables-rate">${breakdown.consumablesCostPerHourRate.toFixed(2)} /hr</span></div>
+              )}
+              {breakdown.consumablesSource && (
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Consumables source</span><span className="font-mono text-[9px] text-right truncate max-w-[60%]">{breakdown.consumablesSource}</span></div>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Labour</div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Setup</span><span className="font-mono" data-testid="detail-setup-min">{(Number(breakdown.setupMinutes) || 0).toFixed(1)} min</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Handling</span><span className="font-mono" data-testid="detail-handling-min">{(Number(breakdown.handlingMinutes) || 0).toFixed(1)} min</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Operator buy / Shop sell</span><span className="font-mono">${breakdown.operatorRatePerHour.toFixed(0)} / ${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
+          </div>
+
+          <div className="text-[9px] text-muted-foreground italic leading-snug px-1">
+            Sell = Buy × (1 + bucket markup). Gas passes through at cost. Machine sell uses governed sell rate; machine buy uses governed buy rate.
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
