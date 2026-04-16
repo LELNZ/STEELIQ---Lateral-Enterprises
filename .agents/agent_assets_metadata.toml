@@ -324,3 +324,9 @@ id = "LS6BuzMWk6MRJRrww46k0"
 uri = "file://reports/ll-bucketed-commercial-pricing-architecture-review.md"
 type = "text"
 title = "Phase 5B — Bucketed Commercial Pricing Architecture Review"
+
+[[outputs]]
+id = "qGjDOoAZCoz27YOLDCX-6"
+uri = "file://reports/ll-bucketed-commercial-pricing-phase-5b-implementation-report.md"
+type = "text"
+title = "Phase 5B — Bucketed Commercial Pricing Implementation Report"
