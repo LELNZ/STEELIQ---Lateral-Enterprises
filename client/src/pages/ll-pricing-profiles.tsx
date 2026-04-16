@@ -432,12 +432,14 @@ function PricingSettingsEditor({
 
       <SettingsSection title="Commercial Policy">
         <div className="grid grid-cols-3 gap-3">
-          {numField("Default Markup", "commercialPolicy.defaultMarkupPercent", settings.commercialPolicy.defaultMarkupPercent, "%")}
+          {numField("Material Markup", "commercialPolicy.defaultMaterialMarkupPercent", settings.commercialPolicy.defaultMaterialMarkupPercent ?? 20, "%")}
+          {numField("Consumables Markup", "commercialPolicy.defaultConsumablesMarkupPercent", settings.commercialPolicy.defaultConsumablesMarkupPercent ?? 25, "%")}
           {numField("Min Material Charge", "commercialPolicy.minimumMaterialCharge", settings.commercialPolicy.minimumMaterialCharge, "$")}
           {numField("Min Line Charge", "commercialPolicy.minimumLineCharge", settings.commercialPolicy.minimumLineCharge, "$")}
           {numField("Rate per mm Cut", "commercialPolicy.defaultRatePerMmCut", settings.commercialPolicy.defaultRatePerMmCut, "$/mm")}
           {numField("Rate per Pierce", "commercialPolicy.defaultRatePerPierce", settings.commercialPolicy.defaultRatePerPierce, "$/pierce")}
         </div>
+        <p className="text-[10px] text-muted-foreground mt-2">Material and consumables markups are applied to buy costs to derive sell prices. Machine and labour sell rates are governed by machine profile and labour rates above.</p>
       </SettingsSection>
 
       <SettingsSection title="Nesting Defaults">
@@ -465,8 +467,9 @@ function PricingSettingsEditor({
               </div>
               {mp.isDefault && <span className="text-[10px] text-muted-foreground">Used for estimates</span>}
             </div>
-            <div className="grid grid-cols-5 gap-2">
-              {numField("Hourly Rate", `machineProfiles.${idx}.hourlyMachineRate`, mp.hourlyMachineRate, "$/hr")}
+            <div className="grid grid-cols-3 gap-2">
+              {numField("Sell Rate", `machineProfiles.${idx}.hourlyMachineRate`, mp.hourlyMachineRate, "$/hr")}
+              {numField("Buy Cost", `machineProfiles.${idx}.machineBuyCostPerHour`, mp.machineBuyCostPerHour ?? mp.hourlyMachineRate * 0.6, "$/hr")}
               {numField("Bed Length", `machineProfiles.${idx}.bedLengthMm`, mp.bedLengthMm, "mm")}
               {numField("Bed Width", `machineProfiles.${idx}.bedWidthMm`, mp.bedWidthMm, "mm")}
               {numField("Usable Length", `machineProfiles.${idx}.usableLengthMm`, mp.usableLengthMm || 0, "mm")}
@@ -485,7 +488,7 @@ function PricingSettingsEditor({
               name: `New Machine ${copy.machineProfiles.length + 1}`,
               bedLengthMm: 3000, bedWidthMm: 1500,
               usableLengthMm: 2900, usableWidthMm: 1400,
-              hourlyMachineRate: 0, isDefault: false, isActive: true,
+              hourlyMachineRate: 0, machineBuyCostPerHour: 0, isDefault: false, isActive: true,
               maxThicknessByMaterialFamily: {},
             });
             onChange(copy);
@@ -595,7 +598,8 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
       {settings.commercialPolicy && (
         <SettingsSection title="Commercial Policy">
           <div className="grid grid-cols-3 gap-3 text-sm">
-            <div><span className="text-muted-foreground">Markup:</span> {settings.commercialPolicy.defaultMarkupPercent}%</div>
+            <div><span className="text-muted-foreground">Material Markup:</span> {settings.commercialPolicy.defaultMaterialMarkupPercent ?? 20}%</div>
+            <div><span className="text-muted-foreground">Consumables Markup:</span> {settings.commercialPolicy.defaultConsumablesMarkupPercent ?? 25}%</div>
             <div><span className="text-muted-foreground">Min Material:</span> ${settings.commercialPolicy.minimumMaterialCharge}</div>
             <div><span className="text-muted-foreground">Min Line:</span> ${settings.commercialPolicy.minimumLineCharge}</div>
             <div><span className="text-muted-foreground">Rate/mm:</span> ${settings.commercialPolicy.defaultRatePerMmCut}</div>
@@ -621,7 +625,8 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
             <div key={mp.id} className="p-2 bg-muted/30 rounded text-sm mb-1">
               <span className="font-medium">{mp.name}</span>
               {mp.isDefault && <Badge variant="outline" className="ml-2 text-[10px]">Default</Badge>}
-              <span className="text-muted-foreground ml-2">${mp.hourlyMachineRate}/hr</span>
+              <span className="text-muted-foreground ml-2">Sell ${mp.hourlyMachineRate}/hr</span>
+              <span className="text-muted-foreground ml-2">Buy ${mp.machineBuyCostPerHour ?? +(mp.hourlyMachineRate * 0.6).toFixed(2)}/hr</span>
               <span className="text-muted-foreground ml-2">{mp.bedLengthMm}×{mp.bedWidthMm}mm</span>
             </div>
           ))}
@@ -678,6 +683,7 @@ const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   empirical_test: { label: "Tested", color: "text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-950/40" },
   operator_input: { label: "Operator", color: "text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-950/40" },
   manual_override: { label: "Override", color: "text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-950/40" },
+  orphaned_no_library_match: { label: "Orphaned", color: "text-gray-500 bg-gray-100 dark:text-gray-400 dark:bg-gray-800/40" },
 };
 
 function ProvenanceBadge({ source, note }: { source?: string; note?: string }) {

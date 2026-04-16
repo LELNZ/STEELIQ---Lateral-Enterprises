@@ -288,3 +288,45 @@ id = "0nFuMD9S3ZKLDFJoQ4W7t"
 uri = "file://reports/ll-dev-vs-live-parity-review.md"
 type = "text"
 title = "LL Dev-vs-Live Parity Review & Fix Report"
+
+[[outputs]]
+id = "FfrfxJ5RFhw7IXYmxeCcw"
+uri = "file://reports/ll-post-deploy-live-parity-confirmation.md"
+type = "text"
+title = "LL Post-Deploy Live Parity Confirmation Report"
+
+[[outputs]]
+id = "voS0VDViamqwWSiXxrCwu"
+uri = "file://reports/ll-pricing-model-cleanup-review.md"
+type = "text"
+title = "LL Pricing Model Cleanup — Review + Correction Report"
+
+[[outputs]]
+id = "dgpOV-ZQTWhkLcLrQsEQw"
+uri = "file://reports/ll-estimate-persistence-forensic-review.md"
+type = "text"
+title = "LL Estimate Persistence Forensic Review — LIVE"
+
+[[outputs]]
+id = "sNMjp2HFkwLk7e2XbatNd"
+uri = "file://reports/ll-source-cost-governance-prt-cleanup.md"
+type = "text"
+title = "LL Live Source Cost Governance + PRT Governance Cleanup Report"
+
+[[outputs]]
+id = "J32X8lf1NrDHzWsTQwm9n"
+uri = "file://reports/ll-material-allocation-markup-review.md"
+type = "text"
+title = "LL Material Allocation + Markup Model Review and Correction Report"
+
+[[outputs]]
+id = "LS6BuzMWk6MRJRrww46k0"
+uri = "file://reports/ll-bucketed-commercial-pricing-architecture-review.md"
+type = "text"
+title = "Phase 5B — Bucketed Commercial Pricing Architecture Review"
+
+[[outputs]]
+id = "qGjDOoAZCoz27YOLDCX-6"
+uri = "file://reports/ll-bucketed-commercial-pricing-phase-5b-implementation-report.md"
+type = "text"
+title = "Phase 5B — Bucketed Commercial Pricing Implementation Report"
