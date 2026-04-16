@@ -330,3 +330,15 @@ id = "qGjDOoAZCoz27YOLDCX-6"
 uri = "file://reports/ll-bucketed-commercial-pricing-phase-5b-implementation-report.md"
 type = "text"
 title = "Phase 5B — Bucketed Commercial Pricing Implementation Report"
+
+[[outputs]]
+id = "EhHNvFeoz1xFzMlrkoHYd"
+uri = "file://reports/ll-est-0003-forensic-investigation-report.md"
+type = "text"
+title = "LL-EST-0003 Forensic Investigation Report"
+
+[[outputs]]
+id = "MitjOlxa8XUbPF41Jb-_a"
+uri = "file://reports/ll-est-0003-evidence-hardening-release-gate-report.md"
+type = "text"
+title = "LL-EST-0003 Evidence Hardening + Release Gate Report"
