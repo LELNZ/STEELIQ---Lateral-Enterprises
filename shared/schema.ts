@@ -227,6 +227,12 @@ export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
 
 export type JoineryItemPayload = QuoteItem;
 
+export const LL_PRICING_OVERRIDE_MODES = ["none", "manual_sell", "target_margin"] as const;
+export type LLPricingOverrideMode = (typeof LL_PRICING_OVERRIDE_MODES)[number];
+
+export const LL_MANUAL_PROCEDURE_TYPES = ["Folding", "Deburring", "Tapping", "Other"] as const;
+export type LLManualProcedureType = (typeof LL_MANUAL_PROCEDURE_TYPES)[number];
+
 export const laserQuoteItemSchema = z.object({
   id: z.string(),
   itemRef: z.string().min(1, "Item reference is required"),
@@ -261,6 +267,27 @@ export const laserQuoteItemSchema = z.object({
     enabled: z.boolean().default(true),
     notes: z.string().optional(),
   })).optional(),
+
+  // Commercial Override Layer (Phase 5E) — additive, optional.
+  // Override is a commercial layer ABOVE calculated bucketed pricing truth.
+  // It must NEVER mutate calculated bucket buy/sell values.
+  pricingOverrideEnabled: z.boolean().optional(),
+  pricingOverrideMode: z.enum(LL_PRICING_OVERRIDE_MODES).optional(),
+  manualSellPrice: z.number().min(0).optional(),
+  targetMarginPercent: z.number().optional(),
+  overrideReason: z.string().optional(),
+
+  // Manual Procedure / Provisional line (Phase 5E).
+  // When isManualProcedure is true, this row is NOT a laser-cut item:
+  // material selection, bucketed pricing engine, and process-rate lookup
+  // are bypassed. The row uses manualUnitCost / manualUnitSell directly.
+  isManualProcedure: z.boolean().optional(),
+  procedureType: z.enum(LL_MANUAL_PROCEDURE_TYPES).optional(),
+  procedureDescription: z.string().optional(),
+  manualUnitCost: z.number().min(0).optional(),
+  manualUnitSell: z.number().min(0).optional(),
+  manualTargetMarginPercent: z.number().optional(),
+  manualNotes: z.string().optional(),
 });
 
 export type LaserQuoteItem = z.infer<typeof laserQuoteItemSchema>;

@@ -38,15 +38,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical, Info } from "lucide-react";
-import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile } from "@shared/schema";
+import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical, Info, DollarSign, Wrench } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile, LLPricingOverrideMode, LLManualProcedureType } from "@shared/schema";
+import { LL_MANUAL_PROCEDURE_TYPES } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
   computeLLPricing,
   resolveRatesFromSettings,
+  applyCommercialOverride,
   type LLMaterialTruth,
   type LLPricingBreakdown,
   type LLGovernedInputs,
+  type LLCommercialResult,
+  type LLOverrideInputs,
 } from "@/lib/ll-pricing";
 import type { LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
 
@@ -94,7 +99,97 @@ function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<Las
     consumablesMarkupPercent: rates.defaultConsumablesMarkupPercent,
     utilisationFactor: rates.defaultUtilisationFactor,
     geometrySource: "manual",
+    pricingOverrideEnabled: false,
+    pricingOverrideMode: "none",
+    isManualProcedure: false,
   };
+}
+
+function makeEmptyManualProcedure(): Omit<LaserQuoteItem, "id"> {
+  return {
+    itemRef: "",
+    title: "",
+    quantity: 1,
+    materialType: "",
+    materialGrade: "",
+    thickness: 0,
+    length: 0,
+    width: 0,
+    finish: "",
+    customerNotes: "",
+    internalNotes: "",
+    unitPrice: 0,
+    llSheetMaterialId: "",
+    coilLengthMm: 0,
+    cutLengthMm: 0,
+    pierceCount: 0,
+    setupMinutes: 0,
+    handlingMinutes: 0,
+    markupPercent: 0,
+    materialMarkupPercent: 0,
+    consumablesMarkupPercent: 0,
+    utilisationFactor: 0.75,
+    geometrySource: "manual",
+    isManualProcedure: true,
+    procedureType: "Folding",
+    procedureDescription: "",
+    manualUnitCost: 0,
+    manualUnitSell: 0,
+    manualNotes: "",
+  };
+}
+
+function buildOverrideInputs(item: Pick<LaserQuoteItem, "pricingOverrideEnabled" | "pricingOverrideMode" | "manualSellPrice" | "targetMarginPercent">): LLOverrideInputs {
+  return {
+    enabled: !!item.pricingOverrideEnabled,
+    mode: (item.pricingOverrideMode ?? "none") as LLPricingOverrideMode,
+    manualSellPrice: item.manualSellPrice,
+    targetMarginPercent: item.targetMarginPercent,
+  };
+}
+
+function computeManualProcedureFinal(item: Pick<LaserQuoteItem, "manualUnitCost" | "manualUnitSell" | "manualTargetMarginPercent" | "quantity">): {
+  unitCost: number;
+  unitSell: number;
+  lineSell: number;
+  lineMargin: number;
+  marginPercent: number;
+  invalid: boolean;
+  warning?: string;
+} {
+  const qtyRaw = Number(item.quantity ?? 0);
+  const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.max(1, Math.floor(qtyRaw)) : 1;
+  const unitCostRaw = Number(item.manualUnitCost ?? 0);
+  const unitCost = Number.isFinite(unitCostRaw) && unitCostRaw > 0 ? unitCostRaw : 0;
+  const unitSellRaw = Number(item.manualUnitSell ?? 0);
+  let unitSell = Number.isFinite(unitSellRaw) && unitSellRaw > 0 ? unitSellRaw : 0;
+  let warning: string | undefined;
+  let invalid = false;
+  const tmRaw = item.manualTargetMarginPercent;
+  if (tmRaw != null) {
+    const tm = Number(tmRaw);
+    if (!Number.isFinite(tm)) {
+      invalid = true;
+      warning = "Target margin % is not a valid number. Using manual unit sell instead.";
+    } else if (tm < 0 || tm >= 100) {
+      invalid = true;
+      warning = "Target margin % must be between 0 and 100. Using manual unit sell instead.";
+    } else if (unitCost > 0) {
+      unitSell = unitCost / (1 - tm / 100);
+    } else {
+      invalid = true;
+      warning = "Cannot apply target margin: unit cost is zero.";
+    }
+  }
+  if (!Number.isFinite(unitSell) || unitSell <= 0) {
+    invalid = true;
+    unitSell = Number.isFinite(unitSell) && unitSell > 0 ? unitSell : 0;
+    warning = warning ?? "Manual unit sell must be greater than zero.";
+  }
+  const lineSell = unitSell * qty;
+  const lineMargin = lineSell - unitCost * qty;
+  const marginPercent = lineSell > 0 ? (lineMargin / lineSell) * 100 : 0;
+  return { unitCost, unitSell, lineSell, lineMargin, marginPercent, invalid, warning };
 }
 
 function findMatchingMaterial(
@@ -158,6 +253,57 @@ function computeItemPricing(
   }, settings, governed);
 }
 
+// Phase 5E — final commercial pricing per row.
+// Manual procedure rows bypass the bucketed pricing engine entirely.
+// Laser-cut rows use computeLLPricing then apply the optional commercial override.
+export interface LLRowPricing {
+  isManualProcedure: boolean;
+  breakdown: LLPricingBreakdown | null;
+  commercial: LLCommercialResult | null;
+  manual: ReturnType<typeof computeManualProcedureFinal> | null;
+  finalUnitSell: number;
+  finalLineSell: number;
+  finalLineCost: number;
+  finalMarginAmount: number;
+  finalMarginPercent: number;
+}
+
+function computeRowPricing(
+  item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
+  materials: SheetMaterialRef[],
+  settings?: LLPricingSettings | null,
+  governed?: LLGovernedInputs,
+): LLRowPricing {
+  if (item.isManualProcedure) {
+    const m = computeManualProcedureFinal(item);
+    const qty = Math.max(item.quantity || 0, 1);
+    return {
+      isManualProcedure: true,
+      breakdown: null,
+      commercial: null,
+      manual: m,
+      finalUnitSell: m.unitSell,
+      finalLineSell: m.lineSell,
+      finalLineCost: m.unitCost * qty,
+      finalMarginAmount: m.lineMargin,
+      finalMarginPercent: m.marginPercent,
+    };
+  }
+  const breakdown = computeItemPricing(item, materials, settings, governed);
+  const commercial = applyCommercialOverride(breakdown, item.quantity, buildOverrideInputs(item));
+  return {
+    isManualProcedure: false,
+    breakdown,
+    commercial,
+    manual: null,
+    finalUnitSell: commercial.finalUnitSell,
+    finalLineSell: commercial.finalSellPrice,
+    finalLineCost: commercial.calculatedBuyCost,
+    finalMarginAmount: commercial.finalMarginAmount,
+    finalMarginPercent: commercial.finalMarginPercent,
+  };
+}
+
 function itemToSnapshotItem(
   item: LaserQuoteItem,
   index: number,
@@ -165,7 +311,76 @@ function itemToSnapshotItem(
   settings?: LLPricingSettings | null,
   governed?: LLGovernedInputs,
 ): LaserSnapshotItem {
+  // Manual procedure rows: bypass bucketed engine entirely.
+  if (item.isManualProcedure) {
+    const final = computeManualProcedureFinal(item);
+    return {
+      itemNumber: index + 1,
+      itemRef: item.itemRef,
+      title: item.title,
+      quantity: item.quantity,
+      materialType: "",
+      materialGrade: "",
+      thickness: 0,
+      length: 0,
+      width: 0,
+      finish: "",
+      customerNotes: item.customerNotes,
+      internalNotes: item.internalNotes,
+      unitPrice: final.unitSell,
+      photos: [],
+      llSheetMaterialId: "",
+      supplierName: "",
+      sheetLength: 0,
+      sheetWidth: 0,
+      pricePerSheetExGst: 0,
+      cutLengthMm: 0,
+      coilLengthMm: 0,
+      stockBehaviour: "manual_procedure",
+      pricePerKg: 0,
+      densityKgM3: 0,
+      pierceCount: 0,
+      setupMinutes: 0,
+      handlingMinutes: 0,
+      markupPercent: 0,
+      materialMarkupPercent: 0,
+      consumablesMarkupPercent: 0,
+      utilisationFactor: 0,
+      estimatedSheets: 0,
+      materialCostTotal: 0,
+      processCostTotal: 0,
+      setupHandlingCost: 0,
+      internalCostSubtotal: final.unitCost * Math.max(item.quantity || 0, 1),
+      markupAmount: final.lineMargin,
+      sellTotal: final.lineSell,
+      materialBuyCost: 0,
+      materialSellCost: 0,
+      labourBuyCost: 0,
+      labourSellCost: 0,
+      machineBuyCost: 0,
+      machineSellCost: 0,
+      consumablesBuyCost: 0,
+      consumablesSellCost: 0,
+      gasBuyCost: 0,
+      totalBuyCost: final.unitCost * Math.max(item.quantity || 0, 1),
+      totalMargin: final.lineMargin,
+      totalMarginPercent: final.marginPercent,
+      geometrySource: item.geometrySource ?? "manual",
+      isManualProcedure: true,
+      procedureType: item.procedureType,
+      procedureDescription: item.procedureDescription,
+      manualUnitCost: final.unitCost,
+      manualUnitSell: final.unitSell,
+      manualTargetMarginPercent: item.manualTargetMarginPercent,
+      manualNotes: item.manualNotes,
+      finalSellPrice: final.lineSell,
+      finalMarginAmount: final.lineMargin,
+      finalMarginPercent: final.marginPercent,
+    };
+  }
+
   const pricing = computeItemPricing(item, materials, settings, governed);
+  const commercial = applyCommercialOverride(pricing, item.quantity, buildOverrideInputs(item));
   const matched = findMatchingMaterial(materials, item);
   const matTruth = matched ? materialToTruth(matched) : null;
   return {
@@ -181,7 +396,9 @@ function itemToSnapshotItem(
     finish: item.finish,
     customerNotes: item.customerNotes,
     internalNotes: item.internalNotes,
-    unitPrice: pricing.unitSell,
+    // unitPrice and sellTotal in snapshot reflect FINAL commercial values
+    // so Preview/PDF and downstream consumers see the agreed sell.
+    unitPrice: commercial.finalUnitSell,
     photos: [],
     llSheetMaterialId: item.llSheetMaterialId,
     supplierName: matTruth?.supplierName || "",
@@ -206,7 +423,7 @@ function itemToSnapshotItem(
     setupHandlingCost: pricing.setupHandlingCost,
     internalCostSubtotal: pricing.internalCostSubtotal,
     markupAmount: pricing.markupAmount,
-    sellTotal: pricing.sellTotal,
+    sellTotal: commercial.finalSellPrice,
     materialBuyCost: pricing.materialBuyCost,
     materialSellCost: pricing.materialSellCost,
     labourBuyCost: pricing.labourBuyCost,
@@ -217,15 +434,26 @@ function itemToSnapshotItem(
     consumablesSellCost: pricing.consumablesSellCost,
     gasBuyCost: pricing.gasBuyCost,
     totalBuyCost: pricing.totalBuyCost,
-    totalMargin: pricing.totalMargin,
-    totalMarginPercent: pricing.totalMarginPercent,
+    totalMargin: commercial.finalMarginAmount,
+    totalMarginPercent: commercial.finalMarginPercent,
     geometrySource: item.geometrySource ?? "manual",
     operations: [{ type: "laser" as const, enabled: true, costTotal: pricing.totalBuyCost }],
+    pricingOverrideEnabled: item.pricingOverrideEnabled,
+    pricingOverrideMode: item.pricingOverrideMode,
+    manualSellPrice: item.manualSellPrice,
+    targetMarginPercent: item.targetMarginPercent,
+    overrideReason: item.overrideReason,
+    calculatedSellPrice: commercial.calculatedSellPrice,
+    calculatedBuyCost: commercial.calculatedBuyCost,
+    finalSellPrice: commercial.finalSellPrice,
+    finalMarginAmount: commercial.finalMarginAmount,
+    finalMarginPercent: commercial.finalMarginPercent,
   };
 }
 
 function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings | null): LaserQuoteItem {
   const rates = resolveRatesFromSettings(settings);
+  const isManualProcedure = !!(si as any).isManualProcedure;
   return {
     id: crypto.randomUUID(),
     itemRef: si.itemRef,
@@ -251,6 +479,18 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
     consumablesMarkupPercent: (si as any).consumablesMarkupPercent ?? rates.defaultConsumablesMarkupPercent,
     utilisationFactor: si.utilisationFactor ?? rates.defaultUtilisationFactor,
     geometrySource: (si as any).geometrySource ?? "manual",
+    pricingOverrideEnabled: (si as any).pricingOverrideEnabled ?? false,
+    pricingOverrideMode: ((si as any).pricingOverrideMode as LLPricingOverrideMode | undefined) ?? "none",
+    manualSellPrice: (si as any).manualSellPrice,
+    targetMarginPercent: (si as any).targetMarginPercent,
+    overrideReason: (si as any).overrideReason,
+    isManualProcedure,
+    procedureType: (si as any).procedureType as LLManualProcedureType | undefined,
+    procedureDescription: (si as any).procedureDescription,
+    manualUnitCost: (si as any).manualUnitCost,
+    manualUnitSell: (si as any).manualUnitSell,
+    manualTargetMarginPercent: (si as any).manualTargetMarginPercent,
+    manualNotes: (si as any).manualNotes,
   };
 }
 
@@ -591,6 +831,10 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     return computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
   }, [formData, sheetMaterials, llPricingSettings, governedInputs]);
 
+  const dialogCommercial = useMemo(() => {
+    return applyCommercialOverride(dialogPricing, formData.quantity, buildOverrideInputs(formData));
+  }, [dialogPricing, formData]);
+
   const { data: quoteData, isLoading: quoteLoading } = useQuery<any>({
     queryKey: ["/api/quotes", quoteId],
     enabled: isEditMode,
@@ -644,21 +888,41 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     }
   }, [estimateData, isEstimateEdit]);
 
+  // Calculated bucketed truth per row (used for breakdown panel display + cost rollups).
+  // Kept independent of the commercial override layer.
   const itemPricings = useMemo(() => {
     const map = new Map<string, LLPricingBreakdown>();
     for (const item of items) {
+      if (item.isManualProcedure) continue;
       map.set(item.id, computeItemPricing(item, sheetMaterials, llPricingSettings, governedInputs));
+    }
+    return map;
+  }, [items, sheetMaterials, llPricingSettings, governedInputs]);
+
+  // Phase 5E — final commercial pricing per row (override + manual procedure aware).
+  const itemRowPricings = useMemo(() => {
+    const map = new Map<string, LLRowPricing>();
+    for (const item of items) {
+      map.set(item.id, computeRowPricing(item, sheetMaterials, llPricingSettings, governedInputs));
     }
     return map;
   }, [items, sheetMaterials, llPricingSettings, governedInputs]);
 
   const totalValue = useMemo(() => {
     let total = 0;
-    for (const [, p] of itemPricings) {
-      total += p.sellTotal;
+    for (const [, p] of itemRowPricings) {
+      total += p.finalLineSell;
     }
     return total;
-  }, [itemPricings]);
+  }, [itemRowPricings]);
+
+  const totalCost = useMemo(() => {
+    let total = 0;
+    for (const [, p] of itemRowPricings) {
+      total += p.finalLineCost;
+    }
+    return total;
+  }, [itemRowPricings]);
 
   const buildSnapshot = () => {
     const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings, governedInputs));
@@ -668,12 +932,10 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       items: [],
       laserItems,
       totals: {
-        cost: Array.from(itemPricings.values()).reduce((s, p) => s + p.internalCostSubtotal, 0),
+        cost: totalCost,
         sell: totalValue,
-        grossProfit: totalValue - Array.from(itemPricings.values()).reduce((s, p) => s + p.internalCostSubtotal, 0),
-        grossMargin: totalValue > 0
-          ? ((totalValue - Array.from(itemPricings.values()).reduce((s, p) => s + p.internalCostSubtotal, 0)) / totalValue) * 100
-          : 0,
+        grossProfit: totalValue - totalCost,
+        grossMargin: totalValue > 0 ? ((totalValue - totalCost) / totalValue) * 100 : 0,
         totalLabourHours: 0,
         gpPerHour: 0,
       },
@@ -801,14 +1063,20 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       return;
     }
     if (!estimateMode && items.length > 0) {
-      const itemsMissingMaterial = items.filter(i => !i.llSheetMaterialId);
+      const laserItems = items.filter(i => !i.isManualProcedure);
+      const itemsMissingMaterial = laserItems.filter(i => !i.llSheetMaterialId);
       if (itemsMissingMaterial.length > 0) {
         toast({ title: "Material Required", description: `${itemsMissingMaterial.length} item(s) have no material selected (${itemsMissingMaterial.map(i => i.itemRef || i.title).join(", ")}). Edit each item and select a material before saving.`, variant: "destructive" });
         return;
       }
-      const unmatchedItems = items.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
+      const unmatchedItems = laserItems.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
       if (unmatchedItems.length > 0) {
         toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
+        return;
+      }
+      const invalidProcedures = items.filter(i => i.isManualProcedure && computeManualProcedureFinal(i).invalid);
+      if (invalidProcedures.length > 0) {
+        toast({ title: "Manual Procedure Invalid", description: `${invalidProcedures.length} manual procedure line(s) need a valid unit sell or target margin.`, variant: "destructive" });
         return;
       }
     }
@@ -834,14 +1102,20 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       toast({ title: "Required", description: "Add at least one item before generating a quote", variant: "destructive" });
       return;
     }
-    const itemsMissingMaterial = items.filter(i => !i.llSheetMaterialId);
+    const laserItems = items.filter(i => !i.isManualProcedure);
+    const itemsMissingMaterial = laserItems.filter(i => !i.llSheetMaterialId);
     if (itemsMissingMaterial.length > 0) {
       toast({ title: "Material Required", description: `${itemsMissingMaterial.length} item(s) have no material selected (${itemsMissingMaterial.map(i => i.itemRef || i.title).join(", ")}). Edit each item and select a material before generating a quote.`, variant: "destructive" });
       return;
     }
-    const unmatchedItems = items.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
+    const unmatchedItems = laserItems.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
     if (unmatchedItems.length > 0) {
       toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
+      return;
+    }
+    const invalidProcedures = items.filter(i => i.isManualProcedure && computeManualProcedureFinal(i).invalid);
+    if (invalidProcedures.length > 0) {
+      toast({ title: "Manual Procedure Invalid", description: `${invalidProcedures.length} manual procedure line(s) need a valid unit sell or target margin.`, variant: "destructive" });
       return;
     }
     generateQuoteFromEstimateMutation.mutate();
@@ -854,6 +1128,10 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   };
 
   const openEditDialog = (item: LaserQuoteItem) => {
+    if (item.isManualProcedure) {
+      openEditProcedureDialog(item);
+      return;
+    }
     setEditingItem(item);
     setFormData({
       itemRef: item.itemRef,
@@ -879,6 +1157,12 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       consumablesMarkupPercent: item.consumablesMarkupPercent,
       utilisationFactor: item.utilisationFactor,
       geometrySource: item.geometrySource ?? "manual",
+      pricingOverrideEnabled: item.pricingOverrideEnabled ?? false,
+      pricingOverrideMode: item.pricingOverrideMode ?? "none",
+      manualSellPrice: item.manualSellPrice,
+      targetMarginPercent: item.targetMarginPercent,
+      overrideReason: item.overrideReason,
+      isManualProcedure: false,
     });
     setDialogOpen(true);
   };
@@ -893,11 +1177,28 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       toast({ title: "Material Required", description: "A material must be selected before saving. Please choose a material family, grade, finish, thickness, and sheet size or coil width.", variant: "destructive" });
       return;
     }
+    if (formData.pricingOverrideEnabled && formData.pricingOverrideMode && formData.pricingOverrideMode !== "none") {
+      if (formData.pricingOverrideMode === "manual_sell") {
+        if (!formData.manualSellPrice || formData.manualSellPrice <= 0) {
+          toast({ title: "Override Invalid", description: "Manual sell price must be greater than zero.", variant: "destructive" });
+          return;
+        }
+      } else if (formData.pricingOverrideMode === "target_margin") {
+        const tm = formData.targetMarginPercent;
+        if (tm == null || !Number.isFinite(tm) || tm < 0 || tm >= 100) {
+          toast({ title: "Override Invalid", description: "Target margin % must be between 0 and 100.", variant: "destructive" });
+          return;
+        }
+      }
+    }
     const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
+    const commercial = applyCommercialOverride(pricing, formData.quantity, buildOverrideInputs(formData));
     const updatedData = {
       ...formData,
       llSheetMaterialId: materialId,
-      unitPrice: pricing.unitSell,
+      // unitPrice mirrors the FINAL commercial unit sell so saved estimate JSON
+      // always reflects the agreed price (override-aware) for downstream readers.
+      unitPrice: commercial.finalUnitSell,
     };
     if (editingItem) {
       setItems(prev => prev.map(i => i.id === editingItem.id ? { ...updatedData, id: editingItem.id } : i));
@@ -906,6 +1207,70 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     }
     setHasUnsavedChanges(true);
     setDialogOpen(false);
+  };
+
+  // ---- Manual Procedure dialog state & handlers (Phase 5E) ----
+  const [procedureDialogOpen, setProcedureDialogOpen] = useState(false);
+  const [editingProcedureItem, setEditingProcedureItem] = useState<LaserQuoteItem | null>(null);
+  const [procedureFormData, setProcedureFormData] = useState<Omit<LaserQuoteItem, "id">>(makeEmptyManualProcedure());
+
+  const openAddProcedureDialog = () => {
+    setEditingProcedureItem(null);
+    setProcedureFormData(makeEmptyManualProcedure());
+    setProcedureDialogOpen(true);
+  };
+
+  const openEditProcedureDialog = (item: LaserQuoteItem) => {
+    setEditingProcedureItem(item);
+    setProcedureFormData({
+      ...makeEmptyManualProcedure(),
+      itemRef: item.itemRef,
+      title: item.title,
+      quantity: item.quantity,
+      customerNotes: item.customerNotes,
+      internalNotes: item.internalNotes,
+      isManualProcedure: true,
+      procedureType: item.procedureType ?? "Folding",
+      procedureDescription: item.procedureDescription ?? "",
+      manualUnitCost: item.manualUnitCost ?? 0,
+      manualUnitSell: item.manualUnitSell ?? 0,
+      manualTargetMarginPercent: item.manualTargetMarginPercent,
+      manualNotes: item.manualNotes ?? "",
+    });
+    setProcedureDialogOpen(true);
+  };
+
+  const procedureDialogPreview = useMemo(
+    () => computeManualProcedureFinal(procedureFormData),
+    [procedureFormData],
+  );
+
+  const handleProcedureDialogSave = () => {
+    if (!procedureFormData.itemRef.trim() || !procedureFormData.title.trim()) {
+      toast({ title: "Required", description: "Item reference and title are required", variant: "destructive" });
+      return;
+    }
+    if (!procedureFormData.procedureType) {
+      toast({ title: "Required", description: "Procedure type is required", variant: "destructive" });
+      return;
+    }
+    const preview = computeManualProcedureFinal(procedureFormData);
+    if (preview.invalid) {
+      toast({ title: "Invalid", description: preview.warning ?? "Manual procedure has invalid pricing.", variant: "destructive" });
+      return;
+    }
+    const updatedData: Omit<LaserQuoteItem, "id"> = {
+      ...procedureFormData,
+      isManualProcedure: true,
+      unitPrice: preview.unitSell,
+    };
+    if (editingProcedureItem) {
+      setItems(prev => prev.map(i => i.id === editingProcedureItem.id ? { ...updatedData, id: editingProcedureItem.id } : i));
+    } else {
+      setItems(prev => [...prev, { ...updatedData, id: crypto.randomUUID() }]);
+    }
+    setHasUnsavedChanges(true);
+    setProcedureDialogOpen(false);
   };
 
   const handleDelete = (id: string) => {
@@ -1129,10 +1494,16 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
         <Card data-testid="card-items-table">
           <CardHeader className="pb-3 flex flex-row items-center justify-between">
             <CardTitle className="text-sm">Line Items ({items.length})</CardTitle>
-            <Button size="sm" variant="outline" onClick={openAddDialog} data-testid="button-add-item">
-              <Plus className="h-4 w-4 mr-1" />
-              Add Item
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={openAddProcedureDialog} data-testid="button-add-manual-procedure">
+                <Wrench className="h-4 w-4 mr-1" />
+                Add Manual Procedure
+              </Button>
+              <Button size="sm" variant="outline" onClick={openAddDialog} data-testid="button-add-item">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Item
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {items.length === 0 ? (
@@ -1159,70 +1530,120 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                   </TableHeader>
                   <TableBody>
                     {items.map((item, idx) => {
+                      const row = itemRowPricings.get(item.id);
                       const pricing = itemPricings.get(item.id);
-                      const unitSell = pricing?.unitSell || 0;
-                      const lineTotal = pricing?.sellTotal || 0;
+                      const isManual = !!item.isManualProcedure;
                       const isExpanded = expandedItems.has(item.id);
-                      const matched = findMatchingMaterial(sheetMaterials, item);
-                      const isFlatRate = pricing?.processMode === "flat-rate" && (item.cutLengthMm > 0 || item.pierceCount > 0);
-                      const isMaterialMissing = !item.llSheetMaterialId || !matched;
+                      const matched = isManual ? null : findMatchingMaterial(sheetMaterials, item);
+                      const isFlatRate = !isManual && pricing?.processMode === "flat-rate" && (item.cutLengthMm > 0 || item.pierceCount > 0);
+                      const isMaterialMissing = !isManual && (!item.llSheetMaterialId || !matched);
+                      const isOverridden = !!(row?.commercial?.isOverridden);
+                      const overrideInvalid = !!(row?.commercial?.invalid);
+                      const procedureInvalid = !!(row?.manual?.invalid);
+                      const finalUnitSell = row?.finalUnitSell ?? 0;
+                      const finalLineTotal = row?.finalLineSell ?? 0;
+                      const finalMargin = row?.finalMarginAmount ?? 0;
+                      const finalMarginPercent = row?.finalMarginPercent ?? 0;
+                      const calcUnitSell = row?.commercial?.calculatedUnitSell ?? 0;
+                      const calcLineTotal = row?.commercial?.calculatedSellPrice ?? 0;
+                      const rowClass = isManual
+                        ? "bg-blue-50/50 dark:bg-blue-950/20"
+                        : isMaterialMissing
+                        ? "bg-red-50/50 dark:bg-red-950/20"
+                        : isOverridden
+                        ? "bg-purple-50/50 dark:bg-purple-950/20"
+                        : isFlatRate
+                        ? "bg-amber-50/50 dark:bg-amber-950/20"
+                        : undefined;
                       return (
                         <Fragment key={item.id}>
-                          <TableRow data-testid={`row-item-${idx}`} className={isMaterialMissing ? "bg-red-50/50 dark:bg-red-950/20" : isFlatRate ? "bg-amber-50/50 dark:bg-amber-950/20" : undefined}>
+                          <TableRow data-testid={`row-item-${idx}`} className={rowClass}>
                             <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                             <TableCell className="font-mono text-xs" data-testid={`text-item-ref-${idx}`}>
-                              <span>{item.itemRef}</span>
-                              {isMaterialMissing && (
-                                <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 h-4 bg-red-50 text-red-700 border-red-300" data-testid={`badge-material-missing-${idx}`}>No Material</Badge>
-                              )}
-                              {isFlatRate && !isMaterialMissing && (
-                                <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 h-4 bg-amber-50 text-amber-700 border-amber-300" data-testid={`badge-flat-rate-${idx}`}>Flat Rate</Badge>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span>{item.itemRef}</span>
+                                {isManual && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300" data-testid={`badge-manual-procedure-${idx}`}>
+                                    Manual Procedure ({item.procedureType ?? "—"})
+                                  </Badge>
+                                )}
+                                {!isManual && isMaterialMissing && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-red-50 text-red-700 border-red-300" data-testid={`badge-material-missing-${idx}`}>No Material</Badge>
+                                )}
+                                {!isManual && isFlatRate && !isMaterialMissing && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-amber-50 text-amber-700 border-amber-300" data-testid={`badge-flat-rate-${idx}`}>Flat Rate</Badge>
+                                )}
+                                {!isManual && isOverridden && !overrideInvalid && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/30 dark:text-purple-300" data-testid={`badge-manual-override-${idx}`}>
+                                    Manual Override ({item.pricingOverrideMode === "manual_sell" ? "Sell $" : "Margin %"})
+                                  </Badge>
+                                )}
+                                {!isManual && overrideInvalid && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-orange-50 text-orange-700 border-orange-300" data-testid={`badge-override-invalid-${idx}`}>Override Invalid</Badge>
+                                )}
+                                {isManual && procedureInvalid && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-orange-50 text-orange-700 border-orange-300" data-testid={`badge-procedure-invalid-${idx}`}>Pricing Invalid</Badge>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell data-testid={`text-item-title-${idx}`}>{item.title}</TableCell>
                             <TableCell className="text-center">{item.quantity}</TableCell>
                             <TableCell className="text-xs">
-                              {[item.materialType, item.materialGrade].filter(Boolean).join(" / ") || "—"}
+                              {isManual ? <span className="text-muted-foreground italic">—</span> : ([item.materialType, item.materialGrade].filter(Boolean).join(" / ") || "—")}
                             </TableCell>
-                            <TableCell className="text-right">{item.thickness > 0 ? `${item.thickness}mm` : "—"}</TableCell>
+                            <TableCell className="text-right">{!isManual && item.thickness > 0 ? `${item.thickness}mm` : "—"}</TableCell>
                             <TableCell className="text-right text-xs">
-                              {item.length > 0 && item.width > 0 ? `${item.length} x ${item.width}` : "—"}
+                              {!isManual && item.length > 0 && item.width > 0 ? `${item.length} x ${item.width}` : "—"}
                             </TableCell>
                             <TableCell className="text-right font-mono" data-testid={`text-unit-cost-${idx}`}>
-                              {pricing ? (
+                              {isManual ? (
+                                <span>${(item.manualUnitCost ?? 0).toFixed(2)}</span>
+                              ) : pricing ? (
                                 <span>${(pricing.internalCostSubtotal / (item.quantity || 1)).toFixed(2)}</span>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
                             </TableCell>
                             <TableCell className="text-right font-mono" data-testid={`text-unit-sell-${idx}`}>
-                              <span>${unitSell.toFixed(2)}</span>
-                              {pricing && (
+                              <span>${finalUnitSell.toFixed(2)}</span>
+                              {!isManual && isOverridden && (
+                                <span className="block text-[10px] text-muted-foreground line-through" data-testid={`text-calculated-unit-sell-${idx}`}>
+                                  ${calcUnitSell.toFixed(2)}
+                                </span>
+                              )}
+                              {row && (
                                 <span className="block text-[10px] text-muted-foreground" data-testid={`text-markup-indicator-${idx}`}>
-                                  {pricing.totalMarginPercent.toFixed(0)}% margin
+                                  {finalMarginPercent.toFixed(0)}% margin
                                 </span>
                               )}
                             </TableCell>
                             <TableCell className="text-right font-mono font-medium" data-testid={`text-line-total-${idx}`}>
-                              <span>${lineTotal.toFixed(2)}</span>
-                              {pricing && (
-                                <span className="block text-[10px] text-green-700 dark:text-green-400" data-testid={`text-margin-indicator-${idx}`}>
-                                  +${pricing.totalMargin.toFixed(2)}
+                              <span>${finalLineTotal.toFixed(2)}</span>
+                              {!isManual && isOverridden && (
+                                <span className="block text-[10px] text-muted-foreground line-through" data-testid={`text-calculated-line-total-${idx}`}>
+                                  ${calcLineTotal.toFixed(2)}
+                                </span>
+                              )}
+                              {row && (
+                                <span className={`block text-[10px] ${finalMargin < 0 ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`} data-testid={`text-margin-indicator-${idx}`}>
+                                  {finalMargin >= 0 ? "+" : ""}${finalMargin.toFixed(2)}
                                 </span>
                               )}
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => toggleItemExpand(item.id)}
-                                  data-testid={`button-toggle-breakdown-${idx}`}
-                                  title="Toggle pricing breakdown"
-                                >
-                                  {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                </Button>
+                                {!isManual && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => toggleItemExpand(item.id)}
+                                    data-testid={`button-toggle-breakdown-${idx}`}
+                                    title="Toggle pricing breakdown"
+                                  >
+                                    {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -1244,13 +1665,37 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                               </div>
                             </TableCell>
                           </TableRow>
-                          {isExpanded && pricing && (
+                          {isExpanded && !isManual && pricing && (
                             <TableRow>
                               <TableCell colSpan={11} className="p-2">
                                 <PricingBreakdownPanel
                                   breakdown={pricing}
                                   supplierName={matched?.supplierName || "—"}
                                 />
+                                {isOverridden && row?.commercial && (
+                                  <div className="mt-2 p-3 rounded-md border border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-950/20" data-testid={`panel-override-summary-${idx}`}>
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-purple-800 dark:text-purple-300">
+                                      <DollarSign className="h-3.5 w-3.5" /> Commercial Override Active
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-xs">
+                                      <div><span className="text-muted-foreground">Calc unit sell: </span><span className="font-mono">${row.commercial.calculatedUnitSell.toFixed(2)}</span></div>
+                                      <div><span className="text-muted-foreground">Final unit sell: </span><span className="font-mono font-semibold">${row.commercial.finalUnitSell.toFixed(2)}</span></div>
+                                      <div><span className="text-muted-foreground">Calc margin %: </span><span className="font-mono">{row.commercial.calculatedMarginPercent.toFixed(1)}%</span></div>
+                                      <div><span className="text-muted-foreground">Final margin %: </span><span className={`font-mono font-semibold ${row.commercial.finalMarginAmount < 0 ? "text-red-700" : ""}`}>{row.commercial.finalMarginPercent.toFixed(1)}%</span></div>
+                                    </div>
+                                    {row.commercial.warning && (
+                                      <div className="mt-2 text-[11px] text-orange-700 dark:text-orange-400 flex items-start gap-1" data-testid={`text-override-warning-${idx}`}>
+                                        <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                        <span>{row.commercial.warning}</span>
+                                      </div>
+                                    )}
+                                    {item.overrideReason && (
+                                      <div className="mt-2 text-[11px] text-muted-foreground italic" data-testid={`text-override-reason-${idx}`}>
+                                        Reason: {item.overrideReason}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </TableCell>
                             </TableRow>
                           )}
@@ -1690,6 +2135,148 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               supplierName={selectedMaterialRow?.supplierName || ""}
             />
 
+            {/* Phase 5E — Commercial Override Layer */}
+            <Collapsible open={!!formData.pricingOverrideEnabled || (formData.pricingOverrideMode != null && formData.pricingOverrideMode !== "none")}>
+              <div className="border rounded-md p-3 space-y-3 bg-purple-50/30 dark:bg-purple-950/10 border-purple-200 dark:border-purple-900" data-testid="section-commercial-override">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-purple-700 dark:text-purple-300" />
+                    <span className="text-sm font-semibold">Commercial Override</span>
+                    <span className="text-[11px] text-muted-foreground">(optional — overrides calculated sell)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="override-toggle" className="text-xs cursor-pointer select-none">Use manual pricing override</Label>
+                    <Switch
+                      id="override-toggle"
+                      checked={!!formData.pricingOverrideEnabled}
+                      onCheckedChange={(v) => setFormData(prev => ({
+                        ...prev,
+                        pricingOverrideEnabled: v,
+                        pricingOverrideMode: v ? (prev.pricingOverrideMode && prev.pricingOverrideMode !== "none" ? prev.pricingOverrideMode : "manual_sell") : "none",
+                      }))}
+                      data-testid="switch-override-enabled"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Calculated unit sell:</span>
+                    <span className="font-mono ml-2" data-testid="text-dialog-calculated-unit-sell">${dialogCommercial.calculatedUnitSell.toFixed(2)}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Calculated unit cost:</span>
+                    <span className="font-mono ml-2" data-testid="text-dialog-calculated-unit-cost">${dialogCommercial.calculatedUnitCost.toFixed(2)}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Calculated margin %:</span>
+                    <span className="font-mono ml-2" data-testid="text-dialog-calculated-margin">{dialogCommercial.calculatedMarginPercent.toFixed(1)}%</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Calculated line sell:</span>
+                    <span className="font-mono ml-2" data-testid="text-dialog-calculated-line">${dialogCommercial.calculatedSellPrice.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {!!formData.pricingOverrideEnabled && (
+                  <CollapsibleContent forceMount asChild>
+                    <div className="space-y-3 pt-2 border-t border-purple-200 dark:border-purple-900">
+                      <div>
+                        <Label className="text-xs">Override Mode</Label>
+                        <Select
+                          value={formData.pricingOverrideMode ?? "manual_sell"}
+                          onValueChange={(v) => setFormData(prev => ({ ...prev, pricingOverrideMode: v as LLPricingOverrideMode }))}
+                        >
+                          <SelectTrigger data-testid="select-override-mode">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual_sell" data-testid="select-mode-manual-sell">Manual unit sell price</SelectItem>
+                            <SelectItem value="target_margin" data-testid="select-mode-target-margin">Target margin %</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {formData.pricingOverrideMode === "manual_sell" && (
+                        <div>
+                          <Label htmlFor="manual-sell-input" className="text-xs">Manual unit sell price (per unit, ex GST)</Label>
+                          <Input
+                            id="manual-sell-input"
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={formData.manualSellPrice ?? ""}
+                            onChange={(e) => setFormData(prev => ({ ...prev, manualSellPrice: e.target.value === "" ? undefined : parseFloat(e.target.value) }))}
+                            placeholder="0.00"
+                            data-testid="input-manual-sell-price"
+                          />
+                        </div>
+                      )}
+
+                      {formData.pricingOverrideMode === "target_margin" && (
+                        <div>
+                          <Label htmlFor="target-margin-input" className="text-xs">Target margin % (0–99.99)</Label>
+                          <Input
+                            id="target-margin-input"
+                            type="number"
+                            step="0.1"
+                            min={0}
+                            max={99.99}
+                            value={formData.targetMarginPercent ?? ""}
+                            onChange={(e) => setFormData(prev => ({ ...prev, targetMarginPercent: e.target.value === "" ? undefined : parseFloat(e.target.value) }))}
+                            placeholder="35"
+                            data-testid="input-target-margin-percent"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <Label htmlFor="override-reason-input" className="text-xs">Override reason / notes (recommended)</Label>
+                        <Textarea
+                          id="override-reason-input"
+                          rows={2}
+                          value={formData.overrideReason ?? ""}
+                          onChange={(e) => setFormData(prev => ({ ...prev, overrideReason: e.target.value }))}
+                          placeholder="Why is the calculated price being overridden?"
+                          data-testid="input-override-reason"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs pt-2 border-t border-purple-200 dark:border-purple-900">
+                        <div>
+                          <span className="text-muted-foreground">Final unit sell:</span>
+                          <span className="font-mono ml-2 font-semibold" data-testid="text-dialog-final-unit-sell">${dialogCommercial.finalUnitSell.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Final line sell:</span>
+                          <span className="font-mono ml-2 font-semibold" data-testid="text-dialog-final-line-sell">${dialogCommercial.finalSellPrice.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Final margin %:</span>
+                          <span className={`font-mono ml-2 font-semibold ${dialogCommercial.finalMarginAmount < 0 ? "text-red-700" : ""}`} data-testid="text-dialog-final-margin">
+                            {dialogCommercial.finalMarginPercent.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Final margin $:</span>
+                          <span className={`font-mono ml-2 font-semibold ${dialogCommercial.finalMarginAmount < 0 ? "text-red-700" : ""}`} data-testid="text-dialog-final-margin-amount">
+                            ${dialogCommercial.finalMarginAmount.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {dialogCommercial.warning && (
+                        <div className="flex items-start gap-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-md px-3 py-2" data-testid="warning-override">
+                          <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                          <span className="text-xs text-orange-800 dark:text-orange-300">{dialogCommercial.warning}</span>
+                        </div>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                )}
+              </div>
+            </Collapsible>
+
             <div>
               <Label htmlFor="customerNotes">Customer Notes</Label>
               <Textarea
@@ -1720,6 +2307,174 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
             <Button onClick={handleDialogSave} data-testid="button-save-item">
               {editingItem ? "Update" : "Add"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Phase 5E — Manual Procedure dialog */}
+      <Dialog open={procedureDialogOpen} onOpenChange={setProcedureDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto" data-testid="dialog-manual-procedure">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-blue-700 dark:text-blue-300" />
+              {editingProcedureItem ? "Edit Manual Procedure" : "Add Manual Procedure"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-xs text-muted-foreground bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-2" data-testid="text-procedure-help">
+              Manual procedure / provisional lines are not laser-cut items. They bypass the bucketed pricing engine and use the unit cost / unit sell you enter directly.
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="proc-itemRef">Item Reference *</Label>
+                <Input
+                  id="proc-itemRef"
+                  value={procedureFormData.itemRef}
+                  onChange={(e) => setProcedureFormData(prev => ({ ...prev, itemRef: e.target.value }))}
+                  placeholder="e.g. MP-001"
+                  data-testid="input-procedure-item-ref"
+                />
+              </div>
+              <div>
+                <Label htmlFor="proc-quantity">Quantity</Label>
+                <Input
+                  id="proc-quantity"
+                  type="number"
+                  min={1}
+                  value={procedureFormData.quantity}
+                  onChange={(e) => setProcedureFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                  data-testid="input-procedure-quantity"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="proc-type">Procedure Type *</Label>
+                <Select
+                  value={procedureFormData.procedureType ?? "Folding"}
+                  onValueChange={(v) => setProcedureFormData(prev => ({ ...prev, procedureType: v as LLManualProcedureType }))}
+                >
+                  <SelectTrigger data-testid="select-procedure-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LL_MANUAL_PROCEDURE_TYPES.map(t => (
+                      <SelectItem key={t} value={t} data-testid={`select-procedure-type-${t}`}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="proc-title">Title *</Label>
+                <Input
+                  id="proc-title"
+                  value={procedureFormData.title}
+                  onChange={(e) => setProcedureFormData(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="e.g. Folding — 3 bends"
+                  data-testid="input-procedure-title"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="proc-description">Description</Label>
+              <Textarea
+                id="proc-description"
+                rows={2}
+                value={procedureFormData.procedureDescription ?? ""}
+                onChange={(e) => setProcedureFormData(prev => ({ ...prev, procedureDescription: e.target.value }))}
+                placeholder="Optional description visible in internal records"
+                data-testid="input-procedure-description"
+              />
+            </div>
+
+            <div className="border rounded-md p-3 space-y-3 bg-muted/20">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pricing</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="proc-unit-cost" className="text-xs">Unit Cost (ex GST)</Label>
+                  <Input
+                    id="proc-unit-cost"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={procedureFormData.manualUnitCost ?? 0}
+                    onChange={(e) => setProcedureFormData(prev => ({ ...prev, manualUnitCost: parseFloat(e.target.value) || 0 }))}
+                    data-testid="input-procedure-unit-cost"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="proc-unit-sell" className="text-xs">Unit Sell (ex GST)</Label>
+                  <Input
+                    id="proc-unit-sell"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={procedureFormData.manualUnitSell ?? 0}
+                    onChange={(e) => setProcedureFormData(prev => ({ ...prev, manualUnitSell: parseFloat(e.target.value) || 0, manualTargetMarginPercent: undefined }))}
+                    data-testid="input-procedure-unit-sell"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="proc-target-margin" className="text-xs">Or use target margin % (overrides unit sell when set, 0–99.99)</Label>
+                <Input
+                  id="proc-target-margin"
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={99.99}
+                  value={procedureFormData.manualTargetMarginPercent ?? ""}
+                  onChange={(e) => setProcedureFormData(prev => ({ ...prev, manualTargetMarginPercent: e.target.value === "" ? undefined : parseFloat(e.target.value) }))}
+                  placeholder="e.g. 35"
+                  data-testid="input-procedure-target-margin"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t text-xs">
+                <div>
+                  <span className="text-muted-foreground">Final unit sell:</span>
+                  <span className="font-mono ml-2 font-semibold" data-testid="text-procedure-preview-unit-sell">${procedureDialogPreview.unitSell.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Line total:</span>
+                  <span className="font-mono ml-2 font-semibold" data-testid="text-procedure-preview-line-total">${procedureDialogPreview.lineSell.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Margin %:</span>
+                  <span className={`font-mono ml-2 ${procedureDialogPreview.lineMargin < 0 ? "text-red-700" : ""}`} data-testid="text-procedure-preview-margin">{procedureDialogPreview.marginPercent.toFixed(1)}%</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Margin $:</span>
+                  <span className={`font-mono ml-2 ${procedureDialogPreview.lineMargin < 0 ? "text-red-700" : ""}`} data-testid="text-procedure-preview-margin-amount">${procedureDialogPreview.lineMargin.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {procedureDialogPreview.warning && (
+                <div className="flex items-start gap-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-md px-3 py-2" data-testid="warning-procedure">
+                  <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                  <span className="text-xs text-orange-800 dark:text-orange-300">{procedureDialogPreview.warning}</span>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="proc-notes" className="text-xs">Internal notes</Label>
+              <Textarea
+                id="proc-notes"
+                rows={2}
+                value={procedureFormData.manualNotes ?? ""}
+                onChange={(e) => setProcedureFormData(prev => ({ ...prev, manualNotes: e.target.value }))}
+                placeholder="Internal notes for this procedure (not shown on quote)"
+                data-testid="input-procedure-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProcedureDialogOpen(false)} data-testid="button-cancel-procedure">Cancel</Button>
+            <Button onClick={handleProcedureDialogSave} data-testid="button-save-procedure">{editingProcedureItem ? "Update" : "Add"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

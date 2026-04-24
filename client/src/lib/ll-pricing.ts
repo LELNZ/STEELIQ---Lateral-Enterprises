@@ -175,6 +175,147 @@ export interface LLPricingBreakdown {
   totalMarginPercent: number;
 }
 
+/**
+ * Phase 5E — Commercial Override Layer (read-only over calculated truth).
+ *
+ * The override is a commercial layer ABOVE the calculated bucketed pricing
+ * truth produced by computeLLPricing. It does NOT mutate any bucket-level
+ * buy/sell/margin value. Calculated buy cost remains the margin basis.
+ *
+ * Modes:
+ *   - "none"          : final = calculated
+ *   - "manual_sell"   : finalUnitSell = manualSellPrice (per unit)
+ *   - "target_margin" : finalUnitSell = unitCost / (1 - targetMarginPercent/100)
+ *
+ * Guards (when override is invalid, falls back to calculated and emits warning):
+ *   - targetMarginPercent must be a finite number, > -∞, and < 100
+ *   - manualSellPrice must be finite and > 0
+ *   - calculatedUnitCost must be > 0 for a meaningful target-margin override
+ */
+export interface LLOverrideInputs {
+  enabled?: boolean;
+  mode?: "none" | "manual_sell" | "target_margin";
+  manualSellPrice?: number;       // per-unit sell price
+  targetMarginPercent?: number;   // 0..<100
+}
+
+export interface LLCommercialResult {
+  isOverridden: boolean;
+  mode: "none" | "manual_sell" | "target_margin";
+  // Calculated truth (mirrors what computeLLPricing produced)
+  calculatedSellPrice: number;     // line total (sellTotal)
+  calculatedUnitSell: number;
+  calculatedBuyCost: number;       // line total buy cost (totalBuyCost)
+  calculatedUnitCost: number;
+  calculatedMarginAmount: number;
+  calculatedMarginPercent: number;
+  // Final commercial values (these flow to subtotal / unitPrice / snapshot)
+  finalSellPrice: number;          // line total
+  finalUnitSell: number;           // per unit
+  finalMarginAmount: number;
+  finalMarginPercent: number;
+  warning?: string;
+  invalid: boolean;
+}
+
+export function applyCommercialOverride(
+  breakdown: Pick<LLPricingBreakdown, "sellTotal" | "unitSell" | "totalBuyCost" | "unitCost">,
+  quantity: number,
+  override?: LLOverrideInputs,
+): LLCommercialResult {
+  const safeQty = Math.max(quantity || 0, 1);
+  const calculatedSellPrice = breakdown.sellTotal;
+  const calculatedUnitSell = breakdown.unitSell;
+  const calculatedBuyCost = breakdown.totalBuyCost;
+  const calculatedUnitCost = breakdown.unitCost;
+  const calculatedMarginAmount = calculatedSellPrice - calculatedBuyCost;
+  const calculatedMarginPercent = calculatedSellPrice > 0
+    ? (calculatedMarginAmount / calculatedSellPrice) * 100
+    : 0;
+
+  const calculatedFallback = (warning?: string, invalid: boolean = false): LLCommercialResult => ({
+    isOverridden: false,
+    mode: override?.mode ?? "none",
+    calculatedSellPrice,
+    calculatedUnitSell,
+    calculatedBuyCost,
+    calculatedUnitCost,
+    calculatedMarginAmount,
+    calculatedMarginPercent,
+    finalSellPrice: calculatedSellPrice,
+    finalUnitSell: calculatedUnitSell,
+    finalMarginAmount: calculatedMarginAmount,
+    finalMarginPercent: calculatedMarginPercent,
+    warning,
+    invalid,
+  });
+
+  if (!override || !override.enabled || !override.mode || override.mode === "none") {
+    return calculatedFallback();
+  }
+
+  if (override.mode === "manual_sell") {
+    const v = override.manualSellPrice;
+    if (v == null || !Number.isFinite(v) || v <= 0) {
+      return calculatedFallback("Manual sell price must be greater than zero. Falling back to calculated pricing.", true);
+    }
+    const finalUnitSell = v;
+    const finalSellPrice = finalUnitSell * safeQty;
+    const finalMarginAmount = finalSellPrice - calculatedBuyCost;
+    const finalMarginPercent = finalSellPrice > 0 ? (finalMarginAmount / finalSellPrice) * 100 : 0;
+    return {
+      isOverridden: true,
+      mode: "manual_sell",
+      calculatedSellPrice,
+      calculatedUnitSell,
+      calculatedBuyCost,
+      calculatedUnitCost,
+      calculatedMarginAmount,
+      calculatedMarginPercent,
+      finalSellPrice,
+      finalUnitSell,
+      finalMarginAmount,
+      finalMarginPercent,
+      warning: finalMarginAmount < 0 ? "Final sell is below calculated buy cost. Margin is negative." : undefined,
+      invalid: false,
+    };
+  }
+
+  // target_margin
+  const tm = override.targetMarginPercent;
+  if (tm == null || !Number.isFinite(tm)) {
+    return calculatedFallback("Target margin % must be a number. Falling back to calculated pricing.", true);
+  }
+  if (tm >= 100) {
+    return calculatedFallback("Target margin % must be less than 100. Falling back to calculated pricing.", true);
+  }
+  if (tm < 0) {
+    return calculatedFallback("Target margin % cannot be negative. Falling back to calculated pricing.", true);
+  }
+  if (calculatedUnitCost <= 0) {
+    return calculatedFallback("Cannot apply target margin: calculated unit cost is zero. Falling back to calculated pricing.", true);
+  }
+  const finalUnitSell = calculatedUnitCost / (1 - tm / 100);
+  const finalSellPrice = finalUnitSell * safeQty;
+  const finalMarginAmount = finalSellPrice - calculatedBuyCost;
+  const finalMarginPercent = tm;
+  return {
+    isOverridden: true,
+    mode: "target_margin",
+    calculatedSellPrice,
+    calculatedUnitSell,
+    calculatedBuyCost,
+    calculatedUnitCost,
+    calculatedMarginAmount,
+    calculatedMarginPercent,
+    finalSellPrice,
+    finalUnitSell,
+    finalMarginAmount,
+    finalMarginPercent,
+    invalid: false,
+  };
+}
+
 export const LL_PRICING_DEFAULTS = {
   RATE_PER_MM_CUT: 0.012,
   RATE_PER_PIERCE: 0.50,

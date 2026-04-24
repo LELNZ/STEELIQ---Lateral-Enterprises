@@ -70,6 +70,29 @@ export const laserSnapshotItemSchema = z.object({
     costTotal: z.number().default(0),
     notes: z.string().optional(),
   })).optional(),
+
+  // Commercial Override Layer (Phase 5E) — additive, optional.
+  // Override is preserved in snapshot so quote revisions reload faithfully.
+  // unitPrice and sellTotal in snapshot reflect the FINAL (commercial) values.
+  pricingOverrideEnabled: z.boolean().optional(),
+  pricingOverrideMode: z.enum(["none", "manual_sell", "target_margin"]).optional(),
+  manualSellPrice: z.number().optional(),
+  targetMarginPercent: z.number().optional(),
+  overrideReason: z.string().optional(),
+  calculatedSellPrice: z.number().optional(),
+  calculatedBuyCost: z.number().optional(),
+  finalSellPrice: z.number().optional(),
+  finalMarginAmount: z.number().optional(),
+  finalMarginPercent: z.number().optional(),
+
+  // Manual Procedure / Provisional line (Phase 5E).
+  isManualProcedure: z.boolean().optional(),
+  procedureType: z.enum(["Folding", "Deburring", "Tapping", "Other"]).optional(),
+  procedureDescription: z.string().optional(),
+  manualUnitCost: z.number().optional(),
+  manualUnitSell: z.number().optional(),
+  manualTargetMarginPercent: z.number().optional(),
+  manualNotes: z.string().optional(),
 });
 
 export type LaserSnapshotItem = z.infer<typeof laserSnapshotItemSchema>;
