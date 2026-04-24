@@ -139,6 +139,57 @@ function makeEmptyManualProcedure(): Omit<LaserQuoteItem, "id"> {
   };
 }
 
+// Phase 5E hardening — gate that decides whether a regular LL laser item is
+// commercially quote-ready. Until ready:
+//   * final calculated/override sell must NOT be presented as a quoteable value
+//   * minimum-line-charge / setup-handling labour must NOT be billed as final
+//   * commercial override must NOT be enabled
+//   * Save/Add must be blocked
+// Manual procedure rows are exempt (they bypass material/process pricing).
+export interface LLItemReadiness {
+  ready: boolean;
+  isManualProcedure: boolean;
+  missing: string[];
+}
+
+function isItemQuoteReady(
+  item: Pick<LaserQuoteItem, "itemRef" | "title" | "quantity" | "materialType" | "materialGrade" | "finish" | "thickness" | "length" | "width" | "cutLengthMm" | "llSheetMaterialId" | "coilLengthMm" | "isManualProcedure" | "procedureType" | "manualUnitCost" | "manualUnitSell" | "manualTargetMarginPercent">,
+  materials: SheetMaterialRef[],
+): LLItemReadiness {
+  if (item.isManualProcedure) {
+    const missing: string[] = [];
+    if (!item.itemRef?.trim()) missing.push("Item reference");
+    if (!item.title?.trim()) missing.push("Title");
+    if (!Number.isFinite(item.quantity) || item.quantity <= 0) missing.push("Quantity > 0");
+    if (!item.procedureType) missing.push("Procedure type");
+    const proc = computeManualProcedureFinal(item);
+    if (proc.invalid) missing.push("Valid unit sell or target margin");
+    return { ready: missing.length === 0, isManualProcedure: true, missing };
+  }
+  const missing: string[] = [];
+  if (!item.itemRef?.trim()) missing.push("Item reference");
+  if (!item.title?.trim()) missing.push("Title");
+  if (!Number.isFinite(item.quantity) || item.quantity <= 0) missing.push("Quantity > 0");
+  const matched = findMatchingMaterial(materials, item);
+  if (!matched) {
+    missing.push("Material selection (family / grade / finish / thickness / sheet)");
+  } else {
+    const isCoil = (matched.stockBehaviour || "sheet") === "coil";
+    if (isCoil) {
+      if (!Number.isFinite(item.coilLengthMm) || (item.coilLengthMm ?? 0) <= 0) {
+        missing.push("Coil cut length (mm)");
+      }
+    } else {
+      if (!Number.isFinite(item.length) || item.length <= 0) missing.push("Part length (mm)");
+      if (!Number.isFinite(item.width) || item.width <= 0) missing.push("Part width (mm)");
+    }
+    if (!Number.isFinite(item.cutLengthMm) || item.cutLengthMm <= 0) {
+      missing.push("Cut length (mm)");
+    }
+  }
+  return { ready: missing.length === 0, isManualProcedure: false, missing };
+}
+
 function buildOverrideInputs(item: Pick<LaserQuoteItem, "pricingOverrideEnabled" | "pricingOverrideMode" | "manualSellPrice" | "targetMarginPercent">): LLOverrideInputs {
   return {
     enabled: !!item.pricingOverrideEnabled,
@@ -291,6 +342,23 @@ function computeRowPricing(
   }
   const breakdown = computeItemPricing(item, materials, settings, governed);
   const commercial = applyCommercialOverride(breakdown, item.quantity, buildOverrideInputs(item));
+  const readiness = isItemQuoteReady(item, materials);
+  // Defensive: if a regular laser item is not quote-ready (legacy data, etc.),
+  // do NOT report a final commercial sell. Final values are zero so subtotal
+  // and quote totals never absorb non-quoteable diagnostic numbers.
+  if (!readiness.ready) {
+    return {
+      isManualProcedure: false,
+      breakdown,
+      commercial,
+      manual: null,
+      finalUnitSell: 0,
+      finalLineSell: 0,
+      finalLineCost: 0,
+      finalMarginAmount: 0,
+      finalMarginPercent: 0,
+    };
+  }
   return {
     isManualProcedure: false,
     breakdown,
@@ -835,6 +903,14 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     return applyCommercialOverride(dialogPricing, formData.quantity, buildOverrideInputs(formData));
   }, [dialogPricing, formData]);
 
+  const dialogReadiness = useMemo(() => {
+    const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
+    return isItemQuoteReady(
+      { ...formData, llSheetMaterialId: materialId || formData.llSheetMaterialId },
+      sheetMaterials,
+    );
+  }, [formData, sheetMaterials, selectedMaterialRow]);
+
   const { data: quoteData, isLoading: quoteLoading } = useQuery<any>({
     queryKey: ["/api/quotes", quoteId],
     enabled: isEditMode,
@@ -1063,20 +1139,21 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       return;
     }
     if (!estimateMode && items.length > 0) {
-      const laserItems = items.filter(i => !i.isManualProcedure);
-      const itemsMissingMaterial = laserItems.filter(i => !i.llSheetMaterialId);
-      if (itemsMissingMaterial.length > 0) {
-        toast({ title: "Material Required", description: `${itemsMissingMaterial.length} item(s) have no material selected (${itemsMissingMaterial.map(i => i.itemRef || i.title).join(", ")}). Edit each item and select a material before saving.`, variant: "destructive" });
+      const notReady = items
+        .map(i => ({ item: i, r: isItemQuoteReady(i, sheetMaterials) }))
+        .filter(x => !x.r.ready);
+      if (notReady.length > 0) {
+        toast({
+          title: "Items not quote-ready",
+          description: `${notReady.length} line(s) are missing required details (${notReady.map(x => x.item.itemRef || x.item.title || "(unnamed)").join(", ")}). Edit each item and complete the required fields before saving.`,
+          variant: "destructive",
+        });
         return;
       }
+      const laserItems = items.filter(i => !i.isManualProcedure);
       const unmatchedItems = laserItems.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
       if (unmatchedItems.length > 0) {
         toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
-        return;
-      }
-      const invalidProcedures = items.filter(i => i.isManualProcedure && computeManualProcedureFinal(i).invalid);
-      if (invalidProcedures.length > 0) {
-        toast({ title: "Manual Procedure Invalid", description: `${invalidProcedures.length} manual procedure line(s) need a valid unit sell or target margin.`, variant: "destructive" });
         return;
       }
     }
@@ -1102,20 +1179,21 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       toast({ title: "Required", description: "Add at least one item before generating a quote", variant: "destructive" });
       return;
     }
-    const laserItems = items.filter(i => !i.isManualProcedure);
-    const itemsMissingMaterial = laserItems.filter(i => !i.llSheetMaterialId);
-    if (itemsMissingMaterial.length > 0) {
-      toast({ title: "Material Required", description: `${itemsMissingMaterial.length} item(s) have no material selected (${itemsMissingMaterial.map(i => i.itemRef || i.title).join(", ")}). Edit each item and select a material before generating a quote.`, variant: "destructive" });
+    const notReady = items
+      .map(i => ({ item: i, r: isItemQuoteReady(i, sheetMaterials) }))
+      .filter(x => !x.r.ready);
+    if (notReady.length > 0) {
+      toast({
+        title: "Items not quote-ready",
+        description: `${notReady.length} line(s) are missing required details (${notReady.map(x => x.item.itemRef || x.item.title || "(unnamed)").join(", ")}). Edit each item and complete the required fields before generating a quote.`,
+        variant: "destructive",
+      });
       return;
     }
+    const laserItems = items.filter(i => !i.isManualProcedure);
     const unmatchedItems = laserItems.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
     if (unmatchedItems.length > 0) {
       toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
-      return;
-    }
-    const invalidProcedures = items.filter(i => i.isManualProcedure && computeManualProcedureFinal(i).invalid);
-    if (invalidProcedures.length > 0) {
-      toast({ title: "Manual Procedure Invalid", description: `${invalidProcedures.length} manual procedure line(s) need a valid unit sell or target margin.`, variant: "destructive" });
       return;
     }
     generateQuoteFromEstimateMutation.mutate();
@@ -1168,13 +1246,15 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   };
 
   const handleDialogSave = () => {
-    if (!formData.itemRef.trim() || !formData.title.trim()) {
-      toast({ title: "Required", description: "Item reference and title are required", variant: "destructive" });
-      return;
-    }
     const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
-    if (!materialId) {
-      toast({ title: "Material Required", description: "A material must be selected before saving. Please choose a material family, grade, finish, thickness, and sheet size or coil width.", variant: "destructive" });
+    const formForCheck = { ...formData, llSheetMaterialId: materialId || formData.llSheetMaterialId };
+    const readiness = isItemQuoteReady(formForCheck, sheetMaterials);
+    if (!readiness.ready) {
+      toast({
+        title: "Item not quote-ready",
+        description: `Complete required details before saving: ${readiness.missing.join(", ")}.`,
+        variant: "destructive",
+      });
       return;
     }
     if (formData.pricingOverrideEnabled && formData.pricingOverrideMode && formData.pricingOverrideMode !== "none") {
@@ -2130,10 +2210,28 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               </div>
             )}
 
-            <PricingBreakdownPanel
-              breakdown={dialogPricing}
-              supplierName={selectedMaterialRow?.supplierName || ""}
-            />
+            {!dialogReadiness.ready && !formData.isManualProcedure && (
+              <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-md px-3 py-2" data-testid="banner-not-quote-ready">
+                <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                  <p className="font-semibold">Pricing pending — complete required item details</p>
+                  <p>Missing: {dialogReadiness.missing.join(", ")}.</p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300">Any preliminary numbers below are diagnostic only and are not a quoteable price.</p>
+                </div>
+              </div>
+            )}
+
+            <div className={!dialogReadiness.ready ? "opacity-60" : ""} data-testid="pricing-breakdown-wrapper">
+              <PricingBreakdownPanel
+                breakdown={dialogPricing}
+                supplierName={selectedMaterialRow?.supplierName || ""}
+              />
+              {!dialogReadiness.ready && (
+                <p className="text-[11px] text-muted-foreground italic mt-1" data-testid="text-non-quoteable-label">
+                  Diagnostic only — not a quoteable price until required fields are complete.
+                </p>
+              )}
+            </div>
 
             {/* Phase 5E — Commercial Override Layer */}
             <Collapsible open={!!formData.pricingOverrideEnabled || (formData.pricingOverrideMode != null && formData.pricingOverrideMode !== "none")}>
@@ -2145,15 +2243,21 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                     <span className="text-[11px] text-muted-foreground">(optional — overrides calculated sell)</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="override-toggle" className="text-xs cursor-pointer select-none">Use manual pricing override</Label>
+                    <Label htmlFor="override-toggle" className={`text-xs select-none ${dialogReadiness.ready ? "cursor-pointer" : "cursor-not-allowed text-muted-foreground"}`}>
+                      Use manual pricing override
+                    </Label>
                     <Switch
                       id="override-toggle"
-                      checked={!!formData.pricingOverrideEnabled}
-                      onCheckedChange={(v) => setFormData(prev => ({
-                        ...prev,
-                        pricingOverrideEnabled: v,
-                        pricingOverrideMode: v ? (prev.pricingOverrideMode && prev.pricingOverrideMode !== "none" ? prev.pricingOverrideMode : "manual_sell") : "none",
-                      }))}
+                      checked={!!formData.pricingOverrideEnabled && dialogReadiness.ready}
+                      disabled={!dialogReadiness.ready}
+                      onCheckedChange={(v) => {
+                        if (!dialogReadiness.ready) return;
+                        setFormData(prev => ({
+                          ...prev,
+                          pricingOverrideEnabled: v,
+                          pricingOverrideMode: v ? (prev.pricingOverrideMode && prev.pricingOverrideMode !== "none" ? prev.pricingOverrideMode : "manual_sell") : "none",
+                        }));
+                      }}
                       data-testid="switch-override-enabled"
                     />
                   </div>
@@ -2304,7 +2408,12 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
             <Button variant="outline" onClick={() => setDialogOpen(false)} data-testid="button-cancel-item">
               Cancel
             </Button>
-            <Button onClick={handleDialogSave} data-testid="button-save-item">
+            <Button
+              onClick={handleDialogSave}
+              disabled={!dialogReadiness.ready}
+              title={dialogReadiness.ready ? undefined : `Complete required fields: ${dialogReadiness.missing.join(", ")}`}
+              data-testid="button-save-item"
+            >
               {editingItem ? "Update" : "Add"}
             </Button>
           </DialogFooter>
