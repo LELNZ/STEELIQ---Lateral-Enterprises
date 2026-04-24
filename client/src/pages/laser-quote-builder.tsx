@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical, Info, DollarSign, Wrench } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile, LLPricingOverrideMode, LLManualProcedureType } from "@shared/schema";
+import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile, LLPricingOverrideMode, LLManualProcedureType, AttachedManualProcedure } from "@shared/schema";
 import { LL_MANUAL_PROCEDURE_TYPES } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
@@ -243,6 +243,95 @@ function computeManualProcedureFinal(item: Pick<LaserQuoteItem, "manualUnitCost"
   return { unitCost, unitSell, lineSell, lineMargin, marginPercent, invalid, warning };
 }
 
+// Phase 5E (Attached Manual Procedures) — price a single attached procedure.
+// Identical math to standalone manual procedure pricing. The procedure carries
+// its own quantity (defaults to parent quantity at creation time).
+export interface AttachedProcedurePricing {
+  procedureId: string;
+  procedureType: LLManualProcedureType;
+  description: string;
+  quantity: number;
+  unitCost: number;
+  unitSell: number;
+  lineSell: number;
+  lineCost: number;
+  lineMargin: number;
+  marginPercent: number;
+  invalid: boolean;
+  warning?: string;
+}
+
+function computeAttachedProcedureFinal(
+  proc: AttachedManualProcedure,
+  parentQuantity: number,
+): AttachedProcedurePricing {
+  const qtyRaw = Number(proc.quantity ?? parentQuantity ?? 0);
+  const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.max(1, Math.floor(qtyRaw)) : 1;
+  const unitCostRaw = Number(proc.unitCost ?? 0);
+  const unitCost = Number.isFinite(unitCostRaw) && unitCostRaw > 0 ? unitCostRaw : 0;
+  let unitSell = Number(proc.unitSell ?? 0);
+  if (!Number.isFinite(unitSell) || unitSell < 0) unitSell = 0;
+  let warning: string | undefined;
+  let invalid = false;
+  const tmRaw = proc.targetMarginPercent;
+  if (tmRaw != null) {
+    const tm = Number(tmRaw);
+    if (!Number.isFinite(tm) || tm < 0 || tm >= 100) {
+      invalid = true;
+      warning = "Target margin % must be between 0 and 100. Using manual unit sell instead.";
+    } else if (unitCost > 0) {
+      unitSell = unitCost / (1 - tm / 100);
+    } else {
+      invalid = true;
+      warning = "Cannot apply target margin: unit cost is zero.";
+    }
+  }
+  if (!Number.isFinite(unitSell) || unitSell <= 0) {
+    invalid = true;
+    warning = warning ?? "Unit sell must be greater than zero.";
+    unitSell = 0;
+  }
+  const lineSell = unitSell * qty;
+  const lineCost = unitCost * qty;
+  const lineMargin = lineSell - lineCost;
+  const marginPercent = lineSell > 0 ? (lineMargin / lineSell) * 100 : 0;
+  return {
+    procedureId: proc.id,
+    procedureType: proc.procedureType,
+    description: proc.description ?? "",
+    quantity: qty,
+    unitCost,
+    unitSell,
+    lineSell,
+    lineCost,
+    lineMargin,
+    marginPercent,
+    invalid,
+    warning,
+  };
+}
+
+export interface AttachedProceduresRollup {
+  pricings: AttachedProcedurePricing[];
+  totalSell: number;
+  totalCost: number;
+  totalMargin: number;
+  anyInvalid: boolean;
+  count: number;
+}
+
+function rollupAttachedProcedures(
+  item: Pick<LaserQuoteItem, "attachedManualProcedures" | "quantity">,
+): AttachedProceduresRollup {
+  const list = item.attachedManualProcedures ?? [];
+  const pricings = list.map(p => computeAttachedProcedureFinal(p, item.quantity || 1));
+  const totalSell = pricings.reduce((s, p) => s + p.lineSell, 0);
+  const totalCost = pricings.reduce((s, p) => s + p.lineCost, 0);
+  const totalMargin = totalSell - totalCost;
+  const anyInvalid = pricings.some(p => p.invalid);
+  return { pricings, totalSell, totalCost, totalMargin, anyInvalid, count: pricings.length };
+}
+
 function findMatchingMaterial(
   materials: SheetMaterialRef[],
   item: { materialType: string; materialGrade: string; finish: string; thickness: number; llSheetMaterialId: string }
@@ -312,6 +401,13 @@ export interface LLRowPricing {
   breakdown: LLPricingBreakdown | null;
   commercial: LLCommercialResult | null;
   manual: ReturnType<typeof computeManualProcedureFinal> | null;
+  // Laser-base final values (after commercial override). Excludes attached procedures.
+  laserFinalLineSell: number;
+  laserFinalLineCost: number;
+  // Attached manual procedures rollup (Phase 5E). Empty for manual-procedure rows.
+  attachedRollup: AttachedProceduresRollup;
+  // Combined values: laser-base + attached procedures. These are what feeds
+  // the parent line total in the items table and the estimate subtotal.
   finalUnitSell: number;
   finalLineSell: number;
   finalLineCost: number;
@@ -333,6 +429,9 @@ function computeRowPricing(
       breakdown: null,
       commercial: null,
       manual: m,
+      laserFinalLineSell: m.lineSell,
+      laserFinalLineCost: m.unitCost * qty,
+      attachedRollup: { pricings: [], totalSell: 0, totalCost: 0, totalMargin: 0, anyInvalid: false, count: 0 },
       finalUnitSell: m.unitSell,
       finalLineSell: m.lineSell,
       finalLineCost: m.unitCost * qty,
@@ -343,32 +442,50 @@ function computeRowPricing(
   const breakdown = computeItemPricing(item, materials, settings, governed);
   const commercial = applyCommercialOverride(breakdown, item.quantity, buildOverrideInputs(item));
   const readiness = isItemQuoteReady(item, materials);
+  // Attached procedures: priced INDEPENDENTLY of the laser bucketed engine.
+  // Commercial override applies only to the laser base, not to procedures.
+  const attachedRollup = rollupAttachedProcedures(item);
   // Defensive: if a regular laser item is not quote-ready (legacy data, etc.),
   // do NOT report a final commercial sell. Final values are zero so subtotal
-  // and quote totals never absorb non-quoteable diagnostic numbers.
+  // and quote totals never absorb non-quoteable diagnostic numbers. Attached
+  // procedures are still reported so the operator sees their value separately.
   if (!readiness.ready) {
+    const qty = Math.max(item.quantity || 0, 1);
     return {
       isManualProcedure: false,
       breakdown,
       commercial,
       manual: null,
-      finalUnitSell: 0,
-      finalLineSell: 0,
-      finalLineCost: 0,
-      finalMarginAmount: 0,
-      finalMarginPercent: 0,
+      laserFinalLineSell: 0,
+      laserFinalLineCost: 0,
+      attachedRollup,
+      finalUnitSell: attachedRollup.totalSell / qty,
+      finalLineSell: attachedRollup.totalSell,
+      finalLineCost: attachedRollup.totalCost,
+      finalMarginAmount: attachedRollup.totalMargin,
+      finalMarginPercent: attachedRollup.totalSell > 0 ? (attachedRollup.totalMargin / attachedRollup.totalSell) * 100 : 0,
     };
   }
+  const laserFinalLineSell = commercial.finalSellPrice;
+  const laserFinalLineCost = commercial.calculatedBuyCost;
+  const combinedLineSell = laserFinalLineSell + attachedRollup.totalSell;
+  const combinedLineCost = laserFinalLineCost + attachedRollup.totalCost;
+  const combinedMargin = combinedLineSell - combinedLineCost;
+  const combinedMarginPercent = combinedLineSell > 0 ? (combinedMargin / combinedLineSell) * 100 : 0;
+  const qty = Math.max(item.quantity || 0, 1);
   return {
     isManualProcedure: false,
     breakdown,
     commercial,
     manual: null,
-    finalUnitSell: commercial.finalUnitSell,
-    finalLineSell: commercial.finalSellPrice,
-    finalLineCost: commercial.calculatedBuyCost,
-    finalMarginAmount: commercial.finalMarginAmount,
-    finalMarginPercent: commercial.finalMarginPercent,
+    laserFinalLineSell,
+    laserFinalLineCost,
+    attachedRollup,
+    finalUnitSell: combinedLineSell / qty,
+    finalLineSell: combinedLineSell,
+    finalLineCost: combinedLineCost,
+    finalMarginAmount: combinedMargin,
+    finalMarginPercent: combinedMarginPercent,
   };
 }
 
@@ -513,9 +630,95 @@ function itemToSnapshotItem(
     overrideReason: item.overrideReason,
     calculatedSellPrice: commercial.calculatedSellPrice,
     calculatedBuyCost: commercial.calculatedBuyCost,
+    // NOTE: parent snapshot row carries the LASER-BASE final values only
+    // (excluding attached procedures). Attached procedures are also flattened
+    // into separate snapshot rows immediately after the parent so the customer
+    // PDF/Preview can render them inline. Subtotal = sum of all flattened rows.
     finalSellPrice: commercial.finalSellPrice,
     finalMarginAmount: commercial.finalMarginAmount,
     finalMarginPercent: commercial.finalMarginPercent,
+    attachedManualProcedures: item.attachedManualProcedures,
+  };
+}
+
+// Phase 5E (Attached Manual Procedures) — build a pseudo snapshot row that
+// represents one attached procedure as its own customer-visible sub-line.
+// These rows live in laserItems[] right after their parent. They carry
+// `attachedToParentRef` so reload-time loaders can skip them when rebuilding
+// the parent's `attachedManualProcedures` array (the array is already on the
+// parent snapshot row — these flattened rows exist purely for PDF/Preview).
+function attachedProcedureToSnapshotPseudoRow(
+  parentItem: LaserQuoteItem,
+  proc: AttachedManualProcedure,
+  itemNumber: number,
+): LaserSnapshotItem {
+  const pricing = computeAttachedProcedureFinal(proc, parentItem.quantity || 1);
+  const parentRef = parentItem.itemRef || `item-${itemNumber}`;
+  const titleBase = proc.description?.trim() || `${proc.procedureType} (manual / provisional)`;
+  return {
+    itemNumber,
+    itemRef: `${parentRef}.${proc.procedureType.charAt(0).toUpperCase()}${(parentItem.attachedManualProcedures ?? []).indexOf(proc) + 1}`,
+    title: `${titleBase} — attached to ${parentRef}`,
+    quantity: pricing.quantity,
+    materialType: "",
+    materialGrade: "",
+    thickness: 0,
+    length: 0,
+    width: 0,
+    finish: "",
+    customerNotes: "",
+    internalNotes: proc.notes ?? "",
+    unitPrice: pricing.unitSell,
+    photos: [],
+    llSheetMaterialId: "",
+    supplierName: "",
+    sheetLength: 0,
+    sheetWidth: 0,
+    pricePerSheetExGst: 0,
+    cutLengthMm: 0,
+    coilLengthMm: 0,
+    stockBehaviour: "manual_procedure",
+    pricePerKg: 0,
+    densityKgM3: 0,
+    pierceCount: 0,
+    setupMinutes: 0,
+    handlingMinutes: 0,
+    markupPercent: 0,
+    materialMarkupPercent: 0,
+    consumablesMarkupPercent: 0,
+    utilisationFactor: 0,
+    estimatedSheets: 0,
+    materialCostTotal: 0,
+    processCostTotal: 0,
+    setupHandlingCost: 0,
+    internalCostSubtotal: pricing.lineCost,
+    markupAmount: pricing.lineMargin,
+    sellTotal: pricing.lineSell,
+    materialBuyCost: 0,
+    materialSellCost: 0,
+    labourBuyCost: 0,
+    labourSellCost: 0,
+    machineBuyCost: 0,
+    machineSellCost: 0,
+    consumablesBuyCost: 0,
+    consumablesSellCost: 0,
+    gasBuyCost: 0,
+    totalBuyCost: pricing.lineCost,
+    totalMargin: pricing.lineMargin,
+    totalMarginPercent: pricing.marginPercent,
+    geometrySource: "manual",
+    isManualProcedure: true,
+    procedureType: proc.procedureType,
+    procedureDescription: proc.description,
+    manualUnitCost: pricing.unitCost,
+    manualUnitSell: pricing.unitSell,
+    manualTargetMarginPercent: proc.targetMarginPercent,
+    manualNotes: proc.notes,
+    finalSellPrice: pricing.lineSell,
+    finalMarginAmount: pricing.lineMargin,
+    finalMarginPercent: pricing.marginPercent,
+    attachedToParentRef: parentRef,
+    attachedProcedureId: proc.id,
   };
 }
 
@@ -559,6 +762,7 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
     manualUnitSell: (si as any).manualUnitSell,
     manualTargetMarginPercent: (si as any).manualTargetMarginPercent,
     manualNotes: (si as any).manualNotes,
+    attachedManualProcedures: (si as any).attachedManualProcedures as AttachedManualProcedure[] | undefined,
   };
 }
 
@@ -768,6 +972,244 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
   );
 }
 
+// Phase 5E (Attached Manual Procedures) — Secondary Operations editor section
+// rendered inside the Add/Edit Item dialog, just below Commercial Override.
+// Each procedure prices INDEPENDENTLY of the laser engine and bypasses any
+// commercial override applied to the parent. Quantity defaults to the parent
+// item quantity when the procedure is added.
+function SecondaryOperationsSection({
+  formData,
+  setFormData,
+}: {
+  formData: Omit<LaserQuoteItem, "id">;
+  setFormData: React.Dispatch<React.SetStateAction<Omit<LaserQuoteItem, "id">>>;
+}) {
+  const procs = formData.attachedManualProcedures ?? [];
+  const updateProc = (id: string, patch: Partial<AttachedManualProcedure>) => {
+    setFormData(prev => ({
+      ...prev,
+      attachedManualProcedures: (prev.attachedManualProcedures ?? []).map(p =>
+        p.id === id ? { ...p, ...patch } : p
+      ),
+    }));
+  };
+  const removeProc = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      attachedManualProcedures: (prev.attachedManualProcedures ?? []).filter(p => p.id !== id),
+    }));
+  };
+  const addProc = () => {
+    const newProc: AttachedManualProcedure = {
+      id: crypto.randomUUID(),
+      procedureType: "Folding",
+      description: "",
+      quantity: Math.max(1, formData.quantity || 1),
+      unitCost: undefined,
+      unitSell: undefined,
+      targetMarginPercent: undefined,
+      notes: "",
+    };
+    setFormData(prev => ({
+      ...prev,
+      attachedManualProcedures: [...(prev.attachedManualProcedures ?? []), newProc],
+    }));
+  };
+
+  const totalSell = procs.reduce((s, p) => {
+    const pricing = computeAttachedProcedureFinal(p, formData.quantity || 1);
+    return s + pricing.lineSell;
+  }, 0);
+
+  return (
+    <div
+      className="rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50/30 dark:bg-amber-950/20 p-3 space-y-2"
+      data-testid="section-secondary-operations"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Wrench className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+          <span className="text-sm font-semibold">Secondary Operations</span>
+          <Badge variant="outline" className="text-[10px]" data-testid="badge-secondary-operations-count">
+            {procs.length} attached
+          </Badge>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={addProc}
+          data-testid="button-add-attached-procedure"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add procedure
+        </Button>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground leading-snug">
+        Folding, deburring, tapping or other manual operations attached to this part.
+        Priced manually (provisional) — independent of the laser pricing engine.
+        Manual override on the laser line does not affect these.
+      </p>
+
+      {procs.length === 0 && (
+        <div className="text-[11px] text-muted-foreground italic" data-testid="text-no-attached-procedures">
+          No procedures attached. Click "Add procedure" to attach folding, deburring, tapping, or other manual operations.
+        </div>
+      )}
+
+      {procs.map((p, idx) => {
+        const pricing = computeAttachedProcedureFinal(p, formData.quantity || 1);
+        return (
+          <div
+            key={p.id}
+            className="rounded border border-amber-200 dark:border-amber-900 bg-background p-2 space-y-2"
+            data-testid={`row-attached-procedure-edit-${idx}`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-[10px]" data-testid={`badge-attached-procedure-type-${idx}`}>
+                  {p.procedureType}
+                </Badge>
+                <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-400">
+                  Manual / Provisional
+                </Badge>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => removeProc(p.id)}
+                data-testid={`button-remove-attached-procedure-${idx}`}
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px]">Type</Label>
+                <Select
+                  value={p.procedureType}
+                  onValueChange={(v) => updateProc(p.id, { procedureType: v as LLManualProcedureType })}
+                >
+                  <SelectTrigger className="h-8 text-xs" data-testid={`select-attached-procedure-type-${idx}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LL_MANUAL_PROCEDURE_TYPES.map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[10px]">Quantity</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  className="h-8 text-xs"
+                  value={p.quantity}
+                  onChange={(e) => updateProc(p.id, { quantity: parseInt(e.target.value) || 1 })}
+                  data-testid={`input-attached-procedure-qty-${idx}`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-[10px]">Description (shown on quote)</Label>
+              <Input
+                className="h-8 text-xs"
+                value={p.description ?? ""}
+                onChange={(e) => updateProc(p.id, { description: e.target.value })}
+                placeholder={`e.g. ${p.procedureType} — 4 bends per part`}
+                data-testid={`input-attached-procedure-description-${idx}`}
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-[10px]">Unit cost ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="h-8 text-xs"
+                  value={p.unitCost ?? ""}
+                  onChange={(e) => updateProc(p.id, { unitCost: e.target.value === "" ? undefined : parseFloat(e.target.value) })}
+                  data-testid={`input-attached-procedure-unit-cost-${idx}`}
+                />
+              </div>
+              <div>
+                <Label className="text-[10px]">Unit sell ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="h-8 text-xs"
+                  value={p.unitSell ?? ""}
+                  onChange={(e) => updateProc(p.id, { unitSell: e.target.value === "" ? undefined : parseFloat(e.target.value) })}
+                  data-testid={`input-attached-procedure-unit-sell-${idx}`}
+                />
+              </div>
+              <div>
+                <Label className="text-[10px]">Target margin (%)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={99.9}
+                  className="h-8 text-xs"
+                  value={p.targetMarginPercent ?? ""}
+                  onChange={(e) => updateProc(p.id, { targetMarginPercent: e.target.value === "" ? undefined : parseFloat(e.target.value) })}
+                  data-testid={`input-attached-procedure-target-margin-${idx}`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-[10px]">Notes (internal, optional)</Label>
+              <Textarea
+                rows={1}
+                className="text-xs min-h-[32px]"
+                value={p.notes ?? ""}
+                onChange={(e) => updateProc(p.id, { notes: e.target.value })}
+                data-testid={`input-attached-procedure-notes-${idx}`}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-amber-200 dark:border-amber-900">
+              <span className="text-muted-foreground">
+                Unit sell <span className="font-mono font-semibold" data-testid={`text-attached-procedure-unit-sell-preview-${idx}`}>${pricing.unitSell.toFixed(2)}</span>
+                {" · "}
+                Margin <span className="font-mono">{pricing.marginPercent.toFixed(1)}%</span>
+              </span>
+              <span className="font-semibold">
+                Line: <span className="font-mono" data-testid={`text-attached-procedure-line-sell-${idx}`}>${pricing.lineSell.toFixed(2)}</span>
+              </span>
+            </div>
+
+            {pricing.invalid && pricing.warning && (
+              <div className="flex items-start gap-1.5 text-[10px] text-orange-700 dark:text-orange-400" data-testid={`warning-attached-procedure-${idx}`}>
+                <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                <span>{pricing.warning}</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {procs.length > 0 && (
+        <div className="flex items-center justify-between text-xs pt-1 border-t border-amber-300 dark:border-amber-800">
+          <span className="font-semibold">Procedures subtotal</span>
+          <span className="font-mono font-semibold" data-testid="text-attached-procedures-subtotal">
+            ${totalSell.toFixed(2)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boolean } = {}) {
   const params = useParams<{ id?: string }>();
   const quoteId = estimateMode ? undefined : params.id;
@@ -946,7 +1388,16 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
         if (snapshot) {
           setProjectAddress(snapshot.projectAddress || "");
           if (snapshot.laserItems?.length) {
-            setItems(snapshot.laserItems.map((si: LaserSnapshotItem) => snapshotItemToItem(si, llPricingSettings)));
+            // Phase 5E (Attached Manual Procedures): the snapshot may contain
+            // flattened pseudo-rows (one per attached procedure right after
+            // its parent) so the customer PDF/Preview can render procedures
+            // inline. The parent already carries the authoritative
+            // `attachedManualProcedures` array, so we skip pseudo-rows on
+            // reload to avoid duplicating procedures back into items[].
+            const reloaded = (snapshot.laserItems as LaserSnapshotItem[])
+              .filter(si => !(si as any).attachedToParentRef)
+              .map(si => snapshotItemToItem(si, llPricingSettings));
+            setItems(reloaded);
           }
         }
       }
@@ -1001,7 +1452,28 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   }, [itemRowPricings]);
 
   const buildSnapshot = () => {
-    const laserItems = items.map((item, idx) => itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings, governedInputs));
+    // Phase 5E (Attached Manual Procedures) — flatten parent + attached
+    // procedures into a sequential laserItems list. The parent row is emitted
+    // first with its laser-base finalSellPrice, then ONE pseudo-row per
+    // attached procedure follows immediately. Item numbers are renumbered
+    // sequentially across the flattened list. Subtotal stays correct because
+    // each procedure's lineSell is on its own row and the parent's sellTotal
+    // contains laser-base only — so summing flattened sellTotal == subtotal.
+    const flattened: LaserSnapshotItem[] = [];
+    let seq = 0;
+    items.forEach((item, idx) => {
+      const parent = itemToSnapshotItem(item, idx, sheetMaterials, llPricingSettings, governedInputs);
+      seq += 1;
+      parent.itemNumber = seq;
+      flattened.push(parent);
+      const procs = item.attachedManualProcedures ?? [];
+      for (const proc of procs) {
+        seq += 1;
+        const child = attachedProcedureToSnapshotPseudoRow(item, proc, seq);
+        flattened.push(child);
+      }
+    });
+    const laserItems = flattened;
     return {
       customer: customerName,
       projectAddress,
@@ -1133,6 +1605,27 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     },
   });
 
+  // Phase 5E (Attached Manual Procedures) — top-level validator that catches
+  // pre-existing or imported items whose attached procedures have invalid
+  // pricing (e.g. zero unit sell, bad target margin). Item-dialog save also
+  // blocks invalid procedures, but this guards persistence at quote/estimate
+  // save time so legacy data cannot slip through.
+  const findItemsWithInvalidAttachedProcedures = (): { itemRef: string; warning: string }[] => {
+    const offenders: { itemRef: string; warning: string }[] = [];
+    for (const it of items) {
+      if (it.isManualProcedure) continue;
+      const rollup = rollupAttachedProcedures(it);
+      if (rollup.anyInvalid) {
+        const first = rollup.pricings.find(p => p.invalid);
+        offenders.push({
+          itemRef: it.itemRef || it.title || "(unnamed)",
+          warning: first?.warning ?? "invalid procedure pricing",
+        });
+      }
+    }
+    return offenders;
+  };
+
   const handleSave = () => {
     if (!customerName.trim()) {
       toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
@@ -1156,6 +1649,16 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
         toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
         return;
       }
+    }
+    // Validate attached procedure pricing on every item (estimates included).
+    const procOffenders = findItemsWithInvalidAttachedProcedures();
+    if (procOffenders.length > 0) {
+      toast({
+        title: "Attached procedure pricing invalid",
+        description: `${procOffenders.length} item(s) have invalid attached procedure pricing (${procOffenders.map(o => o.itemRef).join(", ")}). Edit each item and fix the procedure pricing before saving.`,
+        variant: "destructive",
+      });
+      return;
     }
     if (estimateMode) {
       if (isEstimateEdit) {
@@ -1194,6 +1697,16 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     const unmatchedItems = laserItems.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
     if (unmatchedItems.length > 0) {
       toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
+      return;
+    }
+    // Phase 5E (Attached Manual Procedures) — guard generation against invalid procedures.
+    const procOffenders = findItemsWithInvalidAttachedProcedures();
+    if (procOffenders.length > 0) {
+      toast({
+        title: "Attached procedure pricing invalid",
+        description: `${procOffenders.length} item(s) have invalid attached procedure pricing (${procOffenders.map(o => o.itemRef).join(", ")}). Edit each item and fix the procedure pricing before generating a quote.`,
+        variant: "destructive",
+      });
       return;
     }
     generateQuoteFromEstimateMutation.mutate();
@@ -1241,6 +1754,11 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       targetMarginPercent: item.targetMarginPercent,
       overrideReason: item.overrideReason,
       isManualProcedure: false,
+      // Phase 5E (Attached Manual Procedures) — preserve existing attached
+      // procedures across edits. Cloned so dialog edits do not mutate live state.
+      attachedManualProcedures: item.attachedManualProcedures
+        ? item.attachedManualProcedures.map(p => ({ ...p }))
+        : undefined,
     });
     setDialogOpen(true);
   };
@@ -1270,6 +1788,20 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
           return;
         }
       }
+    }
+    // Phase 5E (Attached Manual Procedures) — block save if any attached
+    // procedure has invalid pricing (zero unit sell, bad target margin, etc.).
+    // Procedures are optional, so an empty list is fine.
+    const attachedRollup = rollupAttachedProcedures(formData);
+    if (attachedRollup.anyInvalid) {
+      const firstBad = attachedRollup.pricings.find(p => p.invalid);
+      toast({
+        title: "Attached procedure pricing invalid",
+        description: firstBad?.warning
+          ?? "Each attached procedure needs a valid unit sell (or unit cost + target margin).",
+        variant: "destructive",
+      });
+      return;
     }
     const pricing = computeItemPricing(formData, sheetMaterials, llPricingSettings, governedInputs);
     const commercial = applyCommercialOverride(pricing, formData.quantity, buildOverrideInputs(formData));
@@ -1745,6 +2277,55 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                               </div>
                             </TableCell>
                           </TableRow>
+                          {/* Phase 5E (Attached Manual Procedures) — indented sub-rows under the parent. */}
+                          {!isManual && (row?.attachedRollup.pricings.length ?? 0) > 0 && row?.attachedRollup.pricings.map((procPricing, procIdx) => (
+                            <TableRow
+                              key={`${item.id}-proc-${procPricing.procedureId}`}
+                              data-testid={`row-attached-procedure-${idx}-${procIdx}`}
+                              className="bg-amber-50/40 dark:bg-amber-950/20"
+                            >
+                              <TableCell></TableCell>
+                              <TableCell className="font-mono text-xs pl-6">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <span className="text-muted-foreground">↳ {item.itemRef}.{procIdx + 1}</span>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] px-1 py-0 h-4 bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300"
+                                    data-testid={`badge-attached-procedure-${idx}-${procIdx}`}
+                                  >
+                                    {procPricing.procedureType} (manual / provisional)
+                                  </Badge>
+                                  {procPricing.invalid && (
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-orange-50 text-orange-700 border-orange-300" data-testid={`badge-attached-procedure-invalid-${idx}-${procIdx}`}>Pricing Invalid</Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell
+                                className="text-xs text-muted-foreground"
+                                data-testid={`text-attached-procedure-description-${idx}-${procIdx}`}
+                              >
+                                {procPricing.description?.trim()
+                                  || `${procPricing.procedureType} attached to ${item.itemRef}`}
+                              </TableCell>
+                              <TableCell className="text-center text-xs" data-testid={`text-attached-procedure-quantity-${idx}-${procIdx}`}>
+                                {procPricing.quantity}
+                              </TableCell>
+                              <TableCell colSpan={3} className="text-xs text-muted-foreground italic">—</TableCell>
+                              <TableCell className="text-right font-mono text-xs" data-testid={`text-attached-procedure-unit-cost-${idx}-${procIdx}`}>
+                                ${procPricing.unitCost.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs" data-testid={`text-attached-procedure-unit-sell-${idx}-${procIdx}`}>
+                                ${procPricing.unitSell.toFixed(2)}
+                                <span className="block text-[10px] text-muted-foreground">
+                                  {procPricing.marginPercent.toFixed(0)}% margin
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-medium text-xs" data-testid={`text-attached-procedure-line-total-${idx}-${procIdx}`}>
+                                ${procPricing.lineSell.toFixed(2)}
+                              </TableCell>
+                              <TableCell></TableCell>
+                            </TableRow>
+                          ))}
                           {isExpanded && !isManual && pricing && (
                             <TableRow>
                               <TableCell colSpan={11} className="p-2">
@@ -2380,6 +2961,12 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                 )}
               </div>
             </Collapsible>
+
+            {/* Phase 5E — Attached Manual Procedures (Secondary Operations) */}
+            <SecondaryOperationsSection
+              formData={formData}
+              setFormData={setFormData}
+            />
 
             <div>
               <Label htmlFor="customerNotes">Customer Notes</Label>

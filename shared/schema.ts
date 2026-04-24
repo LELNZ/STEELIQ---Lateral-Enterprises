@@ -233,6 +233,24 @@ export type LLPricingOverrideMode = (typeof LL_PRICING_OVERRIDE_MODES)[number];
 export const LL_MANUAL_PROCEDURE_TYPES = ["Folding", "Deburring", "Tapping", "Other"] as const;
 export type LLManualProcedureType = (typeof LL_MANUAL_PROCEDURE_TYPES)[number];
 
+// Attached manual procedure (Phase 5E — secondary operation belonging to a parent LL line item).
+// Backward compatible: optional everywhere; existing items without this field still load.
+// Pricing is always manual (provisional) — bypasses material/process-rate engine.
+// Note: `pricingMode` and `isProvisional` markers are implicit (always
+// "manual" / true) and intentionally kept off the schema to avoid type
+// widening through Drizzle's jsonb $type<> inference and createInsertSchema.
+export const attachedManualProcedureSchema = z.object({
+  id: z.string(),
+  procedureType: z.enum(LL_MANUAL_PROCEDURE_TYPES),
+  description: z.string().optional(),
+  quantity: z.number().min(0),
+  unitCost: z.number().min(0).optional(),
+  unitSell: z.number().min(0).optional(),
+  targetMarginPercent: z.number().optional(),
+  notes: z.string().optional(),
+});
+export type AttachedManualProcedure = z.infer<typeof attachedManualProcedureSchema>;
+
 export const laserQuoteItemSchema = z.object({
   id: z.string(),
   itemRef: z.string().min(1, "Item reference is required"),
@@ -288,6 +306,14 @@ export const laserQuoteItemSchema = z.object({
   manualUnitSell: z.number().min(0).optional(),
   manualTargetMarginPercent: z.number().optional(),
   manualNotes: z.string().optional(),
+
+  // Attached secondary operations (Phase 5E — Attached Manual Procedures).
+  // Optional and additive: regular laser items may carry zero or more attached
+  // manual procedures (e.g. Folding for this part). Each procedure prices
+  // independently of the bucketed laser engine and contributes to the parent
+  // line's combined sell. Manual override on the parent applies ONLY to the
+  // laser base sell, not to attached procedure pricing.
+  attachedManualProcedures: z.array(attachedManualProcedureSchema).optional(),
 });
 
 export type LaserQuoteItem = z.infer<typeof laserQuoteItemSchema>;
