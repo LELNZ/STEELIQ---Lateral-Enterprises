@@ -263,6 +263,9 @@ export default function QuotePreview() {
                           { key: "showRubbish", label: "Rubbish / Waste Removal" },
                         ] : [
                           { key: "showDelivery", label: "Delivery" },
+                          // Phase 5E hardening — line-level pricing visibility (LL only).
+                          { key: "showLineUnitPrice", label: "Item Unit Price" },
+                          { key: "showLineTotal", label: "Item Line Total" },
                         ]),
                         { key: "showSubtotal", label: "Subtotal (excl. GST)" },
                         { key: "showGst", label: "GST (15%)" },

@@ -190,6 +190,14 @@ const LASER_SPEC_LABELS: Record<string, string> = {
   width: "Width",
   finish: "Finish",
   customerNotes: "Notes",
+  // Phase 5E hardening — manual / attached procedure labels.
+  procedureKind: "Type",
+  procedureType: "Procedure",
+  description: "Description",
+  attachedTo: "Attached To",
+  // Phase 5E hardening — line-level pricing (toggleable).
+  unitPrice: "Unit Price",
+  lineTotal: "Line Total",
 };
 
 function buildScheduleItem(
@@ -235,8 +243,15 @@ function buildScheduleItem(
   const gosNote = isLaser ? undefined : (item.gosRequired ? "Glaze on site due to size and weight" : undefined);
   const catDoorNote = isLaser ? undefined : (item.catDoorEnabled ? "Cat door included" : undefined);
 
+  // Phase 5E hardening — manual / attached procedure subtitle handling.
+  // Procedure pseudo-rows have no physical dimensions, so we substitute a
+  // descriptive label so the schedule subtitle "Qty: N · {label}" remains
+  // sensible in both Preview and PDF (PDF concatenates with a literal · ).
+  const isManualProc = isLaser && item.category === "manual_procedure";
   const dimensionLabel = isLaser
-    ? (item.width > 0 && item.height > 0 ? `${item.width}mm x ${item.height}mm` : "")
+    ? (isManualProc
+        ? "Manual / Provisional"
+        : (item.width > 0 && item.height > 0 ? `${item.width}mm x ${item.height}mm` : ""))
     : (item.category === "raked-fixed" && item.rakedLeftHeight != null && item.rakedRightHeight != null
       ? `${item.width}mm W × ${item.rakedLeftHeight}/${item.rakedRightHeight}mm H (L/R)`
       : `${item.width}mm x ${item.height}mm`);

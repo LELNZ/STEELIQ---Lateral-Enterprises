@@ -11,6 +11,11 @@ export interface TotalsDisplayConfig {
   showSubtotal: boolean;
   showGst: boolean;
   showCommercialRemarks: boolean;
+  // Phase 5E hardening — line-level pricing visibility (LL only).
+  // Optional, default false (preserves prior behaviour for existing quotes).
+  // Customer-safe: shows only unit price and line total — never margin / cost.
+  showLineUnitPrice?: boolean;
+  showLineTotal?: boolean;
 }
 
 export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
@@ -22,6 +27,8 @@ export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
   showSubtotal: true,
   showGst: true,
   showCommercialRemarks: true,
+  showLineUnitPrice: false,
+  showLineTotal: false,
 };
 
 export interface PreviewData {
@@ -193,16 +200,61 @@ function mapSnapshotItem(si: SnapshotItem): QuoteDocumentItem {
   };
 }
 
-function mapLaserSnapshotItem(li: LaserSnapshotItem): QuoteDocumentItem {
+function fmtNzd(n: number): string {
+  return `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function mapLaserSnapshotItem(li: LaserSnapshotItem, totalsCfg: TotalsDisplayConfig): QuoteDocumentItem {
   const resolvedSpecs: Record<string, string> = {};
-  if (li.materialType) resolvedSpecs["materialType"] = li.materialType;
-  if (li.materialGrade) resolvedSpecs["materialGrade"] = li.materialGrade;
-  if (li.thickness) resolvedSpecs["thickness"] = `${li.thickness}mm`;
-  if (li.length && li.width) resolvedSpecs["dimensions"] = `${li.length}mm x ${li.width}mm`;
-  else if (li.length) resolvedSpecs["length"] = `${li.length}mm`;
-  else if (li.width) resolvedSpecs["width"] = `${li.width}mm`;
-  if (li.finish) resolvedSpecs["finish"] = li.finish;
-  if (li.customerNotes) resolvedSpecs["customerNotes"] = li.customerNotes;
+  // Phase 5E hardening — manual procedure rendering (standalone OR attached).
+  // Detection: isManualProcedure flag set by laser-quote-builder for both
+  // standalone manual rows AND attached-procedure pseudo-rows. We emit
+  // procedure-specific specs in display order so the renderer (which iterates
+  // Object.entries for laser items) shows them in the intended sequence.
+  // Customer-safe: never includes cost/margin/internal notes.
+  const isProc = (li as any).isManualProcedure === true;
+  const attachedToParent = (li as any).attachedToParentRef as string | undefined;
+
+  if (isProc) {
+    resolvedSpecs["procedureKind"] = attachedToParent
+      ? "Attached Manual / Provisional Procedure"
+      : "Manual / Provisional Procedure";
+    if ((li as any).procedureType) {
+      resolvedSpecs["procedureType"] = String((li as any).procedureType);
+    }
+    const desc = ((li as any).procedureDescription as string | undefined) || "";
+    if (desc.trim()) {
+      resolvedSpecs["description"] = desc.trim();
+    }
+    if (attachedToParent) {
+      resolvedSpecs["attachedTo"] = attachedToParent;
+    }
+  } else {
+    if (li.materialType) resolvedSpecs["materialType"] = li.materialType;
+    if (li.materialGrade) resolvedSpecs["materialGrade"] = li.materialGrade;
+    if (li.thickness) resolvedSpecs["thickness"] = `${li.thickness}mm`;
+    if (li.length && li.width) resolvedSpecs["dimensions"] = `${li.length}mm x ${li.width}mm`;
+    else if (li.length) resolvedSpecs["length"] = `${li.length}mm`;
+    else if (li.width) resolvedSpecs["width"] = `${li.width}mm`;
+    if (li.finish) resolvedSpecs["finish"] = li.finish;
+    if (li.customerNotes) resolvedSpecs["customerNotes"] = li.customerNotes;
+  }
+
+  // Optional line-level pricing (toggled per-revision via Quote Display Settings).
+  // For procedures, unitPrice is the manual unit sell. For laser items, it's
+  // sellTotal/quantity (line-level unit). Line total is sellTotal in both cases.
+  const qty = li.quantity || 1;
+  const unitPriceVal = isProc
+    ? (((li as any).manualUnitSell as number | undefined) ?? li.unitPrice ?? 0)
+    : (li.unitPrice && li.unitPrice > 0 ? li.unitPrice : (li.sellTotal || 0) / qty);
+  const lineTotalVal = li.sellTotal || (unitPriceVal * qty);
+
+  if (totalsCfg.showLineUnitPrice && unitPriceVal > 0) {
+    resolvedSpecs["unitPrice"] = `${fmtNzd(unitPriceVal)} ea`;
+  }
+  if (totalsCfg.showLineTotal && lineTotalVal > 0) {
+    resolvedSpecs["lineTotal"] = fmtNzd(lineTotalVal);
+  }
 
   return {
     itemNumber: li.itemNumber,
@@ -211,13 +263,18 @@ function mapLaserSnapshotItem(li: LaserSnapshotItem): QuoteDocumentItem {
     quantity: li.quantity,
     width: li.length || 0,
     height: li.width || 0,
-    photos: (li.photos || []).map(p => ({
-      key: p.key,
-      isPrimary: p.isPrimary,
-      includeInCustomerPdf: p.includeInCustomerPdf,
-      caption: p.caption,
-      takenAt: p.takenAt,
-    })),
+    // Tag manual procedures so the renderer can format the subtitle and
+    // skip dimensions/photos cleanly. Reused by buildScheduleItem.
+    category: isProc ? "manual_procedure" : undefined,
+    photos: isProc
+      ? []
+      : (li.photos || []).map(p => ({
+          key: p.key,
+          isPrimary: p.isPrimary,
+          includeInCustomerPdf: p.includeInCustomerPdf,
+          caption: p.caption,
+          takenAt: p.takenAt,
+        })),
     specValues: {
       materialType: li.materialType,
       materialGrade: li.materialGrade,
@@ -227,6 +284,11 @@ function mapLaserSnapshotItem(li: LaserSnapshotItem): QuoteDocumentItem {
       finish: li.finish,
       customerNotes: li.customerNotes,
       unitPrice: li.unitPrice,
+      isManualProcedure: isProc,
+      procedureType: (li as any).procedureType,
+      procedureDescription: (li as any).procedureDescription,
+      attachedToParentRef: attachedToParent,
+      sellTotal: li.sellTotal,
     },
     resolvedSpecs,
   };
@@ -289,7 +351,7 @@ export function buildQuoteDocumentModel(preview: PreviewData): QuoteDocumentMode
       sourceJobId: quote.sourceJobId || null,
     },
     items: domainType === "laser" && (snapshot as any).laserItems?.length
-      ? ((snapshot as any).laserItems as LaserSnapshotItem[]).map(mapLaserSnapshotItem)
+      ? ((snapshot as any).laserItems as LaserSnapshotItem[]).map(li => mapLaserSnapshotItem(li, totalsDisplayConfig))
       : (snapshot.items || []).map(mapSnapshotItem),
     totals: {
       itemsSubtotal: tb.itemsSubtotal,

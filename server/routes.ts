@@ -3579,6 +3579,9 @@ export async function registerRoutes(
           showSubtotal: z.boolean(),
           showGst: z.boolean(),
           showCommercialRemarks: z.boolean().optional(),
+          // Phase 5E hardening — line-level pricing visibility (LL).
+          showLineUnitPrice: z.boolean().optional(),
+          showLineTotal: z.boolean().optional(),
         }).optional(),
         commercialRemarks: z.string().nullable().optional(),
       }).parse(req.body);
