@@ -107,6 +107,13 @@ export interface QuoteDocumentItem {
   width: number;
   height: number;
   category?: string;
+  // Phase 5F — attached-procedure visual grouping. When an attached manual
+  // procedure is flattened into the schedule, the parent's itemRef is mirrored
+  // here so the renderer can group children under their parent and emit
+  // sub-numbering (001a, 001b…). isManualProcedure mirrors specValues for
+  // direct access by buildQuoteRenderModel.
+  attachedToParentRef?: string;
+  isManualProcedure?: boolean;
   rakedLeftHeight?: number;
   rakedRightHeight?: number;
   openingDirection?: string;
@@ -266,6 +273,12 @@ function mapLaserSnapshotItem(li: LaserSnapshotItem, totalsCfg: TotalsDisplayCon
     // Tag manual procedures so the renderer can format the subtitle and
     // skip dimensions/photos cleanly. Reused by buildScheduleItem.
     category: isProc ? "manual_procedure" : undefined,
+    // Phase 5F — surface attached-parent linkage at the top level so
+    // buildQuoteRenderModel can group attached procedures under their parent
+    // and emit 001/001a/001b sub-numbering. Standalone procs (no parent ref)
+    // remain numbered as their own top-level row.
+    attachedToParentRef: isProc ? attachedToParent : undefined,
+    isManualProcedure: isProc,
     photos: isProc
       ? []
       : (li.photos || []).map(p => ({

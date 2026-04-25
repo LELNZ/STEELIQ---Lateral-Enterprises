@@ -190,12 +190,13 @@ function isItemQuoteReady(
   return { ready: missing.length === 0, isManualProcedure: false, missing };
 }
 
-function buildOverrideInputs(item: Pick<LaserQuoteItem, "pricingOverrideEnabled" | "pricingOverrideMode" | "manualSellPrice" | "targetMarginPercent">): LLOverrideInputs {
+function buildOverrideInputs(item: Pick<LaserQuoteItem, "pricingOverrideEnabled" | "pricingOverrideMode" | "manualSellPrice" | "targetMarginPercent" | "markupOnCostPercent">): LLOverrideInputs {
   return {
     enabled: !!item.pricingOverrideEnabled,
     mode: (item.pricingOverrideMode ?? "none") as LLPricingOverrideMode,
     manualSellPrice: item.manualSellPrice,
     targetMarginPercent: item.targetMarginPercent,
+    markupOnCostPercent: item.markupOnCostPercent,
   };
 }
 
@@ -627,6 +628,7 @@ function itemToSnapshotItem(
     pricingOverrideMode: item.pricingOverrideMode,
     manualSellPrice: item.manualSellPrice,
     targetMarginPercent: item.targetMarginPercent,
+    markupOnCostPercent: item.markupOnCostPercent,
     overrideReason: item.overrideReason,
     calculatedSellPrice: commercial.calculatedSellPrice,
     calculatedBuyCost: commercial.calculatedBuyCost,
@@ -754,6 +756,7 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
     pricingOverrideMode: ((si as any).pricingOverrideMode as LLPricingOverrideMode | undefined) ?? "none",
     manualSellPrice: (si as any).manualSellPrice,
     targetMarginPercent: (si as any).targetMarginPercent,
+    markupOnCostPercent: (si as any).markupOnCostPercent,
     overrideReason: (si as any).overrideReason,
     isManualProcedure,
     procedureType: (si as any).procedureType as LLManualProcedureType | undefined,
@@ -1605,6 +1608,76 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     },
   });
 
+  // Phase 5F — LL Update Existing Quote (creates a NEW revision on the linked
+  // quote, preserving full revision history). Mirrors the LJ exec-summary
+  // pattern: POST /api/quotes mode=revision with sourceLaserEstimateId. The
+  // server now looks up the existing quote by source_laser_estimate_id and
+  // appends a new quote_revisions row. Old revisions remain immutable.
+  const updateExistingQuoteMutation = useMutation({
+    mutationFn: async () => {
+      const snapshot = buildSnapshot();
+      // Phase 5F (revision target determinism) — pass the explicit linked-quote
+      // id so the server revises THIS quote, even if multiple quotes exist for
+      // the same estimate (after a prior "Create New Quote"). Falls back to
+      // sourceLaserEstimateId only if linkedQuote.id is missing for any reason.
+      const linkedQuoteId = (estimateData as any)?.linkedQuote?.id as string | undefined;
+      const res = await apiRequest("POST", "/api/quotes", {
+        snapshot,
+        sourceLaserEstimateId: estimateId,
+        sourceQuoteId: linkedQuoteId,
+        customer: customerName,
+        divisionCode: "LL",
+        mode: "revision",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes", data?.quote?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      toast({
+        title: "Quote updated",
+        description: `${data.quote.number} — new revision v${data.revision?.versionNumber ?? "?"} created`,
+      });
+      navigate(`/quote/${data.quote.id}/preview`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error updating quote", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Phase 5F — LL Create New Quote (separate quote record, new number,
+  // preserves the existing linked quote untouched). Same payload as
+  // generateQuoteFromEstimateMutation; both call mode=new_quote on the
+  // server (which is idempotent for the laser_estimates.status=converted
+  // update). Distinct mutation kept for clearer telemetry / button labelling.
+  const createNewQuoteFromEstimateMutation = useMutation({
+    mutationFn: async () => {
+      const snapshot = buildSnapshot();
+      const res = await apiRequest("POST", "/api/quotes", {
+        snapshot,
+        sourceLaserEstimateId: estimateId,
+        customer: customerName,
+        divisionCode: "LL",
+        mode: "new_quote",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/laser-estimates", estimateId] });
+      toast({ title: "New quote created", description: `${data.quote.number} created from estimate (existing quote preserved)` });
+      navigate(`/quote/${data.quote.id}/preview`);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Phase 5E (Attached Manual Procedures) — top-level validator that catches
   // pre-existing or imported items whose attached procedures have invalid
   // pricing (e.g. zero unit sell, bad target margin). Item-dialog save also
@@ -1712,6 +1785,88 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
     generateQuoteFromEstimateMutation.mutate();
   };
 
+  // Phase 5F — Update existing linked quote (creates a new revision). Reuses
+  // all the readiness / stale-material / attached-procedure validations that
+  // gate Generate Quote, then dispatches mode=revision.
+  const handleUpdateExistingQuote = () => {
+    if (!customerName.trim()) {
+      toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
+      return;
+    }
+    if (items.length === 0) {
+      toast({ title: "Required", description: "Add at least one item before updating the quote", variant: "destructive" });
+      return;
+    }
+    const notReady = items
+      .map(i => ({ item: i, r: isItemQuoteReady(i, sheetMaterials) }))
+      .filter(x => !x.r.ready);
+    if (notReady.length > 0) {
+      toast({
+        title: "Items not quote-ready",
+        description: `${notReady.length} line(s) are missing required details (${notReady.map(x => x.item.itemRef || x.item.title || "(unnamed)").join(", ")}). Edit each item and complete the required fields before updating the quote.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    const laserItems = items.filter(i => !i.isManualProcedure);
+    const unmatchedItems = laserItems.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
+    if (unmatchedItems.length > 0) {
+      toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
+      return;
+    }
+    const procOffenders = findItemsWithInvalidAttachedProcedures();
+    if (procOffenders.length > 0) {
+      toast({
+        title: "Attached procedure pricing invalid",
+        description: `${procOffenders.length} item(s) have invalid attached procedure pricing (${procOffenders.map(o => o.itemRef).join(", ")}). Edit each item and fix the procedure pricing before updating the quote.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    updateExistingQuoteMutation.mutate();
+  };
+
+  // Phase 5F — Create a brand-new quote from a converted LL estimate. Same
+  // validations; uses mode=new_quote on the server (existing linked quote
+  // remains untouched, a separate quote record/number is issued).
+  const handleCreateNewQuoteFromEstimate = () => {
+    if (!customerName.trim()) {
+      toast({ title: "Required", description: "Customer name is required", variant: "destructive" });
+      return;
+    }
+    if (items.length === 0) {
+      toast({ title: "Required", description: "Add at least one item before creating a new quote", variant: "destructive" });
+      return;
+    }
+    const notReady = items
+      .map(i => ({ item: i, r: isItemQuoteReady(i, sheetMaterials) }))
+      .filter(x => !x.r.ready);
+    if (notReady.length > 0) {
+      toast({
+        title: "Items not quote-ready",
+        description: `${notReady.length} line(s) are missing required details (${notReady.map(x => x.item.itemRef || x.item.title || "(unnamed)").join(", ")}). Edit each item and complete the required fields before creating a new quote.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    const laserItems = items.filter(i => !i.isManualProcedure);
+    const unmatchedItems = laserItems.filter(i => i.llSheetMaterialId && !sheetMaterials.find(m => m.id === i.llSheetMaterialId));
+    if (unmatchedItems.length > 0) {
+      toast({ title: "Stale Material", description: `${unmatchedItems.length} item(s) reference a material row that no longer exists (${unmatchedItems.map(i => i.itemRef || i.title).join(", ")}). Edit each item and reselect the material.`, variant: "destructive" });
+      return;
+    }
+    const procOffenders = findItemsWithInvalidAttachedProcedures();
+    if (procOffenders.length > 0) {
+      toast({
+        title: "Attached procedure pricing invalid",
+        description: `${procOffenders.length} item(s) have invalid attached procedure pricing (${procOffenders.map(o => o.itemRef).join(", ")}). Edit each item and fix the procedure pricing before creating a new quote.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    createNewQuoteFromEstimateMutation.mutate();
+  };
+
   const openAddDialog = () => {
     setEditingItem(null);
     setFormData(makeEmptyItem(llPricingSettings));
@@ -1752,6 +1907,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       pricingOverrideMode: item.pricingOverrideMode ?? "none",
       manualSellPrice: item.manualSellPrice,
       targetMarginPercent: item.targetMarginPercent,
+      markupOnCostPercent: item.markupOnCostPercent,
       overrideReason: item.overrideReason,
       isManualProcedure: false,
       // Phase 5E (Attached Manual Procedures) — preserve existing attached
@@ -1784,7 +1940,15 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       } else if (formData.pricingOverrideMode === "target_margin") {
         const tm = formData.targetMarginPercent;
         if (tm == null || !Number.isFinite(tm) || tm < 0 || tm >= 100) {
-          toast({ title: "Override Invalid", description: "Target margin % must be between 0 and 100.", variant: "destructive" });
+          toast({ title: "Override Invalid", description: "Target margin % must be between 0 and 100. Use 'Markup % on cost' for uplifts above 100%.", variant: "destructive" });
+          return;
+        }
+      } else if (formData.pricingOverrideMode === "markup_on_cost") {
+        // Phase 5F — markup_on_cost has no upper bound (e.g. 200% = 3x cost).
+        // The true sell-margin is always < 100% (computed as output).
+        const mk = formData.markupOnCostPercent;
+        if (mk == null || !Number.isFinite(mk) || mk < 0) {
+          toast({ title: "Override Invalid", description: "Markup % on cost must be a non-negative number.", variant: "destructive" });
           return;
         }
       }
@@ -1902,7 +2066,9 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
 
   const isSaving = createQuoteMutation.isPending || saveRevisionMutation.isPending
     || createEstimateMutation.isPending || updateEstimateMutation.isPending
-    || generateQuoteFromEstimateMutation.isPending;
+    || generateQuoteFromEstimateMutation.isPending
+    || updateExistingQuoteMutation.isPending
+    || createNewQuoteFromEstimateMutation.isPending;
 
   if ((isEditMode && quoteLoading) || (isEstimateEdit && estimateLoading)) {
     return (
@@ -1974,15 +2140,48 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               Preview
             </Button>
           )}
+          {/* Phase 5F — Converted-LL-estimate action set: Open Quote, Update Existing
+              Quote (creates a new revision on the linked quote, preserving history),
+              and Create New Quote (separate quote record). Mirrors the LJ
+              exec-summary pattern. Save is also re-enabled below so estimate edits
+              can be persisted to the LL estimate before pushing to the quote. */}
           {isEstimateEdit && estimateData?.status === "converted" && estimateData?.linkedQuote && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}`)}
+              onClick={() => navigate(`/quote/${estimateData.linkedQuote.id}/preview`)}
               data-testid="button-open-linked-quote"
             >
               <Eye className="h-4 w-4 mr-1" />
               Open Quote {estimateData.linkedQuote.number}
+            </Button>
+          )}
+          {isEstimateEdit && estimateData?.status === "converted" && estimateData?.linkedQuote && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUpdateExistingQuote}
+              disabled={isSaving || items.length === 0}
+              data-testid="button-update-existing-quote"
+            >
+              {updateExistingQuoteMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <ArrowRightCircle className="h-4 w-4 mr-1" />}
+              Update Existing Quote
+            </Button>
+          )}
+          {isEstimateEdit && estimateData?.status === "converted" && estimateData?.linkedQuote && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCreateNewQuoteFromEstimate}
+              disabled={isSaving || items.length === 0}
+              data-testid="button-create-new-quote-from-estimate"
+            >
+              {createNewQuoteFromEstimateMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                : <ArrowRightCircle className="h-4 w-4 mr-1" />}
+              Create New Quote
             </Button>
           )}
           {isEstimateEdit && estimateData?.status !== "converted" && (
@@ -1999,19 +2198,21 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               Generate Quote
             </Button>
           )}
-          {!(estimateMode && estimateData?.status === "converted") && (
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={isSaving}
-              data-testid="button-save"
-            >
-              {isSaving && !generateQuoteFromEstimateMutation.isPending
-                ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                : <Save className="h-4 w-4 mr-1" />}
-              {getSaveLabel()}
-            </Button>
-          )}
+          {/* Phase 5F — re-enable Save on converted estimates so users can persist
+              estimate edits before deciding to update existing quote or create new quote. */}
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving}
+            data-testid="button-save"
+          >
+            {isSaving && !generateQuoteFromEstimateMutation.isPending
+              && !updateExistingQuoteMutation.isPending
+              && !createNewQuoteFromEstimateMutation.isPending
+              ? <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              : <Save className="h-4 w-4 mr-1" />}
+            {getSaveLabel()}
+          </Button>
         </div>
       </div>
 
@@ -2877,7 +3078,8 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="manual_sell" data-testid="select-mode-manual-sell">Manual unit sell price</SelectItem>
-                            <SelectItem value="target_margin" data-testid="select-mode-target-margin">Target margin %</SelectItem>
+                            <SelectItem value="target_margin" data-testid="select-mode-target-margin">Target margin % (sell-margin, &lt; 100)</SelectItem>
+                            <SelectItem value="markup_on_cost" data-testid="select-mode-markup-on-cost">Markup % on cost (uplift, no cap)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -2900,7 +3102,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
 
                       {formData.pricingOverrideMode === "target_margin" && (
                         <div>
-                          <Label htmlFor="target-margin-input" className="text-xs">Target margin % (0–99.99)</Label>
+                          <Label htmlFor="target-margin-input" className="text-xs">Target margin % (0–99.99, sell-margin)</Label>
                           <Input
                             id="target-margin-input"
                             type="number"
@@ -2912,6 +3114,31 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                             placeholder="35"
                             data-testid="input-target-margin-percent"
                           />
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            For uplifts &gt; 100% on cost, use <span className="font-semibold">Markup % on cost</span>.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Phase 5F — Markup % on cost. Uplift relative to calculated unit
+                          cost; no upper cap. The true sell-margin is computed and shown
+                          as output below (always &lt; 100% by construction). */}
+                      {formData.pricingOverrideMode === "markup_on_cost" && (
+                        <div>
+                          <Label htmlFor="markup-on-cost-input" className="text-xs">Markup % on cost (uplift, e.g. 200 = cost &times; 3)</Label>
+                          <Input
+                            id="markup-on-cost-input"
+                            type="number"
+                            step="0.1"
+                            min={0}
+                            value={formData.markupOnCostPercent ?? ""}
+                            onChange={(e) => setFormData(prev => ({ ...prev, markupOnCostPercent: e.target.value === "" ? undefined : parseFloat(e.target.value) }))}
+                            placeholder="100"
+                            data-testid="input-markup-on-cost-percent"
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            Final unit sell = calculated unit cost &times; (1 + markup&nbsp;/&nbsp;100). True sell-margin is shown below.
+                          </p>
                         </div>
                       )}
 

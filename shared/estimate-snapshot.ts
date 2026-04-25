@@ -75,9 +75,13 @@ export const laserSnapshotItemSchema = z.object({
   // Override is preserved in snapshot so quote revisions reload faithfully.
   // unitPrice and sellTotal in snapshot reflect the FINAL (commercial) values.
   pricingOverrideEnabled: z.boolean().optional(),
-  pricingOverrideMode: z.enum(["none", "manual_sell", "target_margin"]).optional(),
+  // Phase 5F — adds "markup_on_cost" mode allowing markup values >100 (uncapped).
+  pricingOverrideMode: z.enum(["none", "manual_sell", "target_margin", "markup_on_cost"]).optional(),
   manualSellPrice: z.number().optional(),
   targetMarginPercent: z.number().optional(),
+  // Phase 5F — markup % applied to calculated unit cost (sell = cost * (1 + mk/100)).
+  // No upper cap; true margin is output-only via finalMarginPercent.
+  markupOnCostPercent: z.number().min(0).optional(),
   overrideReason: z.string().optional(),
   calculatedSellPrice: z.number().optional(),
   calculatedBuyCost: z.number().optional(),

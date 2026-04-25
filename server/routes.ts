@@ -2093,6 +2093,11 @@ export async function registerRoutes(
     snapshot: estimateSnapshotSchema,
     sourceJobId: z.string().optional(),
     sourceLaserEstimateId: z.string().optional(),
+    // Phase 5F — when supplied alongside mode="revision", revises THIS specific
+    // quote rather than relying on source-id lookup. Required when multiple
+    // quotes exist for the same source (e.g. after "Create New Quote" was
+    // pressed earlier and there are now several LL quotes for one estimate).
+    sourceQuoteId: z.string().optional(),
     customer: z.string().min(1),
     divisionCode: z.string().min(1, "Division code is required"),
     mode: z.enum(["revision", "new_quote"]).optional().default("revision"),
@@ -2102,7 +2107,7 @@ export async function registerRoutes(
   app.post("/api/quotes", async (req, res) => {
     try {
       const parsed = createQuoteBodySchema.parse(req.body);
-      const { snapshot, sourceJobId, sourceLaserEstimateId, customer, divisionCode, mode, quoteType } = parsed;
+      const { snapshot, sourceJobId, sourceLaserEstimateId, sourceQuoteId, customer, divisionCode, mode, quoteType } = parsed;
 
       const divSettings = await storage.getDivisionSettings(divisionCode);
       const templateKey = divSettings?.templateKey || "base_v1";
@@ -2114,17 +2119,69 @@ export async function registerRoutes(
       try {
         await client.query("BEGIN");
 
-        if (mode === "revision" && sourceJobId) {
-          const existingResult = await client.query(
-            `SELECT * FROM quotes WHERE source_job_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1 FOR UPDATE`,
-            [sourceJobId]
-          );
+        // Phase 5F — extend revision lookup to support LL (sourceLaserEstimateId)
+        // in addition to LJ (sourceJobId). The revision-creation logic below is
+        // identical for both: insert a new quote_revisions row, copy commercial
+        // remarks / spec-display / totals-config from the previous revision,
+        // refresh pricing profile snapshot for LL.
+        // When sourceQuoteId is provided (preferred for LL), revise THAT specific
+        // quote — this avoids ambiguity once multiple quotes exist for one
+        // estimate (after "Create New Quote" was used). Falls back to source-id
+        // lookup for legacy LJ flow. For LL fallback we pick NEWEST (DESC) to
+        // match the linkedQuote returned by GET /api/laser-estimates.
+        if (mode === "revision" && (sourceQuoteId || sourceJobId || sourceLaserEstimateId)) {
+          let lookupSql: string;
+          let lookupParam: string;
+          if (sourceQuoteId) {
+            lookupSql = `SELECT * FROM quotes WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`;
+            lookupParam = sourceQuoteId;
+          } else if (sourceJobId) {
+            lookupSql = `SELECT * FROM quotes WHERE source_job_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1 FOR UPDATE`;
+            lookupParam = sourceJobId;
+          } else {
+            lookupSql = `SELECT * FROM quotes WHERE source_laser_estimate_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1 FOR UPDATE`;
+            lookupParam = sourceLaserEstimateId!;
+          }
+          const existingResult = await client.query(lookupSql, [lookupParam]);
           if (existingResult.rows.length === 0) {
             await client.query("ROLLBACK");
             return res.status(404).json({
               error: "No existing quote found for this estimate. The linked quote may have been deleted. Please use 'Generate Quote' to create a new one.",
               code: "QUOTE_NOT_FOUND_FOR_REVISION",
             });
+          }
+          // Phase 5F (linkage validation) — when an explicit sourceQuoteId is
+          // supplied alongside a source-id (sourceJobId or sourceLaserEstimateId),
+          // require that the quote actually belongs to that source. This prevents
+          // a malformed/stale client from revising the wrong quote (different
+          // estimate, different division). Without this check, a caller could
+          // target any quote id and have the server happily mutate it.
+          if (sourceQuoteId) {
+            const existingRow = existingResult.rows[0];
+            if (sourceLaserEstimateId && existingRow.source_laser_estimate_id !== sourceLaserEstimateId) {
+              await client.query("ROLLBACK");
+              return res.status(422).json({
+                error: "sourceQuoteId does not belong to the supplied sourceLaserEstimateId.",
+                code: "QUOTE_SOURCE_MISMATCH",
+              });
+            }
+            if (sourceJobId && existingRow.source_job_id !== sourceJobId) {
+              await client.query("ROLLBACK");
+              return res.status(422).json({
+                error: "sourceQuoteId does not belong to the supplied sourceJobId.",
+                code: "QUOTE_SOURCE_MISMATCH",
+              });
+            }
+            // Strict equality (null is treated as mismatch) — prevents legacy
+            // rows with NULL division_id from bypassing the division coherence
+            // check when an explicit sourceQuoteId is supplied.
+            if (existingRow.division_id !== divisionCode) {
+              await client.query("ROLLBACK");
+              return res.status(422).json({
+                error: "sourceQuoteId belongs to a different division.",
+                code: "QUOTE_DIVISION_MISMATCH",
+              });
+            }
           }
           if (existingResult.rows.length > 0) {
             const existing = existingResult.rows[0];

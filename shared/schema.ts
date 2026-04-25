@@ -227,7 +227,9 @@ export type InsertQuoteItem = z.infer<typeof insertQuoteItemSchema>;
 
 export type JoineryItemPayload = QuoteItem;
 
-export const LL_PRICING_OVERRIDE_MODES = ["none", "manual_sell", "target_margin"] as const;
+// Phase 5F — added "markup_on_cost" so commercial uplifts above 100% are
+// representable. True margin remains an OUTPUT only and is never user-input.
+export const LL_PRICING_OVERRIDE_MODES = ["none", "manual_sell", "target_margin", "markup_on_cost"] as const;
 export type LLPricingOverrideMode = (typeof LL_PRICING_OVERRIDE_MODES)[number];
 
 export const LL_MANUAL_PROCEDURE_TYPES = ["Folding", "Deburring", "Tapping", "Other"] as const;
@@ -293,6 +295,11 @@ export const laserQuoteItemSchema = z.object({
   pricingOverrideMode: z.enum(LL_PRICING_OVERRIDE_MODES).optional(),
   manualSellPrice: z.number().min(0).optional(),
   targetMarginPercent: z.number().optional(),
+  // Phase 5F — Markup % on cost (uplift mode). Accepts values >= 0 with no
+  // upper cap (200, 300, etc are valid commercial uplifts). Final unit sell
+  // is calculatedUnitCost * (1 + markupOnCostPercent / 100). True margin %
+  // is reported as output only.
+  markupOnCostPercent: z.number().min(0).optional(),
   overrideReason: z.string().optional(),
 
   // Manual Procedure / Provisional line (Phase 5E).

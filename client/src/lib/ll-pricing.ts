@@ -194,14 +194,15 @@ export interface LLPricingBreakdown {
  */
 export interface LLOverrideInputs {
   enabled?: boolean;
-  mode?: "none" | "manual_sell" | "target_margin";
+  mode?: "none" | "manual_sell" | "target_margin" | "markup_on_cost";
   manualSellPrice?: number;       // per-unit sell price
-  targetMarginPercent?: number;   // 0..<100
+  targetMarginPercent?: number;   // 0..<100 (true sell-margin)
+  markupOnCostPercent?: number;   // >= 0, no upper cap (commercial uplift)
 }
 
 export interface LLCommercialResult {
   isOverridden: boolean;
-  mode: "none" | "manual_sell" | "target_margin";
+  mode: "none" | "manual_sell" | "target_margin" | "markup_on_cost";
   // Calculated truth (mirrors what computeLLPricing produced)
   calculatedSellPrice: number;     // line total (sellTotal)
   calculatedUnitSell: number;
@@ -281,13 +282,52 @@ export function applyCommercialOverride(
     };
   }
 
+  // markup_on_cost — Phase 5F. Uplift % on calculated unit cost. No upper cap.
+  // True margin % is reported as OUTPUT only and may be high but always < 100.
+  if (override.mode === "markup_on_cost") {
+    const mk = override.markupOnCostPercent;
+    if (mk == null || !Number.isFinite(mk)) {
+      return calculatedFallback("Markup % on cost must be a number. Falling back to calculated pricing.", true);
+    }
+    if (mk < 0) {
+      return calculatedFallback("Markup % on cost cannot be negative. Falling back to calculated pricing.", true);
+    }
+    if (calculatedUnitCost <= 0) {
+      return calculatedFallback("Cannot apply markup % on cost: calculated unit cost is zero. Falling back to calculated pricing.", true);
+    }
+    const finalUnitSell = calculatedUnitCost * (1 + mk / 100);
+    const finalSellPrice = finalUnitSell * safeQty;
+    const finalMarginAmount = finalSellPrice - calculatedBuyCost;
+    // True sell-margin is calculated as output. Always < 100 by construction
+    // because final sell > cost (mk >= 0 and unit cost > 0).
+    const finalMarginPercent = finalSellPrice > 0
+      ? (finalMarginAmount / finalSellPrice) * 100
+      : 0;
+    return {
+      isOverridden: true,
+      mode: "markup_on_cost",
+      calculatedSellPrice,
+      calculatedUnitSell,
+      calculatedBuyCost,
+      calculatedUnitCost,
+      calculatedMarginAmount,
+      calculatedMarginPercent,
+      finalSellPrice,
+      finalUnitSell,
+      finalMarginAmount,
+      finalMarginPercent,
+      warning: mk === 0 ? "Markup % on cost is 0 — final sell equals calculated unit cost (no uplift)." : undefined,
+      invalid: false,
+    };
+  }
+
   // target_margin
   const tm = override.targetMarginPercent;
   if (tm == null || !Number.isFinite(tm)) {
     return calculatedFallback("Target margin % must be a number. Falling back to calculated pricing.", true);
   }
   if (tm >= 100) {
-    return calculatedFallback("Target margin % must be less than 100. Falling back to calculated pricing.", true);
+    return calculatedFallback("Target margin % must be less than 100. Use Markup % on cost for uplifts above 100%. Falling back to calculated pricing.", true);
   }
   if (tm < 0) {
     return calculatedFallback("Target margin % cannot be negative. Falling back to calculated pricing.", true);

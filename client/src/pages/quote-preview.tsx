@@ -919,10 +919,38 @@ function ScheduleItemCard({
   const photoMaxHPx = Math.round(template.density.photoRowH * 3.78);
   const gapPx = Math.max(4, Math.round(template.density.itemGapMm * 2));
 
+  // Phase 5F — visual grouping for attached procedures. Indent the card,
+  // soften the header background slightly, and prefix the title with a
+  // subtle "↳ Attached operation" affordance so the relationship to the
+  // parent (e.g. 001 → 001a) is obvious in the customer-facing preview.
+  const attachedIndentPx = item.isAttachedChild ? 24 : 0;
   return (
-    <div className="rounded overflow-hidden print:break-inside-avoid" style={{ border: `1px solid ${template.colors.border}` }} data-testid={`schedule-item-${item.index}`}>
-      <div className="flex items-baseline justify-between" style={{ backgroundColor: template.colors.bgMuted, borderBottom: `1px solid ${template.colors.border}`, padding: `${Math.max(4, padPx - 4)}px ${padPx}px` }}>
+    <div
+      className="rounded overflow-hidden print:break-inside-avoid"
+      style={{
+        border: `1px solid ${template.colors.border}`,
+        marginLeft: `${attachedIndentPx}px`,
+        opacity: item.isAttachedChild ? 0.97 : 1,
+      }}
+      data-testid={`schedule-item-${item.index}`}
+      data-attached-child={item.isAttachedChild ? "true" : "false"}
+      data-display-number={item.displayNumber}
+    >
+      <div
+        className="flex items-baseline justify-between"
+        style={{
+          backgroundColor: template.colors.bgMuted,
+          borderBottom: `1px solid ${template.colors.border}`,
+          padding: `${Math.max(4, padPx - 4)}px ${padPx}px`,
+          ...(item.isAttachedChild ? { borderLeft: `3px solid ${template.colors.border}` } : {}),
+        }}
+      >
         <h4 className="font-bold text-sm leading-tight" style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
+          {item.isAttachedChild && (
+            <span className="font-normal mr-1" style={{ color: template.colors.headingMuted }} data-testid={`text-attached-affordance-${item.index}`}>
+              ↳ Attached operation —
+            </span>
+          )}
           {item.title}
         </h4>
         <p className="text-xs whitespace-nowrap ml-3" style={{ color: template.colors.headingMuted }}>
