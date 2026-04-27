@@ -219,12 +219,17 @@ export default function QuotePreview() {
     const headerH = T.density.itemHeaderH;
     const specH = item.visibleSpecs.length * T.density.specRowH;
     const drawH = item.media.drawingUrl ? T.density.drawingMaxH + 2 : 0;
+    // Phase 5F manual blank preview occupies the same left visual area
+    // as the drawing, so its height is bounded by drawingMaxH and never
+    // increases the parent card's row height beyond what specH/drawH
+    // already drive (we take Math.max below).
+    const blankH = item.manualBlankPreview ? T.density.drawingMaxH : 0;
     const photoH = item.media.customerPhotos.length > 0 ? T.density.photoRowH + 5 : 0;
     const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
     // Operations block: heading (~4mm) + 2mm gap + 4mm per row (matches
     // pdf-engine.ts opRowH=4 used in the OPERATIONS section).
     const opsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
-    return headerH + Math.max(drawH, specH) + paneH + opsH + photoH + 4 + T.density.itemGapMm;
+    return headerH + Math.max(drawH, blankH, specH) + paneH + opsH + photoH + 4 + T.density.itemGapMm;
   };
 
   // Conservative page-1 chrome estimate (mm). Tracks the visible sections
@@ -881,6 +886,84 @@ function MediaImage({
   );
 }
 
+// Phase 5F manual blank preview — simple proportional rectangle outline
+// rendered in the existing left visual area when an LL item has valid
+// dimensions but no uploaded drawing. Aspect ratio is preserved so a
+// 1000x500 looks rectangular and a 1000x1000 looks square. Indicative
+// only — never represents holes, folds, cutouts, or any manufacturing
+// geometry. Customer-safe: uses dimensions already on the snapshot, no
+// internal data exposure.
+function ManualBlankPreviewSvg({
+  lengthMm,
+  widthMm,
+  template,
+  itemIndex,
+}: {
+  lengthMm: number;
+  widthMm: number;
+  template: QuoteTemplate;
+  itemIndex: number;
+}) {
+  const maxBoxPx = Math.round(template.density.drawingMaxH * 3.78);
+  const longest = Math.max(lengthMm, widthMm);
+  const scale = maxBoxPx / longest;
+  const rectW = Math.max(20, Math.round(lengthMm * scale));
+  const rectH = Math.max(20, Math.round(widthMm * scale));
+  const padPx = 12;
+  const captionPx = 14;
+  const totalW = rectW + padPx * 2;
+  const totalH = rectH + padPx * 2 + captionPx + 4;
+  return (
+    <div
+      className="flex items-center justify-center"
+      style={{ maxHeight: `${maxBoxPx}px` }}
+      data-testid={`manual-blank-preview-${itemIndex}`}
+    >
+      <svg
+        width={totalW}
+        height={totalH}
+        viewBox={`0 0 ${totalW} ${totalH}`}
+        role="img"
+        aria-label={`Indicative blank ${lengthMm} by ${widthMm} millimetres`}
+      >
+        <rect
+          x={padPx}
+          y={padPx}
+          width={rectW}
+          height={rectH}
+          fill="#ffffff"
+          stroke={template.colors.border}
+          strokeWidth={1}
+          rx={2}
+          ry={2}
+        />
+        <text
+          x={totalW / 2}
+          y={padPx + rectH / 2 + 4}
+          textAnchor="middle"
+          fontSize={11}
+          fontFamily="sans-serif"
+          fill={template.colors.bodyText}
+          data-testid={`text-blank-dimensions-${itemIndex}`}
+        >
+          {`${lengthMm} x ${widthMm}mm`}
+        </text>
+        <text
+          x={totalW / 2}
+          y={padPx + rectH + captionPx}
+          textAnchor="middle"
+          fontSize={9}
+          fontFamily="sans-serif"
+          fontStyle="italic"
+          fill={template.colors.headingMuted}
+        >
+          Indicative blank only
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 function SpecTable({ specs, itemIndex, template }: { specs: { key: string; label: string; value: string }[]; itemIndex: number; template: QuoteTemplate }) {
   if (specs.length === 0) {
     return <p className="text-sm italic" style={{ color: template.colors.headingMuted }}>No specification data available for this item.</p>;
@@ -1079,8 +1162,8 @@ function ScheduleItemCard({
             </div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: media.drawingUrl ? "45% 1fr" : "1fr", gap: "16px" }}>
-            {media.drawingUrl && (
+          <div style={{ display: "grid", gridTemplateColumns: (media.drawingUrl || item.manualBlankPreview) ? "45% 1fr" : "1fr", gap: "16px" }}>
+            {media.drawingUrl ? (
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
                   <div style={{ maxHeight: `${Math.round(template.density.drawingMaxH * 3.78)}px` }} data-testid={`recovered-drawing-${item.index}`}>
@@ -1109,7 +1192,14 @@ function ScheduleItemCard({
                   </div>
                 )}
               </div>
-            )}
+            ) : item.manualBlankPreview ? (
+              <ManualBlankPreviewSvg
+                lengthMm={item.manualBlankPreview.lengthMm}
+                widthMm={item.manualBlankPreview.widthMm}
+                template={template}
+                itemIndex={item.index}
+              />
+            ) : null}
             <div>
               <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
             </div>

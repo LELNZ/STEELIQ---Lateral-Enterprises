@@ -110,6 +110,13 @@ export interface RenderScheduleItem {
   // Phase 5F polish — compact attached operation rows nested inside the
   // parent card. Empty when there are no attached procedures.
   attachedOperations: RenderAttachedOperation[];
+  // Phase 5F manual blank preview — populated only for LL (laser) items
+  // that have valid length + width but no uploaded drawing. Used by
+  // Preview/PDF to render a simple proportional rectangle outline plus
+  // dimension caption in the left visual area, so the customer sees an
+  // indicative shape instead of a large blank space. Never carries
+  // internal cost / margin / supplier / drawing-import data.
+  manualBlankPreview: { lengthMm: number; widthMm: number } | null;
 }
 
 // Phase 5F polish — compact, customer-safe view of an attached manual /
@@ -289,6 +296,17 @@ function buildScheduleItem(
   // after a single sequential pass that knows the parent context. We default
   // to a zero-padded 3-digit number (e.g. "001") matching the LJ convention.
   const fallbackDisplayNumber = String(item.itemNumber || index + 1).padStart(3, "0");
+
+  // Phase 5F manual blank preview — emit only for LL (laser) items that
+  // are NOT manual procedures and that carry valid length + width
+  // dimensions, and only when no uploaded drawing exists. The preview /
+  // PDF will draw a simple proportional rectangle outline plus a
+  // `<L> x <W>mm` caption in the existing left visual area.
+  const manualBlankPreview =
+    isLaser && !isManualProc && !drawingUrl && item.width > 0 && item.height > 0
+      ? { lengthMm: item.width, widthMm: item.height }
+      : null;
+
   return {
     index,
     itemNumber: item.itemNumber || index + 1,
@@ -311,6 +329,7 @@ function buildScheduleItem(
     isAttachedChild: false,
     parentDisplayNumber: undefined,
     attachedOperations: [],
+    manualBlankPreview,
   };
 }
 

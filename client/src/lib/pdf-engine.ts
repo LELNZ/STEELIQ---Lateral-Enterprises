@@ -916,9 +916,20 @@ async function renderSchedule(
   if (model.scheduleItems.length > 0) {
     const fi = model.scheduleItems[0];
     const fiDrawH = fi.media.drawingUrl && imageCache.has(`draw-${fi.index}`) ? DENSITY_DRAWING_MAX_H + 2 : 0;
+    // Phase 5F manual blank preview occupies the same left visual area
+    // as a drawing — bound its height by drawingMaxH so the page-break
+    // estimator stays in parity with the actual rendered card height.
+    const fiBlankH = fi.manualBlankPreview ? DENSITY_DRAWING_MAX_H : 0;
     const fiSpecH = fi.visibleSpecs.length * DENSITY_SPEC_ROW_H;
     const fiPhotoH = fi.media.customerPhotos.filter((p) => imageCache.has(p.key)).length > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
-    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiSpecH) + fiPhotoH + 4;
+    // Phase 5F polish parity — pane specs and attached-operations rows
+    // are part of the rendered card but were previously omitted from the
+    // first-item start-page estimator. Mirror the preview's
+    // estimateScheduleItemMm formula so the page-1 placement decision
+    // aligns with where preview actually breaks.
+    const fiPaneH = fi.paneGlassSpecs.length > 0 ? 6 + fi.paneGlassSpecs.length * 3.5 : 0;
+    const fiOpsH = fi.attachedOperations.length > 0 ? 6 + fi.attachedOperations.length * 4 : 0;
+    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPaneH + fiOpsH + fiPhotoH + 4;
   }
 
   const neededOnCurrentPage = SECTION_GAP + SCHEDULE_HEADING_H + firstItemEstH;
@@ -958,9 +969,15 @@ async function renderSchedule(
     const hasItemDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
     const itemSpecH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
     const itemDrawH = hasItemDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
+    // Phase 5F manual blank preview parity — see comment in firstItemEstH.
+    const itemBlankH = item.manualBlankPreview ? DENSITY_DRAWING_MAX_H : 0;
     const itemPhotoH = loadablePhotoCount > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
     const paneSpecH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemSpecH) + paneSpecH + itemPhotoH + 4;
+    // Phase 5F polish parity — attached-operations rows count toward
+    // the per-item ensureSpace estimate so we match the preview's
+    // measurement-based packer (see estimateScheduleItemMm).
+    const itemOpsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
+    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemBlankH, itemSpecH) + paneSpecH + itemOpsH + itemPhotoH + 4;
     y = ensureSpace(pdf, y, Math.min(estimatedH, MAX_Y - TOP_MARGIN - 5));
 
     y = await renderScheduleItem(pdf, y, item, imageCache);
@@ -995,9 +1012,17 @@ async function renderScheduleItem(
   const headerH = DENSITY_ITEM_HEADER_H;
   const specH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
   const drawingH = hasDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
+  // Phase 5F manual blank preview parity — mirrors firstItemEstH/estimatedH
+  // so the pre-render minItemH ensureSpace check stays consistent with the
+  // height actually drawn in the placeholder branch below.
+  const blankH = item.manualBlankPreview ? DENSITY_DRAWING_MAX_H : 0;
   const photosH = hasPhotos ? DENSITY_PHOTO_ROW_H : 0;
   const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-  const minItemH = headerH + Math.max(drawingH, specH) + paneH + photosH + SECTION_GAP;
+  // Phase 5F polish parity — include attached-operations height so the
+  // pre-render minItemH stays consistent with the preview's
+  // estimateScheduleItemMm formula.
+  const opsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
+  const minItemH = headerH + Math.max(drawingH, blankH, specH) + paneH + opsH + photosH + SECTION_GAP;
 
   y = ensureSpace(pdf, y, Math.min(minItemH, MAX_Y - TOP_MARGIN - 5));
   const itemStartPage = pdf.getNumberOfPages();
@@ -1065,6 +1090,47 @@ async function renderScheduleItem(
         pdf.addImage(drawingData, drawX, y, dw, dh);
         drawingBottomY = y + dh + 2;
       } catch { /* skip */ }
+    } else if (item.manualBlankPreview) {
+      // Phase 5F manual blank preview — render a simple proportional
+      // rectangle outline plus dimension caption in the left visual area
+      // for LL items that have valid length + width but no uploaded
+      // drawing. ASCII / Latin-1 only ("x"), no glyphs that jsPDF
+      // helvetica cannot encode. Indicative geometry only — never holes,
+      // folds, cutouts, or any manufacturing detail.
+      const lengthMm = item.manualBlankPreview.lengthMm;
+      const widthMm = item.manualBlankPreview.widthMm;
+      const maxBoxW = leftColW - pad * 2;
+      const maxBoxH = DENSITY_DRAWING_MAX_H - 6; // reserve mm for caption
+      const longest = Math.max(lengthMm, widthMm);
+      const scale = Math.min(maxBoxW / longest, maxBoxH / longest);
+      const rectW = Math.max(8, lengthMm * scale);
+      const rectH = Math.max(8, widthMm * scale);
+      const rectX = cardLeft + pad + (maxBoxW - rectW) / 2;
+      const rectY = y + 1;
+      pdf.setDrawColor(COLOR_BORDER);
+      pdf.setLineWidth(0.3);
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(rectX, rectY, rectW, rectH, 0.6, 0.6, "FD");
+      // Centred dimension label (inside the rectangle when there's room,
+      // otherwise immediately below).
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(COLOR_BLACK);
+      const dimText = `${lengthMm} x ${widthMm}mm`;
+      const dimTextW = pdf.getTextWidth(dimText);
+      const dimX = rectX + (rectW - dimTextW) / 2;
+      const dimY = rectY + rectH / 2 + 1;
+      pdf.text(dimText, dimX, dimY);
+      // Italic muted caption beneath the rectangle.
+      pdf.setFont(FONT_NORMAL, "italic");
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(COLOR_MUTED);
+      const captionText = "Indicative blank only";
+      const captionW = pdf.getTextWidth(captionText);
+      const captionX = cardLeft + pad + (maxBoxW - captionW) / 2;
+      const captionY = rectY + rectH + 4;
+      pdf.text(captionText, captionX, captionY);
+      drawingBottomY = captionY + 1;
     }
 
     let specY = y;
