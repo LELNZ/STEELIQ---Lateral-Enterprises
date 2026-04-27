@@ -229,14 +229,29 @@ export default function QuotePreview() {
     const blankH = item.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
     const photoH = item.media.customerPhotos.length > 0 ? T.density.photoRowH + 5 : 0;
     const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-    // Operations block: heading (~4mm) + 2mm gap + 4mm per row (matches
-    // pdf-engine.ts opRowH=4 used in the OPERATIONS section).
-    const opsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
-    // Phase 5F card-tightening — single compact pricing row beneath the
-    // spec table for LL items when Unit Price / Line Total are toggled
-    // on. ~5mm covers font + line spacing + a small bottom gap.
-    const pricingDisplayH = (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) ? 5 : 0;
-    return headerH + Math.max(drawH, blankH, specH) + pricingDisplayH + paneH + opsH + photoH + 4 + T.density.itemGapMm;
+    // Phase 5F.1 — grouped commercial pricing table replaces the prior
+    // pricing row + separate operations block. Estimated height:
+    //   header row ~5mm + (parent row + each op row) ~4mm each
+    //   + footer (Item Total) ~5mm when shown.
+    // Mirrors pdf-engine.ts pricingTableH so Preview/PDF stay paginated
+    // identically.
+    const pd = item.pricingDisplay;
+    const ops = item.attachedOperations;
+    const tableHasContent =
+      ops.length > 0 || (pd && (pd.showUnitPriceColumn || pd.showLineTotalColumn));
+    // Phase 5F.1 follow-up — match the actual render condition exactly:
+    // the Item Total footer is only drawn when the line-total column is
+    // ON AND the computed total > 0 (see GroupedPricingTable + PDF
+    // drawGroupedPricingTable). Previously this estimator added the 5mm
+    // footer whenever the column toggle was on, which over-estimated the
+    // card height by 5mm for zero-total items and could cause
+    // Preview→PDF page-break divergence.
+    const itemTotal = (pd?.lineTotal ?? 0) + ops.reduce((s, o) => s + (o.lineTotal || 0), 0);
+    const showFooter = !!pd?.showLineTotalColumn && itemTotal > 0;
+    const pricingTableH = tableHasContent
+      ? 5 + ((pd ? 1 : 0) + ops.length) * 4 + (showFooter ? 5 : 0)
+      : 0;
+    return headerH + Math.max(drawH, blankH, specH) + pricingTableH + paneH + photoH + 4 + T.density.itemGapMm;
   };
 
   // Conservative page-1 chrome estimate (mm). Tracks the visible sections
@@ -993,12 +1008,44 @@ function SpecTable({ specs, itemIndex, template }: { specs: { key: string; label
 
   const rowPadPx = Math.max(1, Math.round((template.density.specRowH - 2) * 1.5));
 
-  const renderRow = ({ key, label, value }: { key: string; label: string; value: string }, idx: number) => (
-    <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? template.colors.bgMuted : "transparent" }}>
-      <td className="px-2 text-xs leading-snug align-top" style={{ color: template.colors.headingMuted, minWidth: "80px", maxWidth: "120px", overflowWrap: "break-word", wordBreak: "break-word", paddingTop: `${rowPadPx}px`, paddingBottom: `${rowPadPx}px` }}>{label}</td>
-      <td className="px-2 font-medium text-sm leading-snug align-top" style={{ color: template.colors.bodyText, overflowWrap: "break-word", wordBreak: "break-word", paddingTop: `${rowPadPx}px`, paddingBottom: `${rowPadPx}px` }} data-testid={`text-spec-${key}-${itemIndex}`}>{value}</td>
-    </tr>
-  );
+  // Phase 5F.1 — compact spec table. Label cell sized to its content
+  // (whiteSpace: nowrap) so labels stay tight against values, and the
+  // dimensions value uses non-breaking spacing so "1000mm x 1000mm"
+  // doesn't break across lines awkwardly. Long free-text values still
+  // wrap naturally on word boundaries (overflowWrap: break-word) but
+  // we no longer break inside tokens like "1000mm".
+  const renderRow = ({ key, label, value }: { key: string; label: string; value: string }, idx: number) => {
+    const isDimension = key === "dimensions" || key === "length" || key === "width";
+    const displayValue = isDimension ? value.replace(/\s*x\s*/g, "\u00A0x\u00A0") : value;
+    return (
+      <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? template.colors.bgMuted : "transparent" }}>
+        <td
+          className="text-xs leading-snug align-top"
+          style={{
+            color: template.colors.headingMuted,
+            whiteSpace: "nowrap",
+            paddingLeft: "8px",
+            paddingRight: "8px",
+            paddingTop: `${rowPadPx}px`,
+            paddingBottom: `${rowPadPx}px`,
+            width: "1%",
+          }}
+        >{label}</td>
+        <td
+          className="font-medium text-sm leading-snug align-top"
+          style={{
+            color: template.colors.bodyText,
+            overflowWrap: "break-word",
+            paddingLeft: "0",
+            paddingRight: "8px",
+            paddingTop: `${rowPadPx}px`,
+            paddingBottom: `${rowPadPx}px`,
+          }}
+          data-testid={`text-spec-${key}-${itemIndex}`}
+        >{displayValue}</td>
+      </tr>
+    );
+  };
 
   const useTwoCol = specs.length > 6;
   const midpoint = Math.ceil(specs.length / 2);
@@ -1085,6 +1132,150 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
   };
 }
 
+
+// Phase 5F.1 — grouped commercial pricing table (LL parent items).
+// Renders a single "Description / Qty / Unit Price / Line Total" table
+// containing the parent laser-blank row + each attached operation row +
+// a bold Item Total footer (parent line total + sum of operation line
+// totals — operation values are always summed, even when their per-row
+// labels are hidden, so the customer can see the true line cost).
+//
+// Visibility rules:
+//  - Table renders when LL parent has either pricingDisplay (any toggle
+//    on) OR ≥1 attached operation. Standalone procedures with no parent
+//    pricingDisplay don't render the table.
+//  - Unit Price column hidden when showLineUnitPrice is OFF.
+//  - Line Total column AND Item Total footer hidden when showLineTotal is OFF.
+//  - When showOperationPricing is OFF, operation $ cells are blank but
+//    the description + qty still display.
+//  - When all toggles are off but operations exist: shows description +
+//    qty only (work-scope visibility), no $ values, no Item Total.
+//
+// Customer-safe: only governed display labels/values; never cost,
+// margin, supplier, bucket, or internal-notes data.
+function fmtMoney(n: number): string {
+  return `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function GroupedPricingTable({
+  item,
+  template,
+}: {
+  item: RenderScheduleItem;
+  template: QuoteTemplate;
+}) {
+  const pd = item.pricingDisplay;
+  const ops = item.attachedOperations;
+  if (!pd && ops.length === 0) return null;
+
+  const showUnit = pd?.showUnitPriceColumn ?? false;
+  const showLT = pd?.showLineTotalColumn ?? false;
+
+  // No table at all when nothing meaningful would be shown (no parent
+  // pricing context AND no operations). pd alone with both toggles off
+  // and no ops => still skip (nothing for customer to see).
+  if (!pd && ops.length === 0) return null;
+  if (pd && !showUnit && !showLT && ops.length === 0) return null;
+
+  const itemTotal = (pd?.lineTotal ?? 0) + ops.reduce((s, o) => s + (o.lineTotal || 0), 0);
+
+  const headerStyle: React.CSSProperties = {
+    color: template.colors.headingMuted,
+    fontSize: "10px",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    fontWeight: 600,
+    paddingTop: "4px",
+    paddingBottom: "4px",
+    borderBottom: `1px solid ${template.colors.border}`,
+  };
+  const cellStyle: React.CSSProperties = {
+    color: template.colors.bodyText,
+    fontSize: "12px",
+    paddingTop: "3px",
+    paddingBottom: "3px",
+  };
+  const numColW = "70px";
+  const qtyColW = "40px";
+
+  return (
+    <table
+      className="w-full"
+      style={{ borderCollapse: "collapse", tableLayout: "fixed" }}
+      data-testid={`pricing-table-${item.index}`}
+    >
+      <colgroup>
+        <col />
+        <col style={{ width: qtyColW }} />
+        {showUnit && <col style={{ width: numColW }} />}
+        {showLT && <col style={{ width: numColW }} />}
+      </colgroup>
+      <thead>
+        <tr>
+          <th style={{ ...headerStyle, textAlign: "left", paddingLeft: "4px" }}>Description</th>
+          <th style={{ ...headerStyle, textAlign: "right", paddingRight: "4px" }}>Qty</th>
+          {showUnit && <th style={{ ...headerStyle, textAlign: "right", paddingRight: "4px" }}>Unit Price</th>}
+          {showLT && <th style={{ ...headerStyle, textAlign: "right", paddingRight: "4px" }}>Line Total</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {pd && (
+          <tr data-testid={`pricing-row-parent-${item.index}`}>
+            <td style={{ ...cellStyle, paddingLeft: "4px" }}>{pd.description}</td>
+            <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px" }}>{pd.quantity}</td>
+            {showUnit && (
+              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-line-unit-price-${item.index}`}>
+                {pd.unitPriceLabel ?? ""}
+              </td>
+            )}
+            {showLT && (
+              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-line-total-${item.index}`}>
+                {pd.lineTotalLabel ?? ""}
+              </td>
+            )}
+          </tr>
+        )}
+        {ops.map((op, opIdx) => (
+          <tr key={opIdx} data-testid={`pricing-row-op-${item.index}-${opIdx}`}>
+            {/* Phase 5F.1 follow-up — clip op description to a single line
+                with ellipsis to match the PDF (which renders first wrapped
+                line only via splitTextToSize). Keeps Preview/PDF content
+                and pagination parity for long op descriptions. */}
+            <td style={{ ...cellStyle, paddingLeft: "16px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 0 }}>
+              <span data-testid={`text-operation-type-${item.index}-${opIdx}`}>{op.procedureType}</span>
+              {op.description && (
+                <span style={{ color: template.colors.headingMuted }} data-testid={`text-operation-desc-${item.index}-${opIdx}`}> — {op.description}</span>
+              )}
+            </td>
+            <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px" }} data-testid={`text-operation-qty-${item.index}-${opIdx}`}>{op.quantity}</td>
+            {showUnit && (
+              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-operation-unit-price-${item.index}-${opIdx}`}>
+                {op.unitPriceLabel ?? ""}
+              </td>
+            )}
+            {showLT && (
+              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-operation-line-total-${item.index}-${opIdx}`}>
+                {op.lineTotalLabel ?? ""}
+              </td>
+            )}
+          </tr>
+        ))}
+      </tbody>
+      {showLT && itemTotal > 0 && (
+        <tfoot>
+          <tr style={{ borderTop: `1px solid ${template.colors.border}` }}>
+            <td colSpan={1 + (showUnit ? 1 : 0) + 1} style={{ ...cellStyle, textAlign: "right", fontWeight: 700, paddingTop: "5px", paddingRight: "4px" }}>
+              Item Total
+            </td>
+            <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700, paddingTop: "5px", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-item-total-${item.index}`}>
+              {fmtMoney(itemTotal)}
+            </td>
+          </tr>
+        </tfoot>
+      )}
+    </table>
+  );
+}
 
 function ScheduleItemCard({
   item,
@@ -1228,26 +1419,8 @@ function ScheduleItemCard({
           </div>
         )}
 
-        {item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel) && (
-          <div
-            className="flex items-baseline justify-end text-xs"
-            style={{ color: template.colors.bodyText, gap: "12px" }}
-            data-testid={`pricing-display-${item.index}`}
-          >
-            {item.pricingDisplay.unitPriceLabel && (
-              <span>
-                <span style={{ color: template.colors.headingMuted, marginRight: "4px" }}>Unit Price:</span>
-                <span data-testid={`text-line-unit-price-${item.index}`}>{item.pricingDisplay.unitPriceLabel}</span>
-              </span>
-            )}
-            {item.pricingDisplay.lineTotalLabel && (
-              <span>
-                <span style={{ color: template.colors.headingMuted, marginRight: "4px" }}>Line Total:</span>
-                <span className="font-semibold" data-testid={`text-line-total-${item.index}`}>{item.pricingDisplay.lineTotalLabel}</span>
-              </span>
-            )}
-          </div>
-        )}
+        <GroupedPricingTable item={item} template={template} />
+
 
         {(item.gosNote || item.catDoorNote) && (
           <div className="space-y-0.5" data-testid={`item-notes-${item.index}`}>
@@ -1278,45 +1451,11 @@ function ScheduleItemCard({
           </div>
         )}
 
-        {item.attachedOperations.length > 0 && (
-          <div data-testid={`operations-section-${item.index}`}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Operations</p>
-            <div className="flex flex-col" style={{ gap: "2px" }}>
-              {item.attachedOperations.map((op, opIdx) => (
-                <div
-                  key={opIdx}
-                  className="flex items-baseline justify-between text-xs"
-                  style={{ color: template.colors.bodyText, paddingLeft: "10px" }}
-                  data-testid={`operation-row-${item.index}-${opIdx}`}
-                >
-                  <span className="leading-tight">
-                    <span style={{ color: template.colors.headingMuted, marginRight: "6px" }}>•</span>
-                    <span className="font-medium" data-testid={`text-operation-type-${item.index}-${opIdx}`}>{op.procedureType}</span>
-                    {op.description && (
-                      <span data-testid={`text-operation-desc-${item.index}-${opIdx}`}> — {op.description}</span>
-                    )}
-                    <span style={{ color: template.colors.headingMuted, marginLeft: "8px" }} data-testid={`text-operation-qty-${item.index}-${opIdx}`}>
-                      Qty: {op.quantity}
-                    </span>
-                  </span>
-                  {(op.unitPriceLabel || op.lineTotalLabel) && (
-                    <span className="whitespace-nowrap ml-3" style={{ color: template.colors.bodyText }}>
-                      {op.unitPriceLabel && (
-                        <span data-testid={`text-operation-unit-price-${item.index}-${opIdx}`}>{op.unitPriceLabel}</span>
-                      )}
-                      {op.unitPriceLabel && op.lineTotalLabel && (
-                        <span style={{ color: template.colors.headingMuted, margin: "0 6px" }}>·</span>
-                      )}
-                      {op.lineTotalLabel && (
-                        <span className="font-medium" data-testid={`text-operation-line-total-${item.index}-${opIdx}`}>{op.lineTotalLabel}</span>
-                      )}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Phase 5F.1 — attached operations are now grouped INSIDE the
+             GroupedPricingTable above; we no longer render a separate
+             Operations block here. Standalone manual procedures still
+             render as their own card and don't carry pricingDisplay
+             so they remain unaffected by the new table. */}
 
         {loadedPhotos.length > 0 && (
           <div data-testid={`photos-section-${item.index}`}>

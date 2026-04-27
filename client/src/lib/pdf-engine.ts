@@ -305,6 +305,27 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
+// Phase 5F.1 — height (mm) of the grouped commercial pricing table
+// rendered for an LL parent item card. Mirrors the Preview's
+// estimateScheduleItemMm formula so cross-page parity is preserved.
+//   header row   ~5mm
+//   parent row   4mm (when pricingDisplay exists)
+//   each op row  4mm
+//   footer total ~5mm (when showLineTotal is on AND total > 0)
+// Returns 0 when the table won't render at all.
+function pricingTableHeightMm(item: RenderScheduleItem): number {
+  const pd = item.pricingDisplay;
+  const ops = item.attachedOperations;
+  const showUnit = !!pd?.showUnitPriceColumn;
+  const showLT = !!pd?.showLineTotalColumn;
+  const tableHasContent = ops.length > 0 || (pd && (showUnit || showLT));
+  if (!tableHasContent) return 0;
+  const rowCount = (pd ? 1 : 0) + ops.length;
+  const itemTotal = (pd?.lineTotal ?? 0) + ops.reduce((s, o) => s + (o.lineTotal || 0), 0);
+  const footerH = showLT && itemTotal > 0 ? 5 : 0;
+  return 5 + rowCount * 4 + footerH;
+}
+
 function getImageDimensions(dataUrl: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -931,12 +952,11 @@ async function renderSchedule(
     // estimateScheduleItemMm formula so the page-1 placement decision
     // aligns with where preview actually breaks.
     const fiPaneH = fi.paneGlassSpecs.length > 0 ? 6 + fi.paneGlassSpecs.length * 3.5 : 0;
-    const fiOpsH = fi.attachedOperations.length > 0 ? 6 + fi.attachedOperations.length * 4 : 0;
-    // Phase 5F card-tightening — single compact pricing row beneath the
-    // spec table for LL items when Unit Price / Line Total are toggled
-    // on. ~5mm covers font + line spacing + a small bottom gap.
-    const fiPricingH = (fi.pricingDisplay && (fi.pricingDisplay.unitPriceLabel || fi.pricingDisplay.lineTotalLabel)) ? 5 : 0;
-    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPricingH + fiPaneH + fiOpsH + fiPhotoH + 4;
+    // Phase 5F.1 — grouped commercial pricing table replaces the prior
+    // separate pricing row + operations block. Same height formula used
+    // by Preview's estimateScheduleItemMm so cross-page parity holds.
+    const fiPricingTableH = pricingTableHeightMm(fi);
+    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPricingTableH + fiPaneH + fiPhotoH + 4;
   }
 
   const neededOnCurrentPage = SECTION_GAP + SCHEDULE_HEADING_H + firstItemEstH;
@@ -982,13 +1002,9 @@ async function renderSchedule(
     const itemBlankH = item.manualBlankPreview ? ITEM_BLANK_PREVIEW_MM : 0;
     const itemPhotoH = loadablePhotoCount > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
     const paneSpecH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-    // Phase 5F polish parity — attached-operations rows count toward
-    // the per-item ensureSpace estimate so we match the preview's
-    // measurement-based packer (see estimateScheduleItemMm).
-    const itemOpsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
-    // Phase 5F card-tightening — pricing display row height (LL only).
-    const itemPricingH = (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) ? 5 : 0;
-    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemBlankH, itemSpecH) + itemPricingH + paneSpecH + itemOpsH + itemPhotoH + 4;
+    // Phase 5F.1 — grouped commercial pricing table (parent + ops + footer).
+    const itemPricingTableH = pricingTableHeightMm(item);
+    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemBlankH, itemSpecH) + itemPricingTableH + paneSpecH + itemPhotoH + 4;
     y = ensureSpace(pdf, y, Math.min(estimatedH, MAX_Y - TOP_MARGIN - 5));
 
     y = await renderScheduleItem(pdf, y, item, imageCache);
@@ -1031,13 +1047,9 @@ async function renderScheduleItem(
   const blankH = item.manualBlankPreview ? MIN_BLANK_PREVIEW_MM : 0;
   const photosH = hasPhotos ? DENSITY_PHOTO_ROW_H : 0;
   const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-  // Phase 5F polish parity — include attached-operations height so the
-  // pre-render minItemH stays consistent with the preview's
-  // estimateScheduleItemMm formula.
-  const opsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
-  // Phase 5F card-tightening — pricing display row height (LL only).
-  const pricingH = (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) ? 5 : 0;
-  const minItemH = headerH + Math.max(drawingH, blankH, specH) + pricingH + paneH + opsH + photosH + SECTION_GAP;
+  // Phase 5F.1 — grouped commercial pricing table (parent + ops + footer).
+  const pricingTblH = pricingTableHeightMm(item);
+  const minItemH = headerH + Math.max(drawingH, blankH, specH) + pricingTblH + paneH + photosH + SECTION_GAP;
 
   y = ensureSpace(pdf, y, Math.min(minItemH, MAX_Y - TOP_MARGIN - 5));
   const itemStartPage = pdf.getNumberOfPages();
@@ -1173,27 +1185,16 @@ async function renderScheduleItem(
 
   y += 2;
 
-  // Phase 5F card-tightening — single compact pricing row beneath the
-  // spec/media grid for LL items when the parent line pricing toggles
-  // are on. Right-aligned, "Unit Price: $X · Line Total: $Y" style.
-  // Customer-safe (only the labels gated by showLineUnitPrice /
-  // showLineTotal are emitted). ASCII / Latin-1 only.
-  if (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) {
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(7.5);
-    const segments: string[] = [];
-    if (item.pricingDisplay.unitPriceLabel) {
-      segments.push(`Unit Price: ${item.pricingDisplay.unitPriceLabel}`);
-    }
-    if (item.pricingDisplay.lineTotalLabel) {
-      segments.push(`Line Total: ${item.pricingDisplay.lineTotalLabel}`);
-    }
-    const pricingText = segments.join("   \u00B7   ");
-    pdf.setTextColor(COLOR_BLACK);
-    const pricingW = pdf.getTextWidth(pricingText);
-    pdf.text(pricingText, cardLeft + cardWidth - pad - pricingW, y + 2.5);
-    y += 5;
-  }
+  // Phase 5F.1 — grouped commercial pricing TABLE (LL parent items).
+  // Replaces the prior pricing-row + separate Operations block with a
+  // single Description / Qty / Unit Price / Line Total table that groups
+  // the parent laser-blank row with each attached operation row, and a
+  // bold Item Total footer = parent line total + Σ operation line
+  // totals. Unit Price / Line Total columns conditionally hidden by the
+  // toggles. ASCII / Latin-1 only — no `↳`, no em-dash where avoidable
+  // (we use " - " between procedureType and description so jsPDF's
+  // helvetica encoder stays safe).
+  y = drawGroupedPricingTable(pdf, y, item, cardLeft, cardWidth, pad);
 
   if (item.gosNote || item.catDoorNote) {
     pdf.setFont(FONT_NORMAL, "italic");
@@ -1226,42 +1227,8 @@ async function renderScheduleItem(
     }
   }
 
-  // Phase 5F polish — render attached procedures as compact operation rows
-  // INSIDE the parent card (no separate cards, no `↳` glyph, no verbose
-  // "Type Attached Manual / Provisional Procedure", no "Attached To" row).
-  // All characters used here are ASCII or Latin-1 (·, -) so jsPDF's
-  // helvetica encoder cannot mangle them.
-  if (item.attachedOperations && item.attachedOperations.length > 0) {
-    y += 1.5;
-    pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(6.5);
-    pdf.setTextColor(COLOR_MUTED);
-    pdf.text("OPERATIONS", cardLeft + pad, y + 2.5);
-    y += 4;
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(7.5);
-    pdf.setTextColor(COLOR_BLACK);
-    const opRowH = 4;
-    const opIndent = 3;
-    for (const op of item.attachedOperations) {
-      const leftBits: string[] = [`- ${op.procedureType}`];
-      if (op.description) leftBits.push(`\u2014 ${op.description}`);
-      leftBits.push(`\u00B7  Qty: ${op.quantity}`);
-      const leftText = leftBits.join("  ");
-
-      const rightBits: string[] = [];
-      if (op.unitPriceLabel) rightBits.push(op.unitPriceLabel);
-      if (op.lineTotalLabel) rightBits.push(op.lineTotalLabel);
-      const rightText = rightBits.join("  \u00B7  ");
-
-      pdf.text(leftText, cardLeft + pad + opIndent, y + 2.5);
-      if (rightText) {
-        const rightW = pdf.getTextWidth(rightText);
-        pdf.text(rightText, cardLeft + cardWidth - pad - rightW, y + 2.5);
-      }
-      y += opRowH;
-    }
-  }
+  // Phase 5F.1 — attached operations are now rendered as rows inside the
+  // grouped pricing table above; no separate Operations block here.
 
   if (hasPhotos) {
     const renderedPhotosResult = await tryRenderPhotos(pdf, y, loadablePhotos, imageCache, item.title, pad, startY, itemStartPage, cardLeft, cardWidth);
@@ -1385,6 +1352,141 @@ async function renderPhotosFromCache(
 function cleanWrappedLines(lines: string[]): string[] {
   if (lines.length <= 1) return lines;
   return lines.map(line => line.replace(/ -$/, "").replace(/ \/$/, "").replace(/ \/\/$/, "").trimEnd());
+}
+
+// Phase 5F.1 — draw grouped commercial pricing table for an LL parent
+// item card. Single Description / Qty / Unit Price / Line Total table
+// containing the parent laser-blank row + each attached operation row +
+// a bold Item Total footer. Returns the new y position. ASCII /
+// Latin-1 only (no `↳`, no curly em-dash where avoidable).
+//
+// Visibility (mirrors GroupedPricingTable in quote-preview.tsx):
+//   - Renders only when LL parent has either pricingDisplay (any toggle
+//     on) OR ≥1 attached operation.
+//   - Unit Price column hidden when showLineUnitPrice is OFF.
+//   - Line Total column AND Item Total footer hidden when showLineTotal
+//     is OFF.
+//   - When showOperationPricing is OFF, op $ cells are blank but
+//     description + qty still display.
+function drawGroupedPricingTable(
+  pdf: Pdf,
+  y: number,
+  item: RenderScheduleItem,
+  cardLeft: number,
+  cardWidth: number,
+  pad: number,
+): number {
+  const pd = item.pricingDisplay;
+  const ops = item.attachedOperations;
+  if (!pd && ops.length === 0) return y;
+  const showUnit = !!pd?.showUnitPriceColumn;
+  const showLT = !!pd?.showLineTotalColumn;
+  if (pd && !showUnit && !showLT && ops.length === 0) return y;
+
+  const itemTotal = (pd?.lineTotal ?? 0) + ops.reduce((s, o) => s + (o.lineTotal || 0), 0);
+  const showFooter = showLT && itemTotal > 0;
+
+  const tableLeft = cardLeft + pad;
+  const tableRight = cardLeft + cardWidth - pad;
+  const tableW = tableRight - tableLeft;
+
+  // Column widths (mm). Numeric columns fixed, description gets remainder.
+  const QTY_W = 12;
+  const NUM_COL_W = 22;
+  const usedRight = (showUnit ? NUM_COL_W : 0) + (showLT ? NUM_COL_W : 0);
+  const descW = tableW - QTY_W - usedRight;
+
+  const qtyRightX = tableLeft + descW + QTY_W - 1;
+  const unitColRightX = qtyRightX + NUM_COL_W;
+  const ltColRightX = unitColRightX + (showUnit ? NUM_COL_W : 0);
+  const lineTotalRightX = showUnit ? ltColRightX : qtyRightX + NUM_COL_W;
+
+  const HEADER_H = 5;
+  const ROW_H = 4;
+  const FOOTER_H = 5;
+
+  // Header
+  pdf.setFont(FONT_NORMAL, "bold");
+  pdf.setFontSize(6.5);
+  pdf.setTextColor(COLOR_MUTED);
+  pdf.text("DESCRIPTION", tableLeft, y + 3);
+  const qtyHdr = "QTY";
+  pdf.text(qtyHdr, qtyRightX - pdf.getTextWidth(qtyHdr), y + 3);
+  if (showUnit) {
+    const upHdr = "UNIT PRICE";
+    pdf.text(upHdr, unitColRightX - pdf.getTextWidth(upHdr), y + 3);
+  }
+  if (showLT) {
+    const ltHdr = "LINE TOTAL";
+    const ltRight = showUnit ? ltColRightX : qtyRightX + NUM_COL_W;
+    pdf.text(ltHdr, ltRight - pdf.getTextWidth(ltHdr), y + 3);
+  }
+  // Header underline
+  pdf.setDrawColor(COLOR_BORDER);
+  pdf.setLineWidth(0.2);
+  pdf.line(tableLeft, y + HEADER_H - 0.5, tableRight, y + HEADER_H - 0.5);
+  y += HEADER_H;
+
+  pdf.setFont(FONT_NORMAL, "normal");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(COLOR_BLACK);
+
+  // Parent (laser blank) row
+  if (pd) {
+    pdf.text(pd.description, tableLeft, y + 2.8);
+    const qtyText = String(pd.quantity);
+    pdf.text(qtyText, qtyRightX - pdf.getTextWidth(qtyText), y + 2.8);
+    if (showUnit) {
+      const t = pd.unitPriceLabel ?? "";
+      if (t) pdf.text(t, unitColRightX - pdf.getTextWidth(t), y + 2.8);
+    }
+    if (showLT) {
+      const t = pd.lineTotalLabel ?? "";
+      const right = showUnit ? ltColRightX : qtyRightX + NUM_COL_W;
+      if (t) pdf.text(t, right - pdf.getTextWidth(t), y + 2.8);
+    }
+    y += ROW_H;
+  }
+
+  // Operation rows (indented description)
+  for (const op of ops) {
+    let opDesc = op.procedureType;
+    if (op.description) opDesc += ` - ${op.description}`;
+    // Truncate to fit description column width (rough cap, ASCII safe).
+    const descLines = pdf.splitTextToSize(opDesc, descW - 4);
+    const opDescOne = Array.isArray(descLines) ? descLines[0] : descLines;
+    pdf.text(opDescOne, tableLeft + 4, y + 2.8);
+    const qtyText = String(op.quantity);
+    pdf.text(qtyText, qtyRightX - pdf.getTextWidth(qtyText), y + 2.8);
+    if (showUnit) {
+      const t = op.unitPriceLabel ?? "";
+      if (t) pdf.text(t, unitColRightX - pdf.getTextWidth(t), y + 2.8);
+    }
+    if (showLT) {
+      const t = op.lineTotalLabel ?? "";
+      const right = showUnit ? ltColRightX : qtyRightX + NUM_COL_W;
+      if (t) pdf.text(t, right - pdf.getTextWidth(t), y + 2.8);
+    }
+    y += ROW_H;
+  }
+
+  // Footer (Item Total)
+  if (showFooter) {
+    pdf.setDrawColor(COLOR_BORDER);
+    pdf.setLineWidth(0.2);
+    pdf.line(tableLeft, y + 0.5, tableRight, y + 0.5);
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(COLOR_BLACK);
+    const totalLabel = "Item Total";
+    const totalText = `$${itemTotal.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const labelRight = lineTotalRightX - NUM_COL_W - 2;
+    pdf.text(totalLabel, labelRight - pdf.getTextWidth(totalLabel), y + 3.5);
+    pdf.text(totalText, lineTotalRightX - pdf.getTextWidth(totalText), y + 3.5);
+    y += FOOTER_H;
+  }
+
+  return y;
 }
 
 function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[], x: number, w: number): number {

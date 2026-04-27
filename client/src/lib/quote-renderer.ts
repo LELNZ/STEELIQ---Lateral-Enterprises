@@ -117,15 +117,34 @@ export interface RenderScheduleItem {
   // indicative shape instead of a large blank space. Never carries
   // internal cost / margin / supplier / drawing-import data.
   manualBlankPreview: { lengthMm: number; widthMm: number } | null;
-  // Phase 5F card-tightening — dedicated parent-item pricing row for
-  // LL (laser) items. Populated from the resolvedSpecs unitPrice /
-  // lineTotal entries (which were placed there by quote-document.ts when
-  // showLineUnitPrice / showLineTotal are on). Pulled OUT of visibleSpecs
-  // for LL items so the spec table stays clean and readable; rendered as
-  // a single compact pricing row beneath the spec table in Preview/PDF.
+  // Phase 5F.1 — grouped commercial pricing table. Populated for LL
+  // (laser) parent items only. Carries everything the renderer needs to
+  // draw a single Description / Qty / Unit Price / Line Total table that
+  // groups the parent laser-blank row with all attached-operation rows
+  // and a bold Item Total footer (parent line total + sum of operation
+  // line totals). Numeric fields are ALWAYS populated so the Item Total
+  // can be summed even when label visibility is off; label/column
+  // visibility is governed by the existing per-revision toggles
+  // (showLineUnitPrice / showLineTotal / showOperationPricing). Pulled
+  // OUT of visibleSpecs so the spec table stays clean and readable.
   // Customer-safe: only the toggled unit price / line total labels are
-  // exposed, never cost / margin / supplier / bucket data.
-  pricingDisplay: { unitPriceLabel: string | null; lineTotalLabel: string | null } | null;
+  // surfaced, never cost / margin / supplier / bucket data.
+  pricingDisplay: RenderPricingDisplay | null;
+}
+
+// Phase 5F.1 — grouped commercial pricing block for an LL parent item.
+// Numeric fields are always populated (used to compute the Item Total
+// footer regardless of toggle state). Label/column visibility flags
+// mirror the per-revision Quote Display Settings toggles.
+export interface RenderPricingDisplay {
+  description: string;             // e.g. "Laser cut blank"
+  quantity: number;                // parent quantity
+  unitPrice: number;               // parent unit sell (always populated)
+  lineTotal: number;               // parent line sell (always populated)
+  unitPriceLabel: string | null;   // formatted when showLineUnitPrice
+  lineTotalLabel: string | null;   // formatted when showLineTotal
+  showUnitPriceColumn: boolean;    // mirrors showLineUnitPrice
+  showLineTotalColumn: boolean;    // mirrors showLineTotal
 }
 
 // Phase 5F polish — compact, customer-safe view of an attached manual /
@@ -140,6 +159,11 @@ export interface RenderAttachedOperation {
   quantity: number;            // e.g. 4
   unitPriceLabel: string | null;  // e.g. "$20.00 ea" or null when hidden
   lineTotalLabel: string | null;  // e.g. "$80.00" or null when hidden
+  // Phase 5F.1 — numeric line total ALWAYS populated so the parent's
+  // Item Total footer can sum operation values even when their labels
+  // are hidden (operation pricing toggle off but item line-total on).
+  // Snapshot subtotal is unaffected; this is purely display math.
+  lineTotal: number;
 }
 
 export interface RenderContentSection {
@@ -250,6 +274,7 @@ function buildScheduleItem(
   displayKeys: string[],
   specKeyToLabel: Record<string, string>,
   domainType?: string,
+  totalsCfg?: TotalsDisplayConfig,
 ): RenderScheduleItem {
   const specs = item.resolvedSpecs || {};
 
@@ -270,14 +295,33 @@ function buildScheduleItem(
         .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
         .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
 
-  // Phase 5F card-tightening — dedicated pricing row (LL only). Reads
-  // the same values the document layer already governed via the
-  // showLineUnitPrice / showLineTotal toggles, so this is a pure display
-  // re-shape — no math change.
-  const pricingDisplay = isLaser && (specs.unitPrice || specs.lineTotal)
+  // Phase 5F.1 — grouped commercial pricing display (LL parent items
+  // only; manual procedures that render as their own card are excluded
+  // since they don't have a "Laser cut blank" line). Numeric fields are
+  // ALWAYS populated so the Item Total footer can be summed even when
+  // the operation pricing toggle is off; only the label / column-show
+  // flags follow the per-revision Quote Display Settings toggles.
+  const sv = (item.specValues || {}) as Record<string, unknown>;
+  const isParentLaserItem = isLaser && item.category !== "manual_procedure";
+  const showUnit = !!(totalsCfg?.showLineUnitPrice);
+  const showLT = !!(totalsCfg?.showLineTotal);
+  const parentQty = Math.max(1, Number(item.quantity) || 1);
+  const parentSellTotal = Number(sv.sellTotal) || 0;
+  const parentUnitPriceRaw = Number(sv.unitPrice);
+  const parentUnitPrice = parentUnitPriceRaw > 0
+    ? parentUnitPriceRaw
+    : (parentSellTotal > 0 ? parentSellTotal / parentQty : 0);
+  const parentLineTotal = parentSellTotal > 0 ? parentSellTotal : parentUnitPrice * parentQty;
+  const pricingDisplay: RenderPricingDisplay | null = isParentLaserItem
     ? {
-        unitPriceLabel: specs.unitPrice ? String(specs.unitPrice) : null,
-        lineTotalLabel: specs.lineTotal ? String(specs.lineTotal) : null,
+        description: "Laser cut blank",
+        quantity: parentQty,
+        unitPrice: parentUnitPrice,
+        lineTotal: parentLineTotal,
+        unitPriceLabel: showUnit && parentUnitPrice > 0 ? `$${fmtCurrency(parentUnitPrice)} ea` : null,
+        lineTotalLabel: showLT && parentLineTotal > 0 ? `$${fmtCurrency(parentLineTotal)}` : null,
+        showUnitPriceColumn: showUnit,
+        showLineTotalColumn: showLT,
       }
     : null;
 
@@ -397,6 +441,9 @@ function buildAttachedOperation(
     lineTotalLabel: showOperationPricing && showLineTotal && sellTotal > 0
       ? `$${fmtCurrency(sellTotal)}`
       : null,
+    // Phase 5F.1 — numeric line total ALWAYS populated so parent's Item
+    // Total can sum operation values regardless of toggle state.
+    lineTotal: sellTotal,
   };
 }
 
@@ -574,7 +621,7 @@ export function buildQuoteRenderModel(
     totals: buildTotals(doc),
     scheduleItems: (() => {
       const items = doc.items.map((item, idx) =>
-        buildScheduleItem(item, idx, doc.specDisplay.effectiveKeys, specKeyToLabel, doc.domainType)
+        buildScheduleItem(item, idx, doc.specDisplay.effectiveKeys, specKeyToLabel, doc.domainType, doc.totalsDisplayConfig)
       );
       // Phase 5F polish — re-number parents 001/002/003… and collapse
       // attached procedures into their parent's `attachedOperations` block.
@@ -606,7 +653,7 @@ export function rebuildScheduleItems(
 ): RenderScheduleItem[] {
   const specKeyToLabel = buildSpecKeyToLabel(doc);
   const items = doc.items.map((item, idx) =>
-    buildScheduleItem(item, idx, effectiveKeys, specKeyToLabel, doc.domainType)
+    buildScheduleItem(item, idx, effectiveKeys, specKeyToLabel, doc.domainType, doc.totalsDisplayConfig)
   );
   // Phase 5F polish — keep parity with buildQuoteRenderModel: collapse
   // attached procedures into parent operations and filter children out
