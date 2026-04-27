@@ -192,16 +192,101 @@ export default function QuotePreview() {
   const { header, branding, orgContact, customerProject, totals, legal, disclaimerText, resolvedTemplate: T, domainType } = activeModel;
   const isLaserQuote = domainType === "laser";
 
-  const ITEMS_FIRST_PAGE = 1;
-  const densityItemsMap: Record<string, number> = { comfortable: 3, standard: 4, compact: 5 };
-  const ITEMS_PER_PAGE = densityItemsMap[T.density.itemGapMm <= 2 ? "compact" : T.density.itemGapMm >= 4 ? "comfortable" : "standard"] ?? 3;
   const hasSchedule = isSectionVisible(T, "schedule") && liveScheduleItems.length > 0;
-  const page1ScheduleItems = hasSchedule ? liveScheduleItems.slice(0, ITEMS_FIRST_PAGE) : [];
-  const overflowItems = hasSchedule ? liveScheduleItems.slice(ITEMS_FIRST_PAGE) : [];
-  const overflowPages: RenderScheduleItem[][] = [];
-  for (let i = 0; i < overflowItems.length; i += ITEMS_PER_PAGE) {
-    overflowPages.push(overflowItems.slice(i, i + ITEMS_PER_PAGE));
+
+  // Phase 5F Pagination Parity — replace the old hardcoded
+  // `ITEMS_FIRST_PAGE = 1` (which always pushed Item 002 onto preview page 2,
+  // even when the PDF correctly fit it on page 1) with a measurement-based
+  // packer that mirrors the PDF's per-item height estimate (see
+  // `pdf-engine.ts` lines 913-934 / 957-963 / 1115-1145). Heights are
+  // computed in mm using the same density values the PDF uses, so preview
+  // page placement tracks PDF page placement as closely as the engines'
+  // shared estimates allow.
+  //
+  // The PDF page is A4 (297mm tall, 18mm top + 18mm bottom margin →
+  // 261mm of usable content height). Page 1 in the PDF also carries the
+  // header / disclaimer / customer-project / totals / details chrome
+  // *above* the Schedule section, so the budget for schedule items on
+  // page 1 is reduced accordingly. Subsequent pages get the full 261mm
+  // budget (PDF starts those at TOP_MARGIN). The first item on any page
+  // is always placed even if it overruns the budget — that matches the
+  // PDF's `ensureSpace(... Math.min(estimatedH, MAX_Y - TOP_MARGIN - 5))`
+  // behaviour, which only adds a fresh page when there isn't room and
+  // never refuses to place a single oversized item.
+  const PAGE_CONTENT_MM = 297 - 18 - 18;
+
+  const estimateScheduleItemMm = (item: RenderScheduleItem): number => {
+    const headerH = T.density.itemHeaderH;
+    const specH = item.visibleSpecs.length * T.density.specRowH;
+    const drawH = item.media.drawingUrl ? T.density.drawingMaxH + 2 : 0;
+    const photoH = item.media.customerPhotos.length > 0 ? T.density.photoRowH + 5 : 0;
+    const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
+    // Operations block: heading (~4mm) + 2mm gap + 4mm per row (matches
+    // pdf-engine.ts opRowH=4 used in the OPERATIONS section).
+    const opsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
+    return headerH + Math.max(drawH, specH) + paneH + opsH + photoH + 4 + T.density.itemGapMm;
+  };
+
+  // Conservative page-1 chrome estimate (mm). Tracks the visible sections
+  // the PDF places above the Schedule heading, plus inter-section gaps.
+  const headerVisible = isSectionVisible(T, "header");
+  const disclaimerVisible = isSectionVisible(T, "disclaimer");
+  const customerProjectVisible = isSectionVisible(T, "customerProject");
+  const totalsVisible = isSectionVisible(T, "totals");
+  const remarksVisible = !!activeModel.commercialRemarks;
+
+  // Wrap-aware estimator for free-text blocks (remarks / disclaimer):
+  // ~80 chars per line at the rendered font size, ~4mm per line, 8mm
+  // chrome (label + padding + border). Caps at 80mm to avoid runaway
+  // values from pathological inputs.
+  const estimateRichTextMm = (text: string | null | undefined, basePadMm: number): number => {
+    const t = (text ?? "").trim();
+    if (!t) return 0;
+    const lines = t.split(/\r?\n/).reduce((acc, line) => acc + Math.max(1, Math.ceil(line.length / 80)), 0);
+    return Math.min(80, basePadMm + lines * 4);
+  };
+
+  const HEADER_MM = headerVisible ? 30 : 0;
+  const TITLE_MM = 8;
+  const DISCLAIMER_MM = disclaimerVisible ? estimateRichTextMm(disclaimerText, 4) : 0;
+  const CUSTOMER_PROJECT_MM = customerProjectVisible ? 22 : 0;
+  const TOTALS_MM = totalsVisible ? 24 + Math.max(0, totals.lines.length) * 4.5 : 0;
+  const REMARKS_MM = remarksVisible ? estimateRichTextMm(activeModel.commercialRemarks, 8) : 0;
+  const SCHEDULE_HEADING_MM = 12;
+  const SECTION_GAPS_MM = T.spacing.sectionGapMm * 6;
+
+  const page1ChromeMm =
+    HEADER_MM + TITLE_MM + DISCLAIMER_MM + CUSTOMER_PROJECT_MM + TOTALS_MM +
+    REMARKS_MM + SCHEDULE_HEADING_MM + SECTION_GAPS_MM;
+
+  const page1BudgetMm = Math.max(40, PAGE_CONTENT_MM - page1ChromeMm);
+  // Overflow pages do NOT re-render the schedule heading in the PDF, so
+  // they get the full A4 content height as their budget.
+  const overflowBudgetMm = PAGE_CONTENT_MM;
+
+  const packedPages: RenderScheduleItem[][] = [];
+  if (hasSchedule) {
+    let currentPage: RenderScheduleItem[] = [];
+    let currentBudget = page1BudgetMm;
+    for (const item of liveScheduleItems) {
+      const itemMm = estimateScheduleItemMm(item);
+      if (currentPage.length === 0) {
+        currentPage.push(item);
+        currentBudget -= itemMm;
+      } else if (itemMm <= currentBudget) {
+        currentPage.push(item);
+        currentBudget -= itemMm;
+      } else {
+        packedPages.push(currentPage);
+        currentPage = [item];
+        currentBudget = overflowBudgetMm - itemMm;
+      }
+    }
+    if (currentPage.length > 0) packedPages.push(currentPage);
   }
+
+  const page1ScheduleItems = packedPages[0] ?? [];
+  const overflowPages: RenderScheduleItem[][] = packedPages.slice(1);
 
   const hasLegalOrAcceptance = isSectionVisible(T, "legal") || isSectionVisible(T, "acceptance");
 
