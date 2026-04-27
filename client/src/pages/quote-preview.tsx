@@ -919,10 +919,12 @@ function ScheduleItemCard({
   const photoMaxHPx = Math.round(template.density.photoRowH * 3.78);
   const gapPx = Math.max(4, Math.round(template.density.itemGapMm * 2));
 
-  // Phase 5F — visual grouping for attached procedures. Indent the card,
-  // soften the header background slightly, and prefix the title with a
-  // subtle "↳ Attached operation" affordance so the relationship to the
-  // parent (e.g. 001 → 001a) is obvious in the customer-facing preview.
+  // Phase 5F polish — attached procedures collapse into the parent's
+  // `attachedOperations` block (rendered below specs), so per-card indent
+  // / "↳ Attached operation —" affordance is removed. `isAttachedChild`
+  // only stays true for orphan attached rows whose parent could not be
+  // resolved (defensive fallback) — keep a small indent in that case so
+  // they remain visually distinct.
   const attachedIndentPx = item.isAttachedChild ? 24 : 0;
   return (
     <div
@@ -930,10 +932,8 @@ function ScheduleItemCard({
       style={{
         border: `1px solid ${template.colors.border}`,
         marginLeft: `${attachedIndentPx}px`,
-        opacity: item.isAttachedChild ? 0.97 : 1,
       }}
       data-testid={`schedule-item-${item.index}`}
-      data-attached-child={item.isAttachedChild ? "true" : "false"}
       data-display-number={item.displayNumber}
     >
       <div
@@ -942,15 +942,9 @@ function ScheduleItemCard({
           backgroundColor: template.colors.bgMuted,
           borderBottom: `1px solid ${template.colors.border}`,
           padding: `${Math.max(4, padPx - 4)}px ${padPx}px`,
-          ...(item.isAttachedChild ? { borderLeft: `3px solid ${template.colors.border}` } : {}),
         }}
       >
         <h4 className="font-bold text-sm leading-tight" style={{ color: template.colors.bodyText }} data-testid={`text-item-title-${item.index}`}>
-          {item.isAttachedChild && (
-            <span className="font-normal mr-1" style={{ color: template.colors.headingMuted }} data-testid={`text-attached-affordance-${item.index}`}>
-              ↳ Attached operation —
-            </span>
-          )}
           {item.title}
         </h4>
         <p className="text-xs whitespace-nowrap ml-3" style={{ color: template.colors.headingMuted }}>
@@ -1061,6 +1055,46 @@ function ScheduleItemCard({
                   <span className="font-medium" style={{ color: template.colors.accent }}>Pane {ps.paneIndex + 1}:</span>{" "}
                   {[ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—"}
                 </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {item.attachedOperations.length > 0 && (
+          <div data-testid={`operations-section-${item.index}`}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: template.colors.headingMuted }}>Operations</p>
+            <div className="flex flex-col" style={{ gap: "2px" }}>
+              {item.attachedOperations.map((op, opIdx) => (
+                <div
+                  key={opIdx}
+                  className="flex items-baseline justify-between text-xs"
+                  style={{ color: template.colors.bodyText, paddingLeft: "10px" }}
+                  data-testid={`operation-row-${item.index}-${opIdx}`}
+                >
+                  <span className="leading-tight">
+                    <span style={{ color: template.colors.headingMuted, marginRight: "6px" }}>•</span>
+                    <span className="font-medium" data-testid={`text-operation-type-${item.index}-${opIdx}`}>{op.procedureType}</span>
+                    {op.description && (
+                      <span data-testid={`text-operation-desc-${item.index}-${opIdx}`}> — {op.description}</span>
+                    )}
+                    <span style={{ color: template.colors.headingMuted, marginLeft: "8px" }} data-testid={`text-operation-qty-${item.index}-${opIdx}`}>
+                      Qty: {op.quantity}
+                    </span>
+                  </span>
+                  {(op.unitPriceLabel || op.lineTotalLabel) && (
+                    <span className="whitespace-nowrap ml-3" style={{ color: template.colors.bodyText }}>
+                      {op.unitPriceLabel && (
+                        <span data-testid={`text-operation-unit-price-${item.index}-${opIdx}`}>{op.unitPriceLabel}</span>
+                      )}
+                      {op.unitPriceLabel && op.lineTotalLabel && (
+                        <span style={{ color: template.colors.headingMuted, margin: "0 6px" }}>·</span>
+                      )}
+                      {op.lineTotalLabel && (
+                        <span className="font-medium" data-testid={`text-operation-line-total-${item.index}-${opIdx}`}>{op.lineTotalLabel}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           </div>

@@ -98,12 +98,32 @@ export interface RenderScheduleItem {
   media: RenderItemMedia;
   // Phase 5F — attached-procedure visual grouping. `displayNumber` is the
   // human-readable schedule number used in Preview/PDF (e.g. "001" for a
-  // parent, "001a"/"001b" for attached children). `isAttachedChild` toggles
-  // indent + lighter background + "↳ Attached operation" affordance in the
-  // renderers. `parentDisplayNumber` is set on children only.
+  // parent). After the Phase 5F polish pass, attached children are NOT
+  // emitted as their own RenderScheduleItem cards — they are collapsed into
+  // their parent's `attachedOperations` array and rendered as compact rows
+  // inside the parent card. `isAttachedChild` therefore only stays `true`
+  // for orphan attached rows whose parent could not be resolved (defensive
+  // fallback so they still render).
   displayNumber: string;
   isAttachedChild: boolean;
   parentDisplayNumber?: string;
+  // Phase 5F polish — compact attached operation rows nested inside the
+  // parent card. Empty when there are no attached procedures.
+  attachedOperations: RenderAttachedOperation[];
+}
+
+// Phase 5F polish — compact, customer-safe view of an attached manual /
+// provisional procedure. NEVER carries cost/margin/supplier/internal-notes
+// fields. The unit price / line total labels are populated only when the
+// existing per-revision pricing toggles (Item Unit Price / Item Line Total)
+// are ON, so the same toggle that controls the parent's pricing also
+// controls the attached operation's pricing.
+export interface RenderAttachedOperation {
+  procedureType: string;       // e.g. "Folding"
+  description: string;         // e.g. "4 folds per item" — may be empty
+  quantity: number;            // e.g. 4
+  unitPriceLabel: string | null;  // e.g. "$20.00 ea" or null when hidden
+  lineTotalLabel: string | null;  // e.g. "$80.00" or null when hidden
 }
 
 export interface RenderContentSection {
@@ -290,6 +310,39 @@ function buildScheduleItem(
     displayNumber: fallbackDisplayNumber,
     isAttachedChild: false,
     parentDisplayNumber: undefined,
+    attachedOperations: [],
+  };
+}
+
+// Phase 5F polish — derive a compact RenderAttachedOperation from an
+// attached procedure QuoteDocumentItem. Customer-safe; reads only public
+// procedure fields and the snapshot sell totals (already governed at
+// quote-document.ts level). Pricing labels are emitted only when the
+// caller passes the corresponding display flag.
+function buildAttachedOperation(
+  docItem: QuoteDocumentItem,
+  showLineUnitPrice: boolean,
+  showLineTotal: boolean,
+): RenderAttachedOperation {
+  const sv = (docItem.specValues || {}) as Record<string, unknown>;
+  const procedureType = String(sv.procedureType ?? "").trim() || "Procedure";
+  const description = String(sv.procedureDescription ?? "").trim();
+  const qty = Math.max(1, Number(docItem.quantity) || 1);
+  const sellTotal = Number(sv.sellTotal) || 0;
+  const manualUnitSell = Number(sv.manualUnitSell);
+  const unitPriceVal = Number.isFinite(manualUnitSell) && manualUnitSell > 0
+    ? manualUnitSell
+    : (sellTotal > 0 ? sellTotal / qty : 0);
+  return {
+    procedureType,
+    description,
+    quantity: qty,
+    unitPriceLabel: showLineUnitPrice && unitPriceVal > 0
+      ? `$${fmtCurrency(unitPriceVal)} ea`
+      : null,
+    lineTotalLabel: showLineTotal && sellTotal > 0
+      ? `$${fmtCurrency(sellTotal)}`
+      : null,
   };
 }
 
@@ -321,14 +374,34 @@ function toAlphaSuffix(zeroBasedIndex: number): string {
   return s;
 }
 
+// Phase 5F polish — single pass that:
+//   1. Re-numbers parent schedule items 001/002/003… (standalone manual
+//      procedures with no attachedToParentRef count as their own parent
+//      and remain rendered as separate cards).
+//   2. Collapses each attached child (category=manual_procedure +
+//      attachedToParentRef matching the most recent parent.itemRef) into
+//      the parent's `attachedOperations` array as a compact row.
+//   3. Returns the set of documentItem indices that have been collapsed
+//      into their parent so the caller can filter them out of the
+//      top-level scheduleItems list (preventing duplicate display while
+//      preserving snapshot totals which are computed independently).
+//   4. Defensive fallback: an attached row with NO resolvable parent
+//      (orphan) keeps rendering as its own card with isAttachedChild=true
+//      so we never silently drop billable lines.
+// NOTE: snapshot totals (subtotal/GST/total) are computed in
+// quote-document.ts from snapshot.totalsBreakdown, NOT from this list, so
+// filtering children here cannot change customer-visible totals.
 function applyAttachedProcedureNumbering(
   scheduleItems: RenderScheduleItem[],
   documentItems: QuoteDocumentItem[],
-): void {
+  showLineUnitPrice: boolean,
+  showLineTotal: boolean,
+): Set<number> {
+  const collapsedIndices = new Set<number>();
   let parentCounter = 0;
   let parentRef: string | null = null;
   let parentDisplayNumber = "";
-  let childLetterIndex = 0;
+  let parentSchedIndex = -1;
 
   for (let i = 0; i < scheduleItems.length; i++) {
     const docItem = documentItems[i];
@@ -336,31 +409,34 @@ function applyAttachedProcedureNumbering(
     const isAttached = !!(docItem.isManualProcedure
       && docItem.attachedToParentRef
       && parentRef
-      && docItem.attachedToParentRef === parentRef);
+      && docItem.attachedToParentRef === parentRef
+      && parentSchedIndex >= 0);
 
     if (isAttached) {
-      // Spreadsheet-style base-26 alpha suffix: a..z, aa..az, ba..zz, aaa…
-      // (defensive — real-world is <= a few attached procedures per parent).
-      const letter = toAlphaSuffix(childLetterIndex);
-      childLetterIndex += 1;
-      const dn = `${parentDisplayNumber}${letter}`;
-      sched.displayNumber = dn;
-      sched.isAttachedChild = true;
-      sched.parentDisplayNumber = parentDisplayNumber;
-      sched.title = `Item ${dn} — ${sched.itemRef}`;
-      sched.media = { ...sched.media, drawingLabel: `Drawing — Item ${dn}` };
+      // Collapse into parent's compact operations block — do NOT emit a
+      // separate card, do NOT advance the parent counter, do NOT touch
+      // child sched.title (will be filtered out anyway).
+      const op = buildAttachedOperation(docItem, showLineUnitPrice, showLineTotal);
+      scheduleItems[parentSchedIndex].attachedOperations.push(op);
+      collapsedIndices.add(i);
     } else {
       parentCounter += 1;
       parentRef = docItem.itemRef || sched.itemRef;
       parentDisplayNumber = String(parentCounter).padStart(3, "0");
-      childLetterIndex = 0;
+      parentSchedIndex = i;
       sched.displayNumber = parentDisplayNumber;
-      sched.isAttachedChild = false;
+      // Orphan defensive flag: if this row is an attached procedure whose
+      // parent could not be resolved (parent missing / out of order), mark
+      // isAttachedChild=true so the renderer applies the small fallback
+      // indent. The row still renders as its own card so the billable line
+      // is never silently dropped.
+      sched.isAttachedChild = !!(docItem.isManualProcedure && docItem.attachedToParentRef);
       sched.parentDisplayNumber = undefined;
       sched.title = `Item ${parentDisplayNumber} — ${sched.itemRef}`;
       sched.media = { ...sched.media, drawingLabel: `Drawing — Item ${parentDisplayNumber}` };
     }
   }
+  return collapsedIndices;
 }
 
 function buildLegal(doc: QuoteDocumentModel): RenderLegalBlock {
@@ -442,12 +518,18 @@ export function buildQuoteRenderModel(
       const items = doc.items.map((item, idx) =>
         buildScheduleItem(item, idx, doc.specDisplay.effectiveKeys, specKeyToLabel, doc.domainType)
       );
-      // Phase 5F — group attached procedures under their parent with
-      // 001/001a/001b sub-numbering. Pure re-labelling pass; safe for all
-      // domains (non-laser docs have no attachedToParentRef so they receive
-      // simple sequential 001/002… numbering).
-      applyAttachedProcedureNumbering(items, doc.items);
-      return items;
+      // Phase 5F polish — re-number parents 001/002/003… and collapse
+      // attached procedures into their parent's `attachedOperations` block.
+      // Children are filtered out of the top-level list so they render as
+      // compact rows inside the parent card (Preview + PDF) instead of
+      // separate cards. Snapshot totals are unaffected.
+      const collapsed = applyAttachedProcedureNumbering(
+        items,
+        doc.items,
+        doc.totalsDisplayConfig.showLineUnitPrice === true,
+        doc.totalsDisplayConfig.showLineTotal === true,
+      );
+      return items.filter((_, idx) => !collapsed.has(idx));
     })(),
     legal: buildLegal(doc),
     disclaimerText: "Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.",
@@ -467,8 +549,14 @@ export function rebuildScheduleItems(
   const items = doc.items.map((item, idx) =>
     buildScheduleItem(item, idx, effectiveKeys, specKeyToLabel, doc.domainType)
   );
-  // Phase 5F — keep parity with buildQuoteRenderModel so live spec-display
-  // edits in the preview retain attached-procedure grouping/sub-numbering.
-  applyAttachedProcedureNumbering(items, doc.items);
-  return items;
+  // Phase 5F polish — keep parity with buildQuoteRenderModel: collapse
+  // attached procedures into parent operations and filter children out
+  // so the live preview's spec-display edits stay consistent.
+  const collapsed = applyAttachedProcedureNumbering(
+    items,
+    doc.items,
+    doc.totalsDisplayConfig.showLineUnitPrice === true,
+    doc.totalsDisplayConfig.showLineTotal === true,
+  );
+  return items.filter((_, idx) => !collapsed.has(idx));
 }

@@ -980,11 +980,13 @@ async function renderScheduleItem(
   const hasDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
   const hasPhotos = loadablePhotos.length > 0;
 
-  // Phase 5F — attached-procedure visual grouping in the PDF. Indent the
-  // entire card ~6mm right and shrink content width accordingly. The actual
-  // schedule item title already includes the sub-numbered displayNumber
-  // (001a/001b…) from the renderer, so no extra string work is required —
-  // we only add the "↳ Attached operation —" affordance prefix.
+  // Phase 5F polish — attached procedures now collapse into the parent's
+  // `attachedOperations` block (rendered as compact rows inside the parent
+  // card). Children no longer render as their own card. We keep a small
+  // defensive indent for orphan attached rows whose parent could not be
+  // resolved, but we DO NOT prefix the title with the `↳` glyph because
+  // jsPDF's helvetica is Latin-1 only and U+21B3 was being mangled into
+  // `!³` on export.
   const ATTACHED_INDENT_MM = 6;
   const indent = item.isAttachedChild ? ATTACHED_INDENT_MM : 0;
   const cardLeft = LEFT_MARGIN + indent;
@@ -1009,8 +1011,8 @@ async function renderScheduleItem(
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_BLACK);
-  const titleText = item.isAttachedChild ? `↳ ${item.title}` : item.title;
-  pdf.text(titleText, cardLeft + pad, y + 3.5);
+  // Phase 5F polish — Latin-1-only PDF text. Never inject U+21B3 here.
+  pdf.text(item.title, cardLeft + pad, y + 3.5);
 
   const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}${item.openingDirectionLabel ? `  \u00B7  ${item.openingDirectionLabel}` : ""}`;
   pdf.setFont(FONT_NORMAL, "normal");
@@ -1102,6 +1104,43 @@ async function renderScheduleItem(
       const label = [ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—";
       pdf.text(`Pane ${ps.paneIndex + 1}: ${label}`, cardLeft + pad + 2, y + 2.5);
       y += 3.5;
+    }
+  }
+
+  // Phase 5F polish — render attached procedures as compact operation rows
+  // INSIDE the parent card (no separate cards, no `↳` glyph, no verbose
+  // "Type Attached Manual / Provisional Procedure", no "Attached To" row).
+  // All characters used here are ASCII or Latin-1 (·, -) so jsPDF's
+  // helvetica encoder cannot mangle them.
+  if (item.attachedOperations && item.attachedOperations.length > 0) {
+    y += 1.5;
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(COLOR_MUTED);
+    pdf.text("OPERATIONS", cardLeft + pad, y + 2.5);
+    y += 4;
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(COLOR_BLACK);
+    const opRowH = 4;
+    const opIndent = 3;
+    for (const op of item.attachedOperations) {
+      const leftBits: string[] = [`- ${op.procedureType}`];
+      if (op.description) leftBits.push(`\u2014 ${op.description}`);
+      leftBits.push(`\u00B7  Qty: ${op.quantity}`);
+      const leftText = leftBits.join("  ");
+
+      const rightBits: string[] = [];
+      if (op.unitPriceLabel) rightBits.push(op.unitPriceLabel);
+      if (op.lineTotalLabel) rightBits.push(op.lineTotalLabel);
+      const rightText = rightBits.join("  \u00B7  ");
+
+      pdf.text(leftText, cardLeft + pad + opIndent, y + 2.5);
+      if (rightText) {
+        const rightW = pdf.getTextWidth(rightText);
+        pdf.text(rightText, cardLeft + cardWidth - pad - rightW, y + 2.5);
+      }
+      y += opRowH;
     }
   }
 

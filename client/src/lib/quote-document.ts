@@ -223,18 +223,20 @@ function mapLaserSnapshotItem(li: LaserSnapshotItem, totalsCfg: TotalsDisplayCon
   const attachedToParent = (li as any).attachedToParentRef as string | undefined;
 
   if (isProc) {
-    resolvedSpecs["procedureKind"] = attachedToParent
-      ? "Attached Manual / Provisional Procedure"
-      : "Manual / Provisional Procedure";
-    if ((li as any).procedureType) {
-      resolvedSpecs["procedureType"] = String((li as any).procedureType);
-    }
-    const desc = ((li as any).procedureDescription as string | undefined) || "";
-    if (desc.trim()) {
-      resolvedSpecs["description"] = desc.trim();
-    }
-    if (attachedToParent) {
-      resolvedSpecs["attachedTo"] = attachedToParent;
+    // Phase 5F polish — drop verbose "Type Attached Manual / Provisional Procedure"
+    // and "Attached To" rows from customer output. Attached children no longer
+    // render as their own schedule cards (they collapse into the parent's
+    // Operations block in the renderer), so attachedTo is implicit by nesting.
+    // Standalone manual procedures still render as separate cards; the
+    // "Manual / Provisional" annotation lives in the card subtitle.
+    if (!attachedToParent) {
+      if ((li as any).procedureType) {
+        resolvedSpecs["procedureType"] = String((li as any).procedureType);
+      }
+      const desc = ((li as any).procedureDescription as string | undefined) || "";
+      if (desc.trim()) {
+        resolvedSpecs["description"] = desc.trim();
+      }
     }
   } else {
     if (li.materialType) resolvedSpecs["materialType"] = li.materialType;
@@ -302,6 +304,7 @@ function mapLaserSnapshotItem(li: LaserSnapshotItem, totalsCfg: TotalsDisplayCon
       procedureDescription: (li as any).procedureDescription,
       attachedToParentRef: attachedToParent,
       sellTotal: li.sellTotal,
+      manualUnitSell: (li as any).manualUnitSell,
     },
     resolvedSpecs,
   };
