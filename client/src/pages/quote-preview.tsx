@@ -229,29 +229,37 @@ export default function QuotePreview() {
     const blankH = item.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
     const photoH = item.media.customerPhotos.length > 0 ? T.density.photoRowH + 5 : 0;
     const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-    // Phase 5F.1 — grouped commercial pricing table replaces the prior
-    // pricing row + separate operations block. Estimated height:
-    //   header row ~5mm + (parent row + each op row) ~4mm each
-    //   + footer (Item Total) ~5mm when shown.
-    // Mirrors pdf-engine.ts pricingTableH so Preview/PDF stay paginated
-    // identically.
+    // Phase 5F.2 — compact supplier-style pricing block replaces the
+    // prior grouped pricing table. Estimated height (mirrors
+    // pdf-engine.ts pricingBlockHeightMm so Preview/PDF stay paginated
+    // identically):
+    //   - Optional op breakdown sub-list: ~3.5mm per line (parent +
+    //     each op) when showOperationPricing is ON, ops exist, AND at
+    //     least one price toggle is ON. +1mm separator gap.
+    //   - Unit Price line: ~4mm when showLineUnitPrice && combinedUnit > 0
+    //   - Line Total line: ~4.5mm when showLineTotal && combinedLT > 0
+    // Note: the operations summary itself flows through specH because
+    // finaliseParentDisplay() already added it as an "operations" spec
+    // row, so it is counted in `item.visibleSpecs.length` above.
     const pd = item.pricingDisplay;
     const ops = item.attachedOperations;
-    const tableHasContent =
-      ops.length > 0 || (pd && (pd.showUnitPriceColumn || pd.showLineTotalColumn));
-    // Phase 5F.1 follow-up — match the actual render condition exactly:
-    // the Item Total footer is only drawn when the line-total column is
-    // ON AND the computed total > 0 (see GroupedPricingTable + PDF
-    // drawGroupedPricingTable). Previously this estimator added the 5mm
-    // footer whenever the column toggle was on, which over-estimated the
-    // card height by 5mm for zero-total items and could cause
-    // Preview→PDF page-break divergence.
-    const itemTotal = (pd?.lineTotal ?? 0) + ops.reduce((s, o) => s + (o.lineTotal || 0), 0);
-    const showFooter = !!pd?.showLineTotalColumn && itemTotal > 0;
-    const pricingTableH = tableHasContent
-      ? 5 + ((pd ? 1 : 0) + ops.length) * 4 + (showFooter ? 5 : 0)
-      : 0;
-    return headerH + Math.max(drawH, blankH, specH) + pricingTableH + paneH + photoH + 4 + T.density.itemGapMm;
+    const showUnitPx = !!pd?.showUnitPriceColumn;
+    const showLTPx = !!pd?.showLineTotalColumn;
+    const showOpsPx = !!pd?.showOperationPricing;
+    const combUnit = pd?.combinedUnitPrice ?? 0;
+    const combLT = pd?.combinedLineTotal ?? 0;
+    const renderUnitLine = pd && showUnitPx && combUnit > 0;
+    const renderLTLine = pd && showLTPx && combLT > 0;
+    const renderBreakdown = !!pd && showOpsPx && ops.length > 0 && (showUnitPx || showLTPx);
+    const breakdownLines = renderBreakdown ? 1 + ops.length : 0;
+    const breakdownH = breakdownLines * 3.5 + (renderBreakdown ? 1 : 0);
+    const summaryH = (renderUnitLine ? 4 : 0) + (renderLTLine ? 4.5 : 0);
+    // Phase 5F.2 — explicit 1mm top margin matching Preview's
+    // `marginTop:4px` on the CompactItemPricing container and PDF's
+    // `y += 1` at the start of drawCompactItemPricing.
+    const blockTopMargin = renderBreakdown || renderUnitLine || renderLTLine ? 1 : 0;
+    const pricingBlockH = blockTopMargin + breakdownH + summaryH;
+    return headerH + Math.max(drawH, blankH, specH) + pricingBlockH + paneH + photoH + 4 + T.density.itemGapMm;
   };
 
   // Conservative page-1 chrome estimate (mm). Tracks the visible sections
@@ -1133,31 +1141,44 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
 }
 
 
-// Phase 5F.1 — grouped commercial pricing table (LL parent items).
-// Renders a single "Description / Qty / Unit Price / Line Total" table
-// containing the parent laser-blank row + each attached operation row +
-// a bold Item Total footer (parent line total + sum of operation line
-// totals — operation values are always summed, even when their per-row
-// labels are hidden, so the customer can see the true line cost).
+// Phase 5F.2 — compact, supplier-style customer pricing block for an
+// LL parent item. Replaces the prior bulky grouped table with a small
+// right-aligned "Unit Price / Line Total" pair (always the COMBINED
+// values: parent + Σ attached ops), plus an optional small nested
+// breakdown ("- Laser cut blank: $X", "- Folding: $X") shown only
+// when the showOperationPricing toggle is ON.
+//
+// The operations themselves are summarised separately as part of the
+// spec block (see the synthesized "Operations" row added in
+// quote-renderer.ts → finaliseParentDisplay), so attached operations
+// always read as part of the item's description even when their $
+// breakdown is hidden.
 //
 // Visibility rules:
-//  - Table renders when LL parent has either pricingDisplay (any toggle
-//    on) OR ≥1 attached operation. Standalone procedures with no parent
-//    pricingDisplay don't render the table.
-//  - Unit Price column hidden when showLineUnitPrice is OFF.
-//  - Line Total column AND Item Total footer hidden when showLineTotal is OFF.
-//  - When showOperationPricing is OFF, operation $ cells are blank but
-//    the description + qty still display.
-//  - When all toggles are off but operations exist: shows description +
-//    qty only (work-scope visibility), no $ values, no Item Total.
+//  - Block renders when an LL parent has pricingDisplay AND at least
+//    one of the price toggles (showLineUnitPrice / showLineTotal) is
+//    ON. With both toggles OFF the block disappears entirely (no
+//    customer-facing prices).
+//  - "Unit Price: $X ea" line shows only when showLineUnitPrice is ON
+//    and combinedUnitPrice > 0.
+//  - "Line Total: $X" line shows only when showLineTotal is ON and
+//    combinedLineTotal > 0.
+//  - Operation breakdown sub-list shows only when ops.length > 0,
+//    showOperationPricing is ON, and either price toggle is ON.
 //
-// Customer-safe: only governed display labels/values; never cost,
-// margin, supplier, bucket, or internal-notes data.
+// Customer-safe: only governed display values; never cost / margin /
+// supplier / bucket / internal-notes data.
+//
+// FUTURE: when quantity-break presentation is enabled, replace the
+// single Unit/Line pair with a small Qty | Unit | Line table sourced
+// from `pricingDisplay.quantityBreaks`. See replit.md "Quantity-Break
+// Future Design" for the planned customer layout. NOT implemented in
+// Phase 5F.2.
 function fmtMoney(n: number): string {
   return `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function GroupedPricingTable({
+function CompactItemPricing({
   item,
   template,
 }: {
@@ -1166,114 +1187,91 @@ function GroupedPricingTable({
 }) {
   const pd = item.pricingDisplay;
   const ops = item.attachedOperations;
-  if (!pd && ops.length === 0) return null;
+  if (!pd) return null;
 
-  const showUnit = pd?.showUnitPriceColumn ?? false;
-  const showLT = pd?.showLineTotalColumn ?? false;
+  const showUnit = pd.showUnitPriceColumn;
+  const showLT = pd.showLineTotalColumn;
+  const showOps = pd.showOperationPricing;
+  if (!showUnit && !showLT) return null;
 
-  // No table at all when nothing meaningful would be shown (no parent
-  // pricing context AND no operations). pd alone with both toggles off
-  // and no ops => still skip (nothing for customer to see).
-  if (!pd && ops.length === 0) return null;
-  if (pd && !showUnit && !showLT && ops.length === 0) return null;
+  const combinedUnit = pd.combinedUnitPrice;
+  const combinedLT = pd.combinedLineTotal;
+  const showUnitLine = showUnit && combinedUnit > 0;
+  const showLineTotalLine = showLT && combinedLT > 0;
+  if (!showUnitLine && !showLineTotalLine && !(showOps && ops.length > 0)) return null;
 
-  const itemTotal = (pd?.lineTotal ?? 0) + ops.reduce((s, o) => s + (o.lineTotal || 0), 0);
+  // Optional nested breakdown (- parent, - op, - op …). Only when
+  // showOperationPricing is ON, ops exist, AND at least one price
+  // toggle is ON (otherwise there is nothing meaningful to disclose).
+  const renderBreakdown = showOps && ops.length > 0 && (showUnit || showLT);
 
-  const headerStyle: React.CSSProperties = {
-    color: template.colors.headingMuted,
-    fontSize: "10px",
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-    fontWeight: 600,
-    paddingTop: "4px",
-    paddingBottom: "4px",
-    borderBottom: `1px solid ${template.colors.border}`,
-  };
-  const cellStyle: React.CSSProperties = {
-    color: template.colors.bodyText,
-    fontSize: "12px",
-    paddingTop: "3px",
-    paddingBottom: "3px",
-  };
-  const numColW = "70px";
-  const qtyColW = "40px";
-
+  // Phase 5F.2 — Preview/PDF parity: only spacing we add here is a
+  // single 4px (~1mm) top margin, mirrored exactly by `+1mm` in
+  // estimateScheduleItemMm and `y += 1` at the start of
+  // drawCompactItemPricing. The breakdown→summary 1mm gap is already
+  // baked into pricingBlockHeightMm via the `+1` in breakdownH and is
+  // realised by the inner summary div's borderTop with no extra
+  // padding. No `gap-1` (4px between flex children) here because the
+  // estimator/PDF do not model it.
   return (
-    <table
-      className="w-full"
-      style={{ borderCollapse: "collapse", tableLayout: "fixed" }}
-      data-testid={`pricing-table-${item.index}`}
+    <div
+      className="flex flex-col items-end"
+      style={{ marginTop: "4px" }}
+      data-testid={`pricing-block-${item.index}`}
     >
-      <colgroup>
-        <col />
-        <col style={{ width: qtyColW }} />
-        {showUnit && <col style={{ width: numColW }} />}
-        {showLT && <col style={{ width: numColW }} />}
-      </colgroup>
-      <thead>
-        <tr>
-          <th style={{ ...headerStyle, textAlign: "left", paddingLeft: "4px" }}>Description</th>
-          <th style={{ ...headerStyle, textAlign: "right", paddingRight: "4px" }}>Qty</th>
-          {showUnit && <th style={{ ...headerStyle, textAlign: "right", paddingRight: "4px" }}>Unit Price</th>}
-          {showLT && <th style={{ ...headerStyle, textAlign: "right", paddingRight: "4px" }}>Line Total</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {pd && (
-          <tr data-testid={`pricing-row-parent-${item.index}`}>
-            <td style={{ ...cellStyle, paddingLeft: "4px" }}>{pd.description}</td>
-            <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px" }}>{pd.quantity}</td>
-            {showUnit && (
-              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-line-unit-price-${item.index}`}>
-                {pd.unitPriceLabel ?? ""}
-              </td>
-            )}
-            {showLT && (
-              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-line-total-${item.index}`}>
-                {pd.lineTotalLabel ?? ""}
-              </td>
-            )}
-          </tr>
-        )}
-        {ops.map((op, opIdx) => (
-          <tr key={opIdx} data-testid={`pricing-row-op-${item.index}-${opIdx}`}>
-            {/* Phase 5F.1 follow-up — clip op description to a single line
-                with ellipsis to match the PDF (which renders first wrapped
-                line only via splitTextToSize). Keeps Preview/PDF content
-                and pagination parity for long op descriptions. */}
-            <td style={{ ...cellStyle, paddingLeft: "16px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 0 }}>
-              <span data-testid={`text-operation-type-${item.index}-${opIdx}`}>{op.procedureType}</span>
-              {op.description && (
-                <span style={{ color: template.colors.headingMuted }} data-testid={`text-operation-desc-${item.index}-${opIdx}`}> — {op.description}</span>
-              )}
-            </td>
-            <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px" }} data-testid={`text-operation-qty-${item.index}-${opIdx}`}>{op.quantity}</td>
-            {showUnit && (
-              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-operation-unit-price-${item.index}-${opIdx}`}>
-                {op.unitPriceLabel ?? ""}
-              </td>
-            )}
-            {showLT && (
-              <td style={{ ...cellStyle, textAlign: "right", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-operation-line-total-${item.index}-${opIdx}`}>
-                {op.lineTotalLabel ?? ""}
-              </td>
-            )}
-          </tr>
-        ))}
-      </tbody>
-      {showLT && itemTotal > 0 && (
-        <tfoot>
-          <tr style={{ borderTop: `1px solid ${template.colors.border}` }}>
-            <td colSpan={1 + (showUnit ? 1 : 0) + 1} style={{ ...cellStyle, textAlign: "right", fontWeight: 700, paddingTop: "5px", paddingRight: "4px" }}>
-              Item Total
-            </td>
-            <td style={{ ...cellStyle, textAlign: "right", fontWeight: 700, paddingTop: "5px", paddingRight: "4px", whiteSpace: "nowrap" }} data-testid={`text-item-total-${item.index}`}>
-              {fmtMoney(itemTotal)}
-            </td>
-          </tr>
-        </tfoot>
+      {renderBreakdown && (
+        <div
+          className="w-full"
+          style={{ color: template.colors.headingMuted, fontSize: "10.5px", lineHeight: 1.4 }}
+          data-testid={`op-breakdown-${item.index}`}
+        >
+          <div style={{ paddingLeft: "4px" }}>
+            <span style={{ marginRight: "6px" }}>-</span>
+            <span data-testid={`text-op-breakdown-label-${item.index}-parent`}>{pd.description}:</span>
+            <span style={{ marginLeft: "6px" }} data-testid={`text-op-breakdown-amount-${item.index}-parent`}>{fmtMoney(pd.lineTotal)}</span>
+          </div>
+          {ops.map((op, opIdx) => (
+            <div key={opIdx} style={{ paddingLeft: "4px" }}>
+              <span style={{ marginRight: "6px" }}>-</span>
+              <span data-testid={`text-op-breakdown-label-${item.index}-${opIdx}`}>{op.procedureType}:</span>
+              <span style={{ marginLeft: "6px" }} data-testid={`text-op-breakdown-amount-${item.index}-${opIdx}`}>{fmtMoney(op.lineTotal)}</span>
+            </div>
+          ))}
+        </div>
       )}
-    </table>
+      <div
+        className="flex flex-col items-end"
+        style={{ borderTop: renderBreakdown ? `1px solid ${template.colors.border}` : undefined, minWidth: "180px" }}
+      >
+        {showUnitLine && (
+          <div
+            className="flex items-baseline justify-end gap-2"
+            style={{ fontSize: "12px", color: template.colors.bodyText }}
+          >
+            <span style={{ color: template.colors.headingMuted, fontSize: "10.5px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Unit Price</span>
+            <span className="font-semibold" data-testid={`text-line-unit-price-${item.index}`} style={{ whiteSpace: "nowrap" }}>{pd.combinedUnitPriceLabel ?? `${fmtMoney(combinedUnit)} ea`}</span>
+          </div>
+        )}
+        {showLineTotalLine && (
+          <div
+            className="flex items-baseline justify-end gap-2"
+            style={{ fontSize: "13px", color: template.colors.bodyText }}
+          >
+            <span style={{ color: template.colors.headingMuted, fontSize: "10.5px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Line Total</span>
+            <span className="font-bold" data-testid={`text-line-total-${item.index}`} style={{ whiteSpace: "nowrap" }}>{pd.combinedLineTotalLabel ?? fmtMoney(combinedLT)}</span>
+          </div>
+        )}
+        {/* Phase 5F.2 — `text-item-total-N` testid is preserved as an
+            alias for the combined Line Total so existing regression
+            tests + downstream consumers continue to address the
+            customer-facing total without breaking. The renderer no
+            longer emits a separate "Item Total" footer because the
+            combined Line Total already conveys that value. */}
+        {showLineTotalLine && (
+          <span data-testid={`text-item-total-${item.index}`} style={{ display: "none" }}>{pd.combinedLineTotalLabel ?? fmtMoney(combinedLT)}</span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1419,7 +1417,7 @@ function ScheduleItemCard({
           </div>
         )}
 
-        <GroupedPricingTable item={item} template={template} />
+        <CompactItemPricing item={item} template={template} />
 
 
         {(item.gosNote || item.catDoorNote) && (

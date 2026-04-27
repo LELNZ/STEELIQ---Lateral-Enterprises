@@ -63,6 +63,13 @@ export interface RenderSpecEntry {
   key: string;
   label: string;
   value: string;
+  // Optional ASCII / Latin-1-only override used by the PDF renderer.
+  // jsPDF's helvetica encoder is Latin-1 only — characters such as the
+  // em-dash (\u2014) render as garbage glyphs (e.g. `!³`). When a spec
+  // value contains non-Latin-1 characters intentionally for the
+  // browser Preview (which renders unicode fine), populate `pdfValue`
+  // with the ASCII-safe equivalent so the PDF stays clean.
+  pdfValue?: string;
 }
 
 export interface RenderItemMedia {
@@ -132,19 +139,53 @@ export interface RenderScheduleItem {
   pricingDisplay: RenderPricingDisplay | null;
 }
 
-// Phase 5F.1 — grouped commercial pricing block for an LL parent item.
-// Numeric fields are always populated (used to compute the Item Total
-// footer regardless of toggle state). Label/column visibility flags
-// mirror the per-revision Quote Display Settings toggles.
+// Phase 5F.2 — compact, supplier-style commercial pricing block for an
+// LL parent item. The customer-facing Unit Price / Line Total fields
+// are the COMBINED values (parent laser-blank sell + sum of attached
+// operation sells). Parent-only values are retained for the optional
+// nested operation breakdown that appears under the spec block when
+// the showOperationPricing toggle is ON.
+//
+// Numeric fields are always populated so totals can be summed
+// regardless of toggle state. Label / column visibility mirror the
+// per-revision Quote Display Settings toggles.
+//
+// Customer-safe: never carries cost / margin / supplier / bucket /
+// internal-notes data. Snapshot subtotal is computed independently in
+// quote-document.ts from snapshot.totalsBreakdown — these display
+// values do not affect quote totals.
+//
+// FUTURE: when quantity-break presentation is enabled, an optional
+// `quantityBreaks?: { qty: number; unitPrice: number; lineTotal: number }[]`
+// field will sit alongside `combinedUnitPrice` / `combinedLineTotal`,
+// rendered as a small table in the same compact pricing block. NOT
+// implemented in Phase 5F.2 — see replit.md "Quantity-Break Future
+// Design" for the planned customer layout.
 export interface RenderPricingDisplay {
   description: string;             // e.g. "Laser cut blank"
   quantity: number;                // parent quantity
+
+  // Parent-only values (used for the optional nested op breakdown).
   unitPrice: number;               // parent unit sell (always populated)
   lineTotal: number;               // parent line sell (always populated)
   unitPriceLabel: string | null;   // formatted when showLineUnitPrice
   lineTotalLabel: string | null;   // formatted when showLineTotal
+
+  // Phase 5F.2 — combined customer-facing display values
+  // = parent + Σ attached operation sell values.
+  // For a parent with no ops these equal the parent values.
+  combinedUnitPrice: number;       // = combinedLineTotal / quantity
+  combinedLineTotal: number;       // = parent.lineTotal + Σ ops.lineTotal
+  combinedUnitPriceLabel: string | null;  // formatted when showLineUnitPrice
+  combinedLineTotalLabel: string | null;  // formatted when showLineTotal
+
   showUnitPriceColumn: boolean;    // mirrors showLineUnitPrice
   showLineTotalColumn: boolean;    // mirrors showLineTotal
+  // Phase 5F.2 — controls whether the small nested operation $
+  // breakdown ("- Laser cut blank: $945.64", "- Folding: $80.00")
+  // is shown under the spec block. Operations themselves still
+  // display description + qty even when this is off.
+  showOperationPricing: boolean;
 }
 
 // Phase 5F polish — compact, customer-safe view of an attached manual /
@@ -266,6 +307,11 @@ const LASER_SPEC_LABELS: Record<string, string> = {
   // Phase 5E hardening — line-level pricing (toggleable).
   unitPrice: "Unit Price",
   lineTotal: "Line Total",
+  // Phase 5F.2 — synthesized operations summary row (added by
+  // applyAttachedProcedureNumbering after ops are collapsed into the
+  // parent). Renders inside the spec block so attached operations
+  // read as part of the item's description, supplier-style.
+  operations: "Operations",
 };
 
 function buildScheduleItem(
@@ -312,6 +358,12 @@ function buildScheduleItem(
     ? parentUnitPriceRaw
     : (parentSellTotal > 0 ? parentSellTotal / parentQty : 0);
   const parentLineTotal = parentSellTotal > 0 ? parentSellTotal : parentUnitPrice * parentQty;
+  // Phase 5F.2 — combined values are seeded equal to the parent values
+  // here. After applyAttachedProcedureNumbering() collapses ops into the
+  // parent, the combined values are recomputed to include op sell totals
+  // (combinedLineTotal = parent + Σ ops; combinedUnitPrice = combined /
+  // parentQty). Doing it post-collapse keeps the math in one place.
+  const showOps = !!(totalsCfg?.showOperationPricing);
   const pricingDisplay: RenderPricingDisplay | null = isParentLaserItem
     ? {
         description: "Laser cut blank",
@@ -320,8 +372,13 @@ function buildScheduleItem(
         lineTotal: parentLineTotal,
         unitPriceLabel: showUnit && parentUnitPrice > 0 ? `$${fmtCurrency(parentUnitPrice)} ea` : null,
         lineTotalLabel: showLT && parentLineTotal > 0 ? `$${fmtCurrency(parentLineTotal)}` : null,
+        combinedUnitPrice: parentUnitPrice,
+        combinedLineTotal: parentLineTotal,
+        combinedUnitPriceLabel: showUnit && parentUnitPrice > 0 ? `$${fmtCurrency(parentUnitPrice)} ea` : null,
+        combinedLineTotalLabel: showLT && parentLineTotal > 0 ? `$${fmtCurrency(parentLineTotal)}` : null,
         showUnitPriceColumn: showUnit,
         showLineTotalColumn: showLT,
+        showOperationPricing: showOps,
       }
     : null;
 
@@ -525,6 +582,15 @@ function applyAttachedProcedureNumbering(
       scheduleItems[parentSchedIndex].attachedOperations.push(op);
       collapsedIndices.add(i);
     } else {
+      // Phase 5F.2 — finalise the previous parent (if any) BEFORE we
+      // advance to a new parent. This rolls combined values for the
+      // closed-out parent and pushes its synthesized "Operations" spec
+      // row using the ops we just collected for it. Doing this here
+      // (rather than after every isAttached push) keeps the work in
+      // one place per parent and avoids repeated mutation churn.
+      if (parentSchedIndex >= 0) {
+        finaliseParentDisplay(scheduleItems[parentSchedIndex], showLineUnitPrice, showLineTotal);
+      }
       parentCounter += 1;
       parentRef = docItem.itemRef || sched.itemRef;
       parentDisplayNumber = String(parentCounter).padStart(3, "0");
@@ -541,7 +607,61 @@ function applyAttachedProcedureNumbering(
       sched.media = { ...sched.media, drawingLabel: `Drawing — Item ${parentDisplayNumber}` };
     }
   }
+  // Phase 5F.2 — finalise the very last parent in the list so its
+  // combined values + Operations spec row are populated. Mirrors the
+  // finalise-on-new-parent step inside the loop.
+  if (parentSchedIndex >= 0) {
+    finaliseParentDisplay(scheduleItems[parentSchedIndex], showLineUnitPrice, showLineTotal);
+  }
   return collapsedIndices;
+}
+
+// Phase 5F.2 — once a parent's full set of attached operations has
+// been collected, recompute the combined customer-facing display
+// values on its pricingDisplay and synthesize a single "Operations"
+// row in its visibleSpecs that summarises the operations as part of
+// the description block (e.g. "Folding — 4 folds per item;
+// Deburring; Tapping — M6×3"). The summary uses an em-dash for
+// Preview readability — the PDF re-renders its own ASCII-safe
+// version inline so jsPDF helvetica's Latin-1 encoder cannot mangle
+// the dash. Snapshot totals are unaffected.
+function finaliseParentDisplay(
+  sched: RenderScheduleItem,
+  showLineUnitPrice: boolean,
+  showLineTotal: boolean,
+): void {
+  const ops = sched.attachedOperations;
+  // Recompute combined values on parent.pricingDisplay (LL only).
+  if (sched.pricingDisplay) {
+    const pd = sched.pricingDisplay;
+    const opsTotal = ops.reduce((s, o) => s + (o.lineTotal || 0), 0);
+    const combinedLineTotal = pd.lineTotal + opsTotal;
+    const qty = Math.max(1, pd.quantity || 1);
+    const combinedUnitPrice = combinedLineTotal / qty;
+    pd.combinedLineTotal = combinedLineTotal;
+    pd.combinedUnitPrice = combinedUnitPrice;
+    pd.combinedUnitPriceLabel = showLineUnitPrice && combinedUnitPrice > 0
+      ? `$${fmtCurrency(combinedUnitPrice)} ea`
+      : null;
+    pd.combinedLineTotalLabel = showLineTotal && combinedLineTotal > 0
+      ? `$${fmtCurrency(combinedLineTotal)}`
+      : null;
+  }
+  // Synthesize Operations summary spec row when ops exist.
+  // Preview uses an em-dash (\u2014) for typographic polish; PDF uses
+  // an ASCII " - " separator because jsPDF helvetica is Latin-1 only.
+  if (ops.length > 0) {
+    const previewSummary = ops
+      .map(op => op.description ? `${op.procedureType} \u2014 ${op.description}` : op.procedureType)
+      .join("; ");
+    const pdfSummary = ops
+      .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
+      .join("; ");
+    sched.visibleSpecs = [
+      ...sched.visibleSpecs,
+      { key: "operations", label: "Operations", value: previewSummary, pdfValue: pdfSummary },
+    ];
+  }
 }
 
 function buildLegal(doc: QuoteDocumentModel): RenderLegalBlock {
