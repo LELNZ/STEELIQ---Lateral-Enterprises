@@ -96,6 +96,14 @@ export interface RenderScheduleItem {
   visibleSpecs: RenderSpecEntry[];
   paneGlassSpecs: RenderPaneGlassSpec[];
   media: RenderItemMedia;
+  // Phase 5F — attached-procedure visual grouping. `displayNumber` is the
+  // human-readable schedule number used in Preview/PDF (e.g. "001" for a
+  // parent, "001a"/"001b" for attached children). `isAttachedChild` toggles
+  // indent + lighter background + "↳ Attached operation" affordance in the
+  // renderers. `parentDisplayNumber` is set on children only.
+  displayNumber: string;
+  isAttachedChild: boolean;
+  parentDisplayNumber?: string;
 }
 
 export interface RenderContentSection {
@@ -190,6 +198,14 @@ const LASER_SPEC_LABELS: Record<string, string> = {
   width: "Width",
   finish: "Finish",
   customerNotes: "Notes",
+  // Phase 5E hardening — manual / attached procedure labels.
+  procedureKind: "Type",
+  procedureType: "Procedure",
+  description: "Description",
+  attachedTo: "Attached To",
+  // Phase 5E hardening — line-level pricing (toggleable).
+  unitPrice: "Unit Price",
+  lineTotal: "Line Total",
 };
 
 function buildScheduleItem(
@@ -235,17 +251,29 @@ function buildScheduleItem(
   const gosNote = isLaser ? undefined : (item.gosRequired ? "Glaze on site due to size and weight" : undefined);
   const catDoorNote = isLaser ? undefined : (item.catDoorEnabled ? "Cat door included" : undefined);
 
+  // Phase 5E hardening — manual / attached procedure subtitle handling.
+  // Procedure pseudo-rows have no physical dimensions, so we substitute a
+  // descriptive label so the schedule subtitle "Qty: N · {label}" remains
+  // sensible in both Preview and PDF (PDF concatenates with a literal · ).
+  const isManualProc = isLaser && item.category === "manual_procedure";
   const dimensionLabel = isLaser
-    ? (item.width > 0 && item.height > 0 ? `${item.width}mm x ${item.height}mm` : "")
+    ? (isManualProc
+        ? "Manual / Provisional"
+        : (item.width > 0 && item.height > 0 ? `${item.width}mm x ${item.height}mm` : ""))
     : (item.category === "raked-fixed" && item.rakedLeftHeight != null && item.rakedRightHeight != null
       ? `${item.width}mm W × ${item.rakedLeftHeight}/${item.rakedRightHeight}mm H (L/R)`
       : `${item.width}mm x ${item.height}mm`);
 
+  // Phase 5F — displayNumber/isAttachedChild are placeholders here. The
+  // canonical values are filled in by buildQuoteRenderModel/rebuildScheduleItems
+  // after a single sequential pass that knows the parent context. We default
+  // to a zero-padded 3-digit number (e.g. "001") matching the LJ convention.
+  const fallbackDisplayNumber = String(item.itemNumber || index + 1).padStart(3, "0");
   return {
     index,
     itemNumber: item.itemNumber || index + 1,
     itemRef: item.itemRef || item.title || `Item ${index + 1}`,
-    title: `Item ${item.itemNumber || index + 1} — ${item.itemRef || item.title || `Item ${index + 1}`}`,
+    title: `Item ${fallbackDisplayNumber} — ${item.itemRef || item.title || `Item ${index + 1}`}`,
     dimensionLabel,
     quantityLabel: `Qty: ${item.quantity || 1}`,
     openingDirectionLabel,
@@ -256,10 +284,83 @@ function buildScheduleItem(
     media: {
       drawingUrl,
       drawingKey: isLaser ? null : (item.drawingImageKey || null),
-      drawingLabel: `Drawing — Item ${item.itemNumber || index + 1}`,
+      drawingLabel: `Drawing — Item ${fallbackDisplayNumber}`,
       customerPhotos,
     },
+    displayNumber: fallbackDisplayNumber,
+    isAttachedChild: false,
+    parentDisplayNumber: undefined,
   };
+}
+
+// Phase 5F — Sub-numbering pass for attached procedures. Mutates each
+// schedule item's `displayNumber`, `title`, `media.drawingLabel`,
+// `isAttachedChild`, and `parentDisplayNumber` so that:
+//   - Each non-attached row receives a fresh zero-padded parent number
+//     (001, 002, 003…). Standalone manual procedures with NO parent ref
+//     still count as their own top-level row.
+//   - Each attached child (category=manual_procedure + attachedToParentRef
+//     matching the most recent parent.itemRef) inherits the parent's display
+//     number with a suffix letter (a, b, c…). The child counter is reset
+//     for every new parent.
+// Items are NOT reordered — the snapshot already flattens children
+// immediately after their parent. Parent itemNumber is left intact for
+// internal references; only the human-readable labels change.
+// Phase 5F — proper spreadsheet-style alpha suffix generator.
+// 0->"a", 25->"z", 26->"aa", 27->"ab", 51->"az", 52->"ba", 701->"zz",
+// 702->"aaa", etc. Used for attached procedure sub-numbering so we never
+// emit non-alpha chars when more than 26 procedures are attached.
+function toAlphaSuffix(zeroBasedIndex: number): string {
+  let n = zeroBasedIndex;
+  let s = "";
+  while (true) {
+    s = String.fromCharCode(97 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+    if (n < 0) break;
+  }
+  return s;
+}
+
+function applyAttachedProcedureNumbering(
+  scheduleItems: RenderScheduleItem[],
+  documentItems: QuoteDocumentItem[],
+): void {
+  let parentCounter = 0;
+  let parentRef: string | null = null;
+  let parentDisplayNumber = "";
+  let childLetterIndex = 0;
+
+  for (let i = 0; i < scheduleItems.length; i++) {
+    const docItem = documentItems[i];
+    const sched = scheduleItems[i];
+    const isAttached = !!(docItem.isManualProcedure
+      && docItem.attachedToParentRef
+      && parentRef
+      && docItem.attachedToParentRef === parentRef);
+
+    if (isAttached) {
+      // Spreadsheet-style base-26 alpha suffix: a..z, aa..az, ba..zz, aaa…
+      // (defensive — real-world is <= a few attached procedures per parent).
+      const letter = toAlphaSuffix(childLetterIndex);
+      childLetterIndex += 1;
+      const dn = `${parentDisplayNumber}${letter}`;
+      sched.displayNumber = dn;
+      sched.isAttachedChild = true;
+      sched.parentDisplayNumber = parentDisplayNumber;
+      sched.title = `Item ${dn} — ${sched.itemRef}`;
+      sched.media = { ...sched.media, drawingLabel: `Drawing — Item ${dn}` };
+    } else {
+      parentCounter += 1;
+      parentRef = docItem.itemRef || sched.itemRef;
+      parentDisplayNumber = String(parentCounter).padStart(3, "0");
+      childLetterIndex = 0;
+      sched.displayNumber = parentDisplayNumber;
+      sched.isAttachedChild = false;
+      sched.parentDisplayNumber = undefined;
+      sched.title = `Item ${parentDisplayNumber} — ${sched.itemRef}`;
+      sched.media = { ...sched.media, drawingLabel: `Drawing — Item ${parentDisplayNumber}` };
+    }
+  }
 }
 
 function buildLegal(doc: QuoteDocumentModel): RenderLegalBlock {
@@ -337,9 +438,17 @@ export function buildQuoteRenderModel(
       hasProjectAddress: !!doc.project.address,
     },
     totals: buildTotals(doc),
-    scheduleItems: doc.items.map((item, idx) =>
-      buildScheduleItem(item, idx, doc.specDisplay.effectiveKeys, specKeyToLabel, doc.domainType)
-    ),
+    scheduleItems: (() => {
+      const items = doc.items.map((item, idx) =>
+        buildScheduleItem(item, idx, doc.specDisplay.effectiveKeys, specKeyToLabel, doc.domainType)
+      );
+      // Phase 5F — group attached procedures under their parent with
+      // 001/001a/001b sub-numbering. Pure re-labelling pass; safe for all
+      // domains (non-laser docs have no attachedToParentRef so they receive
+      // simple sequential 001/002… numbering).
+      applyAttachedProcedureNumbering(items, doc.items);
+      return items;
+    })(),
     legal: buildLegal(doc),
     disclaimerText: "Preliminary Estimate — subject to final site measure, specification confirmation, and final approval.",
     itemCount: doc.items.length,
@@ -355,7 +464,11 @@ export function rebuildScheduleItems(
   effectiveKeys: string[],
 ): RenderScheduleItem[] {
   const specKeyToLabel = buildSpecKeyToLabel(doc);
-  return doc.items.map((item, idx) =>
+  const items = doc.items.map((item, idx) =>
     buildScheduleItem(item, idx, effectiveKeys, specKeyToLabel, doc.domainType)
   );
+  // Phase 5F — keep parity with buildQuoteRenderModel so live spec-display
+  // edits in the preview retain attached-procedure grouping/sub-numbering.
+  applyAttachedProcedureNumbering(items, doc.items);
+  return items;
 }

@@ -102,14 +102,27 @@ export interface LLPricingBreakdown {
   consumablesCost: number;
   machineTimeCost: number;
   machineTimeMinutes: number;
+  cutTimeMinutes: number;
+  pierceTimeMinutes: number;
   processCostPerUnit: number;
   processCostTotal: number;
   processMode: "time-based" | "flat-rate";
 
   setupHandlingCost: number;
+  setupMinutes: number;
+  handlingMinutes: number;
 
   internalCostSubtotal: number;
   minimumLineChargeApplied: boolean;
+  minimumLineCharge: number;
+  minimumMaterialCharge: number;
+  minimumMaterialChargeApplied: boolean;
+  sheetPricePerSheet?: number;
+  gasType?: string;
+  gasConsumptionLPerMin?: number;
+  processRateThicknessMatched?: number;
+  processRateCutSpeedMmPerMin?: number;
+  processRatePierceTimeSec?: number;
 
   markupPercent: number;
   markupAmount: number;
@@ -160,6 +173,187 @@ export interface LLPricingBreakdown {
   totalBuyCost: number;
   totalMargin: number;
   totalMarginPercent: number;
+}
+
+/**
+ * Phase 5E — Commercial Override Layer (read-only over calculated truth).
+ *
+ * The override is a commercial layer ABOVE the calculated bucketed pricing
+ * truth produced by computeLLPricing. It does NOT mutate any bucket-level
+ * buy/sell/margin value. Calculated buy cost remains the margin basis.
+ *
+ * Modes:
+ *   - "none"          : final = calculated
+ *   - "manual_sell"   : finalUnitSell = manualSellPrice (per unit)
+ *   - "target_margin" : finalUnitSell = unitCost / (1 - targetMarginPercent/100)
+ *
+ * Guards (when override is invalid, falls back to calculated and emits warning):
+ *   - targetMarginPercent must be a finite number, > -∞, and < 100
+ *   - manualSellPrice must be finite and > 0
+ *   - calculatedUnitCost must be > 0 for a meaningful target-margin override
+ */
+export interface LLOverrideInputs {
+  enabled?: boolean;
+  mode?: "none" | "manual_sell" | "target_margin" | "markup_on_cost";
+  manualSellPrice?: number;       // per-unit sell price
+  targetMarginPercent?: number;   // 0..<100 (true sell-margin)
+  markupOnCostPercent?: number;   // >= 0, no upper cap (commercial uplift)
+}
+
+export interface LLCommercialResult {
+  isOverridden: boolean;
+  mode: "none" | "manual_sell" | "target_margin" | "markup_on_cost";
+  // Calculated truth (mirrors what computeLLPricing produced)
+  calculatedSellPrice: number;     // line total (sellTotal)
+  calculatedUnitSell: number;
+  calculatedBuyCost: number;       // line total buy cost (totalBuyCost)
+  calculatedUnitCost: number;
+  calculatedMarginAmount: number;
+  calculatedMarginPercent: number;
+  // Final commercial values (these flow to subtotal / unitPrice / snapshot)
+  finalSellPrice: number;          // line total
+  finalUnitSell: number;           // per unit
+  finalMarginAmount: number;
+  finalMarginPercent: number;
+  warning?: string;
+  invalid: boolean;
+}
+
+export function applyCommercialOverride(
+  breakdown: Pick<LLPricingBreakdown, "sellTotal" | "unitSell" | "totalBuyCost" | "unitCost">,
+  quantity: number,
+  override?: LLOverrideInputs,
+): LLCommercialResult {
+  const safeQty = Math.max(quantity || 0, 1);
+  const calculatedSellPrice = breakdown.sellTotal;
+  const calculatedUnitSell = breakdown.unitSell;
+  const calculatedBuyCost = breakdown.totalBuyCost;
+  const calculatedUnitCost = breakdown.unitCost;
+  const calculatedMarginAmount = calculatedSellPrice - calculatedBuyCost;
+  const calculatedMarginPercent = calculatedSellPrice > 0
+    ? (calculatedMarginAmount / calculatedSellPrice) * 100
+    : 0;
+
+  const calculatedFallback = (warning?: string, invalid: boolean = false): LLCommercialResult => ({
+    isOverridden: false,
+    mode: override?.mode ?? "none",
+    calculatedSellPrice,
+    calculatedUnitSell,
+    calculatedBuyCost,
+    calculatedUnitCost,
+    calculatedMarginAmount,
+    calculatedMarginPercent,
+    finalSellPrice: calculatedSellPrice,
+    finalUnitSell: calculatedUnitSell,
+    finalMarginAmount: calculatedMarginAmount,
+    finalMarginPercent: calculatedMarginPercent,
+    warning,
+    invalid,
+  });
+
+  if (!override || !override.enabled || !override.mode || override.mode === "none") {
+    return calculatedFallback();
+  }
+
+  if (override.mode === "manual_sell") {
+    const v = override.manualSellPrice;
+    if (v == null || !Number.isFinite(v) || v <= 0) {
+      return calculatedFallback("Manual sell price must be greater than zero. Falling back to calculated pricing.", true);
+    }
+    const finalUnitSell = v;
+    const finalSellPrice = finalUnitSell * safeQty;
+    const finalMarginAmount = finalSellPrice - calculatedBuyCost;
+    const finalMarginPercent = finalSellPrice > 0 ? (finalMarginAmount / finalSellPrice) * 100 : 0;
+    return {
+      isOverridden: true,
+      mode: "manual_sell",
+      calculatedSellPrice,
+      calculatedUnitSell,
+      calculatedBuyCost,
+      calculatedUnitCost,
+      calculatedMarginAmount,
+      calculatedMarginPercent,
+      finalSellPrice,
+      finalUnitSell,
+      finalMarginAmount,
+      finalMarginPercent,
+      warning: finalMarginAmount < 0 ? "Final sell is below calculated buy cost. Margin is negative." : undefined,
+      invalid: false,
+    };
+  }
+
+  // markup_on_cost — Phase 5F. Uplift % on calculated unit cost. No upper cap.
+  // True margin % is reported as OUTPUT only and may be high but always < 100.
+  if (override.mode === "markup_on_cost") {
+    const mk = override.markupOnCostPercent;
+    if (mk == null || !Number.isFinite(mk)) {
+      return calculatedFallback("Markup % on cost must be a number. Falling back to calculated pricing.", true);
+    }
+    if (mk < 0) {
+      return calculatedFallback("Markup % on cost cannot be negative. Falling back to calculated pricing.", true);
+    }
+    if (calculatedUnitCost <= 0) {
+      return calculatedFallback("Cannot apply markup % on cost: calculated unit cost is zero. Falling back to calculated pricing.", true);
+    }
+    const finalUnitSell = calculatedUnitCost * (1 + mk / 100);
+    const finalSellPrice = finalUnitSell * safeQty;
+    const finalMarginAmount = finalSellPrice - calculatedBuyCost;
+    // True sell-margin is calculated as output. Always < 100 by construction
+    // because final sell > cost (mk >= 0 and unit cost > 0).
+    const finalMarginPercent = finalSellPrice > 0
+      ? (finalMarginAmount / finalSellPrice) * 100
+      : 0;
+    return {
+      isOverridden: true,
+      mode: "markup_on_cost",
+      calculatedSellPrice,
+      calculatedUnitSell,
+      calculatedBuyCost,
+      calculatedUnitCost,
+      calculatedMarginAmount,
+      calculatedMarginPercent,
+      finalSellPrice,
+      finalUnitSell,
+      finalMarginAmount,
+      finalMarginPercent,
+      warning: mk === 0 ? "Markup % on cost is 0 — final sell equals calculated unit cost (no uplift)." : undefined,
+      invalid: false,
+    };
+  }
+
+  // target_margin
+  const tm = override.targetMarginPercent;
+  if (tm == null || !Number.isFinite(tm)) {
+    return calculatedFallback("Target margin % must be a number. Falling back to calculated pricing.", true);
+  }
+  if (tm >= 100) {
+    return calculatedFallback("Target margin % must be less than 100. Use Markup % on cost for uplifts above 100%. Falling back to calculated pricing.", true);
+  }
+  if (tm < 0) {
+    return calculatedFallback("Target margin % cannot be negative. Falling back to calculated pricing.", true);
+  }
+  if (calculatedUnitCost <= 0) {
+    return calculatedFallback("Cannot apply target margin: calculated unit cost is zero. Falling back to calculated pricing.", true);
+  }
+  const finalUnitSell = calculatedUnitCost / (1 - tm / 100);
+  const finalSellPrice = finalUnitSell * safeQty;
+  const finalMarginAmount = finalSellPrice - calculatedBuyCost;
+  const finalMarginPercent = tm;
+  return {
+    isOverridden: true,
+    mode: "target_margin",
+    calculatedSellPrice,
+    calculatedUnitSell,
+    calculatedBuyCost,
+    calculatedUnitCost,
+    calculatedMarginAmount,
+    calculatedMarginPercent,
+    finalSellPrice,
+    finalUnitSell,
+    finalMarginAmount,
+    finalMarginPercent,
+    invalid: false,
+  };
 }
 
 export const LL_PRICING_DEFAULTS = {
@@ -431,8 +625,10 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     }
   }
 
+  let minimumMaterialChargeApplied = false;
   if (materialBuyCost > 0 && materialBuyCost < rates.minimumMaterialCharge) {
     materialBuyCost = rates.minimumMaterialCharge;
+    minimumMaterialChargeApplied = true;
   }
 
   const materialSellCost = materialBuyCost * (1 + materialMarkupPercent / 100);
@@ -454,6 +650,8 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   let machineSellCost = 0;
   let machineBuyCost = 0;
   let machineTimeMinutes = 0;
+  let cutTimeMinutes = 0;
+  let pierceTimeMinutes = 0;
   let processCostTotal = 0;
   let processCostPerUnit = 0;
   let processMode: "time-based" | "flat-rate" = "flat-rate";
@@ -461,6 +659,8 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   let gasCostPerLitre = 0;
   let consumablesSource = "";
   let consumablesCostPerHourRate = 0;
+  let gasTypeOut = "";
+  let gasConsumptionLPerMinOut = 0;
 
   if (processRate && (cutLengthMm > 0 || pierceCount > 0)) {
     processMode = "time-based";
@@ -470,6 +670,11 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     const totalPierces = pierceCount * safeQty;
     const pierceTimeMin = (totalPierces * processRate.pierceTimeSec) / 60;
+
+    cutTimeMinutes = cuttingTimeMin;
+    pierceTimeMinutes = pierceTimeMin;
+    gasTypeOut = processRate.assistGasType;
+    gasConsumptionLPerMinOut = processRate.gasConsumptionLPerMin;
 
     machineTimeMinutes = cuttingTimeMin + pierceTimeMin;
     const machineTimeHours = machineTimeMinutes / 60;
@@ -546,12 +751,25 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     consumablesCost: consumablesBuyCost,
     machineTimeCost: machineSellCost,
     machineTimeMinutes,
+    cutTimeMinutes,
+    pierceTimeMinutes,
     processCostPerUnit,
     processCostTotal,
     processMode,
     setupHandlingCost,
+    setupMinutes: Number(setupMinutes) || 0,
+    handlingMinutes: Number(handlingMinutes) || 0,
     internalCostSubtotal: totalBuyCost,
     minimumLineChargeApplied,
+    minimumLineCharge: rates.minimumLineCharge,
+    minimumMaterialCharge: rates.minimumMaterialCharge,
+    minimumMaterialChargeApplied,
+    sheetPricePerSheet: material?.pricePerSheetExGst,
+    gasType: gasTypeOut || undefined,
+    gasConsumptionLPerMin: gasConsumptionLPerMinOut || undefined,
+    processRateThicknessMatched: processRate?.thickness,
+    processRateCutSpeedMmPerMin: processRate?.cutSpeedMmPerMin,
+    processRatePierceTimeSec: processRate?.pierceTimeSec,
     markupPercent: Math.round(effectiveMarkupPercent * 100) / 100,
     markupAmount,
     sellTotal,

@@ -980,6 +980,16 @@ async function renderScheduleItem(
   const hasDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
   const hasPhotos = loadablePhotos.length > 0;
 
+  // Phase 5F — attached-procedure visual grouping in the PDF. Indent the
+  // entire card ~6mm right and shrink content width accordingly. The actual
+  // schedule item title already includes the sub-numbered displayNumber
+  // (001a/001b…) from the renderer, so no extra string work is required —
+  // we only add the "↳ Attached operation —" affordance prefix.
+  const ATTACHED_INDENT_MM = 6;
+  const indent = item.isAttachedChild ? ATTACHED_INDENT_MM : 0;
+  const cardLeft = LEFT_MARGIN + indent;
+  const cardWidth = CONTENT_WIDTH - indent;
+
   const headerH = DENSITY_ITEM_HEADER_H;
   const specH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
   const drawingH = hasDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
@@ -994,49 +1004,50 @@ async function renderScheduleItem(
   const pad = INNER_PAD;
 
   pdf.setFillColor(COLOR_BG_MUTED);
-  pdf.roundedRect(LEFT_MARGIN, startY - 2, CONTENT_WIDTH, headerH, 1, 1, "F");
+  pdf.roundedRect(cardLeft, startY - 2, cardWidth, headerH, 1, 1, "F");
 
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_BLACK);
-  pdf.text(item.title, LEFT_MARGIN + pad, y + 3.5);
+  const titleText = item.isAttachedChild ? `↳ ${item.title}` : item.title;
+  pdf.text(titleText, cardLeft + pad, y + 3.5);
 
   const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}${item.openingDirectionLabel ? `  \u00B7  ${item.openingDirectionLabel}` : ""}`;
   pdf.setFont(FONT_NORMAL, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(COLOR_MUTED);
   const subtitleW = pdf.getTextWidth(subtitleText);
-  pdf.text(subtitleText, LEFT_MARGIN + CONTENT_WIDTH - pad - subtitleW, y + 3.5);
+  pdf.text(subtitleText, cardLeft + cardWidth - pad - subtitleW, y + 3.5);
 
   y += headerH;
 
   if (SCHEDULE_LAYOUT === "specs_only_v1") {
     if (item.visibleSpecs.length > 0) {
-      y = renderSpecTableNoPageBreak(pdf, y, item.visibleSpecs, LEFT_MARGIN + pad, CONTENT_WIDTH - pad * 2);
+      y = renderSpecTableNoPageBreak(pdf, y, item.visibleSpecs, cardLeft + pad, cardWidth - pad * 2);
     }
   } else if (SCHEDULE_LAYOUT === "image_top_specs_below_v1") {
     if (hasDrawing) {
       const drawingData = imageCache.get(`draw-${item.index}`)!;
       try {
         const dims = await getImageDimensions(drawingData);
-        const maxDrawW = CONTENT_WIDTH - pad * 2;
+        const maxDrawW = cardWidth - pad * 2;
         const maxDrawH = DENSITY_DRAWING_MAX_H;
         const scale = Math.min(maxDrawW / dims.w, maxDrawH / dims.h, 1);
         const dw = dims.w * scale;
         const dh = dims.h * scale;
-        const drawX = LEFT_MARGIN + pad + (maxDrawW - dw) / 2;
+        const drawX = cardLeft + pad + (maxDrawW - dw) / 2;
         pdf.addImage(drawingData, drawX, y, dw, dh);
         y += dh + 3;
       } catch { /* skip */ }
     }
     if (item.visibleSpecs.length > 0) {
-      y = renderSpecTableNoPageBreak(pdf, y, item.visibleSpecs, LEFT_MARGIN + pad, CONTENT_WIDTH - pad * 2);
+      y = renderSpecTableNoPageBreak(pdf, y, item.visibleSpecs, cardLeft + pad, cardWidth - pad * 2);
     }
   } else {
     const drawWPct = DRAWING_MAX_W_PCT / 100;
-    const leftColW = CONTENT_WIDTH * drawWPct - 2;
-    const rightColX = LEFT_MARGIN + CONTENT_WIDTH * drawWPct + 2;
-    const rightColW = CONTENT_WIDTH * (1 - drawWPct) - 5;
+    const leftColW = cardWidth * drawWPct - 2;
+    const rightColX = cardLeft + cardWidth * drawWPct + 2;
+    const rightColW = cardWidth * (1 - drawWPct) - 5;
 
     let drawingBottomY = y;
     if (hasDrawing) {
@@ -1048,7 +1059,7 @@ async function renderScheduleItem(
         const scale = Math.min(maxDrawW / dims.w, maxDrawH / dims.h, 1);
         const dw = dims.w * scale;
         const dh = dims.h * scale;
-        const drawX = LEFT_MARGIN + pad + (leftColW - pad * 2 - dw) / 2;
+        const drawX = cardLeft + pad + (leftColW - pad * 2 - dw) / 2;
         pdf.addImage(drawingData, drawX, y, dw, dh);
         drawingBottomY = y + dh + 2;
       } catch { /* skip */ }
@@ -1068,11 +1079,11 @@ async function renderScheduleItem(
     pdf.setFontSize(7);
     pdf.setTextColor(COLOR_ACCENT);
     if (item.gosNote) {
-      pdf.text(`[GOS] ${item.gosNote}`, LEFT_MARGIN + pad, y + 2.5);
+      pdf.text(`[GOS] ${item.gosNote}`, cardLeft + pad, y + 2.5);
       y += 4;
     }
     if (item.catDoorNote) {
-      pdf.text(`\u2022  ${item.catDoorNote}`, LEFT_MARGIN + pad, y + 2.5);
+      pdf.text(`\u2022  ${item.catDoorNote}`, cardLeft + pad, y + 2.5);
       y += 4;
     }
   }
@@ -1082,30 +1093,30 @@ async function renderScheduleItem(
     pdf.setFont(FONT_NORMAL, "bold");
     pdf.setFontSize(6.5);
     pdf.setTextColor(COLOR_MUTED);
-    pdf.text("PANE-LEVEL GLAZING", LEFT_MARGIN + pad, y + 2.5);
+    pdf.text("PANE-LEVEL GLAZING", cardLeft + pad, y + 2.5);
     y += 4;
     pdf.setFont(FONT_NORMAL, "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(COLOR_BLACK);
     for (const ps of [...item.paneGlassSpecs].sort((a, b) => a.paneIndex - b.paneIndex)) {
       const label = [ps.iguType, ps.glassType, ps.glassThickness].filter(Boolean).join(" · ") || "—";
-      pdf.text(`Pane ${ps.paneIndex + 1}: ${label}`, LEFT_MARGIN + pad + 2, y + 2.5);
+      pdf.text(`Pane ${ps.paneIndex + 1}: ${label}`, cardLeft + pad + 2, y + 2.5);
       y += 3.5;
     }
   }
 
   if (hasPhotos) {
-    const renderedPhotosResult = await tryRenderPhotos(pdf, y, loadablePhotos, imageCache, item.title, pad, startY, itemStartPage);
+    const renderedPhotosResult = await tryRenderPhotos(pdf, y, loadablePhotos, imageCache, item.title, pad, startY, itemStartPage, cardLeft, cardWidth);
     if (renderedPhotosResult.rendered) {
       if (renderedPhotosResult.newPage) {
-        drawItemBorder(pdf, startY, y, itemStartPage);
+        drawItemBorder(pdf, startY, y, itemStartPage, cardLeft, cardWidth);
         return renderedPhotosResult.y + 2;
       }
       y = renderedPhotosResult.y;
     }
   }
 
-  drawItemBorder(pdf, startY, y, itemStartPage);
+  drawItemBorder(pdf, startY, y, itemStartPage, cardLeft, cardWidth);
   return y + 2;
 }
 
@@ -1118,12 +1129,14 @@ async function tryRenderPhotos(
   pad: number,
   cardStartY: number,
   cardStartPage: number,
+  cardLeft: number = LEFT_MARGIN,
+  cardWidth: number = CONTENT_WIDTH,
 ): Promise<{ rendered: boolean; y: number; newPage: boolean }> {
   const actuallyLoadable = photos.filter((p) => imageCache.has(p.key));
   if (actuallyLoadable.length === 0) return { rendered: false, y, newPage: false };
 
   if (y + DENSITY_PHOTO_ROW_H > MAX_Y) {
-    drawItemBorder(pdf, cardStartY, y, cardStartPage);
+    drawItemBorder(pdf, cardStartY, y, cardStartPage, cardLeft, cardWidth);
     pdf.addPage();
     y = TOP_MARGIN;
     const photosStartY = y;
@@ -1133,10 +1146,10 @@ async function tryRenderPhotos(
       pdf.setFont(FONT_NORMAL, "bold");
       pdf.setFontSize(mmSize(T.typography.specLabelSize));
       pdf.setTextColor(COLOR_MUTED);
-      pdf.text(`${itemTitle} — SITE PHOTOS (continued)`, LEFT_MARGIN + pad, y + 3);
+      pdf.text(`${itemTitle} — SITE PHOTOS (continued)`, cardLeft + pad, y + 3);
       y = result.y;
     }
-    drawItemBorder(pdf, photosStartY - 2, y, pdf.getNumberOfPages());
+    drawItemBorder(pdf, photosStartY - 2, y, pdf.getNumberOfPages(), cardLeft, cardWidth);
     return { rendered: result.count > 0, y, newPage: true };
   }
 
@@ -1146,20 +1159,27 @@ async function tryRenderPhotos(
     pdf.setFont(FONT_NORMAL, "bold");
     pdf.setFontSize(mmSize(T.typography.specLabelSize));
     pdf.setTextColor(COLOR_MUTED);
-    pdf.text("SITE PHOTOS", LEFT_MARGIN + pad, headingY + 3);
+    pdf.text("SITE PHOTOS", cardLeft + pad, headingY + 3);
     y = result.y;
     return { rendered: true, y, newPage: false };
   }
   return { rendered: false, y: headingY, newPage: false };
 }
 
-function drawItemBorder(pdf: Pdf, startY: number, endY: number, startPage: number) {
+function drawItemBorder(
+  pdf: Pdf,
+  startY: number,
+  endY: number,
+  startPage: number,
+  cardLeft: number = LEFT_MARGIN,
+  cardWidth: number = CONTENT_WIDTH,
+) {
   const currentPage = pdf.getNumberOfPages();
   if (currentPage !== startPage) return;
 
   pdf.setDrawColor(COLOR_BORDER);
   pdf.setLineWidth(0.3);
-  pdf.roundedRect(LEFT_MARGIN, startY - 2, CONTENT_WIDTH, endY - startY + 3, 1, 1, "S");
+  pdf.roundedRect(cardLeft, startY - 2, cardWidth, endY - startY + 3, 1, 1, "S");
 }
 
 async function renderPhotosFromCache(

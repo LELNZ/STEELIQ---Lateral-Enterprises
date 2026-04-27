@@ -70,6 +70,55 @@ export const laserSnapshotItemSchema = z.object({
     costTotal: z.number().default(0),
     notes: z.string().optional(),
   })).optional(),
+
+  // Commercial Override Layer (Phase 5E) — additive, optional.
+  // Override is preserved in snapshot so quote revisions reload faithfully.
+  // unitPrice and sellTotal in snapshot reflect the FINAL (commercial) values.
+  pricingOverrideEnabled: z.boolean().optional(),
+  // Phase 5F — adds "markup_on_cost" mode allowing markup values >100 (uncapped).
+  pricingOverrideMode: z.enum(["none", "manual_sell", "target_margin", "markup_on_cost"]).optional(),
+  manualSellPrice: z.number().optional(),
+  targetMarginPercent: z.number().optional(),
+  // Phase 5F — markup % applied to calculated unit cost (sell = cost * (1 + mk/100)).
+  // No upper cap; true margin is output-only via finalMarginPercent.
+  markupOnCostPercent: z.number().min(0).optional(),
+  overrideReason: z.string().optional(),
+  calculatedSellPrice: z.number().optional(),
+  calculatedBuyCost: z.number().optional(),
+  finalSellPrice: z.number().optional(),
+  finalMarginAmount: z.number().optional(),
+  finalMarginPercent: z.number().optional(),
+
+  // Manual Procedure / Provisional line (Phase 5E).
+  isManualProcedure: z.boolean().optional(),
+  procedureType: z.enum(["Folding", "Deburring", "Tapping", "Other"]).optional(),
+  procedureDescription: z.string().optional(),
+  manualUnitCost: z.number().optional(),
+  manualUnitSell: z.number().optional(),
+  manualTargetMarginPercent: z.number().optional(),
+  manualNotes: z.string().optional(),
+
+  // Attached manual procedures (Phase 5E — secondary operations belonging to a
+  // parent LL line item). Stored on the parent snapshot row so reload restores
+  // the parent->child relationship faithfully.
+  attachedManualProcedures: z.array(z.object({
+    id: z.string(),
+    procedureType: z.enum(["Folding", "Deburring", "Tapping", "Other"]),
+    description: z.string().optional(),
+    quantity: z.number().min(0),
+    unitCost: z.number().min(0).optional(),
+    unitSell: z.number().min(0).optional(),
+    targetMarginPercent: z.number().optional(),
+    notes: z.string().optional(),
+  })).optional(),
+
+  // For flattened pseudo-rows that represent an attached procedure as its own
+  // child sub-line in the snapshot (so PDF/Preview can render it inline after
+  // the parent without any quote-document changes). Reload-time loaders use
+  // these to skip pseudo rows and rebuild parent->child from the parent's
+  // attachedManualProcedures array.
+  attachedToParentRef: z.string().optional(),
+  attachedProcedureId: z.string().optional(),
 });
 
 export type LaserSnapshotItem = z.infer<typeof laserSnapshotItemSchema>;

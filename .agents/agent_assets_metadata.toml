@@ -342,3 +342,9 @@ id = "MitjOlxa8XUbPF41Jb-_a"
 uri = "file://reports/ll-est-0003-evidence-hardening-release-gate-report.md"
 type = "text"
 title = "LL-EST-0003 Evidence Hardening + Release Gate Report"
+
+[[outputs]]
+id = "gq6bE6SSarlzto-JDchFD"
+uri = "file://reports/ll-pricing-explainability-and-process-rate-coverage-report.md"
+type = "text"
+title = "LL Pricing Explainability + Governed Process-Rate Coverage Review"
