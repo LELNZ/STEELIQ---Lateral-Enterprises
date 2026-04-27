@@ -828,10 +828,10 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         ))}
       </div>
 
-      <div className="grid grid-cols-[1fr_80px_80px_70px] gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">
-        <span>Bucket</span>
-        <span className="text-right">Buy</span>
-        <span className="text-right">Sell</span>
+      <div className="grid grid-cols-[1fr_80px_80px_70px] gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1" title="All bucket values are line totals (buy/sell × quantity)">
+        <span>Bucket (line totals)</span>
+        <span className="text-right">Line Buy</span>
+        <span className="text-right">Line Sell</span>
         <span className="text-right">Margin</span>
       </div>
 
@@ -881,8 +881,8 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         </div>
       )}
 
-      <div className="flex justify-between text-xs font-semibold border-t pt-1 mt-1">
-        <span>Unit Sell</span>
+      <div className="flex justify-between text-xs font-semibold border-t pt-1 mt-1" title="Unit Sell = Line Sell ÷ quantity">
+        <span>Unit Sell <span className="text-[9px] font-normal text-muted-foreground">(line ÷ qty)</span></span>
         <span className="font-mono" data-testid="unit-sell-price">${breakdown.unitSell.toFixed(2)}</span>
       </div>
       <div className="flex justify-between text-[11px] text-muted-foreground">
@@ -906,12 +906,18 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
           <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Material</div>
             {breakdown.sheetPricePerSheet ? (
-              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Sheet price (ex-GST)</span><span className="font-mono" data-testid="detail-sheet-price">${breakdown.sheetPricePerSheet.toFixed(2)}</span></div>
+              <div className="flex justify-between text-[10px]" title="Supplier buy price per sheet (ex-GST). This is the procurement basis; material sell = (sheet buy ÷ parts per sheet) × qty × (1 + material markup%).">
+                <span className="text-muted-foreground">Supplier sheet buy (ex-GST)</span>
+                <span className="font-mono" data-testid="detail-sheet-price">${breakdown.sheetPricePerSheet.toFixed(2)}</span>
+              </div>
             ) : null}
             <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Parts per sheet</span><span className="font-mono">{breakdown.partsPerSheet || "—"}</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Estimated sheets</span><span className="font-mono">{breakdown.estimatedSheets || "—"}</span></div>
+            <div className="flex justify-between text-[10px]" title="Procurement guidance only — sheets you would order. Material billing uses yield-based allocation (per-part), not whole sheets."><span className="text-muted-foreground">Estimated sheets <span className="text-[9px] italic">(procurement)</span></span><span className="font-mono">{breakdown.estimatedSheets || "—"}</span></div>
             <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Sheet utilisation</span><span className="font-mono">{(breakdown.utilisationFactor * 100).toFixed(0)}%</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Effective material buy / part</span><span className="font-mono">${breakdown.materialCostPerUnit.toFixed(2)}</span></div>
+            <div className="flex justify-between text-[10px]" title="Yield-based per-part buy = sheet buy ÷ parts per sheet."><span className="text-muted-foreground">Effective material buy / part</span><span className="font-mono">${breakdown.materialCostPerUnit.toFixed(2)}</span></div>
+            <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
+              Material billing is yield-based: line buy = (sheet buy ÷ parts per sheet) × qty, before any minimum material charge. Estimated sheets is procurement only.
+            </div>
             {breakdown.minimumMaterialChargeApplied && (
               <div className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="min-material-notice">
                 Min. material charge applied (${breakdown.minimumMaterialCharge.toFixed(2)})
@@ -3021,8 +3027,14 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-purple-700 dark:text-purple-300" />
-                    <span className="text-sm font-semibold">Commercial Override</span>
-                    <span className="text-[11px] text-muted-foreground">(optional — overrides calculated sell)</span>
+                    <span className="text-sm font-semibold" data-testid="text-commercial-section-title">
+                      {formData.pricingOverrideEnabled ? "Commercial Override Active" : "Commercial Pricing Preview"}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground" data-testid="text-commercial-section-subtitle">
+                      {formData.pricingOverrideEnabled
+                        ? "(override ON — manual values applied)"
+                        : "(override OFF — engine-calculated values shown below)"}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Label htmlFor="override-toggle" className={`text-xs select-none ${dialogReadiness.ready ? "cursor-pointer" : "cursor-not-allowed text-muted-foreground"}`}>
