@@ -916,10 +916,13 @@ async function renderSchedule(
   if (model.scheduleItems.length > 0) {
     const fi = model.scheduleItems[0];
     const fiDrawH = fi.media.drawingUrl && imageCache.has(`draw-${fi.index}`) ? DENSITY_DRAWING_MAX_H + 2 : 0;
-    // Phase 5F manual blank preview occupies the same left visual area
-    // as a drawing — bound its height by drawingMaxH so the page-break
-    // estimator stays in parity with the actual rendered card height.
-    const fiBlankH = fi.manualBlankPreview ? DENSITY_DRAWING_MAX_H : 0;
+    // Phase 5F card-tightening — manual blank placeholder is now a
+    // strictly bounded ~22mm tall compact box (max 32mm wide). It no
+    // longer borrows the full drawingMaxH (40mm), so the page-1
+    // first-item estimator correctly recognises that LL items with
+    // bounded blanks fit on page 1 alongside subsequent items.
+    const BLANK_PREVIEW_MM = 22;
+    const fiBlankH = fi.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
     const fiSpecH = fi.visibleSpecs.length * DENSITY_SPEC_ROW_H;
     const fiPhotoH = fi.media.customerPhotos.filter((p) => imageCache.has(p.key)).length > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
     // Phase 5F polish parity — pane specs and attached-operations rows
@@ -929,7 +932,11 @@ async function renderSchedule(
     // aligns with where preview actually breaks.
     const fiPaneH = fi.paneGlassSpecs.length > 0 ? 6 + fi.paneGlassSpecs.length * 3.5 : 0;
     const fiOpsH = fi.attachedOperations.length > 0 ? 6 + fi.attachedOperations.length * 4 : 0;
-    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPaneH + fiOpsH + fiPhotoH + 4;
+    // Phase 5F card-tightening — single compact pricing row beneath the
+    // spec table for LL items when Unit Price / Line Total are toggled
+    // on. ~5mm covers font + line spacing + a small bottom gap.
+    const fiPricingH = (fi.pricingDisplay && (fi.pricingDisplay.unitPriceLabel || fi.pricingDisplay.lineTotalLabel)) ? 5 : 0;
+    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPricingH + fiPaneH + fiOpsH + fiPhotoH + 4;
   }
 
   const neededOnCurrentPage = SECTION_GAP + SCHEDULE_HEADING_H + firstItemEstH;
@@ -969,15 +976,19 @@ async function renderSchedule(
     const hasItemDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
     const itemSpecH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
     const itemDrawH = hasItemDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
-    // Phase 5F manual blank preview parity — see comment in firstItemEstH.
-    const itemBlankH = item.manualBlankPreview ? DENSITY_DRAWING_MAX_H : 0;
+    // Phase 5F card-tightening — bounded ~22mm blank box (see comment
+    // in firstItemEstH).
+    const ITEM_BLANK_PREVIEW_MM = 22;
+    const itemBlankH = item.manualBlankPreview ? ITEM_BLANK_PREVIEW_MM : 0;
     const itemPhotoH = loadablePhotoCount > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
     const paneSpecH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
     // Phase 5F polish parity — attached-operations rows count toward
     // the per-item ensureSpace estimate so we match the preview's
     // measurement-based packer (see estimateScheduleItemMm).
     const itemOpsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
-    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemBlankH, itemSpecH) + paneSpecH + itemOpsH + itemPhotoH + 4;
+    // Phase 5F card-tightening — pricing display row height (LL only).
+    const itemPricingH = (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) ? 5 : 0;
+    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemBlankH, itemSpecH) + itemPricingH + paneSpecH + itemOpsH + itemPhotoH + 4;
     y = ensureSpace(pdf, y, Math.min(estimatedH, MAX_Y - TOP_MARGIN - 5));
 
     y = await renderScheduleItem(pdf, y, item, imageCache);
@@ -1012,17 +1023,21 @@ async function renderScheduleItem(
   const headerH = DENSITY_ITEM_HEADER_H;
   const specH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
   const drawingH = hasDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
-  // Phase 5F manual blank preview parity — mirrors firstItemEstH/estimatedH
-  // so the pre-render minItemH ensureSpace check stays consistent with the
-  // height actually drawn in the placeholder branch below.
-  const blankH = item.manualBlankPreview ? DENSITY_DRAWING_MAX_H : 0;
+  // Phase 5F card-tightening — bounded ~22mm blank box (mirrors the
+  // firstItemEstH / estimatedH change so the pre-render minItemH
+  // ensureSpace check stays consistent with the bounded box actually
+  // drawn in the placeholder branch below).
+  const MIN_BLANK_PREVIEW_MM = 22;
+  const blankH = item.manualBlankPreview ? MIN_BLANK_PREVIEW_MM : 0;
   const photosH = hasPhotos ? DENSITY_PHOTO_ROW_H : 0;
   const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
   // Phase 5F polish parity — include attached-operations height so the
   // pre-render minItemH stays consistent with the preview's
   // estimateScheduleItemMm formula.
   const opsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
-  const minItemH = headerH + Math.max(drawingH, blankH, specH) + paneH + opsH + photosH + SECTION_GAP;
+  // Phase 5F card-tightening — pricing display row height (LL only).
+  const pricingH = (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) ? 5 : 0;
+  const minItemH = headerH + Math.max(drawingH, blankH, specH) + pricingH + paneH + opsH + photosH + SECTION_GAP;
 
   y = ensureSpace(pdf, y, Math.min(minItemH, MAX_Y - TOP_MARGIN - 5));
   const itemStartPage = pdf.getNumberOfPages();
@@ -1072,9 +1087,23 @@ async function renderScheduleItem(
     }
   } else {
     const drawWPct = DRAWING_MAX_W_PCT / 100;
-    const leftColW = cardWidth * drawWPct - 2;
-    const rightColX = cardLeft + cardWidth * drawWPct + 2;
-    const rightColW = cardWidth * (1 - drawWPct) - 5;
+    // Phase 5F card-tightening — when there's no uploaded drawing but
+    // we DO have a manual blank placeholder, narrow the left column to
+    // a compact ~35mm so the spec table on the right has the full
+    // remaining card width. This restores readability when Unit Price
+    // / Line Total / Operations rows widen the spec table content.
+    // Items with a real drawing keep the original ~45% column.
+    const BLANK_LEFT_COL_MM = 35;
+    const useNarrowBlankCol = !hasDrawing && !!item.manualBlankPreview;
+    const leftColW = useNarrowBlankCol
+      ? BLANK_LEFT_COL_MM
+      : cardWidth * drawWPct - 2;
+    const rightColX = useNarrowBlankCol
+      ? cardLeft + BLANK_LEFT_COL_MM + 2
+      : cardLeft + cardWidth * drawWPct + 2;
+    const rightColW = useNarrowBlankCol
+      ? cardWidth - BLANK_LEFT_COL_MM - pad - 5
+      : cardWidth * (1 - drawWPct) - 5;
 
     let drawingBottomY = y;
     if (hasDrawing) {
@@ -1091,44 +1120,46 @@ async function renderScheduleItem(
         drawingBottomY = y + dh + 2;
       } catch { /* skip */ }
     } else if (item.manualBlankPreview) {
-      // Phase 5F manual blank preview — render a simple proportional
-      // rectangle outline plus dimension caption in the left visual area
-      // for LL items that have valid length + width but no uploaded
-      // drawing. ASCII / Latin-1 only ("x"), no glyphs that jsPDF
-      // helvetica cannot encode. Indicative geometry only — never holes,
-      // folds, cutouts, or any manufacturing detail.
+      // Phase 5F card-tightening — bounded compact blank placeholder.
+      // Strict caps ~32mm wide × 14mm tall regardless of the surrounding
+      // column so the placeholder never dominates the card. Aspect ratio
+      // is preserved within those bounds. Indicative geometry only —
+      // never holes, folds, cutouts, or any manufacturing detail.
+      // ASCII / Latin-1 only ("x") so jsPDF helvetica cannot mangle it.
+      const BLANK_BOX_MAX_W_MM = 32;
+      const BLANK_BOX_MAX_H_MM = 14;
       const lengthMm = item.manualBlankPreview.lengthMm;
       const widthMm = item.manualBlankPreview.widthMm;
-      const maxBoxW = leftColW - pad * 2;
-      const maxBoxH = DENSITY_DRAWING_MAX_H - 6; // reserve mm for caption
-      const longest = Math.max(lengthMm, widthMm);
-      const scale = Math.min(maxBoxW / longest, maxBoxH / longest);
-      const rectW = Math.max(8, lengthMm * scale);
-      const rectH = Math.max(8, widthMm * scale);
-      const rectX = cardLeft + pad + (maxBoxW - rectW) / 2;
+      const scale = Math.min(BLANK_BOX_MAX_W_MM / lengthMm, BLANK_BOX_MAX_H_MM / widthMm);
+      const rectW = Math.max(6, lengthMm * scale);
+      const rectH = Math.max(4, widthMm * scale);
+      // Centre the bounded box within the (now narrow) left column.
+      const colInnerW = leftColW - pad * 2;
+      const rectX = cardLeft + pad + (colInnerW - rectW) / 2;
       const rectY = y + 1;
       pdf.setDrawColor(COLOR_BORDER);
       pdf.setLineWidth(0.3);
       pdf.setFillColor(255, 255, 255);
       pdf.roundedRect(rectX, rectY, rectW, rectH, 0.6, 0.6, "FD");
-      // Centred dimension label (inside the rectangle when there's room,
-      // otherwise immediately below).
+      // Centred dimension label inside the bounded rectangle. Smaller
+      // font (6.5pt) so it fits the new compact box.
       pdf.setFont(FONT_NORMAL, "normal");
-      pdf.setFontSize(7.5);
+      pdf.setFontSize(6.5);
       pdf.setTextColor(COLOR_BLACK);
       const dimText = `${lengthMm} x ${widthMm}mm`;
       const dimTextW = pdf.getTextWidth(dimText);
       const dimX = rectX + (rectW - dimTextW) / 2;
       const dimY = rectY + rectH / 2 + 1;
       pdf.text(dimText, dimX, dimY);
-      // Italic muted caption beneath the rectangle.
+      // Italic muted caption beneath the rectangle, centred under the
+      // bounded blank box (not the full left column).
       pdf.setFont(FONT_NORMAL, "italic");
-      pdf.setFontSize(6.5);
+      pdf.setFontSize(5.5);
       pdf.setTextColor(COLOR_MUTED);
       const captionText = "Indicative blank only";
       const captionW = pdf.getTextWidth(captionText);
-      const captionX = cardLeft + pad + (maxBoxW - captionW) / 2;
-      const captionY = rectY + rectH + 4;
+      const captionX = rectX + (rectW - captionW) / 2;
+      const captionY = rectY + rectH + 3;
       pdf.text(captionText, captionX, captionY);
       drawingBottomY = captionY + 1;
     }
@@ -1141,6 +1172,28 @@ async function renderScheduleItem(
   }
 
   y += 2;
+
+  // Phase 5F card-tightening — single compact pricing row beneath the
+  // spec/media grid for LL items when the parent line pricing toggles
+  // are on. Right-aligned, "Unit Price: $X · Line Total: $Y" style.
+  // Customer-safe (only the labels gated by showLineUnitPrice /
+  // showLineTotal are emitted). ASCII / Latin-1 only.
+  if (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) {
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(7.5);
+    const segments: string[] = [];
+    if (item.pricingDisplay.unitPriceLabel) {
+      segments.push(`Unit Price: ${item.pricingDisplay.unitPriceLabel}`);
+    }
+    if (item.pricingDisplay.lineTotalLabel) {
+      segments.push(`Line Total: ${item.pricingDisplay.lineTotalLabel}`);
+    }
+    const pricingText = segments.join("   \u00B7   ");
+    pdf.setTextColor(COLOR_BLACK);
+    const pricingW = pdf.getTextWidth(pricingText);
+    pdf.text(pricingText, cardLeft + cardWidth - pad - pricingW, y + 2.5);
+    y += 5;
+  }
 
   if (item.gosNote || item.catDoorNote) {
     pdf.setFont(FONT_NORMAL, "italic");

@@ -3639,6 +3639,10 @@ export async function registerRoutes(
           // Phase 5E hardening — line-level pricing visibility (LL).
           showLineUnitPrice: z.boolean().optional(),
           showLineTotal: z.boolean().optional(),
+          // Phase 5F card-tightening — independent toggle for attached
+          // operation pricing visibility (LL). Default false on the
+          // client; persisted here so user choice survives reload.
+          showOperationPricing: z.boolean().optional(),
         }).optional(),
         commercialRemarks: z.string().nullable().optional(),
       }).parse(req.body);

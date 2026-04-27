@@ -117,6 +117,15 @@ export interface RenderScheduleItem {
   // indicative shape instead of a large blank space. Never carries
   // internal cost / margin / supplier / drawing-import data.
   manualBlankPreview: { lengthMm: number; widthMm: number } | null;
+  // Phase 5F card-tightening — dedicated parent-item pricing row for
+  // LL (laser) items. Populated from the resolvedSpecs unitPrice /
+  // lineTotal entries (which were placed there by quote-document.ts when
+  // showLineUnitPrice / showLineTotal are on). Pulled OUT of visibleSpecs
+  // for LL items so the spec table stays clean and readable; rendered as
+  // a single compact pricing row beneath the spec table in Preview/PDF.
+  // Customer-safe: only the toggled unit price / line total labels are
+  // exposed, never cost / margin / supplier / bucket data.
+  pricingDisplay: { unitPriceLabel: string | null; lineTotalLabel: string | null } | null;
 }
 
 // Phase 5F polish — compact, customer-safe view of an attached manual /
@@ -246,13 +255,31 @@ function buildScheduleItem(
 
   const isLaser = domainType === "laser";
 
+  // Phase 5F card-tightening — pull unitPrice/lineTotal OUT of the LL
+  // spec table so the customer-facing right-hand column stays focused on
+  // material/grade/thickness/dimensions/finish. The pricing values are
+  // re-emitted in the dedicated `pricingDisplay` field below and rendered
+  // in a single compact row beneath the spec table by Preview / PDF.
+  const isLaserPricingKey = (k: string) => k === "unitPrice" || k === "lineTotal";
+
   const visibleSpecs = isLaser
     ? Object.entries(specs)
-        .filter(([, v]) => v && v !== "" && v !== "0")
+        .filter(([k, v]) => v && v !== "" && v !== "0" && !isLaserPricingKey(k))
         .map(([key, value]) => ({ key, label: LASER_SPEC_LABELS[key] || key, value }))
     : displayKeys
         .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
         .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
+
+  // Phase 5F card-tightening — dedicated pricing row (LL only). Reads
+  // the same values the document layer already governed via the
+  // showLineUnitPrice / showLineTotal toggles, so this is a pure display
+  // re-shape — no math change.
+  const pricingDisplay = isLaser && (specs.unitPrice || specs.lineTotal)
+    ? {
+        unitPriceLabel: specs.unitPrice ? String(specs.unitPrice) : null,
+        lineTotalLabel: specs.lineTotal ? String(specs.lineTotal) : null,
+      }
+    : null;
 
   const customerPhotos = (item.photos || [])
     .filter((p: QuoteDocumentItemPhoto) => p.includeInCustomerPdf)
@@ -330,6 +357,7 @@ function buildScheduleItem(
     parentDisplayNumber: undefined,
     attachedOperations: [],
     manualBlankPreview,
+    pricingDisplay,
   };
 }
 
@@ -342,6 +370,7 @@ function buildAttachedOperation(
   docItem: QuoteDocumentItem,
   showLineUnitPrice: boolean,
   showLineTotal: boolean,
+  showOperationPricing: boolean,
 ): RenderAttachedOperation {
   const sv = (docItem.specValues || {}) as Record<string, unknown>;
   const procedureType = String(sv.procedureType ?? "").trim() || "Procedure";
@@ -352,14 +381,20 @@ function buildAttachedOperation(
   const unitPriceVal = Number.isFinite(manualUnitSell) && manualUnitSell > 0
     ? manualUnitSell
     : (sellTotal > 0 ? sellTotal / qty : 0);
+  // Phase 5F card-tightening — operation pricing is gated by BOTH the
+  // standard line-pricing toggle (showLineUnitPrice / showLineTotal) AND
+  // the new showOperationPricing toggle. When showOperationPricing is
+  // false the customer sees the operation description / qty only and the
+  // operation value is implicitly absorbed into the parent item / quote
+  // subtotal — no math change, just display aggregation.
   return {
     procedureType,
     description,
     quantity: qty,
-    unitPriceLabel: showLineUnitPrice && unitPriceVal > 0
+    unitPriceLabel: showOperationPricing && showLineUnitPrice && unitPriceVal > 0
       ? `$${fmtCurrency(unitPriceVal)} ea`
       : null,
-    lineTotalLabel: showLineTotal && sellTotal > 0
+    lineTotalLabel: showOperationPricing && showLineTotal && sellTotal > 0
       ? `$${fmtCurrency(sellTotal)}`
       : null,
   };
@@ -410,11 +445,15 @@ function toAlphaSuffix(zeroBasedIndex: number): string {
 // NOTE: snapshot totals (subtotal/GST/total) are computed in
 // quote-document.ts from snapshot.totalsBreakdown, NOT from this list, so
 // filtering children here cannot change customer-visible totals.
+// Phase 5F card-tightening — extra `showOperationPricing` flag is
+// threaded through so attached operations can suppress their unit/line
+// price labels independently from the parent line-pricing toggles.
 function applyAttachedProcedureNumbering(
   scheduleItems: RenderScheduleItem[],
   documentItems: QuoteDocumentItem[],
   showLineUnitPrice: boolean,
   showLineTotal: boolean,
+  showOperationPricing: boolean,
 ): Set<number> {
   const collapsedIndices = new Set<number>();
   let parentCounter = 0;
@@ -435,7 +474,7 @@ function applyAttachedProcedureNumbering(
       // Collapse into parent's compact operations block — do NOT emit a
       // separate card, do NOT advance the parent counter, do NOT touch
       // child sched.title (will be filtered out anyway).
-      const op = buildAttachedOperation(docItem, showLineUnitPrice, showLineTotal);
+      const op = buildAttachedOperation(docItem, showLineUnitPrice, showLineTotal, showOperationPricing);
       scheduleItems[parentSchedIndex].attachedOperations.push(op);
       collapsedIndices.add(i);
     } else {
@@ -547,6 +586,7 @@ export function buildQuoteRenderModel(
         doc.items,
         doc.totalsDisplayConfig.showLineUnitPrice === true,
         doc.totalsDisplayConfig.showLineTotal === true,
+        doc.totalsDisplayConfig.showOperationPricing === true,
       );
       return items.filter((_, idx) => !collapsed.has(idx));
     })(),
@@ -576,6 +616,7 @@ export function rebuildScheduleItems(
     doc.items,
     doc.totalsDisplayConfig.showLineUnitPrice === true,
     doc.totalsDisplayConfig.showLineTotal === true,
+    doc.totalsDisplayConfig.showOperationPricing === true,
   );
   return items.filter((_, idx) => !collapsed.has(idx));
 }

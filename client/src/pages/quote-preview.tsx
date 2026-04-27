@@ -219,17 +219,24 @@ export default function QuotePreview() {
     const headerH = T.density.itemHeaderH;
     const specH = item.visibleSpecs.length * T.density.specRowH;
     const drawH = item.media.drawingUrl ? T.density.drawingMaxH + 2 : 0;
-    // Phase 5F manual blank preview occupies the same left visual area
-    // as the drawing, so its height is bounded by drawingMaxH and never
-    // increases the parent card's row height beyond what specH/drawH
-    // already drive (we take Math.max below).
-    const blankH = item.manualBlankPreview ? T.density.drawingMaxH : 0;
+    // Phase 5F card-tightening — manual blank preview is now strictly
+    // bounded to a compact ~22mm tall placeholder regardless of density
+    // tier (130x80px max + caption + 4px padding ≈ 22mm). It no longer
+    // borrows the full drawingMaxH (40mm) which previously caused the
+    // pagination estimator to inflate the LL card and push subsequent
+    // items to page 2.
+    const BLANK_PREVIEW_MM = 22;
+    const blankH = item.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
     const photoH = item.media.customerPhotos.length > 0 ? T.density.photoRowH + 5 : 0;
     const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
     // Operations block: heading (~4mm) + 2mm gap + 4mm per row (matches
     // pdf-engine.ts opRowH=4 used in the OPERATIONS section).
     const opsH = item.attachedOperations.length > 0 ? 6 + item.attachedOperations.length * 4 : 0;
-    return headerH + Math.max(drawH, blankH, specH) + paneH + opsH + photoH + 4 + T.density.itemGapMm;
+    // Phase 5F card-tightening — single compact pricing row beneath the
+    // spec table for LL items when Unit Price / Line Total are toggled
+    // on. ~5mm covers font + line spacing + a small bottom gap.
+    const pricingDisplayH = (item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel)) ? 5 : 0;
+    return headerH + Math.max(drawH, blankH, specH) + pricingDisplayH + paneH + opsH + photoH + 4 + T.density.itemGapMm;
   };
 
   // Conservative page-1 chrome estimate (mm). Tracks the visible sections
@@ -356,6 +363,13 @@ export default function QuotePreview() {
                           // Phase 5E hardening — line-level pricing visibility (LL only).
                           { key: "showLineUnitPrice", label: "Item Unit Price" },
                           { key: "showLineTotal", label: "Item Line Total" },
+                          // Phase 5F card-tightening — independent toggle for
+                          // attached operation pricing (LL only). Default OFF so
+                          // operations show description + qty without exposing
+                          // their unit / line price; the underlying operation
+                          // value is implicitly absorbed into the parent item /
+                          // quote subtotal — no math change.
+                          { key: "showOperationPricing", label: "Operation Unit/Line Pricing" },
                         ]),
                         { key: "showSubtotal", label: "Subtotal (excl. GST)" },
                         { key: "showGst", label: "GST (15%)" },
@@ -893,6 +907,14 @@ function MediaImage({
 // only — never represents holes, folds, cutouts, or any manufacturing
 // geometry. Customer-safe: uses dimensions already on the snapshot, no
 // internal data exposure.
+// Phase 5F card-tightening — strict, bounded compact size for the manual
+// blank placeholder. Maximum 130px wide × 80px tall regardless of density
+// tier so the placeholder never dominates the card. Aspect ratio is
+// preserved within those bounds: 1000×500 reads as a rectangle, 1000×1000
+// as a square. Indicative geometry only — never holes / folds / cutouts.
+const MANUAL_BLANK_PREVIEW_MAX_W_PX = 130;
+const MANUAL_BLANK_PREVIEW_MAX_H_PX = 80;
+
 function ManualBlankPreviewSvg({
   lengthMm,
   widthMm,
@@ -904,19 +926,19 @@ function ManualBlankPreviewSvg({
   template: QuoteTemplate;
   itemIndex: number;
 }) {
-  const maxBoxPx = Math.round(template.density.drawingMaxH * 3.78);
-  const longest = Math.max(lengthMm, widthMm);
-  const scale = maxBoxPx / longest;
-  const rectW = Math.max(20, Math.round(lengthMm * scale));
-  const rectH = Math.max(20, Math.round(widthMm * scale));
-  const padPx = 12;
-  const captionPx = 14;
+  const scale = Math.min(
+    MANUAL_BLANK_PREVIEW_MAX_W_PX / lengthMm,
+    MANUAL_BLANK_PREVIEW_MAX_H_PX / widthMm,
+  );
+  const rectW = Math.max(16, Math.round(lengthMm * scale));
+  const rectH = Math.max(12, Math.round(widthMm * scale));
+  const padPx = 4;
+  const captionPx = 11;
   const totalW = rectW + padPx * 2;
-  const totalH = rectH + padPx * 2 + captionPx + 4;
+  const totalH = rectH + padPx * 2 + captionPx + 2;
   return (
     <div
-      className="flex items-center justify-center"
-      style={{ maxHeight: `${maxBoxPx}px` }}
+      className="flex flex-col items-center justify-center"
       data-testid={`manual-blank-preview-${itemIndex}`}
     >
       <svg
@@ -939,9 +961,9 @@ function ManualBlankPreviewSvg({
         />
         <text
           x={totalW / 2}
-          y={padPx + rectH / 2 + 4}
+          y={padPx + rectH / 2 + 3}
           textAnchor="middle"
-          fontSize={11}
+          fontSize={9}
           fontFamily="sans-serif"
           fill={template.colors.bodyText}
           data-testid={`text-blank-dimensions-${itemIndex}`}
@@ -952,7 +974,7 @@ function ManualBlankPreviewSvg({
           x={totalW / 2}
           y={padPx + rectH + captionPx}
           textAnchor="middle"
-          fontSize={9}
+          fontSize={7}
           fontFamily="sans-serif"
           fontStyle="italic"
           fill={template.colors.headingMuted}
@@ -1162,7 +1184,7 @@ function ScheduleItemCard({
             </div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: (media.drawingUrl || item.manualBlankPreview) ? "45% 1fr" : "1fr", gap: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: media.drawingUrl ? "45% 1fr" : item.manualBlankPreview ? "150px 1fr" : "1fr", gap: "16px" }}>
             {media.drawingUrl ? (
               <div className="flex items-center justify-center">
                 {drawingConfig ? (
@@ -1203,6 +1225,27 @@ function ScheduleItemCard({
             <div>
               <SpecTable specs={visibleSpecs} itemIndex={item.index} template={template} />
             </div>
+          </div>
+        )}
+
+        {item.pricingDisplay && (item.pricingDisplay.unitPriceLabel || item.pricingDisplay.lineTotalLabel) && (
+          <div
+            className="flex items-baseline justify-end text-xs"
+            style={{ color: template.colors.bodyText, gap: "12px" }}
+            data-testid={`pricing-display-${item.index}`}
+          >
+            {item.pricingDisplay.unitPriceLabel && (
+              <span>
+                <span style={{ color: template.colors.headingMuted, marginRight: "4px" }}>Unit Price:</span>
+                <span data-testid={`text-line-unit-price-${item.index}`}>{item.pricingDisplay.unitPriceLabel}</span>
+              </span>
+            )}
+            {item.pricingDisplay.lineTotalLabel && (
+              <span>
+                <span style={{ color: template.colors.headingMuted, marginRight: "4px" }}>Line Total:</span>
+                <span className="font-semibold" data-testid={`text-line-total-${item.index}`}>{item.pricingDisplay.lineTotalLabel}</span>
+              </span>
+            )}
           </div>
         )}
 

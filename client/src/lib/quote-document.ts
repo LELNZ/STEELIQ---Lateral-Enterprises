@@ -16,6 +16,14 @@ export interface TotalsDisplayConfig {
   // Customer-safe: shows only unit price and line total — never margin / cost.
   showLineUnitPrice?: boolean;
   showLineTotal?: boolean;
+  // Phase 5F card-tightening — independent control over attached
+  // operation (procedure) pricing visibility on the customer card. When
+  // false, operation descriptions still show but their unit/line price
+  // labels are suppressed (so the customer-facing parent item / subtotal
+  // implicitly absorbs the operation value — no math change). When true,
+  // operation pricing follows the standard showLineUnitPrice /
+  // showLineTotal toggles. Default false favours customer simplicity.
+  showOperationPricing?: boolean;
 }
 
 export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
@@ -29,6 +37,7 @@ export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
   showCommercialRemarks: true,
   showLineUnitPrice: false,
   showLineTotal: false,
+  showOperationPricing: false,
 };
 
 export interface PreviewData {
