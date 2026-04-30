@@ -223,7 +223,12 @@ export default function QuotePreview() {
     // render path was causing false overflow pages on quotes whose
     // first item was a standalone manual procedure.
     if (activeModel.domainType === "laser") {
-      const ROW_H = 22; // image-capped row height
+      // Phase 5H.0 — image stays at 78px (~22mm). The Item /
+      // Description cell now stacks up to 3 text lines (ref + title +
+      // optional Ops) and Material / Spec stacks 2 text lines, so we
+      // bump the row height budget to 24mm for safer pagination.
+      // Must stay aligned with PDF row math in renderLaserScheduleTable.
+      const ROW_H = 24; // image-capped row height (Phase 5H.0)
       const pd = item.pricingDisplay;
       const detailH = pd?.showOperationPricing
         && item.attachedOperations.length > 0
@@ -1260,23 +1265,31 @@ function CompactItemPricing({
   );
 }
 
-// Phase 5G — enterprise schedule TABLE for the LL customer-facing
-// surface. Replaces the per-item card layout with a single table that
-// fits more items per page and reads as a professional schedule. Same
-// columns / behaviour are mirrored in the PDF by
-// renderLaserScheduleTable() in pdf-engine.ts.
+// Phase 5H.0 — enterprise hybrid schedule TABLE for the LL
+// customer-facing surface. Replaces the previous Phase 5G 8-column
+// table with a tighter 7-column hybrid layout. Same columns /
+// behaviour are mirrored in the PDF by renderLaserScheduleTable() in
+// pdf-engine.ts.
 //
-// Columns: Image · Item · Material · Dimensions · Operations · Qty ·
-//   Unit Price (toggle) · Line Total (toggle).
+// Columns: Image · Item / Description · Material / Spec · Size · Qty
+//   · Unit (toggle) · Total (toggle).
 //
-// Pricing-related columns and the optional `Detail:` sub-row are
-// strictly toggle-gated: showUnitPriceColumn / showLineTotalColumn /
-// showOperationPricing — all derived from the per-revision Quote
-// Display Settings via the render model. No cost / margin / supplier /
-// internal-notes data ever surfaces.
+// Operations are now nested INSIDE Item / Description as a third
+// stacked text line ("Ops: Folding, Deburring") instead of a
+// standalone column. Material / Spec is split into two stacked lines
+// (primary "Aluminium 5052" + secondary "3mm · Fibre PE"). Size
+// replaces the old Dimensions column as a single compact value.
 //
-// TODO Phase 5H — reserved sub-row slot for "Qty Breaks" tier pricing.
-// When implemented, render below the Detail row spanning all columns.
+// Pricing-related columns and the optional `Pricing detail:` sub-row
+// are strictly toggle-gated: showUnitPriceColumn / showLineTotalColumn
+// / showOperationPricing — all derived from the per-revision Quote
+// Display Settings via the render model. No cost / margin / supplier
+// / internal-notes data ever surfaces.
+//
+// TODO Phase 5H — Qty Breaks tier pricing sub-row slot is reserved
+// inside this component (see qtyBreaksSlot helper below). When data
+// becomes available, the helper will return the rendered <tr/>
+// without any other layout change.
 function LaserScheduleTable({
   items,
   template,
@@ -1325,36 +1338,44 @@ function LaserScheduleTable({
   };
 
   // Column widths in mm — total = 180mm (matches PDF CONTENT_WIDTH so
-  // both surfaces look identical to the customer). When pricing
-  // columns are hidden their mm budget is redistributed across Item +
-  // Operations using the same 42% / 58% split as the PDF
-  // (renderLaserScheduleTable). We then convert each mm width to a
-  // percentage that always sums to 100% (the React table layout would
-  // otherwise leave browser-dependent slack and drift from the PDF).
+  // both surfaces look identical to the customer). Image / Size / Qty
+  // are fixed; Unit / Total are gated by toggles. The remaining
+  // budget is split 60% Item / Description, 40% Material / Spec — so
+  // when toggles are off the reclaimed width flows to BOTH text
+  // columns (per spec). We then convert each mm width to a percentage
+  // that always sums to 100% (the React table layout would otherwise
+  // leave browser-dependent slack and drift from the PDF).
   const PDF_CONTENT_MM = 180;
   const W_IMAGE_MM = 22;
-  const W_MATERIAL_MM = 30;
-  const W_DIMS_MM = 22;
+  const W_SIZE_MM = 24;
   const W_QTY_MM = 8;
   const W_UNIT_MM = showUnit ? 14 : 0;
-  const W_LINE_MM = showLT ? 18 : 0;
-  const remainingForItemOpsMm =
-    PDF_CONTENT_MM - W_IMAGE_MM - W_MATERIAL_MM - W_DIMS_MM - W_QTY_MM - W_UNIT_MM - W_LINE_MM;
-  const W_ITEM_MM = Math.floor(remainingForItemOpsMm * 0.42);
-  const W_OPS_MM = remainingForItemOpsMm - W_ITEM_MM;
+  const W_TOTAL_MM = showLT ? 18 : 0;
+  const remainingForTextMm =
+    PDF_CONTENT_MM - W_IMAGE_MM - W_SIZE_MM - W_QTY_MM - W_UNIT_MM - W_TOTAL_MM;
+  const W_ITEM_MM = Math.floor(remainingForTextMm * 0.60);
+  const W_MATERIAL_MM = remainingForTextMm - W_ITEM_MM;
   const pct = (mm: number) => `${((mm / PDF_CONTENT_MM) * 100).toFixed(3)}%`;
   const widths = {
     image: pct(W_IMAGE_MM),
     item: pct(W_ITEM_MM),
     material: pct(W_MATERIAL_MM),
-    dimensions: pct(W_DIMS_MM),
-    operations: pct(W_OPS_MM),
+    size: pct(W_SIZE_MM),
     qty: pct(W_QTY_MM),
     unit: pct(W_UNIT_MM),
-    lineTotal: pct(W_LINE_MM),
+    total: pct(W_TOTAL_MM),
   };
 
-  const totalCols = 6 + (showUnit ? 1 : 0) + (showLT ? 1 : 0);
+  const totalCols = 5 + (showUnit ? 1 : 0) + (showLT ? 1 : 0);
+
+  // TODO Phase 5H — Qty Breaks tier pricing sub-row.
+  // Returns null until the underlying data exists. Will render below
+  // the Pricing detail row spanning all columns. No DB fields, no
+  // calculation, no mock output in this phase.
+  const qtyBreaksSlot = (
+    _item: RenderScheduleItem,
+    _row: ReturnType<typeof extractLaserTableRow>,
+  ): React.ReactElement | null => null;
 
   return (
     <div data-testid={`laser-schedule-table${isContinuation ? "-continuation" : ""}`}>
@@ -1369,22 +1390,20 @@ function LaserScheduleTable({
           <col style={{ width: widths.image }} />
           <col style={{ width: widths.item }} />
           <col style={{ width: widths.material }} />
-          <col style={{ width: widths.dimensions }} />
-          <col style={{ width: widths.operations }} />
+          <col style={{ width: widths.size }} />
           <col style={{ width: widths.qty }} />
           {showUnit && <col style={{ width: widths.unit }} />}
-          {showLT && <col style={{ width: widths.lineTotal }} />}
+          {showLT && <col style={{ width: widths.total }} />}
         </colgroup>
         <thead>
           <tr>
             <th style={headerCellStyle}>Image</th>
-            <th style={headerCellStyle}>Item</th>
+            <th style={headerCellStyle}>Item / Description</th>
             <th style={headerCellStyle}>Material / Spec</th>
-            <th style={headerCellStyle}>Dimensions</th>
-            <th style={headerCellStyle}>Operations</th>
+            <th style={headerCellStyle}>Size</th>
             <th style={{ ...headerCellStyle, textAlign: "right" }}>Qty</th>
-            {showUnit && <th style={{ ...headerCellStyle, textAlign: "right" }}>Unit Price</th>}
-            {showLT && <th style={{ ...headerCellStyle, textAlign: "right" }}>Line Total</th>}
+            {showUnit && <th style={{ ...headerCellStyle, textAlign: "right" }}>Unit</th>}
+            {showLT && <th style={{ ...headerCellStyle, textAlign: "right" }}>Total</th>}
           </tr>
         </thead>
         <tbody>
@@ -1393,6 +1412,7 @@ function LaserScheduleTable({
             const blank = item.manualBlankPreview;
             const drawingUrl = item.media.drawingUrl;
             const showDetail = !!row.detailPreview;
+            const qtyBreakRow = qtyBreaksSlot(item, row);
             const trs: React.ReactElement[] = [
                 <tr key={`row-${item.index}`} data-testid={`schedule-row-${item.index}`}>
                   <td style={cellStyle}>
@@ -1433,28 +1453,45 @@ function LaserScheduleTable({
                   </td>
                   <td style={cellStyle}>
                     <div
-                      style={{ fontWeight: 600 }}
+                      style={{ fontSize: "10.5px", color: template.colors.headingMuted }}
+                      data-testid={`text-item-ref-${item.index}`}
+                    >
+                      {row.itemRefLine}
+                    </div>
+                    <div
+                      style={{ fontWeight: 600, marginTop: "1px" }}
                       data-testid={`text-item-title-${item.index}`}
                     >
-                      {item.title}
+                      {row.title || "—"}
                     </div>
-                    {row.notes && (
+                    {row.opsSummaryPreview && (
+                      <div
+                        style={{ fontSize: "10.5px", color: template.colors.bodyText, marginTop: "2px" }}
+                        data-testid={`text-item-ops-${item.index}`}
+                      >
+                        Ops: {row.opsSummaryPreview}
+                      </div>
+                    )}
+                    {/* Phase 5H.0 — customer notes are intentionally NOT
+                        rendered as an extra line here. They are already
+                        absorbed into the description fallback chain
+                        (extractLaserTableRow), so showing them again
+                        would duplicate content AND break Preview/PDF
+                        parity (the PDF table never rendered notes). */}
+                  </td>
+                  <td style={cellStyle} data-testid={`text-row-material-${item.index}`}>
+                    <div>{row.materialPrimary || "—"}</div>
+                    {row.materialSecondary && (
                       <div
                         style={{ fontSize: "10.5px", color: template.colors.headingMuted, marginTop: "2px" }}
-                        data-testid={`text-item-notes-${item.index}`}
+                        data-testid={`text-row-material-secondary-${item.index}`}
                       >
-                        {row.notes}
+                        {row.materialSecondary}
                       </div>
                     )}
                   </td>
-                  <td style={cellStyle} data-testid={`text-row-material-${item.index}`}>
-                    {row.material || "—"}
-                  </td>
-                  <td style={cellStyle} data-testid={`text-row-dimensions-${item.index}`}>
+                  <td style={cellStyle} data-testid={`text-row-size-${item.index}`}>
                     {row.dimensions || "—"}
-                  </td>
-                  <td style={cellStyle} data-testid={`text-row-operations-${item.index}`}>
-                    {row.hasOperations ? row.operationsPreview : "—"}
                   </td>
                   <td style={numericCellStyle} data-testid={`text-row-qty-${item.index}`}>
                     {row.qty}
@@ -1491,7 +1528,7 @@ function LaserScheduleTable({
                 </tr>
               );
             }
-            // TODO Phase 5H — Qty Breaks tier sub-row slot reserved here.
+            if (qtyBreakRow) trs.push(qtyBreakRow);
             // Hidden back-compat testids (display:none) for the legacy
             // regression suite that binds to text-line-unit-price-N /
             // text-line-total-N / text-item-total-N / price-detail-N etc.

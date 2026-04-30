@@ -722,15 +722,32 @@ export interface LaserTableRow {
   dimensions: string;
   qty: number;
   qtyLabel: string;
-  operationsPreview: string;   // em-dash for Preview
-  operationsPdf: string;       // ASCII " - " for PDF
+  operationsPreview: string;   // em-dash for Preview (legacy)
+  operationsPdf: string;       // ASCII " - " for PDF (legacy)
   hasOperations: boolean;
   unitPriceLabel: string | null;  // null when toggle off
   lineTotalLabel: string | null;  // null when toggle off
-  detailPreview: string | null;   // "Blank $X · Folding $Y" — null when hidden
+  detailPreview: string | null;   // "Pricing detail: Blank $X · Folding $Y" — null when hidden
   detailPdf: string | null;
   notes: string;
   showOperationPricing: boolean;
+  // Phase 5H.0 — hybrid 7-column table additions.
+  // `itemRefLine` is the first line of the Item / Description cell
+  // ("Item 001 — LC-001"). PDF variant uses ASCII " - " separator.
+  itemRefLine: string;
+  itemRefLinePdf: string;
+  // `materialPrimary` is the leading material+grade ("Aluminium 5052").
+  // `materialSecondary` is the joined thickness/finish suffix
+  // ("3mm · Fibre PE"). PDF variant uses ASCII " - ".
+  materialPrimary: string;
+  materialSecondary: string;
+  materialSecondaryPdf: string;
+  // `opsSummaryPreview` is the third line of the Item / Description cell
+  // when operations exist ("Folding, Deburring, Tapping" or
+  // "Folding — 4 folds per item, Deburring"). PDF variant uses ASCII.
+  // Empty string when no operations.
+  opsSummaryPreview: string;
+  opsSummaryPdf: string;
 }
 
 export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
@@ -745,6 +762,16 @@ export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
   const operationsPdf = ops
     .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
     .join("; ");
+
+  // Phase 5H.0 — concise comma-separated ops summary for the
+  // Item / Description cell. Includes brief description when present.
+  // Empty string when no ops so callers can branch cleanly.
+  const opsSummaryPreview = ops.length === 0 ? "" : ops
+    .map(op => op.description ? `${op.procedureType} \u2014 ${op.description}` : op.procedureType)
+    .join(", ");
+  const opsSummaryPdf = ops.length === 0 ? "" : ops
+    .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
+    .join(", ");
 
   const fmtMoney = (n: number) => `$${fmtCurrency(n)}`;
   let detailPreview: string | null = null;
@@ -761,15 +788,51 @@ export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
     // Preview keeps the typographic middot for visual polish.
     // PDF uses ASCII " - " separator to stay strictly Latin-1 safe and
     // avoid font-substitution surprises across PDF readers.
-    detailPreview = `Detail: ${parts.join(" \u00B7 ")}`;
-    detailPdf = `Detail: ${parts.join(" - ")}`;
+    // Phase 5H.0 — label is "Pricing detail:" (was "Detail:").
+    detailPreview = `Pricing detail: ${parts.join(" \u00B7 ")}`;
+    detailPdf = `Pricing detail: ${parts.join(" - ")}`;
   }
+
+  // Phase 5H.0 — split the joined Material spec back into a
+  // primary line ("Aluminium 5052") and a secondary line
+  // ("3mm · Fibre PE") for the two-line Material / Spec cell.
+  // The source is `material = matLeading · thickness · finish`
+  // (see buildLaserParentSpecs above); splitting on " \u00B7 "
+  // preserves single-line behaviour when only one part exists.
+  const materialFull = findSpec("material");
+  const matSplit = materialFull.split(" \u00B7 ");
+  const materialPrimary = matSplit[0] || "";
+  const materialSecondary = matSplit.slice(1).join(" \u00B7 ");
+  const materialSecondaryPdf = matSplit.slice(1).join(" - ");
+
+  // Phase 5H.0 — Item / Description first line: "Item 001 — LC-001".
+  // Falls back to just "Item 001" when no itemRef is present.
+  const ref = (item.itemRef || "").toString().trim();
+  const itemRefLine = ref
+    ? `Item ${item.displayNumber} \u2014 ${ref}`
+    : `Item ${item.displayNumber}`;
+  const itemRefLinePdf = ref
+    ? `Item ${item.displayNumber} - ${ref}`
+    : `Item ${item.displayNumber}`;
+
+  // Phase 5H.0 — Item / Description second line is the actual
+  // human-readable product description. `item.title` is composed by
+  // buildScheduleItem() / applyAttachedProcedureNumbering() as
+  // "Item NNN — REF" (i.e. the same content as itemRefLine), so we
+  // can NOT use it as the description. The real description lives on
+  // `pricingDisplay.description` (e.g. "Laser cut blank") for laser
+  // parents. Fallback to the customer notes or the bare ref so the
+  // cell never collapses to a duplicate identifier.
+  const description = (pd?.description || "").toString().trim()
+    || findSpec("customerNotes")
+    || ref
+    || "";
 
   return {
     index: item.index,
     displayNumber: item.displayNumber,
-    title: item.title,
-    material: findSpec("material"),
+    title: description,
+    material: materialFull,
     dimensions: findSpec("dimensions"),
     qty: pd?.quantity ?? Math.max(1, parseInt(item.quantityLabel.replace(/\D/g, ""), 10) || 1),
     qtyLabel: item.quantityLabel,
@@ -782,6 +845,13 @@ export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
     detailPdf,
     notes: findSpec("customerNotes"),
     showOperationPricing,
+    itemRefLine,
+    itemRefLinePdf,
+    materialPrimary,
+    materialSecondary,
+    materialSecondaryPdf,
+    opsSummaryPreview,
+    opsSummaryPdf,
   };
 }
 

@@ -931,14 +931,15 @@ async function renderSchedule(
   if (model.scheduleItems.length > 0) {
     const fi = model.scheduleItems[0];
     if (model.domainType === "laser") {
-      // Phase 5G — laser schedules render via renderLaserScheduleTable
-      // (8-column table). The per-row footprint is the table header
-      // (~7mm) + a single capped image-row (~22mm) + an optional
-      // ~5mm Detail sub-row. Mirrors the preview's
+      // Phase 5H.0 — laser schedules render via renderLaserScheduleTable
+      // (7-column hybrid). Per-row footprint is the table header
+      // (~7mm) + a single capped image-row (~24mm; bumped from 22mm
+      // for the additional Item / Description text line) + an
+      // optional ~5mm Pricing detail sub-row. Mirrors the preview's
       // estimateScheduleItemMm laser branch so cross-surface
       // pagination decisions agree.
       const TABLE_HEADER_H = 7;
-      const ROW_H = 22;
+      const ROW_H = 24;
       const pd = fi.pricingDisplay;
       const detailH =
         pd?.showOperationPricing
@@ -1058,42 +1059,46 @@ async function renderLaserScheduleTable(
   imageCache: Map<string, string>,
   onProgress?: (status: string) => void,
 ): Promise<number> {
+  // Phase 5H.0 — 7-column hybrid: Image · Item / Description ·
+  // Material / Spec · Size · Qty · Unit (toggle) · Total (toggle).
+  // Operations are nested inside Item / Description as a third
+  // stacked text line (see drawWrappedCellLines below).
+
   // Determine column visibility from the first item that carries
   // pricingDisplay (all laser parents share the same toggles).
   const sampleWithPricing = model.scheduleItems.find(it => !!it.pricingDisplay);
   const showUnit = sampleWithPricing?.pricingDisplay?.showUnitPriceColumn ?? false;
   const showLT = sampleWithPricing?.pricingDisplay?.showLineTotalColumn ?? false;
 
-  // Column widths in mm — total = CONTENT_WIDTH (180mm).
-  // Both pricing columns hidden → distribute the 34mm to Item + Operations.
-  // Only one hidden → distribute its share to Operations.
+  // Column widths in mm — total = CONTENT_WIDTH (180mm). Image / Size /
+  // Qty are fixed; Unit / Total are gated by toggles. Remaining budget
+  // is split 60% Item / Description, 40% Material / Spec — identical
+  // to the preview LaserScheduleTable so both surfaces look the same.
   const W_IMAGE = 22;
+  const W_SIZE = 24;
   const W_QTY = 8;
   const W_UNIT = showUnit ? 14 : 0;
-  const W_LINE = showLT ? 18 : 0;
-  const W_DIMS = 22;
-  const W_MATERIAL = 30;
-  const remainingForItemOps = CONTENT_WIDTH - W_IMAGE - W_DIMS - W_MATERIAL - W_QTY - W_UNIT - W_LINE;
-  // Allocate 40% to Item, 60% to Operations.
-  const W_ITEM = Math.floor(remainingForItemOps * 0.42);
-  const W_OPS = remainingForItemOps - W_ITEM;
+  const W_TOTAL = showLT ? 18 : 0;
+  const remainingForText = CONTENT_WIDTH - W_IMAGE - W_SIZE - W_QTY - W_UNIT - W_TOTAL;
+  const W_ITEM = Math.floor(remainingForText * 0.60);
+  const W_MATERIAL = remainingForText - W_ITEM;
 
   // Column x offsets (left edge of each cell).
   const X_IMAGE = LEFT_MARGIN;
   const X_ITEM = X_IMAGE + W_IMAGE;
   const X_MATERIAL = X_ITEM + W_ITEM;
-  const X_DIMS = X_MATERIAL + W_MATERIAL;
-  const X_OPS = X_DIMS + W_DIMS;
-  const X_QTY = X_OPS + W_OPS;
+  const X_SIZE = X_MATERIAL + W_MATERIAL;
+  const X_QTY = X_SIZE + W_SIZE;
   const X_UNIT = X_QTY + W_QTY;
-  const X_LINE = X_UNIT + W_UNIT;
+  const X_TOTAL = X_UNIT + W_UNIT;
 
   const HEADER_H = 6;
-  const ROW_H = 14;       // image-capped row height
-  const DETAIL_H = 4.5;   // optional sub-row height
+  const ROW_H = 24;       // image-capped row height (Phase 5H.0)
+  const DETAIL_H = 4.5;   // optional Pricing detail sub-row height
   const CELL_PAD_X = 1.5;
   const HEADER_FONT = 7;
   const BODY_FONT = 7.5;
+  const SMALL_FONT = 6.8;
   const DETAIL_FONT = 6.5;
 
   const drawHeader = (yy: number): number => {
@@ -1108,26 +1113,76 @@ async function renderLaserScheduleTable(
     pdf.setTextColor(COLOR_BLACK);
     const baseline = yy + 4;
     pdf.text("Image", X_IMAGE + CELL_PAD_X, baseline);
-    pdf.text("Item", X_ITEM + CELL_PAD_X, baseline);
+    pdf.text("Item / Description", X_ITEM + CELL_PAD_X, baseline);
     pdf.text("Material / Spec", X_MATERIAL + CELL_PAD_X, baseline);
-    pdf.text("Dimensions", X_DIMS + CELL_PAD_X, baseline);
-    pdf.text("Operations", X_OPS + CELL_PAD_X, baseline);
+    pdf.text("Size", X_SIZE + CELL_PAD_X, baseline);
     // Right-aligned numeric headers.
     const qtyLbl = "Qty";
     pdf.text(qtyLbl, X_QTY + W_QTY - CELL_PAD_X - pdf.getTextWidth(qtyLbl), baseline);
     if (showUnit) {
-      const ul = "Unit Price";
+      const ul = "Unit";
       pdf.text(ul, X_UNIT + W_UNIT - CELL_PAD_X - pdf.getTextWidth(ul), baseline);
     }
     if (showLT) {
-      const ll = "Line Total";
-      pdf.text(ll, X_LINE + W_LINE - CELL_PAD_X - pdf.getTextWidth(ll), baseline);
+      const ll = "Total";
+      pdf.text(ll, X_TOTAL + W_TOTAL - CELL_PAD_X - pdf.getTextWidth(ll), baseline);
     }
     return yy + HEADER_H;
   };
 
   // Initial header row (immediately after the SCHEDULE heading).
   y = drawHeader(y);
+
+  // Helper — draw a single line of text inside a cell at (x, y).
+  // Right-aligns numeric values when align==="right".
+  const drawLine = (
+    text: string,
+    x: number,
+    w: number,
+    yLine: number,
+    opts?: { bold?: boolean; italic?: boolean; align?: "left" | "right"; muted?: boolean; font?: number },
+  ) => {
+    const safe = sanitizeForPdfText(text);
+    pdf.setFont(FONT_NORMAL, opts?.italic ? "italic" : (opts?.bold ? "bold" : "normal"));
+    pdf.setFontSize(opts?.font ?? BODY_FONT);
+    pdf.setTextColor(opts?.muted ? COLOR_MUTED : COLOR_BLACK);
+    if (opts?.align === "right") {
+      const tw = pdf.getTextWidth(safe);
+      pdf.text(safe, x + w - CELL_PAD_X - tw, yLine);
+    } else {
+      pdf.text(safe, x + CELL_PAD_X, yLine);
+    }
+  };
+
+  // Helper — draw multiple wrapped lines starting at (x, yStart) and
+  // return the number of lines drawn.
+  const drawWrappedLines = (
+    text: string,
+    x: number,
+    w: number,
+    yStart: number,
+    opts?: { bold?: boolean; align?: "left" | "right"; muted?: boolean; maxLines?: number; font?: number },
+  ): number => {
+    if (!text) return 0;
+    const fontSize = opts?.font ?? BODY_FONT;
+    pdf.setFont(FONT_NORMAL, opts?.bold ? "bold" : "normal");
+    pdf.setFontSize(fontSize);
+    pdf.setTextColor(opts?.muted ? COLOR_MUTED : COLOR_BLACK);
+    const maxLines = opts?.maxLines ?? 3;
+    const innerW = w - CELL_PAD_X * 2;
+    const lines = wrapText(pdf, sanitizeForPdfText(text), innerW).slice(0, maxLines);
+    const lineSpacingMm = fontSize * 1.15 * 0.352778;
+    lines.forEach((ln, i) => {
+      const ly = yStart + i * lineSpacingMm;
+      if (opts?.align === "right") {
+        const tw = pdf.getTextWidth(ln);
+        pdf.text(ln, x + w - CELL_PAD_X - tw, ly);
+      } else {
+        pdf.text(ln, x + CELL_PAD_X, ly);
+      }
+    });
+    return lines.length;
+  };
 
   for (let si = 0; si < model.scheduleItems.length; si++) {
     const item = model.scheduleItems[si];
@@ -1186,55 +1241,57 @@ async function renderLaserScheduleTable(
       pdf.text("-", imgBoxX + imgBoxW / 2, y + ROW_H / 2 + 1);
     }
 
-    // --- Text cells ---------------------------------------------------
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(BODY_FONT);
-    pdf.setTextColor(COLOR_BLACK);
-
-    const drawWrappedCell = (text: string, x: number, w: number, opts?: { bold?: boolean; align?: "left" | "right"; muted?: boolean; maxLines?: number }) => {
-      if (!text) text = "-";
-      pdf.setFont(FONT_NORMAL, opts?.bold ? "bold" : "normal");
-      pdf.setTextColor(opts?.muted ? COLOR_MUTED : COLOR_BLACK);
-      const maxLines = opts?.maxLines ?? 3;
-      const innerW = w - CELL_PAD_X * 2;
-      const lines = wrapText(pdf, sanitizeForPdfText(text), innerW).slice(0, maxLines);
-      const lineSpacingMm = BODY_FONT * 1.15 * 0.352778;
-      lines.forEach((ln, i) => {
-        const ly = y + 3 + i * lineSpacingMm;
-        if (opts?.align === "right") {
-          const tw = pdf.getTextWidth(ln);
-          pdf.text(ln, x + w - CELL_PAD_X - tw, ly);
-        } else {
-          pdf.text(ln, x + CELL_PAD_X, ly);
-        }
+    // --- Item / Description cell (3 stacked lines) -------------------
+    // Line 1: ref (small, muted) — "Item 001 - LC-001"
+    // Line 2: title (bold) — "Laser cut blank"
+    // Line 3 (optional): "Ops: <summary>"
+    const itemBaseY = y + 3;
+    const refLineSp = SMALL_FONT * 1.15 * 0.352778;
+    drawLine(row.itemRefLinePdf, X_ITEM, W_ITEM, itemBaseY, {
+      muted: true,
+      font: SMALL_FONT,
+    });
+    const titleY = itemBaseY + refLineSp + 0.5;
+    const titleLines = drawWrappedLines(row.title, X_ITEM, W_ITEM, titleY, {
+      bold: true,
+      maxLines: 2,
+    });
+    if (row.opsSummaryPdf) {
+      const titleSp = BODY_FONT * 1.15 * 0.352778;
+      const opsY = titleY + titleLines * titleSp + 0.5;
+      drawWrappedLines(`Ops: ${row.opsSummaryPdf}`, X_ITEM, W_ITEM, opsY, {
+        font: SMALL_FONT,
+        maxLines: 2,
       });
-    };
-
-    drawWrappedCell(row.title, X_ITEM, W_ITEM, { bold: true, maxLines: 2 });
-    if (row.notes) {
-      // Notes appear below the title in muted small font.
-      pdf.setFont(FONT_NORMAL, "italic");
-      pdf.setFontSize(DETAIL_FONT);
-      pdf.setTextColor(COLOR_MUTED);
-      const notesLine = wrapText(pdf, sanitizeForPdfText(row.notes), W_ITEM - CELL_PAD_X * 2)[0] || "";
-      pdf.text(notesLine, X_ITEM + CELL_PAD_X, y + 9);
-      pdf.setFontSize(BODY_FONT);
     }
 
-    drawWrappedCell(row.material, X_MATERIAL, W_MATERIAL);
-    drawWrappedCell(row.dimensions, X_DIMS, W_DIMS);
-    drawWrappedCell(row.hasOperations ? row.operationsPdf : "-", X_OPS, W_OPS, { maxLines: 3 });
-    drawWrappedCell(String(row.qty), X_QTY, W_QTY, { align: "right" });
+    // --- Material / Spec cell (2 stacked lines) ----------------------
+    const matBaseY = y + 3.5;
+    drawLine(row.materialPrimary || "-", X_MATERIAL, W_MATERIAL, matBaseY);
+    if (row.materialSecondary) {
+      const matSp = BODY_FONT * 1.15 * 0.352778;
+      drawLine(row.materialSecondaryPdf, X_MATERIAL, W_MATERIAL, matBaseY + matSp + 0.5, {
+        muted: true,
+        font: SMALL_FONT,
+      });
+    }
+
+    // --- Size / Qty / Unit / Total -----------------------------------
+    drawLine(row.dimensions || "-", X_SIZE, W_SIZE, y + 3.5);
+    drawLine(String(row.qty), X_QTY, W_QTY, y + 3.5, { align: "right" });
     if (showUnit) {
-      drawWrappedCell(row.unitPriceLabel ?? "-", X_UNIT, W_UNIT, { align: "right" });
+      drawLine(row.unitPriceLabel ?? "-", X_UNIT, W_UNIT, y + 3.5, { align: "right" });
     }
     if (showLT) {
-      drawWrappedCell(row.lineTotalLabel ?? "-", X_LINE, W_LINE, { align: "right", bold: true });
+      drawLine(row.lineTotalLabel ?? "-", X_TOTAL, W_TOTAL, y + 3.5, {
+        align: "right",
+        bold: true,
+      });
     }
 
     y += ROW_H;
 
-    // --- Optional Detail sub-row -------------------------------------
+    // --- Optional Pricing detail sub-row -----------------------------
     if (needsDetail) {
       pdf.setFont(FONT_NORMAL, "italic");
       pdf.setFontSize(DETAIL_FONT);
@@ -1252,8 +1309,9 @@ async function renderLaserScheduleTable(
     pdf.line(LEFT_MARGIN, y, LEFT_MARGIN + CONTENT_WIDTH, y);
 
     // TODO Phase 5H — reserved sub-row slot for "Qty Breaks" tier
-    // pricing. When implemented, render here under the Detail row
-    // spanning all columns, then advance y by its height.
+    // pricing. When data exists, render here directly under the
+    // Pricing detail row spanning all columns and advance y by its
+    // height. No DB / calc / mock output in this phase.
 
     // Touch the rowTopY var so lint doesn't trip; also useful for
     // future row-background fills.
