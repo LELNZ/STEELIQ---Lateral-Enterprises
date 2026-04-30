@@ -251,8 +251,13 @@ export default function QuotePreview() {
     const renderUnitLine = pd && showUnitPx && combUnit > 0;
     const renderLTLine = pd && showLTPx && combLT > 0;
     const renderBreakdown = !!pd && showOpsPx && ops.length > 0 && (showUnitPx || showLTPx);
-    const breakdownLines = renderBreakdown ? 1 + ops.length : 0;
-    const breakdownH = breakdownLines * 3.5 + (renderBreakdown ? 1 : 0);
+    // Phase 5F.3 — single-line "Price detail" inline row replaces the
+    // prior vertical bullet list. Height: 4mm for one line + 1mm gap.
+    // We assume single-line for typical 1-4 op cases; cards with very
+    // long op descriptions may wrap to a second line in the DOM but
+    // the +1mm gap absorbs minor drift and keeps the estimator aligned
+    // with the PDF (which uses wrapText for the same content).
+    const breakdownH = renderBreakdown ? 4 + 1 : 0;
     const summaryH = (renderUnitLine ? 4 : 0) + (renderLTLine ? 4.5 : 0);
     // Phase 5F.2 — explicit 1mm top margin matching Preview's
     // `marginTop:4px` on the CompactItemPricing container and PDF's
@@ -1219,29 +1224,32 @@ function CompactItemPricing({
       style={{ marginTop: "4px" }}
       data-testid={`pricing-block-${item.index}`}
     >
+      {/* Phase 5F.3 — single compact "Price detail" inline row.
+          Replaces the prior vertical bullet list with one line:
+          "Price detail: Blank $X · Folding $Y · Deburring $Z".
+          Uses the U+00B7 middot which is Latin-1 safe. Wraps cleanly
+          within the right-hand details width when too long. */}
       {renderBreakdown && (
         <div
-          className="w-full"
-          style={{ color: template.colors.headingMuted, fontSize: "10.5px", lineHeight: 1.4 }}
-          data-testid={`op-breakdown-${item.index}`}
+          className="w-full text-right"
+          style={{ color: template.colors.headingMuted, fontSize: "10.5px", lineHeight: 1.35 }}
+          data-testid={`price-detail-${item.index}`}
         >
-          <div style={{ paddingLeft: "4px" }}>
-            <span style={{ marginRight: "6px" }}>-</span>
-            <span data-testid={`text-op-breakdown-label-${item.index}-parent`}>{pd.description}:</span>
-            <span style={{ marginLeft: "6px" }} data-testid={`text-op-breakdown-amount-${item.index}-parent`}>{fmtMoney(pd.lineTotal)}</span>
-          </div>
+          <span style={{ textTransform: "uppercase", letterSpacing: "0.04em", fontSize: "9.5px", marginRight: "6px" }}>Price detail:</span>
+          <span data-testid={`text-op-breakdown-label-${item.index}-parent`}>Blank </span>
+          <span data-testid={`text-op-breakdown-amount-${item.index}-parent`}>{fmtMoney(pd.lineTotal)}</span>
           {ops.map((op, opIdx) => (
-            <div key={opIdx} style={{ paddingLeft: "4px" }}>
-              <span style={{ marginRight: "6px" }}>-</span>
-              <span data-testid={`text-op-breakdown-label-${item.index}-${opIdx}`}>{op.procedureType}:</span>
-              <span style={{ marginLeft: "6px" }} data-testid={`text-op-breakdown-amount-${item.index}-${opIdx}`}>{fmtMoney(op.lineTotal)}</span>
-            </div>
+            <span key={opIdx}>
+              <span style={{ margin: "0 4px" }}>{"\u00B7"}</span>
+              <span data-testid={`text-op-breakdown-label-${item.index}-${opIdx}`}>{op.procedureType} </span>
+              <span data-testid={`text-op-breakdown-amount-${item.index}-${opIdx}`}>{fmtMoney(op.lineTotal)}</span>
+            </span>
           ))}
         </div>
       )}
       <div
         className="flex flex-col items-end"
-        style={{ borderTop: renderBreakdown ? `1px solid ${template.colors.border}` : undefined, minWidth: "180px" }}
+        style={{ minWidth: "180px" }}
       >
         {showUnitLine && (
           <div

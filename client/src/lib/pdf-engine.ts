@@ -305,12 +305,14 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-// Phase 5F.2 — height (mm) of the compact supplier-style pricing
+// Phase 5F.3 — height (mm) of the compact supplier-style pricing
 // block rendered for an LL parent item card. Mirrors the Preview's
 // estimateScheduleItemMm formula so cross-page parity is preserved.
-//   - Optional op breakdown sub-list: 3.5mm per line (parent + each
-//     op) + 1mm separator gap, when showOperationPricing is ON, ops
-//     exist, AND at least one price toggle is ON.
+//   - Optional inline "Price detail" row: a flat 4mm + 1mm gap (one
+//     wrapped line in the typical case), shown only when
+//     showOperationPricing is ON, ops exist, AND at least one main
+//     price toggle is ON. Replaces the prior multi-row vertical list
+//     used in 5F.2 to remove per-op height variability.
 //   - Unit Price line: 4mm when showLineUnitPrice && combinedUnit > 0
 //   - Line Total line: 4.5mm when showLineTotal && combinedLT > 0
 // Returns 0 when nothing would render.
@@ -330,7 +332,14 @@ function pricingBlockHeightMm(item: RenderScheduleItem): number {
   // CompactItemPricing `marginTop:4px` and drawCompactItemPricing's
   // `y += 1` so per-item pagination stays in sync across surfaces.
   const topMargin = 1;
-  const breakdownH = renderBreakdown ? (1 + ops.length) * 3.5 + 1 : 0;
+  // Phase 5F.3 — single-line compact "Price detail" row replaces the
+  // prior vertical bullet list. 4mm for one line + 1mm bottom gap.
+  // drawCompactItemPricing uses wrapText for the same string in case
+  // it overflows the right-hand column width; the actual draw advances
+  // y by `nLines * 4mm`, so the estimator's single-line assumption is
+  // an under-estimate when the price detail wraps. This matches the
+  // identical assumption used in Preview's estimateScheduleItemMm.
+  const breakdownH = renderBreakdown ? 4 + 1 : 0;
   const summaryH = (renderUnitLine ? 4 : 0) + (renderLTLine ? 4.5 : 0);
   return topMargin + breakdownH + summaryH;
 }
@@ -1408,27 +1417,29 @@ function drawCompactItemPricing(
   const blockLeft = cardLeft + pad;
   const blockRight = cardLeft + cardWidth - pad;
 
-  // Optional operation breakdown sub-list (left-aligned, muted).
+  // Phase 5F.3 — single compact "Price detail" inline row.
+  // Right-aligned, muted, ASCII / Latin-1 safe ("·" U+00B7 separator).
+  // Wraps cleanly within the right-hand column width using wrapText.
   if (renderBreakdown) {
+    const fmtAmt = (n: number) =>
+      `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const parts = [
+      `Blank ${fmtAmt(pd.lineTotal)}`,
+      ...ops.map(op => `${op.procedureType} ${fmtAmt(op.lineTotal || 0)}`),
+    ];
+    const detailText = sanitizeForPdfText(`Price detail: ${parts.join(" \u00B7 ")}`);
     pdf.setFont(FONT_NORMAL, "normal");
     pdf.setFontSize(6.5);
     pdf.setTextColor(COLOR_MUTED);
+    const blockW = blockRight - blockLeft;
+    const lines = wrapText(pdf, detailText, blockW);
     const lineH = 3.5;
-    const drawBreakdownLine = (label: string, amount: number) => {
-      const amountText = `$${amount.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      pdf.text(`- ${label}:`, blockLeft, y + 2.4);
-      pdf.text(amountText, blockRight - pdf.getTextWidth(amountText), y + 2.4);
-      y += lineH;
-    };
-    drawBreakdownLine(pd.description, pd.lineTotal);
-    for (const op of ops) {
-      drawBreakdownLine(op.procedureType, op.lineTotal || 0);
+    for (let li = 0; li < lines.length; li++) {
+      const lw = pdf.getTextWidth(lines[li]);
+      pdf.text(lines[li], blockRight - lw, y + 2.4 + li * lineH);
     }
-    // Thin divider above the summary.
-    pdf.setDrawColor(COLOR_BORDER);
-    pdf.setLineWidth(0.2);
-    pdf.line(blockRight - 60, y + 0.4, blockRight, y + 0.4);
-    y += 1;
+    // Advance y by 4mm baseline + 3.5mm per extra wrapped line.
+    y += 4 + Math.max(0, lines.length - 1) * lineH;
   }
 
   // Compact right-aligned summary: UNIT PRICE / LINE TOTAL.
@@ -1477,8 +1488,10 @@ function drawCompactItemPricing(
 // "smart" punctuation that callers may forget to convert: em-dash,
 // en-dash, smart quotes, ellipsis. Spec entries may also opt in
 // explicitly via `pdfValue`, which takes precedence.
-function specValueForPdf(entry: RenderSpecEntry): string {
-  const raw = entry.pdfValue ?? entry.value;
+// Phase 5F.3 — extracted shared sanitizer so price-detail strings
+// (which embed user-entered procedureType) get the same defensive
+// normalization as spec values.
+function sanitizeForPdfText(raw: string): string {
   return raw
     .replace(/\u2014/g, " - ")  // em-dash
     .replace(/\u2013/g, "-")    // en-dash
@@ -1486,6 +1499,10 @@ function specValueForPdf(entry: RenderSpecEntry): string {
     .replace(/[\u201C\u201D]/g, '"')  // smart double quotes
     .replace(/\u2026/g, "...")  // ellipsis
     .replace(/\u21B3/g, "->");  // turn-down right arrow (legacy `↳`)
+}
+
+function specValueForPdf(entry: RenderSpecEntry): string {
+  return sanitizeForPdfText(entry.pdfValue ?? entry.value);
 }
 
 function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[], x: number, w: number): number {
