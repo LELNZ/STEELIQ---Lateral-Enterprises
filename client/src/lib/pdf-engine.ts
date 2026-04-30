@@ -305,43 +305,18 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
   }
 }
 
-// Phase 5F.3 — height (mm) of the compact supplier-style pricing
-// block rendered for an LL parent item card. Mirrors the Preview's
-// estimateScheduleItemMm formula so cross-page parity is preserved.
-//   - Optional inline "Price detail" row: a flat 4mm + 1mm gap (one
-//     wrapped line in the typical case), shown only when
-//     showOperationPricing is ON, ops exist, AND at least one main
-//     price toggle is ON. Replaces the prior multi-row vertical list
-//     used in 5F.2 to remove per-op height variability.
-//   - Unit Price line: 4mm when showLineUnitPrice && combinedUnit > 0
-//   - Line Total line: 4.5mm when showLineTotal && combinedLT > 0
-// Returns 0 when nothing would render.
-function pricingBlockHeightMm(item: RenderScheduleItem): number {
-  const pd = item.pricingDisplay;
-  if (!pd) return 0;
-  const ops = item.attachedOperations;
-  const showUnit = !!pd.showUnitPriceColumn;
-  const showLT = !!pd.showLineTotalColumn;
-  const showOps = !!pd.showOperationPricing;
-  if (!showUnit && !showLT) return 0;
-  const renderUnitLine = showUnit && pd.combinedUnitPrice > 0;
-  const renderLTLine = showLT && pd.combinedLineTotal > 0;
-  const renderBreakdown = showOps && ops.length > 0 && (showUnit || showLT);
-  if (!renderUnitLine && !renderLTLine && !renderBreakdown) return 0;
-  // Phase 5F.2 — explicit 1mm top margin matching Preview's
-  // CompactItemPricing `marginTop:4px` and drawCompactItemPricing's
-  // `y += 1` so per-item pagination stays in sync across surfaces.
-  const topMargin = 1;
-  // Phase 5F.3 — single-line compact "Price detail" row replaces the
-  // prior vertical bullet list. 4mm for one line + 1mm bottom gap.
-  // drawCompactItemPricing uses wrapText for the same string in case
-  // it overflows the right-hand column width; the actual draw advances
-  // y by `nLines * 4mm`, so the estimator's single-line assumption is
-  // an under-estimate when the price detail wraps. This matches the
-  // identical assumption used in Preview's estimateScheduleItemMm.
-  const breakdownH = renderBreakdown ? 4 + 1 : 0;
-  const summaryH = (renderUnitLine ? 4 : 0) + (renderLTLine ? 4.5 : 0);
-  return topMargin + breakdownH + summaryH;
+// Phase 5F.4 — the legacy "compact pricing block" no longer occupies
+// any vertical space on the customer-facing PDF. All Pricing / Detail
+// / Operations content has moved into the spec table as appended
+// RenderSpecEntry rows (added by finaliseParentDisplay() in
+// quote-renderer.ts), so it is naturally counted by every place that
+// already does `visibleSpecs.length * DENSITY_SPEC_ROW_H`. This
+// function is preserved as a stable extension point and now always
+// returns 0; drawCompactItemPricing is also a no-op for the same
+// reason. Both sides of the engine (Preview and PDF) use the same
+// zero-block formula → perfect pagination parity.
+function pricingBlockHeightMm(_item: RenderScheduleItem): number {
+  return 0;
 }
 
 function getImageDimensions(dataUrl: string): Promise<{ w: number; h: number }> {
@@ -1389,97 +1364,22 @@ function cleanWrappedLines(lines: string[]): string[] {
 // Mirror of CompactItemPricing in client/src/pages/quote-preview.tsx.
 // Snapshot subtotal/GST/total are NOT recomputed here — they are
 // rendered upstream from snapshot.totalsBreakdown.
+// Phase 5F.4 — no-op. The Pricing / Detail / Operations content has
+// moved into the spec table as appended RenderSpecEntry rows
+// (added by finaliseParentDisplay() in quote-renderer.ts), so the
+// rows render through renderSpecTableNoPageBreak above. Both the
+// y-advance and the visible content come from the spec-table render
+// path, giving Preview/PDF perfect parity. The function is preserved
+// as a stable extension point in case future phases reintroduce a
+// dedicated supplier-style block; it currently returns y unchanged.
 function drawCompactItemPricing(
-  pdf: Pdf,
+  _pdf: Pdf,
   y: number,
-  item: RenderScheduleItem,
-  cardLeft: number,
-  cardWidth: number,
-  pad: number,
+  _item: RenderScheduleItem,
+  _cardLeft: number,
+  _cardWidth: number,
+  _pad: number,
 ): number {
-  const pd = item.pricingDisplay;
-  if (!pd) return y;
-  const ops = item.attachedOperations;
-  const showUnit = !!pd.showUnitPriceColumn;
-  const showLT = !!pd.showLineTotalColumn;
-  const showOps = !!pd.showOperationPricing;
-  if (!showUnit && !showLT) return y;
-
-  const renderUnitLine = showUnit && pd.combinedUnitPrice > 0;
-  const renderLTLine = showLT && pd.combinedLineTotal > 0;
-  const renderBreakdown = showOps && ops.length > 0 && (showUnit || showLT);
-  if (!renderUnitLine && !renderLTLine && !renderBreakdown) return y;
-
-  // Phase 5F.2 — 1mm top margin matching Preview CompactItemPricing
-  // (`marginTop:4px`) and pricingBlockHeightMm (`topMargin = 1`).
-  y += 1;
-
-  const blockLeft = cardLeft + pad;
-  const blockRight = cardLeft + cardWidth - pad;
-
-  // Phase 5F.3 — single compact "Price detail" inline row.
-  // Right-aligned, muted, ASCII / Latin-1 safe ("·" U+00B7 separator).
-  // Wraps cleanly within the right-hand column width using wrapText.
-  if (renderBreakdown) {
-    const fmtAmt = (n: number) =>
-      `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const parts = [
-      `Blank ${fmtAmt(pd.lineTotal)}`,
-      ...ops.map(op => `${op.procedureType} ${fmtAmt(op.lineTotal || 0)}`),
-    ];
-    const detailText = sanitizeForPdfText(`Price detail: ${parts.join(" \u00B7 ")}`);
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(6.5);
-    pdf.setTextColor(COLOR_MUTED);
-    const blockW = blockRight - blockLeft;
-    const lines = wrapText(pdf, detailText, blockW);
-    const lineH = 3.5;
-    for (let li = 0; li < lines.length; li++) {
-      const lw = pdf.getTextWidth(lines[li]);
-      pdf.text(lines[li], blockRight - lw, y + 2.4 + li * lineH);
-    }
-    // Advance y by 4mm baseline + 3.5mm per extra wrapped line.
-    y += 4 + Math.max(0, lines.length - 1) * lineH;
-  }
-
-  // Compact right-aligned summary: UNIT PRICE / LINE TOTAL.
-  const labelGap = 2;
-  if (renderUnitLine) {
-    const valueText = pd.combinedUnitPriceLabel
-      ?? `$${pd.combinedUnitPrice.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ea`;
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(6.5);
-    pdf.setTextColor(COLOR_MUTED);
-    const labelText = "UNIT PRICE";
-    pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(7.5);
-    pdf.setTextColor(COLOR_BLACK);
-    const valueW = pdf.getTextWidth(valueText);
-    pdf.text(valueText, blockRight - valueW, y + 3);
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(6.5);
-    pdf.setTextColor(COLOR_MUTED);
-    const labelW = pdf.getTextWidth(labelText);
-    pdf.text(labelText, blockRight - valueW - labelGap - labelW, y + 3);
-    y += 4;
-  }
-  if (renderLTLine) {
-    const valueText = pd.combinedLineTotalLabel
-      ?? `$${pd.combinedLineTotal.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    pdf.setFont(FONT_NORMAL, "bold");
-    pdf.setFontSize(8);
-    pdf.setTextColor(COLOR_BLACK);
-    const valueW = pdf.getTextWidth(valueText);
-    pdf.text(valueText, blockRight - valueW, y + 3.4);
-    pdf.setFont(FONT_NORMAL, "normal");
-    pdf.setFontSize(6.5);
-    pdf.setTextColor(COLOR_MUTED);
-    const labelText = "LINE TOTAL";
-    const labelW = pdf.getTextWidth(labelText);
-    pdf.text(labelText, blockRight - valueW - labelGap - labelW, y + 3.4);
-    y += 4.5;
-  }
-
   return y;
 }
 

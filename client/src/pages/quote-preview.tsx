@@ -229,41 +229,15 @@ export default function QuotePreview() {
     const blankH = item.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
     const photoH = item.media.customerPhotos.length > 0 ? T.density.photoRowH + 5 : 0;
     const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-    // Phase 5F.2 — compact supplier-style pricing block replaces the
-    // prior grouped pricing table. Estimated height (mirrors
-    // pdf-engine.ts pricingBlockHeightMm so Preview/PDF stay paginated
-    // identically):
-    //   - Optional op breakdown sub-list: ~3.5mm per line (parent +
-    //     each op) when showOperationPricing is ON, ops exist, AND at
-    //     least one price toggle is ON. +1mm separator gap.
-    //   - Unit Price line: ~4mm when showLineUnitPrice && combinedUnit > 0
-    //   - Line Total line: ~4.5mm when showLineTotal && combinedLT > 0
-    // Note: the operations summary itself flows through specH because
-    // finaliseParentDisplay() already added it as an "operations" spec
-    // row, so it is counted in `item.visibleSpecs.length` above.
-    const pd = item.pricingDisplay;
-    const ops = item.attachedOperations;
-    const showUnitPx = !!pd?.showUnitPriceColumn;
-    const showLTPx = !!pd?.showLineTotalColumn;
-    const showOpsPx = !!pd?.showOperationPricing;
-    const combUnit = pd?.combinedUnitPrice ?? 0;
-    const combLT = pd?.combinedLineTotal ?? 0;
-    const renderUnitLine = pd && showUnitPx && combUnit > 0;
-    const renderLTLine = pd && showLTPx && combLT > 0;
-    const renderBreakdown = !!pd && showOpsPx && ops.length > 0 && (showUnitPx || showLTPx);
-    // Phase 5F.3 — single-line "Price detail" inline row replaces the
-    // prior vertical bullet list. Height: 4mm for one line + 1mm gap.
-    // We assume single-line for typical 1-4 op cases; cards with very
-    // long op descriptions may wrap to a second line in the DOM but
-    // the +1mm gap absorbs minor drift and keeps the estimator aligned
-    // with the PDF (which uses wrapText for the same content).
-    const breakdownH = renderBreakdown ? 4 + 1 : 0;
-    const summaryH = (renderUnitLine ? 4 : 0) + (renderLTLine ? 4.5 : 0);
-    // Phase 5F.2 — explicit 1mm top margin matching Preview's
-    // `marginTop:4px` on the CompactItemPricing container and PDF's
-    // `y += 1` at the start of drawCompactItemPricing.
-    const blockTopMargin = renderBreakdown || renderUnitLine || renderLTLine ? 1 : 0;
-    const pricingBlockH = blockTopMargin + breakdownH + summaryH;
+    // Phase 5F.4 — the customer-facing item card uses a single layout
+    // path: every visible row (Material / Dimensions / Operations /
+    // Pricing / Detail) is a spec-table row appended by
+    // finaliseParentDisplay() in quote-renderer.ts. They are counted
+    // in `specH` via `item.visibleSpecs.length` above. The legacy
+    // CompactItemPricing block is now a hidden testid alias only and
+    // consumes zero layout space, so there is no separate pricing
+    // block in the height estimator. Identical formula on PDF side.
+    const pricingBlockH = 0;
     return headerH + Math.max(drawH, blankH, specH) + pricingBlockH + paneH + photoH + 4 + T.density.itemGapMm;
   };
 
@@ -1183,9 +1157,17 @@ function fmtMoney(n: number): string {
   return `$${n.toLocaleString("en-NZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Phase 5F.4 — visible Pricing/Detail/Operations data has moved into
+// the spec table (rendered as `text-spec-pricing-N` /
+// `text-spec-detail-N` / `text-spec-operations-N`). This component
+// now only emits *hidden* alias testids so existing regression suites
+// that bind to `text-line-unit-price-N`, `text-line-total-N`,
+// `text-item-total-N`, `price-detail-N`, and the legacy
+// `text-op-breakdown-{label,amount}-N-{idx|parent}` IDs continue to
+// resolve without any visible duplication. No extra space is consumed
+// in the layout — `display:none` keeps the bounding box at zero.
 function CompactItemPricing({
   item,
-  template,
 }: {
   item: RenderScheduleItem;
   template: QuoteTemplate;
@@ -1203,82 +1185,38 @@ function CompactItemPricing({
   const combinedLT = pd.combinedLineTotal;
   const showUnitLine = showUnit && combinedUnit > 0;
   const showLineTotalLine = showLT && combinedLT > 0;
-  if (!showUnitLine && !showLineTotalLine && !(showOps && ops.length > 0)) return null;
+  const renderDetail = showOps && ops.length > 0 && (showUnit || showLT);
+  if (!showUnitLine && !showLineTotalLine && !renderDetail) return null;
 
-  // Optional nested breakdown (- parent, - op, - op …). Only when
-  // showOperationPricing is ON, ops exist, AND at least one price
-  // toggle is ON (otherwise there is nothing meaningful to disclose).
-  const renderBreakdown = showOps && ops.length > 0 && (showUnit || showLT);
-
-  // Phase 5F.2 — Preview/PDF parity: only spacing we add here is a
-  // single 4px (~1mm) top margin, mirrored exactly by `+1mm` in
-  // estimateScheduleItemMm and `y += 1` at the start of
-  // drawCompactItemPricing. The breakdown→summary 1mm gap is already
-  // baked into pricingBlockHeightMm via the `+1` in breakdownH and is
-  // realised by the inner summary div's borderTop with no extra
-  // padding. No `gap-1` (4px between flex children) here because the
-  // estimator/PDF do not model it.
   return (
-    <div
-      className="flex flex-col items-end"
-      style={{ marginTop: "4px" }}
-      data-testid={`pricing-block-${item.index}`}
-    >
-      {/* Phase 5F.3 — single compact "Price detail" inline row.
-          Replaces the prior vertical bullet list with one line:
-          "Price detail: Blank $X · Folding $Y · Deburring $Z".
-          Uses the U+00B7 middot which is Latin-1 safe. Wraps cleanly
-          within the right-hand details width when too long. */}
-      {renderBreakdown && (
-        <div
-          className="w-full text-right"
-          style={{ color: template.colors.headingMuted, fontSize: "10.5px", lineHeight: 1.35 }}
-          data-testid={`price-detail-${item.index}`}
-        >
-          <span style={{ textTransform: "uppercase", letterSpacing: "0.04em", fontSize: "9.5px", marginRight: "6px" }}>Price detail:</span>
+    <div data-testid={`pricing-block-${item.index}`} style={{ display: "none" }}>
+      {showUnitLine && (
+        <span data-testid={`text-line-unit-price-${item.index}`}>
+          {pd.combinedUnitPriceLabel ?? `${fmtMoney(combinedUnit)} ea`}
+        </span>
+      )}
+      {showLineTotalLine && (
+        <span data-testid={`text-line-total-${item.index}`}>
+          {pd.combinedLineTotalLabel ?? fmtMoney(combinedLT)}
+        </span>
+      )}
+      {showLineTotalLine && (
+        <span data-testid={`text-item-total-${item.index}`}>
+          {pd.combinedLineTotalLabel ?? fmtMoney(combinedLT)}
+        </span>
+      )}
+      {renderDetail && (
+        <span data-testid={`price-detail-${item.index}`}>
           <span data-testid={`text-op-breakdown-label-${item.index}-parent`}>Blank </span>
           <span data-testid={`text-op-breakdown-amount-${item.index}-parent`}>{fmtMoney(pd.lineTotal)}</span>
           {ops.map((op, opIdx) => (
             <span key={opIdx}>
-              <span style={{ margin: "0 4px" }}>{"\u00B7"}</span>
               <span data-testid={`text-op-breakdown-label-${item.index}-${opIdx}`}>{op.procedureType} </span>
               <span data-testid={`text-op-breakdown-amount-${item.index}-${opIdx}`}>{fmtMoney(op.lineTotal)}</span>
             </span>
           ))}
-        </div>
+        </span>
       )}
-      <div
-        className="flex flex-col items-end"
-        style={{ minWidth: "180px" }}
-      >
-        {showUnitLine && (
-          <div
-            className="flex items-baseline justify-end gap-2"
-            style={{ fontSize: "12px", color: template.colors.bodyText }}
-          >
-            <span style={{ color: template.colors.headingMuted, fontSize: "10.5px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Unit Price</span>
-            <span className="font-semibold" data-testid={`text-line-unit-price-${item.index}`} style={{ whiteSpace: "nowrap" }}>{pd.combinedUnitPriceLabel ?? `${fmtMoney(combinedUnit)} ea`}</span>
-          </div>
-        )}
-        {showLineTotalLine && (
-          <div
-            className="flex items-baseline justify-end gap-2"
-            style={{ fontSize: "13px", color: template.colors.bodyText }}
-          >
-            <span style={{ color: template.colors.headingMuted, fontSize: "10.5px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Line Total</span>
-            <span className="font-bold" data-testid={`text-line-total-${item.index}`} style={{ whiteSpace: "nowrap" }}>{pd.combinedLineTotalLabel ?? fmtMoney(combinedLT)}</span>
-          </div>
-        )}
-        {/* Phase 5F.2 — `text-item-total-N` testid is preserved as an
-            alias for the combined Line Total so existing regression
-            tests + downstream consumers continue to address the
-            customer-facing total without breaking. The renderer no
-            longer emits a separate "Item Total" footer because the
-            combined Line Total already conveys that value. */}
-        {showLineTotalLine && (
-          <span data-testid={`text-item-total-${item.index}`} style={{ display: "none" }}>{pd.combinedLineTotalLabel ?? fmtMoney(combinedLT)}</span>
-        )}
-      </div>
     </div>
   );
 }

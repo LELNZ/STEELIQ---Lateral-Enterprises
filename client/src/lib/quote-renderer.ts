@@ -326,20 +326,62 @@ function buildScheduleItem(
 
   const isLaser = domainType === "laser";
 
-  // Phase 5F card-tightening — pull unitPrice/lineTotal OUT of the LL
-  // spec table so the customer-facing right-hand column stays focused on
-  // material/grade/thickness/dimensions/finish. The pricing values are
-  // re-emitted in the dedicated `pricingDisplay` field below and rendered
-  // in a single compact row beneath the spec table by Preview / PDF.
-  const isLaserPricingKey = (k: string) => k === "unitPrice" || k === "lineTotal";
+  // Phase 5F.4 — compact enterprise spec layout for LL parent items:
+  // collapse Material / Grade / Thickness / Finish into ONE row
+  // ("Aluminium 5052 · 3mm · Fibre PE") and emit a single Dimensions
+  // row. Pricing / Detail / Operations rows are appended later by
+  // finaliseParentDisplay() so all five rows render through the same
+  // spec-table code path on Preview AND PDF (perfect parity).
+  //
+  // Manual-procedure laser items (rendered as their own card) keep the
+  // legacy per-key listing because they don't have material data and
+  // their visible fields are intentionally minimal.
+  //
+  // Non-laser items continue to use the dictionary-driven displayKeys
+  // path — unchanged.
+  const isLaserParent = isLaser && item.category !== "manual_procedure";
 
-  const visibleSpecs = isLaser
-    ? Object.entries(specs)
-        .filter(([k, v]) => v && v !== "" && v !== "0" && !isLaserPricingKey(k))
-        .map(([key, value]) => ({ key, label: LASER_SPEC_LABELS[key] || key, value }))
-    : displayKeys
-        .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
-        .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
+  const buildLaserParentSpecs = (): RenderSpecEntry[] => {
+    const out: RenderSpecEntry[] = [];
+    // Material row — combines materialType + materialGrade · thickness · finish.
+    // Each part is optional; the row is hidden if everything is missing.
+    const mt = (specs.materialType || "").toString().trim();
+    const mg = (specs.materialGrade || "").toString().trim();
+    const th = (specs.thickness || "").toString().trim();
+    const fi = (specs.finish || "").toString().trim();
+    const matLeading = mt && mg ? `${mt} ${mg}` : (mt || mg);
+    const matParts = [matLeading, th, fi].filter(p => p && p.length > 0);
+    if (matParts.length > 0) {
+      out.push({ key: "material", label: "Material", value: matParts.join(" \u00B7 ") });
+    }
+    // Dimensions row — prefer the pre-formatted `dimensions` value;
+    // fall back to length/width singletons if only one is present.
+    const dims = (specs.dimensions || "").toString().trim();
+    if (dims) {
+      out.push({ key: "dimensions", label: "Dimensions", value: dims });
+    } else if (specs.length || specs.width) {
+      const dval = specs.length && specs.width
+        ? `${specs.length} x ${specs.width}`
+        : (specs.length || specs.width);
+      out.push({ key: "dimensions", label: "Dimensions", value: dval });
+    }
+    // Customer notes (if present) — kept as a separate row so the
+    // multi-line content doesn't pollute the compact Material line.
+    if (specs.customerNotes) {
+      out.push({ key: "customerNotes", label: "Notes", value: specs.customerNotes });
+    }
+    return out;
+  };
+
+  const visibleSpecs: RenderSpecEntry[] = isLaserParent
+    ? buildLaserParentSpecs()
+    : isLaser
+      ? Object.entries(specs)
+          .filter(([k, v]) => v && v !== "" && v !== "0" && k !== "unitPrice" && k !== "lineTotal")
+          .map(([key, value]) => ({ key, label: LASER_SPEC_LABELS[key] || key, value }))
+      : displayKeys
+          .filter(key => specs[key] && specs[key] !== "" && specs[key] !== "0")
+          .map(key => ({ key, label: specKeyToLabel[key] || key, value: specs[key] }));
 
   // Phase 5F.1 — grouped commercial pricing display (LL parent items
   // only; manual procedures that render as their own card are excluded
@@ -661,6 +703,54 @@ function finaliseParentDisplay(
       ...sched.visibleSpecs,
       { key: "operations", label: "Operations", value: previewSummary, pdfValue: pdfSummary },
     ];
+  }
+
+  // Phase 5F.4 — synthesize Pricing and Detail spec rows so the entire
+  // customer-facing item card flows through one rendering path on both
+  // Preview and PDF (perfect parity, no separate pricing block).
+  // Pricing row: shown when at least one of Unit / Line is enabled AND
+  //   the corresponding combined value is > 0.
+  //   Format: "Unit $X ea \u00B7 Line $Y" (parts gated by toggle).
+  // Detail row: shown only when showOperationPricing is ON, ops exist,
+  //   AND at least one main price toggle is ON.
+  //   Format: "Blank $X \u00B7 Folding $Y \u00B7 Deburring $Z".
+  // U+00B7 middot is Latin-1 safe; Preview renders it natively, PDF
+  // sanitizes via sanitizeForPdfText() before drawing.
+  const pd = sched.pricingDisplay;
+  if (pd) {
+    const fmtMoney = (n: number) => `$${fmtCurrency(n)}`;
+    // Pricing row.
+    const pricingParts: string[] = [];
+    if (showLineUnitPrice && pd.combinedUnitPrice > 0) {
+      pricingParts.push(`Unit ${fmtMoney(pd.combinedUnitPrice)} ea`);
+    }
+    if (showLineTotal && pd.combinedLineTotal > 0) {
+      pricingParts.push(`Line ${fmtMoney(pd.combinedLineTotal)}`);
+    }
+    if (pricingParts.length > 0) {
+      const pricingValue = pricingParts.join(" \u00B7 ");
+      sched.visibleSpecs = [
+        ...sched.visibleSpecs,
+        { key: "pricing", label: "Pricing", value: pricingValue },
+      ];
+    }
+    // Detail row — only when ops exist, op pricing is ON, and at least
+    // one main price toggle is on (matches the historical gating from
+    // Phase 5F.2/5F.3 inline price-detail rules).
+    const showDetail = pd.showOperationPricing
+      && ops.length > 0
+      && (showLineUnitPrice || showLineTotal);
+    if (showDetail) {
+      const detailParts = [
+        `Blank ${fmtMoney(pd.lineTotal)}`,
+        ...ops.map(op => `${op.procedureType} ${fmtMoney(op.lineTotal || 0)}`),
+      ];
+      const detailValue = detailParts.join(" \u00B7 ");
+      sched.visibleSpecs = [
+        ...sched.visibleSpecs,
+        { key: "detail", label: "Detail", value: detailValue },
+      ];
+    }
   }
 }
 
