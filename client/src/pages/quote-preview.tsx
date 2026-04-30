@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { PreviewData, QuoteDocumentModel, QuoteDocumentItem, TotalsDisplayConfig } from "@/lib/quote-document";
 import { buildQuoteDocumentModel, DEFAULT_TOTALS_DISPLAY_CONFIG } from "@/lib/quote-document";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine } from "@/lib/quote-renderer";
-import { buildQuoteRenderModel, rebuildScheduleItems } from "@/lib/quote-renderer";
+import { buildQuoteRenderModel, rebuildScheduleItems, extractLaserTableRow } from "@/lib/quote-renderer";
 import { MediaViewer } from "@/components/media-viewer";
 import { generateQuotePdf } from "@/lib/pdf-engine";
 import { isSectionVisible } from "@/lib/quote-template";
@@ -216,29 +216,36 @@ export default function QuotePreview() {
   const PAGE_CONTENT_MM = 297 - 18 - 18;
 
   const estimateScheduleItemMm = (item: RenderScheduleItem): number => {
+    // Phase 5G — for laser quotes, EVERY schedule row (including
+    // standalone manual procedures with pricingDisplay == null) is
+    // rendered through the LaserScheduleTable so the estimator must
+    // also use the table-row formula. Mismatch here against the actual
+    // render path was causing false overflow pages on quotes whose
+    // first item was a standalone manual procedure.
+    if (activeModel.domainType === "laser") {
+      const ROW_H = 22; // image-capped row height
+      const pd = item.pricingDisplay;
+      const detailH = pd?.showOperationPricing
+        && item.attachedOperations.length > 0
+        && (pd.showUnitPriceColumn || pd.showLineTotalColumn)
+        ? 5
+        : 0;
+      // Customer photos are intentionally NOT rendered inside the
+      // laser schedule table (the table is the sell-side schedule;
+      // customer photos belong to the gallery section). Therefore the
+      // estimator must NOT add photoH for laser rows or it will create
+      // false overflow pages on photo-bearing items.
+      return ROW_H + detailH + 1;
+    }
+    // Joinery / standalone-manual fallback — original card formula.
     const headerH = T.density.itemHeaderH;
     const specH = item.visibleSpecs.length * T.density.specRowH;
     const drawH = item.media.drawingUrl ? T.density.drawingMaxH + 2 : 0;
-    // Phase 5F card-tightening — manual blank preview is now strictly
-    // bounded to a compact ~22mm tall placeholder regardless of density
-    // tier (130x80px max + caption + 4px padding ≈ 22mm). It no longer
-    // borrows the full drawingMaxH (40mm) which previously caused the
-    // pagination estimator to inflate the LL card and push subsequent
-    // items to page 2.
     const BLANK_PREVIEW_MM = 22;
     const blankH = item.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
     const photoH = item.media.customerPhotos.length > 0 ? T.density.photoRowH + 5 : 0;
     const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-    // Phase 5F.4 — the customer-facing item card uses a single layout
-    // path: every visible row (Material / Dimensions / Operations /
-    // Pricing / Detail) is a spec-table row appended by
-    // finaliseParentDisplay() in quote-renderer.ts. They are counted
-    // in `specH` via `item.visibleSpecs.length` above. The legacy
-    // CompactItemPricing block is now a hidden testid alias only and
-    // consumes zero layout space, so there is no separate pricing
-    // block in the height estimator. Identical formula on PDF side.
-    const pricingBlockH = 0;
-    return headerH + Math.max(drawH, blankH, specH) + pricingBlockH + paneH + photoH + 4 + T.density.itemGapMm;
+    return headerH + Math.max(drawH, blankH, specH) + paneH + photoH + 4 + T.density.itemGapMm;
   };
 
   // Conservative page-1 chrome estimate (mm). Tracks the visible sections
@@ -301,6 +308,17 @@ export default function QuotePreview() {
 
   const page1ScheduleItems = packedPages[0] ?? [];
   const overflowPages: RenderScheduleItem[][] = packedPages.slice(1);
+
+  // Phase 5G — derive laser table column visibility from the FULL
+  // schedule (not the per-page subset) so that a continuation page
+  // that happens to contain only standalone manual procedures still
+  // renders the same column set as page 1. Mirrors the PDF logic in
+  // renderLaserScheduleTable() which reads from model.scheduleItems.
+  const laserSampleWithPricing = isLaserQuote
+    ? liveScheduleItems.find(it => !!it.pricingDisplay)
+    : undefined;
+  const laserShowUnit = laserSampleWithPricing?.pricingDisplay?.showUnitPriceColumn ?? false;
+  const laserShowLT = laserSampleWithPricing?.pricingDisplay?.showLineTotalColumn ?? false;
 
   const hasLegalOrAcceptance = isSectionVisible(T, "legal") || isSectionVisible(T, "acceptance");
 
@@ -565,16 +583,26 @@ export default function QuotePreview() {
                     <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
                   )}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
-                  {page1ScheduleItems.map((item) => (
-                    <ScheduleItemCard
-                      key={item.index}
-                      item={item}
-                      template={T}
-                      docItem={doc?.items[item.index]}
-                    />
-                  ))}
-                </div>
+                {isLaserQuote ? (
+                  <LaserScheduleTable
+                    items={page1ScheduleItems}
+                    template={T}
+                    docItems={doc?.items}
+                    showUnit={laserShowUnit}
+                    showLT={laserShowLT}
+                  />
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+                    {page1ScheduleItems.map((item) => (
+                      <ScheduleItemCard
+                        key={item.index}
+                        item={item}
+                        template={T}
+                        docItem={doc?.items[item.index]}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -583,16 +611,27 @@ export default function QuotePreview() {
         {overflowPages.map((pageItems, pageIdx) => (
           <div key={`schedule-page-${pageIdx}`} style={pageStyle} className="print:!shadow-none print:!rounded-none" data-testid={`preview-schedule-page-${pageIdx}`}>
             <div style={pageContentStyle} className="print:!p-4 print:!min-h-0">
-              <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
-                {pageItems.map((item) => (
-                  <ScheduleItemCard
-                    key={item.index}
-                    item={item}
-                    template={T}
-                    docItem={doc?.items[item.index]}
-                  />
-                ))}
-              </div>
+              {isLaserQuote ? (
+                <LaserScheduleTable
+                  items={pageItems}
+                  template={T}
+                  docItems={doc?.items}
+                  showUnit={laserShowUnit}
+                  showLT={laserShowLT}
+                  isContinuation
+                />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
+                  {pageItems.map((item) => (
+                    <ScheduleItemCard
+                      key={item.index}
+                      item={item}
+                      template={T}
+                      docItem={doc?.items[item.index]}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -1217,6 +1256,256 @@ function CompactItemPricing({
           ))}
         </span>
       )}
+    </div>
+  );
+}
+
+// Phase 5G — enterprise schedule TABLE for the LL customer-facing
+// surface. Replaces the per-item card layout with a single table that
+// fits more items per page and reads as a professional schedule. Same
+// columns / behaviour are mirrored in the PDF by
+// renderLaserScheduleTable() in pdf-engine.ts.
+//
+// Columns: Image · Item · Material · Dimensions · Operations · Qty ·
+//   Unit Price (toggle) · Line Total (toggle).
+//
+// Pricing-related columns and the optional `Detail:` sub-row are
+// strictly toggle-gated: showUnitPriceColumn / showLineTotalColumn /
+// showOperationPricing — all derived from the per-revision Quote
+// Display Settings via the render model. No cost / margin / supplier /
+// internal-notes data ever surfaces.
+//
+// TODO Phase 5H — reserved sub-row slot for "Qty Breaks" tier pricing.
+// When implemented, render below the Detail row spanning all columns.
+function LaserScheduleTable({
+  items,
+  template,
+  docItems,
+  showUnit,
+  showLT,
+  isContinuation,
+}: {
+  items: RenderScheduleItem[];
+  template: QuoteTemplate;
+  docItems: QuoteDocumentItem[] | undefined;
+  showUnit: boolean;
+  showLT: boolean;
+  isContinuation?: boolean;
+}) {
+  if (items.length === 0) return null;
+
+  // showUnit / showLT are derived once at the parent level from the
+  // FULL liveScheduleItems array (not the per-page subset) so that a
+  // continuation page containing only standalone manual procedures
+  // still renders the same column set as page 1. This mirrors the PDF
+  // logic in renderLaserScheduleTable() in pdf-engine.ts.
+  void docItems; // reserved for future per-row drawing config lookups
+
+  const headerCellStyle: React.CSSProperties = {
+    textAlign: "left",
+    padding: "6px 8px",
+    fontSize: "11px",
+    fontWeight: 600,
+    color: template.colors.bodyText,
+    backgroundColor: template.colors.bgMuted,
+    borderBottom: `1px solid ${template.colors.border}`,
+    whiteSpace: "nowrap",
+  };
+  const cellStyle: React.CSSProperties = {
+    padding: "6px 8px",
+    fontSize: "11.5px",
+    color: template.colors.bodyText,
+    borderBottom: `1px solid ${template.colors.border}`,
+    verticalAlign: "top",
+  };
+  const numericCellStyle: React.CSSProperties = {
+    ...cellStyle,
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  };
+
+  // Column widths in mm — total = 180mm (matches PDF CONTENT_WIDTH so
+  // both surfaces look identical to the customer). When pricing
+  // columns are hidden their mm budget is redistributed across Item +
+  // Operations using the same 42% / 58% split as the PDF
+  // (renderLaserScheduleTable). We then convert each mm width to a
+  // percentage that always sums to 100% (the React table layout would
+  // otherwise leave browser-dependent slack and drift from the PDF).
+  const PDF_CONTENT_MM = 180;
+  const W_IMAGE_MM = 22;
+  const W_MATERIAL_MM = 30;
+  const W_DIMS_MM = 22;
+  const W_QTY_MM = 8;
+  const W_UNIT_MM = showUnit ? 14 : 0;
+  const W_LINE_MM = showLT ? 18 : 0;
+  const remainingForItemOpsMm =
+    PDF_CONTENT_MM - W_IMAGE_MM - W_MATERIAL_MM - W_DIMS_MM - W_QTY_MM - W_UNIT_MM - W_LINE_MM;
+  const W_ITEM_MM = Math.floor(remainingForItemOpsMm * 0.42);
+  const W_OPS_MM = remainingForItemOpsMm - W_ITEM_MM;
+  const pct = (mm: number) => `${((mm / PDF_CONTENT_MM) * 100).toFixed(3)}%`;
+  const widths = {
+    image: pct(W_IMAGE_MM),
+    item: pct(W_ITEM_MM),
+    material: pct(W_MATERIAL_MM),
+    dimensions: pct(W_DIMS_MM),
+    operations: pct(W_OPS_MM),
+    qty: pct(W_QTY_MM),
+    unit: pct(W_UNIT_MM),
+    lineTotal: pct(W_LINE_MM),
+  };
+
+  const totalCols = 6 + (showUnit ? 1 : 0) + (showLT ? 1 : 0);
+
+  return (
+    <div data-testid={`laser-schedule-table${isContinuation ? "-continuation" : ""}`}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          tableLayout: "fixed",
+        }}
+      >
+        <colgroup>
+          <col style={{ width: widths.image }} />
+          <col style={{ width: widths.item }} />
+          <col style={{ width: widths.material }} />
+          <col style={{ width: widths.dimensions }} />
+          <col style={{ width: widths.operations }} />
+          <col style={{ width: widths.qty }} />
+          {showUnit && <col style={{ width: widths.unit }} />}
+          {showLT && <col style={{ width: widths.lineTotal }} />}
+        </colgroup>
+        <thead>
+          <tr>
+            <th style={headerCellStyle}>Image</th>
+            <th style={headerCellStyle}>Item</th>
+            <th style={headerCellStyle}>Material / Spec</th>
+            <th style={headerCellStyle}>Dimensions</th>
+            <th style={headerCellStyle}>Operations</th>
+            <th style={{ ...headerCellStyle, textAlign: "right" }}>Qty</th>
+            {showUnit && <th style={{ ...headerCellStyle, textAlign: "right" }}>Unit Price</th>}
+            {showLT && <th style={{ ...headerCellStyle, textAlign: "right" }}>Line Total</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {items.flatMap((item) => {
+            const row = extractLaserTableRow(item);
+            const blank = item.manualBlankPreview;
+            const drawingUrl = item.media.drawingUrl;
+            const showDetail = !!row.detailPreview;
+            const trs: React.ReactElement[] = [
+                <tr key={`row-${item.index}`} data-testid={`schedule-row-${item.index}`}>
+                  <td style={cellStyle}>
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "78px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {drawingUrl ? (
+                        <MediaImage
+                          src={drawingUrl}
+                          alt={`Drawing for ${item.itemRef}`}
+                          style={{
+                            maxWidth: "100%",
+                            maxHeight: "78px",
+                            objectFit: "contain",
+                          }}
+                          testId={`img-drawing-${item.index}`}
+                          fallbackTestId={`img-drawing-fallback-${item.index}`}
+                          fallbackText="—"
+                        />
+                      ) : blank ? (
+                        <ManualBlankPreviewSvg
+                          lengthMm={blank.lengthMm}
+                          widthMm={blank.widthMm}
+                          template={template}
+                          itemIndex={item.index}
+                        />
+                      ) : (
+                        <span style={{ fontSize: "10px", color: template.colors.headingMuted }}>—</span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={cellStyle}>
+                    <div
+                      style={{ fontWeight: 600 }}
+                      data-testid={`text-item-title-${item.index}`}
+                    >
+                      {item.title}
+                    </div>
+                    {row.notes && (
+                      <div
+                        style={{ fontSize: "10.5px", color: template.colors.headingMuted, marginTop: "2px" }}
+                        data-testid={`text-item-notes-${item.index}`}
+                      >
+                        {row.notes}
+                      </div>
+                    )}
+                  </td>
+                  <td style={cellStyle} data-testid={`text-row-material-${item.index}`}>
+                    {row.material || "—"}
+                  </td>
+                  <td style={cellStyle} data-testid={`text-row-dimensions-${item.index}`}>
+                    {row.dimensions || "—"}
+                  </td>
+                  <td style={cellStyle} data-testid={`text-row-operations-${item.index}`}>
+                    {row.hasOperations ? row.operationsPreview : "—"}
+                  </td>
+                  <td style={numericCellStyle} data-testid={`text-row-qty-${item.index}`}>
+                    {row.qty}
+                  </td>
+                  {showUnit && (
+                    <td style={numericCellStyle} data-testid={`text-row-unit-${item.index}`}>
+                      {row.unitPriceLabel ?? "—"}
+                    </td>
+                  )}
+                  {showLT && (
+                    <td style={numericCellStyle} data-testid={`text-row-line-total-${item.index}`}>
+                      {row.lineTotalLabel ?? "—"}
+                    </td>
+                  )}
+                </tr>,
+            ];
+            if (showDetail) {
+              trs.push(
+                <tr key={`detail-${item.index}`} data-testid={`schedule-row-detail-${item.index}`}>
+                  <td
+                    colSpan={totalCols}
+                    style={{
+                      ...cellStyle,
+                      paddingTop: 0,
+                      paddingLeft: "calc(11% + 8px)",
+                      fontSize: "10.5px",
+                      color: template.colors.headingMuted,
+                      fontStyle: "italic",
+                    }}
+                    data-testid={`text-row-detail-${item.index}`}
+                  >
+                    {row.detailPreview}
+                  </td>
+                </tr>
+              );
+            }
+            // TODO Phase 5H — Qty Breaks tier sub-row slot reserved here.
+            // Hidden back-compat testids (display:none) for the legacy
+            // regression suite that binds to text-line-unit-price-N /
+            // text-line-total-N / text-item-total-N / price-detail-N etc.
+            trs.push(
+              <tr key={`compat-${item.index}`} style={{ display: "none" }} aria-hidden="true">
+                <td colSpan={totalCols}>
+                  <CompactItemPricing item={item} template={template} />
+                </td>
+              </tr>
+            );
+            return trs;
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

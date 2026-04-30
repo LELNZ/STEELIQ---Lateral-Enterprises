@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine, RenderSpecEntry } from "./quote-renderer";
+import { extractLaserTableRow } from "./quote-renderer";
 import { isSectionVisible, LOGO_SCALE_PRESETS, COMPANY_MASTER_TEMPLATE } from "./quote-template";
 import { parseRichText, isAllBold, tokensToPlainText, type InlineToken } from "./rich-text-parser";
 import type { QuoteTemplate, ScheduleLayoutVariant, TotalsLayoutVariant } from "./quote-template";
@@ -929,27 +930,46 @@ async function renderSchedule(
   let firstItemEstH = 0;
   if (model.scheduleItems.length > 0) {
     const fi = model.scheduleItems[0];
-    const fiDrawH = fi.media.drawingUrl && imageCache.has(`draw-${fi.index}`) ? DENSITY_DRAWING_MAX_H + 2 : 0;
-    // Phase 5F card-tightening — manual blank placeholder is now a
-    // strictly bounded ~22mm tall compact box (max 32mm wide). It no
-    // longer borrows the full drawingMaxH (40mm), so the page-1
-    // first-item estimator correctly recognises that LL items with
-    // bounded blanks fit on page 1 alongside subsequent items.
-    const BLANK_PREVIEW_MM = 22;
-    const fiBlankH = fi.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
-    const fiSpecH = fi.visibleSpecs.length * DENSITY_SPEC_ROW_H;
-    const fiPhotoH = fi.media.customerPhotos.filter((p) => imageCache.has(p.key)).length > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
-    // Phase 5F polish parity — pane specs and attached-operations rows
-    // are part of the rendered card but were previously omitted from the
-    // first-item start-page estimator. Mirror the preview's
-    // estimateScheduleItemMm formula so the page-1 placement decision
-    // aligns with where preview actually breaks.
-    const fiPaneH = fi.paneGlassSpecs.length > 0 ? 6 + fi.paneGlassSpecs.length * 3.5 : 0;
-    // Phase 5F.1 — grouped commercial pricing table replaces the prior
-    // separate pricing row + operations block. Same height formula used
-    // by Preview's estimateScheduleItemMm so cross-page parity holds.
-    const fiPricingBlockH = pricingBlockHeightMm(fi);
-    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPricingBlockH + fiPaneH + fiPhotoH + 4;
+    if (model.domainType === "laser") {
+      // Phase 5G — laser schedules render via renderLaserScheduleTable
+      // (8-column table). The per-row footprint is the table header
+      // (~7mm) + a single capped image-row (~22mm) + an optional
+      // ~5mm Detail sub-row. Mirrors the preview's
+      // estimateScheduleItemMm laser branch so cross-surface
+      // pagination decisions agree.
+      const TABLE_HEADER_H = 7;
+      const ROW_H = 22;
+      const pd = fi.pricingDisplay;
+      const detailH =
+        pd?.showOperationPricing
+        && fi.attachedOperations.length > 0
+        && (pd.showUnitPriceColumn || pd.showLineTotalColumn)
+          ? 5
+          : 0;
+      firstItemEstH = TABLE_HEADER_H + ROW_H + detailH + 2;
+    } else {
+      const fiDrawH = fi.media.drawingUrl && imageCache.has(`draw-${fi.index}`) ? DENSITY_DRAWING_MAX_H + 2 : 0;
+      // Phase 5F card-tightening — manual blank placeholder is now a
+      // strictly bounded ~22mm tall compact box (max 32mm wide). It no
+      // longer borrows the full drawingMaxH (40mm), so the page-1
+      // first-item estimator correctly recognises that LL items with
+      // bounded blanks fit on page 1 alongside subsequent items.
+      const BLANK_PREVIEW_MM = 22;
+      const fiBlankH = fi.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
+      const fiSpecH = fi.visibleSpecs.length * DENSITY_SPEC_ROW_H;
+      const fiPhotoH = fi.media.customerPhotos.filter((p) => imageCache.has(p.key)).length > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
+      // Phase 5F polish parity — pane specs and attached-operations rows
+      // are part of the rendered card but were previously omitted from the
+      // first-item start-page estimator. Mirror the preview's
+      // estimateScheduleItemMm formula so the page-1 placement decision
+      // aligns with where preview actually breaks.
+      const fiPaneH = fi.paneGlassSpecs.length > 0 ? 6 + fi.paneGlassSpecs.length * 3.5 : 0;
+      // Phase 5F.1 — grouped commercial pricing table replaces the prior
+      // separate pricing row + operations block. Same height formula used
+      // by Preview's estimateScheduleItemMm so cross-page parity holds.
+      const fiPricingBlockH = pricingBlockHeightMm(fi);
+      firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPricingBlockH + fiPaneH + fiPhotoH + 4;
+    }
   }
 
   const neededOnCurrentPage = SECTION_GAP + SCHEDULE_HEADING_H + firstItemEstH;
@@ -978,6 +998,12 @@ async function renderSchedule(
     y += 6;
   }
 
+  // Phase 5G — laser quotes render the schedule as an enterprise table.
+  // Joinery / estimator quotes keep the per-item card path below.
+  if (model.domainType === "laser") {
+    return await renderLaserScheduleTable(pdf, y, model, imageCache, onProgress);
+  }
+
   for (let si = 0; si < model.scheduleItems.length; si++) {
     const item = model.scheduleItems[si];
     onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
@@ -1002,6 +1028,236 @@ async function renderSchedule(
 
     y = await renderScheduleItem(pdf, y, item, imageCache);
     y += ITEM_GAP;
+  }
+
+  return y;
+}
+
+// Phase 5G — enterprise schedule TABLE for the LL customer-facing PDF.
+// Mirrors the React `LaserScheduleTable` in quote-preview.tsx so the
+// preview and the exported PDF render the same 8-column schedule with
+// the same toggle-driven column visibility:
+//
+//   Image | Item | Material/Spec | Dimensions | Operations | Qty |
+//   Unit Price (toggle) | Line Total (toggle).
+//
+// Pricing values are sourced ONLY from `pricingDisplay` (combined
+// labels) which respect `showUnitPriceColumn` / `showLineTotalColumn`.
+// No cost / margin / supplier / internal-notes data is ever surfaced.
+//
+// Pagination: per-row `ensureSpace`. When a page break occurs the
+// header row is redrawn at the top of the new page so the customer
+// always sees column labels.
+//
+// All text is run through `sanitizeForPdfText()` because jsPDF's
+// helvetica is Latin-1 only.
+async function renderLaserScheduleTable(
+  pdf: Pdf,
+  y: number,
+  model: QuoteRenderModel,
+  imageCache: Map<string, string>,
+  onProgress?: (status: string) => void,
+): Promise<number> {
+  // Determine column visibility from the first item that carries
+  // pricingDisplay (all laser parents share the same toggles).
+  const sampleWithPricing = model.scheduleItems.find(it => !!it.pricingDisplay);
+  const showUnit = sampleWithPricing?.pricingDisplay?.showUnitPriceColumn ?? false;
+  const showLT = sampleWithPricing?.pricingDisplay?.showLineTotalColumn ?? false;
+
+  // Column widths in mm — total = CONTENT_WIDTH (180mm).
+  // Both pricing columns hidden → distribute the 34mm to Item + Operations.
+  // Only one hidden → distribute its share to Operations.
+  const W_IMAGE = 22;
+  const W_QTY = 8;
+  const W_UNIT = showUnit ? 14 : 0;
+  const W_LINE = showLT ? 18 : 0;
+  const W_DIMS = 22;
+  const W_MATERIAL = 30;
+  const remainingForItemOps = CONTENT_WIDTH - W_IMAGE - W_DIMS - W_MATERIAL - W_QTY - W_UNIT - W_LINE;
+  // Allocate 40% to Item, 60% to Operations.
+  const W_ITEM = Math.floor(remainingForItemOps * 0.42);
+  const W_OPS = remainingForItemOps - W_ITEM;
+
+  // Column x offsets (left edge of each cell).
+  const X_IMAGE = LEFT_MARGIN;
+  const X_ITEM = X_IMAGE + W_IMAGE;
+  const X_MATERIAL = X_ITEM + W_ITEM;
+  const X_DIMS = X_MATERIAL + W_MATERIAL;
+  const X_OPS = X_DIMS + W_DIMS;
+  const X_QTY = X_OPS + W_OPS;
+  const X_UNIT = X_QTY + W_QTY;
+  const X_LINE = X_UNIT + W_UNIT;
+
+  const HEADER_H = 6;
+  const ROW_H = 14;       // image-capped row height
+  const DETAIL_H = 4.5;   // optional sub-row height
+  const CELL_PAD_X = 1.5;
+  const HEADER_FONT = 7;
+  const BODY_FONT = 7.5;
+  const DETAIL_FONT = 6.5;
+
+  const drawHeader = (yy: number): number => {
+    pdf.setFillColor(COLOR_BG_MUTED);
+    pdf.rect(LEFT_MARGIN, yy, CONTENT_WIDTH, HEADER_H, "F");
+    pdf.setDrawColor(COLOR_BORDER);
+    pdf.setLineWidth(0.2);
+    pdf.line(LEFT_MARGIN, yy + HEADER_H, LEFT_MARGIN + CONTENT_WIDTH, yy + HEADER_H);
+
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(HEADER_FONT);
+    pdf.setTextColor(COLOR_BLACK);
+    const baseline = yy + 4;
+    pdf.text("Image", X_IMAGE + CELL_PAD_X, baseline);
+    pdf.text("Item", X_ITEM + CELL_PAD_X, baseline);
+    pdf.text("Material / Spec", X_MATERIAL + CELL_PAD_X, baseline);
+    pdf.text("Dimensions", X_DIMS + CELL_PAD_X, baseline);
+    pdf.text("Operations", X_OPS + CELL_PAD_X, baseline);
+    // Right-aligned numeric headers.
+    const qtyLbl = "Qty";
+    pdf.text(qtyLbl, X_QTY + W_QTY - CELL_PAD_X - pdf.getTextWidth(qtyLbl), baseline);
+    if (showUnit) {
+      const ul = "Unit Price";
+      pdf.text(ul, X_UNIT + W_UNIT - CELL_PAD_X - pdf.getTextWidth(ul), baseline);
+    }
+    if (showLT) {
+      const ll = "Line Total";
+      pdf.text(ll, X_LINE + W_LINE - CELL_PAD_X - pdf.getTextWidth(ll), baseline);
+    }
+    return yy + HEADER_H;
+  };
+
+  // Initial header row (immediately after the SCHEDULE heading).
+  y = drawHeader(y);
+
+  for (let si = 0; si < model.scheduleItems.length; si++) {
+    const item = model.scheduleItems[si];
+    onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
+    if (si > 0 && si % 2 === 0) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    const row = extractLaserTableRow(item);
+    const needsDetail = !!row.detailPdf;
+    const totalRowH = ROW_H + (needsDetail ? DETAIL_H : 0);
+
+    // Page-break handling — redraw the header on every new page so the
+    // customer always sees column labels above the data.
+    if (y + totalRowH > MAX_Y) {
+      pdf.addPage();
+      y = TOP_MARGIN;
+      y = drawHeader(y);
+    }
+
+    const rowTopY = y;
+
+    // --- Image cell ---------------------------------------------------
+    const hasDrawing = !!item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
+    const imgBoxX = X_IMAGE + CELL_PAD_X;
+    const imgBoxY = y + 1;
+    const imgBoxW = W_IMAGE - CELL_PAD_X * 2;
+    const imgBoxH = ROW_H - 2;
+    if (hasDrawing) {
+      const drawingData = imageCache.get(`draw-${item.index}`)!;
+      try {
+        const dims = await getImageDimensions(drawingData);
+        const scale = Math.min(imgBoxW / dims.w, imgBoxH / dims.h, 1);
+        const dw = dims.w * scale;
+        const dh = dims.h * scale;
+        const dx = imgBoxX + (imgBoxW - dw) / 2;
+        const dy = imgBoxY + (imgBoxH - dh) / 2;
+        pdf.addImage(drawingData, dx, dy, dw, dh);
+      } catch { /* skip */ }
+    } else if (item.manualBlankPreview) {
+      const lengthMm = item.manualBlankPreview.lengthMm;
+      const widthMm = item.manualBlankPreview.widthMm;
+      const scale = Math.min(imgBoxW / lengthMm, imgBoxH / widthMm);
+      const rectW = Math.max(4, lengthMm * scale * 0.85);
+      const rectH = Math.max(3, widthMm * scale * 0.85);
+      const rx = imgBoxX + (imgBoxW - rectW) / 2;
+      const ry = imgBoxY + (imgBoxH - rectH) / 2;
+      pdf.setDrawColor(COLOR_BORDER);
+      pdf.setLineWidth(0.25);
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(rx, ry, rectW, rectH, 0.4, 0.4, "FD");
+    } else {
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(BODY_FONT);
+      pdf.setTextColor(COLOR_MUTED);
+      pdf.text("-", imgBoxX + imgBoxW / 2, y + ROW_H / 2 + 1);
+    }
+
+    // --- Text cells ---------------------------------------------------
+    pdf.setFont(FONT_NORMAL, "normal");
+    pdf.setFontSize(BODY_FONT);
+    pdf.setTextColor(COLOR_BLACK);
+
+    const drawWrappedCell = (text: string, x: number, w: number, opts?: { bold?: boolean; align?: "left" | "right"; muted?: boolean; maxLines?: number }) => {
+      if (!text) text = "-";
+      pdf.setFont(FONT_NORMAL, opts?.bold ? "bold" : "normal");
+      pdf.setTextColor(opts?.muted ? COLOR_MUTED : COLOR_BLACK);
+      const maxLines = opts?.maxLines ?? 3;
+      const innerW = w - CELL_PAD_X * 2;
+      const lines = wrapText(pdf, sanitizeForPdfText(text), innerW).slice(0, maxLines);
+      const lineSpacingMm = BODY_FONT * 1.15 * 0.352778;
+      lines.forEach((ln, i) => {
+        const ly = y + 3 + i * lineSpacingMm;
+        if (opts?.align === "right") {
+          const tw = pdf.getTextWidth(ln);
+          pdf.text(ln, x + w - CELL_PAD_X - tw, ly);
+        } else {
+          pdf.text(ln, x + CELL_PAD_X, ly);
+        }
+      });
+    };
+
+    drawWrappedCell(row.title, X_ITEM, W_ITEM, { bold: true, maxLines: 2 });
+    if (row.notes) {
+      // Notes appear below the title in muted small font.
+      pdf.setFont(FONT_NORMAL, "italic");
+      pdf.setFontSize(DETAIL_FONT);
+      pdf.setTextColor(COLOR_MUTED);
+      const notesLine = wrapText(pdf, sanitizeForPdfText(row.notes), W_ITEM - CELL_PAD_X * 2)[0] || "";
+      pdf.text(notesLine, X_ITEM + CELL_PAD_X, y + 9);
+      pdf.setFontSize(BODY_FONT);
+    }
+
+    drawWrappedCell(row.material, X_MATERIAL, W_MATERIAL);
+    drawWrappedCell(row.dimensions, X_DIMS, W_DIMS);
+    drawWrappedCell(row.hasOperations ? row.operationsPdf : "-", X_OPS, W_OPS, { maxLines: 3 });
+    drawWrappedCell(String(row.qty), X_QTY, W_QTY, { align: "right" });
+    if (showUnit) {
+      drawWrappedCell(row.unitPriceLabel ?? "-", X_UNIT, W_UNIT, { align: "right" });
+    }
+    if (showLT) {
+      drawWrappedCell(row.lineTotalLabel ?? "-", X_LINE, W_LINE, { align: "right", bold: true });
+    }
+
+    y += ROW_H;
+
+    // --- Optional Detail sub-row -------------------------------------
+    if (needsDetail) {
+      pdf.setFont(FONT_NORMAL, "italic");
+      pdf.setFontSize(DETAIL_FONT);
+      pdf.setTextColor(COLOR_MUTED);
+      const detailText = sanitizeForPdfText(row.detailPdf!);
+      const detailW = CONTENT_WIDTH - W_IMAGE;
+      const detailLine = wrapText(pdf, detailText, detailW - CELL_PAD_X * 2)[0] || detailText;
+      pdf.text(detailLine, X_ITEM + CELL_PAD_X, y + 2.8);
+      y += DETAIL_H;
+    }
+
+    // --- Row separator ------------------------------------------------
+    pdf.setDrawColor(COLOR_BORDER);
+    pdf.setLineWidth(0.15);
+    pdf.line(LEFT_MARGIN, y, LEFT_MARGIN + CONTENT_WIDTH, y);
+
+    // TODO Phase 5H — reserved sub-row slot for "Qty Breaks" tier
+    // pricing. When implemented, render here under the Detail row
+    // spanning all columns, then advance y by its height.
+
+    // Touch the rowTopY var so lint doesn't trip; also useful for
+    // future row-background fills.
+    void rowTopY;
   }
 
   return y;

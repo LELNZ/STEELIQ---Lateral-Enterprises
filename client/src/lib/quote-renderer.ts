@@ -689,69 +689,100 @@ function finaliseParentDisplay(
       ? `$${fmtCurrency(combinedLineTotal)}`
       : null;
   }
-  // Synthesize Operations summary spec row when ops exist.
-  // Preview uses an em-dash (\u2014) for typographic polish; PDF uses
-  // an ASCII " - " separator because jsPDF helvetica is Latin-1 only.
-  if (ops.length > 0) {
-    const previewSummary = ops
-      .map(op => op.description ? `${op.procedureType} \u2014 ${op.description}` : op.procedureType)
-      .join("; ");
-    const pdfSummary = ops
-      .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
-      .join("; ");
-    sched.visibleSpecs = [
-      ...sched.visibleSpecs,
-      { key: "operations", label: "Operations", value: previewSummary, pdfValue: pdfSummary },
+  // Phase 5G — the customer-facing LL surface now uses an enterprise
+  // schedule TABLE (see LaserScheduleTable in quote-preview.tsx and
+  // renderLaserScheduleTable in pdf-engine.ts). Operations / Pricing /
+  // Detail are rendered as dedicated table columns + an optional Detail
+  // sub-row, sourced directly from `attachedOperations` and
+  // `pricingDisplay` via `extractLaserTableRow()`. Therefore we no
+  // longer synthesize Operations / Pricing / Detail spec rows here.
+  // The `combinedUnitPrice` / `combinedLineTotal` recompute above is
+  // still essential because `extractLaserTableRow()` reads those
+  // values directly. `visibleSpecs` for laser parents still carries
+  // the compact Material / Dimensions / Notes rows from
+  // `buildLaserParentSpecs()` which the table cells consume.
+}
+
+// Phase 5G — extract the per-row data needed by the customer-facing
+// LL schedule table. Pulls from `visibleSpecs` (Material / Dimensions /
+// Notes), `pricingDisplay` (Qty / Unit Price / Line Total / Detail),
+// and `attachedOperations` (Operations cell + Detail breakdown).
+//
+// Two text variants are produced for Operations and Detail because
+// Preview renders an em-dash (typographic polish) while the PDF must
+// stay strictly ASCII / Latin-1 safe (jsPDF helvetica encoder).
+//
+// Customer-safe — only sell-side toggle-governed values are surfaced;
+// no cost / margin / supplier / bucket / internal-notes data.
+export interface LaserTableRow {
+  index: number;
+  displayNumber: string;
+  title: string;
+  material: string;
+  dimensions: string;
+  qty: number;
+  qtyLabel: string;
+  operationsPreview: string;   // em-dash for Preview
+  operationsPdf: string;       // ASCII " - " for PDF
+  hasOperations: boolean;
+  unitPriceLabel: string | null;  // null when toggle off
+  lineTotalLabel: string | null;  // null when toggle off
+  detailPreview: string | null;   // "Blank $X · Folding $Y" — null when hidden
+  detailPdf: string | null;
+  notes: string;
+  showOperationPricing: boolean;
+}
+
+export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
+  const findSpec = (key: string): string =>
+    (item.visibleSpecs.find(s => s.key === key)?.value || "").toString();
+  const ops = item.attachedOperations;
+  const pd = item.pricingDisplay;
+
+  const operationsPreview = ops
+    .map(op => op.description ? `${op.procedureType} \u2014 ${op.description}` : op.procedureType)
+    .join("; ");
+  const operationsPdf = ops
+    .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
+    .join("; ");
+
+  const fmtMoney = (n: number) => `$${fmtCurrency(n)}`;
+  let detailPreview: string | null = null;
+  let detailPdf: string | null = null;
+  const showOperationPricing = !!pd?.showOperationPricing;
+  if (
+    pd && showOperationPricing && ops.length > 0
+    && (pd.showUnitPriceColumn || pd.showLineTotalColumn)
+  ) {
+    const parts = [
+      `Blank ${fmtMoney(pd.lineTotal)}`,
+      ...ops.map(op => `${op.procedureType} ${fmtMoney(op.lineTotal || 0)}`),
     ];
+    // Preview keeps the typographic middot for visual polish.
+    // PDF uses ASCII " - " separator to stay strictly Latin-1 safe and
+    // avoid font-substitution surprises across PDF readers.
+    detailPreview = `Detail: ${parts.join(" \u00B7 ")}`;
+    detailPdf = `Detail: ${parts.join(" - ")}`;
   }
 
-  // Phase 5F.4 — synthesize Pricing and Detail spec rows so the entire
-  // customer-facing item card flows through one rendering path on both
-  // Preview and PDF (perfect parity, no separate pricing block).
-  // Pricing row: shown when at least one of Unit / Line is enabled AND
-  //   the corresponding combined value is > 0.
-  //   Format: "Unit $X ea \u00B7 Line $Y" (parts gated by toggle).
-  // Detail row: shown only when showOperationPricing is ON, ops exist,
-  //   AND at least one main price toggle is ON.
-  //   Format: "Blank $X \u00B7 Folding $Y \u00B7 Deburring $Z".
-  // U+00B7 middot is Latin-1 safe; Preview renders it natively, PDF
-  // sanitizes via sanitizeForPdfText() before drawing.
-  const pd = sched.pricingDisplay;
-  if (pd) {
-    const fmtMoney = (n: number) => `$${fmtCurrency(n)}`;
-    // Pricing row.
-    const pricingParts: string[] = [];
-    if (showLineUnitPrice && pd.combinedUnitPrice > 0) {
-      pricingParts.push(`Unit ${fmtMoney(pd.combinedUnitPrice)} ea`);
-    }
-    if (showLineTotal && pd.combinedLineTotal > 0) {
-      pricingParts.push(`Line ${fmtMoney(pd.combinedLineTotal)}`);
-    }
-    if (pricingParts.length > 0) {
-      const pricingValue = pricingParts.join(" \u00B7 ");
-      sched.visibleSpecs = [
-        ...sched.visibleSpecs,
-        { key: "pricing", label: "Pricing", value: pricingValue },
-      ];
-    }
-    // Detail row — only when ops exist, op pricing is ON, and at least
-    // one main price toggle is on (matches the historical gating from
-    // Phase 5F.2/5F.3 inline price-detail rules).
-    const showDetail = pd.showOperationPricing
-      && ops.length > 0
-      && (showLineUnitPrice || showLineTotal);
-    if (showDetail) {
-      const detailParts = [
-        `Blank ${fmtMoney(pd.lineTotal)}`,
-        ...ops.map(op => `${op.procedureType} ${fmtMoney(op.lineTotal || 0)}`),
-      ];
-      const detailValue = detailParts.join(" \u00B7 ");
-      sched.visibleSpecs = [
-        ...sched.visibleSpecs,
-        { key: "detail", label: "Detail", value: detailValue },
-      ];
-    }
-  }
+  return {
+    index: item.index,
+    displayNumber: item.displayNumber,
+    title: item.title,
+    material: findSpec("material"),
+    dimensions: findSpec("dimensions"),
+    qty: pd?.quantity ?? Math.max(1, parseInt(item.quantityLabel.replace(/\D/g, ""), 10) || 1),
+    qtyLabel: item.quantityLabel,
+    operationsPreview,
+    operationsPdf,
+    hasOperations: ops.length > 0,
+    unitPriceLabel: pd?.combinedUnitPriceLabel ?? null,
+    lineTotalLabel: pd?.combinedLineTotalLabel ?? null,
+    detailPreview,
+    detailPdf,
+    notes: findSpec("customerNotes"),
+    showOperationPricing,
+  };
 }
 
 function buildLegal(doc: QuoteDocumentModel): RenderLegalBlock {
