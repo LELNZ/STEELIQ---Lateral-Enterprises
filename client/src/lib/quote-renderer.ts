@@ -727,8 +727,8 @@ export interface LaserTableRow {
   hasOperations: boolean;
   unitPriceLabel: string | null;  // null when toggle off
   lineTotalLabel: string | null;  // null when toggle off
-  detailPreview: string | null;   // "Pricing detail: Blank $X · Folding $Y" — null when hidden
-  detailPdf: string | null;
+  detailPreview: string | null;   // "Included pricing detail: Blank $X - Folding $Y" — null when hidden
+  detailPdf: string | null;       // identical text in both surfaces (Phase 5H.1 parity)
   notes: string;
   showOperationPricing: boolean;
   // Phase 5H.0 — hybrid 7-column table additions.
@@ -766,12 +766,13 @@ export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
   // Phase 5H.0 — concise comma-separated ops summary for the
   // Item / Description cell. Includes brief description when present.
   // Empty string when no ops so callers can branch cleanly.
+  // Phase 5H.1 — both surfaces use the same ASCII " - " separator
+  // when an op has a brief description, so Preview and PDF render
+  // identical text inside the Item / Description cell.
   const opsSummaryPreview = ops.length === 0 ? "" : ops
-    .map(op => op.description ? `${op.procedureType} \u2014 ${op.description}` : op.procedureType)
-    .join(", ");
-  const opsSummaryPdf = ops.length === 0 ? "" : ops
     .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
     .join(", ");
+  const opsSummaryPdf = opsSummaryPreview;
 
   const fmtMoney = (n: number) => `$${fmtCurrency(n)}`;
   let detailPreview: string | null = null;
@@ -785,12 +786,15 @@ export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
       `Blank ${fmtMoney(pd.lineTotal)}`,
       ...ops.map(op => `${op.procedureType} ${fmtMoney(op.lineTotal || 0)}`),
     ];
-    // Preview keeps the typographic middot for visual polish.
-    // PDF uses ASCII " - " separator to stay strictly Latin-1 safe and
-    // avoid font-substitution surprises across PDF readers.
-    // Phase 5H.0 — label is "Pricing detail:" (was "Detail:").
-    detailPreview = `Pricing detail: ${parts.join(" \u00B7 ")}`;
-    detailPdf = `Pricing detail: ${parts.join(" - ")}`;
+    // Phase 5H.1 — both surfaces use ASCII " - " between parts to
+    // guarantee strict WYSIWYG parity (Preview previously used a
+    // typographic middot, PDF used " - "; differing glyphs broke
+    // visual parity even when the commercial meaning matched).
+    // Phase 5H.1 — label rebranded "Included pricing detail:" so
+    // the customer reads it as an explanatory breakdown of the
+    // already-charged Unit/Total figures, NOT as additional fees.
+    detailPreview = `Included pricing detail: ${parts.join(" - ")}`;
+    detailPdf = `Included pricing detail: ${parts.join(" - ")}`;
   }
 
   // Phase 5H.0 — split the joined Material spec back into a

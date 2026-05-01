@@ -230,10 +230,13 @@ export default function QuotePreview() {
       // Must stay aligned with PDF row math in renderLaserScheduleTable.
       const ROW_H = 24; // image-capped row height (Phase 5H.0)
       const pd = item.pricingDisplay;
+      // Phase 5H.1 — detail row height MUST match pdf-engine.ts
+      // `DETAIL_H = 4.5` exactly so per-item pagination matches the
+      // PDF page-pack 1:1.
       const detailH = pd?.showOperationPricing
         && item.attachedOperations.length > 0
         && (pd.showUnitPriceColumn || pd.showLineTotalColumn)
-        ? 5
+        ? 4.5
         : 0;
       // Customer photos are intentionally NOT rendered inside the
       // laser schedule table (the table is the sell-side schedule;
