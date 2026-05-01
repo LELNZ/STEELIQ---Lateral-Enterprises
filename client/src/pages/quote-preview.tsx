@@ -969,11 +969,17 @@ function ManualBlankPreviewSvg({
   widthMm,
   template,
   itemIndex,
+  showCaption = true,
 }: {
   lengthMm: number;
   widthMm: number;
   template: QuoteTemplate;
   itemIndex: number;
+  // Phase 5H.1a — the LL hybrid schedule table call site passes
+  // false so the "Indicative blank only" caption is suppressed in the
+  // customer-facing schedule (visual clutter / Preview-vs-PDF parity).
+  // Default true preserves the existing LJ joinery card behaviour.
+  showCaption?: boolean;
 }) {
   const scale = Math.min(
     MANUAL_BLANK_PREVIEW_MAX_W_PX / lengthMm,
@@ -984,7 +990,7 @@ function ManualBlankPreviewSvg({
   const padPx = 4;
   const captionPx = 11;
   const totalW = rectW + padPx * 2;
-  const totalH = rectH + padPx * 2 + captionPx + 2;
+  const totalH = rectH + padPx * 2 + (showCaption ? captionPx + 2 : 0);
   return (
     <div
       className="flex flex-col items-center justify-center"
@@ -1019,17 +1025,19 @@ function ManualBlankPreviewSvg({
         >
           {`${lengthMm} x ${widthMm}mm`}
         </text>
-        <text
-          x={totalW / 2}
-          y={padPx + rectH + captionPx}
-          textAnchor="middle"
-          fontSize={7}
-          fontFamily="sans-serif"
-          fontStyle="italic"
-          fill={template.colors.headingMuted}
-        >
-          Indicative blank only
-        </text>
+        {showCaption && (
+          <text
+            x={totalW / 2}
+            y={padPx + rectH + captionPx}
+            textAnchor="middle"
+            fontSize={7}
+            fontFamily="sans-serif"
+            fontStyle="italic"
+            fill={template.colors.headingMuted}
+          >
+            Indicative blank only
+          </text>
+        )}
       </svg>
     </div>
   );
@@ -1448,6 +1456,7 @@ function LaserScheduleTable({
                           widthMm={blank.widthMm}
                           template={template}
                           itemIndex={item.index}
+                          showCaption={false}
                         />
                       ) : (
                         <span style={{ fontSize: "10px", color: template.colors.headingMuted }}>—</span>
