@@ -102,6 +102,13 @@ function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<Las
     pricingOverrideEnabled: false,
     pricingOverrideMode: "none",
     isManualProcedure: false,
+    // Phase 5H.9A — seed material allocation from the ACTIVE profile default for
+    // NEW lines only. This is the ONLY place the profile default is consulted;
+    // the engine never uses it as a fallback for existing lines. Absent profile
+    // default → whole-sheets (legacy-safe).
+    materialAllocationMode: settings?.defaultMaterialAllocationMode ?? "whole-sheets",
+    yieldMinimumSheetChargePercent: settings?.defaultYieldMinimumSheetChargePercent ?? 25,
+    recoverableRemnantPercent: settings?.defaultRecoverableRemnantPercent ?? 75,
   };
 }
 
@@ -391,6 +398,12 @@ function computeItemPricing(
     consumablesMarkupPercent: item.consumablesMarkupPercent ?? rates.defaultConsumablesMarkupPercent,
     utilisationFactor: item.utilisationFactor,
     coilLengthMm: item.coilLengthMm || 0,
+    // Phase 5H.9A — LEGACY-SAFE: pass the line's stored mode straight through.
+    // Undefined stays undefined so the engine resolves it to "whole-sheets".
+    // The profile default is NEVER substituted here — it only seeds new lines.
+    materialAllocationMode: item.materialAllocationMode,
+    yieldMinimumSheetChargePercent: item.yieldMinimumSheetChargePercent,
+    recoverableRemnantPercent: item.recoverableRemnantPercent,
   }, settings, governed);
 }
 
@@ -1007,20 +1020,55 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-2 mt-2" data-testid="breakdown-details">
           <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Material</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Material</div>
+              {breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? (
+                <span className="inline-flex items-center rounded bg-purple-100 dark:bg-purple-950/40 px-1.5 py-0.5 text-[9px] font-medium text-purple-700 dark:text-purple-300" data-testid="badge-material-allocation">Estimated yield-based (line setting)</span>
+              ) : (
+                <span className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-medium text-slate-700 dark:text-slate-300" data-testid="badge-material-allocation">Whole sheet (legacy/current)</span>
+              )}
+            </div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Allocation mode</span><span className="font-mono" data-testid="detail-allocation-mode">{breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? "Estimated yield-based" : "Whole sheet"}</span></div>
             {breakdown.sheetPricePerSheet ? (
-              <div className="flex justify-between text-[10px]" title="Supplier buy price per sheet (ex-GST). This is the procurement basis; material sell = (sheet buy ÷ parts per sheet) × qty × (1 + material markup%).">
+              <div className="flex justify-between text-[10px]" title="Supplier buy price per sheet (ex-GST).">
                 <span className="text-muted-foreground">Supplier sheet buy (ex-GST)</span>
                 <span className="font-mono" data-testid="detail-sheet-price">${breakdown.sheetPricePerSheet.toFixed(2)}</span>
               </div>
             ) : null}
             <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Parts per sheet</span><span className="font-mono">{breakdown.partsPerSheet || "—"}</span></div>
-            <div className="flex justify-between text-[10px]" title="Procurement guidance only — sheets you would order. Material billing uses yield-based allocation (per-part), not whole sheets."><span className="text-muted-foreground">Estimated sheets <span className="text-[9px] italic">(procurement)</span></span><span className="font-mono">{breakdown.estimatedSheets || "—"}</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Qty</span><span className="font-mono" data-testid="detail-material-qty">{breakdown.quantity || "—"}</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Material markup %</span><span className="font-mono">{breakdown.materialMarkupPercent}%</span></div>
             <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Sheet utilisation</span><span className="font-mono">{(breakdown.utilisationFactor * 100).toFixed(0)}%</span></div>
-            <div className="flex justify-between text-[10px]" title="Yield-based per-part buy = sheet buy ÷ parts per sheet."><span className="text-muted-foreground">Effective material buy / part</span><span className="font-mono">${breakdown.materialCostPerUnit.toFixed(2)}</span></div>
-            <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
-              Material billing is yield-based: line buy = (sheet buy ÷ parts per sheet) × qty, before any minimum material charge. Estimated sheets is procurement only.
-            </div>
+
+            {breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? (
+              <>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Estimated sheet usage</span><span className="font-mono" data-testid="detail-yield-usage">{breakdown.estimatedSheetUsagePercent != null ? (breakdown.estimatedSheetUsagePercent * 100).toFixed(1) : "—"}%</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Minimum sheet charge</span><span className="font-mono">{breakdown.yieldMinimumSheetChargePercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Recoverable remnant</span><span className="font-mono">{breakdown.recoverableRemnantPercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Non-recoverable remnant</span><span className="font-mono">{breakdown.nonRecoverableRemnantPercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Allocated sheet %</span><span className="font-mono" data-testid="detail-allocated-percent">{breakdown.allocatedSheetPercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Allocated material buy</span><span className="font-mono" data-testid="detail-allocated-buy">${(breakdown.allocatedMaterialBuy ?? breakdown.materialBuyCost).toFixed(2)}</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Material sell</span><span className="font-mono" data-testid="detail-material-sell">${breakdown.materialSellCost.toFixed(2)}</span></div>
+                <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
+                  Estimated from rectangular blank size, not actual nest geometry.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Estimated sheets</span><span className="font-mono">{breakdown.estimatedSheets || "—"}</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Allocated sheet basis</span><span className="font-mono" data-testid="detail-allocated-percent">Whole sheet (100%)</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Material buy</span><span className="font-mono" data-testid="detail-allocated-buy">${breakdown.materialBuyCost.toFixed(2)}</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Material sell</span><span className="font-mono" data-testid="detail-material-sell">${breakdown.materialSellCost.toFixed(2)}</span></div>
+                <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
+                  Legacy/current full-sheet recovery — charges the full estimated sheet cost to this line.
+                </div>
+              </>
+            )}
+            {breakdown.yieldMultiSheetFallback && (
+              <div className="text-[10px] text-amber-600 dark:text-amber-400 leading-snug" data-testid="detail-multi-sheet-fallback">
+                Multi-sheet job: yield allocation preserved as whole-sheet (ambiguous without true nest).
+              </div>
+            )}
             {breakdown.minimumMaterialChargeApplied && (
               <div className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="min-material-notice">
                 Min. material charge applied (${breakdown.minimumMaterialCharge.toFixed(2)})
@@ -2057,6 +2105,12 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       materialMarkupPercent: item.materialMarkupPercent,
       consumablesMarkupPercent: item.consumablesMarkupPercent,
       utilisationFactor: item.utilisationFactor,
+      // Phase 5H.9A — preserve the line's stored allocation policy as-is. Do NOT
+      // substitute a profile default here: an existing line with no stored mode
+      // stays undefined and the engine resolves it to "whole-sheets" (legacy).
+      materialAllocationMode: item.materialAllocationMode,
+      yieldMinimumSheetChargePercent: item.yieldMinimumSheetChargePercent,
+      recoverableRemnantPercent: item.recoverableRemnantPercent,
       geometrySource: item.geometrySource ?? "manual",
       pricingOverrideEnabled: item.pricingOverrideEnabled ?? false,
       pricingOverrideMode: item.pricingOverrideMode ?? "none",
@@ -3121,6 +3175,118 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       />
                       <p className="text-[10px] text-muted-foreground mt-0.5">Sheet utilisation (0.75 = 75%)</p>
                     </div>
+                  </div>
+
+                  {/* Phase 5H.9A — Material Allocation (internal-only). Not shown
+                      on customer Preview/PDF. Controls how the sheet buy cost is
+                      apportioned to this line. */}
+                  <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 space-y-3" data-testid="section-material-allocation">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Material Allocation (internal)</Label>
+                      <span className="text-[10px] text-muted-foreground italic">Not shown to customer</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 items-start">
+                      <div>
+                        <Label htmlFor="materialAllocationMode" className="text-[11px]">Allocation mode</Label>
+                        <Select
+                          value={formData.materialAllocationMode ?? "whole-sheets"}
+                          onValueChange={(v) => setFormData(prev => ({
+                            ...prev,
+                            materialAllocationMode: v as "whole-sheets" | "yield-based",
+                            // Seed yield params with safe defaults when first switching to yield.
+                            yieldMinimumSheetChargePercent: v === "yield-based"
+                              ? (prev.yieldMinimumSheetChargePercent ?? 25) : prev.yieldMinimumSheetChargePercent,
+                            recoverableRemnantPercent: v === "yield-based"
+                              ? (prev.recoverableRemnantPercent ?? 75) : prev.recoverableRemnantPercent,
+                          }))}
+                        >
+                          <SelectTrigger id="materialAllocationMode" className="h-8 text-xs" data-testid="select-material-allocation-mode">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="whole-sheets">Whole sheet</SelectItem>
+                            <SelectItem value="yield-based">Estimated yield-based</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-end h-full">
+                        {(formData.materialAllocationMode ?? "whole-sheets") === "whole-sheets" ? (
+                          <span className="inline-flex items-center rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:text-slate-300" data-testid="badge-allocation-mode">
+                            Material allocation: Whole sheet (legacy/current)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-md bg-purple-100 dark:bg-purple-950/40 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-300" data-testid="badge-allocation-mode">
+                            Material allocation: Estimated yield-based (line setting)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {(formData.materialAllocationMode ?? "whole-sheets") === "whole-sheets" ? (
+                      <p className="text-[10px] text-muted-foreground leading-snug" data-testid="help-whole-sheet">
+                        Charges the full estimated sheet cost to this line. Use for special-order material, dedicated stock, poor remnant, traceability, uncommon material, or where the job should carry the full sheet.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-muted-foreground leading-snug" data-testid="help-yield-based">
+                          Uses rectangular blank size and estimated sheet yield. This is not a true nest. Use for common stocked material where the remaining sheet/remnant is commercially reusable.
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <Label htmlFor="yieldMinimumSheetChargePercent" className="text-[11px]">Minimum sheet charge %</Label>
+                            <Input
+                              id="yieldMinimumSheetChargePercent"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              className="h-8 text-xs"
+                              value={formData.yieldMinimumSheetChargePercent ?? 25}
+                              onChange={(e) => setFormData(prev => ({ ...prev, yieldMinimumSheetChargePercent: e.target.value === "" ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))}
+                              data-testid="input-yield-min-sheet-charge"
+                            />
+                            <p className="text-[9px] text-muted-foreground mt-0.5 leading-snug">Minimum portion of a sheet charged to the job even when estimated usage is lower. Covers handling, stock risk, and remnant management.</p>
+                          </div>
+                          <div>
+                            <Label htmlFor="recoverableRemnantPercent" className="text-[11px]">Recoverable remnant %</Label>
+                            <Input
+                              id="recoverableRemnantPercent"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              className="h-8 text-xs"
+                              value={formData.recoverableRemnantPercent ?? 75}
+                              onChange={(e) => setFormData(prev => ({ ...prev, recoverableRemnantPercent: e.target.value === "" ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))}
+                              data-testid="input-recoverable-remnant"
+                            />
+                            <p className="text-[9px] text-muted-foreground mt-0.5 leading-snug">Estimated percentage of the unused sheet/remnant that is commercially reusable. Lower recoverability increases the material portion charged to this job.</p>
+                          </div>
+                          <div>
+                            <Label className="text-[11px]">Calculated allocated sheet %</Label>
+                            <div className="h-8 flex items-center font-mono text-xs" data-testid="text-allocated-sheet-percent">
+                              {dialogPricing.yieldApplied && dialogPricing.allocatedSheetPercent != null
+                                ? `${dialogPricing.allocatedSheetPercent.toFixed(1)}%`
+                                : dialogPricing.yieldMultiSheetFallback
+                                  ? "Whole sheet (multi-sheet)"
+                                  : "—"}
+                            </div>
+                            {dialogPricing.yieldApplied && dialogPricing.estimatedSheetUsagePercent != null && (
+                              <p className="text-[9px] text-muted-foreground mt-0.5">Est. usage {(dialogPricing.estimatedSheetUsagePercent * 100).toFixed(1)}% · non-recoverable {dialogPricing.nonRecoverableRemnantPercent?.toFixed(1)}%</p>
+                            )}
+                          </div>
+                        </div>
+                        {dialogPricing.yieldMultiSheetFallback && (
+                          <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2 py-1.5" data-testid="notice-multi-sheet-fallback">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                            <span className="text-[10px] text-amber-800 dark:text-amber-300 leading-snug">Multi-sheet job: estimated yield allocation is ambiguous without true nest geometry. Whole-sheet recovery has been preserved for safety. Use manual judgement where remnant recovery is uncertain.</span>
+                          </div>
+                        )}
+                        <p className="text-[9px] text-muted-foreground italic leading-snug" data-testid="note-yield-estimate">
+                          Estimated from rectangular blank size, not actual nest geometry. Adjust recoverable remnant % where remnant recovery is uncertain.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CollapsibleContent>

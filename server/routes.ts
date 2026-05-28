@@ -1167,6 +1167,21 @@ export async function registerRoutes(
             settingsJson.gasCosts.gasMarkupPercent = 20;
           }
         }
+
+        // Phase 5H.9A — seed material allocation defaults on new/duplicated draft
+        // profiles when the source/body did not specify them. The default mode is
+        // "whole-sheets" so activating a new profile NEVER changes existing
+        // quoting behaviour — these defaults only seed brand-new line items in the
+        // builder; the engine never uses them as a fallback for existing lines.
+        if (settingsJson.defaultMaterialAllocationMode == null) {
+          settingsJson.defaultMaterialAllocationMode = "whole-sheets";
+        }
+        if (settingsJson.defaultYieldMinimumSheetChargePercent == null) {
+          settingsJson.defaultYieldMinimumSheetChargePercent = 25;
+        }
+        if (settingsJson.defaultRecoverableRemnantPercent == null) {
+          settingsJson.defaultRecoverableRemnantPercent = 75;
+        }
       }
 
       const profile = await storage.createLLPricingProfile({

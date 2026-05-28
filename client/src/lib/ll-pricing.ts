@@ -79,6 +79,14 @@ export interface LLPricingInputs {
   consumablesMarkupPercent: number;
   utilisationFactor: number;
   coilLengthMm?: number;
+  // Phase 5H.9A — LL material allocation policy (internal-only, additive).
+  // LEGACY-SAFE: when materialAllocationMode is undefined the engine treats the
+  // line as "whole-sheets" (current/legacy behaviour). The engine never reads a
+  // profile default here — the builder seeds new lines from the profile default,
+  // but existing lines that never stored a mode always remain whole-sheets.
+  materialAllocationMode?: "whole-sheets" | "yield-based";
+  yieldMinimumSheetChargePercent?: number;
+  recoverableRemnantPercent?: number;
 }
 
 export interface LLGovernedInputs {
@@ -87,6 +95,7 @@ export interface LLGovernedInputs {
 }
 
 export interface LLPricingBreakdown {
+  quantity: number;
   sheetAreaMm2: number;
   partAreaMm2: number;
   totalNetPartArea: number;
@@ -150,6 +159,20 @@ export interface LLPricingBreakdown {
   materialMarkupPercent: number;
   materialSellCost: number;
   materialMargin: number;
+
+  // Phase 5H.9A — material allocation policy + yield breakdown (internal-only).
+  // materialAllocationPolicy is the line's resolved policy ("whole-sheets" when
+  // no mode was stored — the legacy-safe fallback). Yield fields are populated
+  // only when the resolved policy is "yield-based" and it was actually applied.
+  materialAllocationPolicy: "whole-sheets" | "yield-based";
+  yieldApplied: boolean;
+  yieldMultiSheetFallback: boolean;
+  estimatedSheetUsagePercent?: number;
+  yieldMinimumSheetChargePercent?: number;
+  recoverableRemnantPercent?: number;
+  nonRecoverableRemnantPercent?: number;
+  allocatedSheetPercent?: number;
+  allocatedMaterialBuy?: number;
 
   labourBuyCost: number;
   labourSellCost: number;
@@ -642,6 +665,17 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     coilLengthMm,
   } = inputs;
 
+  // Phase 5H.9A — resolve material allocation policy. LEGACY-SAFE: undefined
+  // mode resolves to "whole-sheets". The engine never reads the profile default.
+  const allocationPolicy: "whole-sheets" | "yield-based" =
+    inputs.materialAllocationMode === "yield-based" ? "yield-based" : "whole-sheets";
+  // Yield parameters only matter in yield mode; defaults are 25% / 75% when the
+  // line is in yield mode but did not store explicit values.
+  const yieldMinSheetChargeFraction =
+    Math.min(Math.max(Number(inputs.yieldMinimumSheetChargePercent ?? 25), 0), 100) / 100;
+  const recoverableRemnantFraction =
+    Math.min(Math.max(Number(inputs.recoverableRemnantPercent ?? 75), 0), 100) / 100;
+
   const safeQty = Math.max(quantity, 1);
   const safeUtilisation = Math.max(utilisationFactor, 0.1);
   const isCoil = material?.stockBehaviour === "coil";
@@ -656,6 +690,13 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
   let estimatedSheets = 0;
   let materialBuyCost = 0;
+  // Phase 5H.9A — yield allocation breakdown accumulators (display-only).
+  let yieldApplied = false;
+  let yieldMultiSheetFallback = false;
+  let estimatedSheetUsagePercent: number | undefined;
+  let nonRecoverableRemnantPercent: number | undefined;
+  let allocatedSheetPercent: number | undefined;
+  let allocatedMaterialBuy: number | undefined;
   let partsPerSheet = 0;
   let coilWeightKg = 0;
   let coilPricePerKgUsed = 0;
@@ -685,11 +726,37 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     if (partsPerSheet > 0) {
       estimatedSheets = Math.ceil(safeQty / partsPerSheet);
-      // Phase 5H.3 — whole-sheet allocation. Supplier invoices charge per sheet,
-      // not per fractional part. Previous fractional formula understated cost
-      // when qty did not perfectly fill the final sheet (root cause of the
-      // material under-allocation surfaced in LL-EST-0035 / Te Mana).
-      materialBuyCost = estimatedSheets * material.pricePerSheetExGst;
+      // Phase 5H.9A — material allocation policy. LEGACY-SAFE fallback: if the
+      // line did not store a mode, allocationPolicy is "whole-sheets" and the
+      // calculation is bit-identical to pre-5H.9A. The engine NEVER reads a
+      // profile default here — undefined mode always means whole-sheets.
+      if (allocationPolicy === "yield-based" && estimatedSheets <= 1) {
+        // Single-sheet estimated yield-based allocation. Not a true nest — a
+        // commercial estimate from rectangular blank size + estimated yield.
+        estimatedSheetUsagePercent = safeQty / partsPerSheet; // < 1 for a single sheet
+        nonRecoverableRemnantPercent = 1 - recoverableRemnantFraction;
+        allocatedSheetPercent = Math.max(
+          estimatedSheetUsagePercent,
+          yieldMinSheetChargeFraction,
+          nonRecoverableRemnantPercent,
+        );
+        // Basis is one sheet (estimatedSheets === 1); allocatedSheetPercent is
+        // already the fraction of that sheet, so we do NOT multiply by
+        // estimatedSheets again (avoids double-charging).
+        materialBuyCost = material.pricePerSheetExGst * allocatedSheetPercent;
+        allocatedMaterialBuy = materialBuyCost;
+        yieldApplied = true;
+      } else {
+        // Phase 5H.3 — whole-sheet allocation. Supplier invoices charge per
+        // sheet, not per fractional part. Also the safe path for multi-sheet
+        // yield jobs (estimatedSheets > 1): true multi-sheet yield allocation
+        // is ambiguous without real nest geometry, so we preserve whole-sheet
+        // behaviour and flag the fallback for the internal breakdown.
+        materialBuyCost = estimatedSheets * material.pricePerSheetExGst;
+        if (allocationPolicy === "yield-based" && estimatedSheets > 1) {
+          yieldMultiSheetFallback = true;
+        }
+      }
     } else if (usableSheetArea > 0 && totalNetPartArea > 0) {
       estimatedSheets = Math.ceil(totalNetPartArea / usableSheetArea);
       materialBuyCost = estimatedSheets * material.pricePerSheetExGst;
@@ -874,6 +941,7 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   const unitCost = totalBuyCost / safeQty;
 
   return {
+    quantity: safeQty,
     sheetAreaMm2,
     partAreaMm2,
     totalNetPartArea,
@@ -930,6 +998,18 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     materialMarkupPercent,
     materialSellCost,
     materialMargin,
+
+    // Phase 5H.9A — material allocation policy + yield breakdown (internal-only).
+    materialAllocationPolicy: allocationPolicy,
+    yieldApplied,
+    yieldMultiSheetFallback,
+    estimatedSheetUsagePercent,
+    yieldMinimumSheetChargePercent: yieldApplied ? yieldMinSheetChargeFraction * 100 : undefined,
+    recoverableRemnantPercent: yieldApplied ? recoverableRemnantFraction * 100 : undefined,
+    nonRecoverableRemnantPercent:
+      nonRecoverableRemnantPercent != null ? nonRecoverableRemnantPercent * 100 : undefined,
+    allocatedSheetPercent: allocatedSheetPercent != null ? allocatedSheetPercent * 100 : undefined,
+    allocatedMaterialBuy,
 
     labourBuyCost,
     labourSellCost,

@@ -279,6 +279,17 @@ export const laserQuoteItemSchema = z.object({
   consumablesMarkupPercent: z.number().min(0).default(25).optional(),
   utilisationFactor: z.number().min(0).max(1).default(0.75),
 
+  // Phase 5H.9A — LL material allocation policy (internal-only, additive).
+  // LEGACY-SAFE: when materialAllocationMode is absent on a line, the engine
+  // MUST treat it as "whole-sheets" (current/legacy behaviour). The engine must
+  // NEVER fall back to a profile default for an existing line — the profile
+  // default is only consulted by the builder when seeding a NEW line. The two
+  // yield parameters are only meaningful when mode === "yield-based"; when
+  // absent in yield mode the engine applies 25% / 75% defaults at evaluation.
+  materialAllocationMode: z.enum(["whole-sheets", "yield-based"]).optional(),
+  yieldMinimumSheetChargePercent: z.number().min(0).max(100).optional(),
+  recoverableRemnantPercent: z.number().min(0).max(100).optional(),
+
   geometrySource: z.enum(["manual", "dxf", "cam_import"]).default("manual"),
   geometryFileRef: z.string().optional(),
 
@@ -1244,4 +1255,12 @@ export interface LLPricingSettings {
   nestingDefaults: LLNestingDefaults;
   // Phase 5H.3 — optional. Profiles without this field behave exactly as before.
   productionAllowanceTiers?: LLProductionAllowanceTier[];
+  // Phase 5H.9A — material allocation defaults (additive, optional). These are
+  // ONLY used by the builder to seed a newly-created line item. They are NEVER
+  // consulted by the pricing engine as a fallback for an existing line — an
+  // existing line with no stored materialAllocationMode always evaluates as
+  // "whole-sheets". Profiles without these fields behave exactly as before.
+  defaultMaterialAllocationMode?: "whole-sheets" | "yield-based";
+  defaultYieldMinimumSheetChargePercent?: number;
+  defaultRecoverableRemnantPercent?: number;
 }

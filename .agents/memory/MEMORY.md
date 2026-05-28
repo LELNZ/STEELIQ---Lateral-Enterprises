@@ -1,0 +1,1 @@
+- [LL line-policy legacy-safety](ll-allocation-legacy-safety.md) — new optional per-line LL pricing fields must default to legacy IN the engine; never read profile default for a missing line field (estimates live-recompute).
