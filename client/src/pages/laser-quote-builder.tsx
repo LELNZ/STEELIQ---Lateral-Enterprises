@@ -92,8 +92,8 @@ function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<Las
     coilLengthMm: 0,
     cutLengthMm: 0,
     pierceCount: 0,
-    setupMinutes: rates.defaultSetupMinutes,
-    handlingMinutes: rates.defaultHandlingMinutes,
+    setupMinutes: 0,
+    handlingMinutes: 0,
     markupPercent: rates.defaultMarkupPercent,
     materialMarkupPercent: rates.defaultMaterialMarkupPercent,
     consumablesMarkupPercent: rates.defaultConsumablesMarkupPercent,
@@ -745,8 +745,8 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
     cutLengthMm: si.cutLengthMm ?? 0,
     coilLengthMm: si.coilLengthMm ?? 0,
     pierceCount: si.pierceCount ?? 0,
-    setupMinutes: si.setupMinutes ?? rates.defaultSetupMinutes,
-    handlingMinutes: si.handlingMinutes ?? rates.defaultHandlingMinutes,
+    setupMinutes: si.setupMinutes ?? 0,
+    handlingMinutes: si.handlingMinutes ?? 0,
     markupPercent: si.markupPercent ?? rates.defaultMarkupPercent,
     materialMarkupPercent: (si as any).materialMarkupPercent ?? rates.defaultMaterialMarkupPercent,
     consumablesMarkupPercent: (si as any).consumablesMarkupPercent ?? rates.defaultConsumablesMarkupPercent,
@@ -858,12 +858,19 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         sell={`$${breakdown.consumablesSellCost.toFixed(2)}`}
         margin={`$${breakdown.consumablesMargin.toFixed(2)}`}
       />
-      <BucketRow
-        label={`Line setup/handling labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
-        buy={`$${breakdown.labourBuyCost.toFixed(2)}`}
-        sell={`$${breakdown.labourSellCost.toFixed(2)}`}
-        margin={`$${breakdown.labourMargin.toFixed(2)}`}
-      />
+      {breakdown.labourSellCost > 0 && (
+        <div data-testid="legacy-line-labour-row">
+          <BucketRow
+            label={`Legacy line setup/handling labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
+            buy={`$${breakdown.labourBuyCost.toFixed(2)}`}
+            sell={`$${breakdown.labourSellCost.toFixed(2)}`}
+            margin={`$${breakdown.labourMargin.toFixed(2)}`}
+          />
+          <div className="text-[9px] text-amber-700 dark:text-amber-300 italic leading-snug pl-1">
+            Legacy per-line setup/handling — setup &amp; handling are now governed by the Production Allowance Tier. Clear on this item's Commercial Settings to remove.
+          </div>
+        </div>
+      )}
 
       {/* Phase 5H.3 — Production allowance + overhead (internal-only). Only renders when a tier matched. */}
       {breakdown.productionAllowanceTierKey && (
@@ -914,12 +921,14 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Total labour + production recovery <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(internal only)</span>
         </div>
+        {breakdown.labourSellCost > 0 && (
+          <div className="flex justify-between text-[10px]">
+            <span className="text-muted-foreground">Legacy line setup/handling sell</span>
+            <span className="font-mono" data-testid="recovery-line-labour-sell">${breakdown.labourSellCost.toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-[10px]">
-          <span className="text-muted-foreground">Line setup/handling labour sell</span>
-          <span className="font-mono" data-testid="recovery-line-labour-sell">${breakdown.labourSellCost.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-[10px]">
-          <span className="text-muted-foreground">Production allowance sell</span>
+          <span className="text-muted-foreground">Production allowance sell <span className="text-[9px]">(canonical)</span></span>
           <span className="font-mono" data-testid="recovery-allowance-sell">${breakdown.productionAllowanceSellCost.toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-[11px] font-semibold border-t border-purple-200/60 dark:border-purple-800/60 pt-1 mt-1">
@@ -2982,34 +2991,27 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="w-full justify-start text-xs text-muted-foreground" data-testid="button-toggle-advanced">
                   <ChevronRight className="h-3 w-3 mr-1" />
-                  Setup, Handling &amp; Commercial Settings
+                  Commercial Settings
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="border rounded-md p-3 space-y-3 bg-muted/20 mt-1">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="setupMinutes">Setup Minutes</Label>
-                      <Input
-                        id="setupMinutes"
-                        type="number"
-                        min={0}
-                        value={formData.setupMinutes}
-                        onChange={(e) => setFormData(prev => ({ ...prev, setupMinutes: parseFloat(e.target.value) || 0 }))}
-                        data-testid="input-setup-minutes"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="handlingMinutes">Handling Minutes</Label>
-                      <Input
-                        id="handlingMinutes"
-                        type="number"
-                        min={0}
-                        value={formData.handlingMinutes}
-                        onChange={(e) => setFormData(prev => ({ ...prev, handlingMinutes: parseFloat(e.target.value) || 0 }))}
-                        data-testid="input-handling-minutes"
-                      />
-                    </div>
+                  <div className="rounded-sm border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 text-[11px] text-muted-foreground leading-snug" data-testid="setup-handling-policy-note">
+                    Setup, sheet handling, sorting, QA and packing are governed by the active Production Allowance Tier — they are no longer entered per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
+                    {(formData.setupMinutes > 0 || formData.handlingMinutes > 0) && (
+                      <span className="block mt-1 text-amber-700 dark:text-amber-300" data-testid="legacy-setup-handling-warning">
+                        Legacy values present on this item: setup {formData.setupMinutes.toFixed(1)} min, handling {formData.handlingMinutes.toFixed(1)} min. These will continue to charge until cleared.
+                        {" "}
+                        <button
+                          type="button"
+                          className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
+                          onClick={() => setFormData(prev => ({ ...prev, setupMinutes: 0, handlingMinutes: 0 }))}
+                          data-testid="button-clear-legacy-setup-handling"
+                        >
+                          Clear legacy values
+                        </button>
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
