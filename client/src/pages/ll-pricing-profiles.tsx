@@ -29,7 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle, Shield,
-  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info,
+  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info, Trash2,
 } from "lucide-react";
 import type {
   LLPricingProfile,
@@ -547,6 +547,26 @@ function PricingSettingsEditor({
     onChange(copy);
   };
 
+  // Phase 5H.5 — admin removal of orphaned process-rate rows. Only rows whose
+  // dataSource === "orphaned_no_library_match" may be removed (guard enforced
+  // again at click-time). Removal mutates the draft profile state only; the
+  // admin must still Save → Approve → Activate via the existing governed
+  // workflow for the change to take effect on live pricing.
+  const [orphanToDelete, setOrphanToDelete] = useState<number | null>(null);
+  const confirmRemoveOrphan = () => {
+    if (orphanToDelete === null) return;
+    const idx = orphanToDelete;
+    const row = settings.processRateTables?.[idx];
+    if (!row || row.dataSource !== "orphaned_no_library_match") {
+      setOrphanToDelete(null);
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(settings));
+    copy.processRateTables = (copy.processRateTables || []).filter((_: any, i: number) => i !== idx);
+    onChange(copy);
+    setOrphanToDelete(null);
+  };
+
   const numField = (label: string, path: string, value: number, unit?: string) => {
     const help = helpForPath(path);
     return (
@@ -868,6 +888,9 @@ function PricingSettingsEditor({
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
         <p className="text-[10px] text-muted-foreground mb-2">Defines cut speed, pierce time, and <strong>assist gas type</strong> for each material/thickness combination. The gas type here determines which gas source cost is used during pricing.</p>
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug" data-testid="orphan-helper-note-editor">
+          Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library. Remove only after confirming they are not required.
+        </div>
         <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-background">
@@ -879,42 +902,86 @@ function PricingSettingsEditor({
                 <th className="text-left p-1.5 font-medium">Assist Gas Type</th>
                 <th className="text-left p-1.5 font-medium">Gas (L/min)</th>
                 <th className="text-left p-1.5 font-medium">Source</th>
+                <th className="text-left p-1.5 font-medium w-8"></th>
               </tr>
             </thead>
             <tbody>
-              {settings.processRateTables.map((entry, idx) => (
-                <tr key={idx} className="border-b border-muted hover:bg-muted/30">
-                  <td className="p-1.5">{entry.materialFamily}</td>
-                  <td className="p-1.5">{entry.thickness}mm</td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      step="any"
-                      value={entry.cutSpeedMmPerMin}
-                      onChange={e => update(`processRateTables.${idx}.cutSpeedMmPerMin`, parseFloat(e.target.value) || 0)}
-                      className="h-6 text-xs w-20"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      step="any"
-                      value={entry.pierceTimeSec}
-                      onChange={e => update(`processRateTables.${idx}.pierceTimeSec`, parseFloat(e.target.value) || 0)}
-                      className="h-6 text-xs w-16"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Badge variant="outline" className="text-[10px]">{entry.assistGasType}</Badge>
-                  </td>
-                  <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
-                  <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
-                </tr>
-              ))}
+              {settings.processRateTables.map((entry, idx) => {
+                const isOrphan = entry.dataSource === "orphaned_no_library_match";
+                return (
+                  <tr key={idx} className="border-b border-muted hover:bg-muted/30">
+                    <td className="p-1.5">{entry.materialFamily}</td>
+                    <td className="p-1.5">{entry.thickness}mm</td>
+                    <td className="p-1.5">
+                      <Input
+                        type="number"
+                        step="any"
+                        value={entry.cutSpeedMmPerMin}
+                        onChange={e => update(`processRateTables.${idx}.cutSpeedMmPerMin`, parseFloat(e.target.value) || 0)}
+                        className="h-6 text-xs w-20"
+                      />
+                    </td>
+                    <td className="p-1.5">
+                      <Input
+                        type="number"
+                        step="any"
+                        value={entry.pierceTimeSec}
+                        onChange={e => update(`processRateTables.${idx}.pierceTimeSec`, parseFloat(e.target.value) || 0)}
+                        className="h-6 text-xs w-16"
+                      />
+                    </td>
+                    <td className="p-1.5">
+                      <Badge variant="outline" className="text-[10px]">{entry.assistGasType}</Badge>
+                    </td>
+                    <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
+                    <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
+                    <td className="p-1.5">
+                      {isOrphan && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          title="Remove orphaned process rate"
+                          onClick={() => setOrphanToDelete(idx)}
+                          data-testid={`button-remove-orphan-${idx}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </SettingsSection>
+
+      <AlertDialog open={orphanToDelete !== null} onOpenChange={(o) => { if (!o) setOrphanToDelete(null); }}>
+        <AlertDialogContent data-testid="dialog-confirm-remove-orphan">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove orphaned process rate?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove this orphaned process rate? This only removes the obsolete profile row and does not change existing estimate snapshots.
+              {orphanToDelete !== null && settings.processRateTables?.[orphanToDelete] && (
+                <span className="block mt-2 text-xs font-medium text-foreground">
+                  {settings.processRateTables[orphanToDelete].materialFamily} · {settings.processRateTables[orphanToDelete].thickness}mm
+                </span>
+              )}
+              <span className="block mt-2 text-[11px] text-muted-foreground">
+                You must still Save → Approve → Activate this draft profile for the cleanup to become active.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-remove-orphan">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveOrphan} data-testid="button-confirm-remove-orphan" className="bg-red-600 hover:bg-red-700">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1057,6 +1124,9 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
       </SettingsSection>
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables?.length ?? 0} entries)`}>
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug" data-testid="orphan-helper-note-viewer">
+          Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library. Remove only after confirming they are not required. To remove, duplicate this profile and edit the draft.
+        </div>
         {!settings.processRateTables || settings.processRateTables.length === 0 ? (
           <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400" data-testid="empty-process-rates-warning">
             <p className="font-medium">No process rate entries defined</p>
