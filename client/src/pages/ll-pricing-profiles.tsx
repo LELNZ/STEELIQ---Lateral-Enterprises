@@ -467,6 +467,70 @@ function ProfileDetail({
   );
 }
 
+// Phase 5H.4 — admin tooltip text for LL Pricing Model fields.
+// Tier paths (productionAllowanceTiers.<n>.field) are normalised to "tier.field".
+// Machine paths (machineProfiles.<n>.field) are normalised to "machine.field".
+const LL_FIELD_HELP: Record<string, string> = {
+  "labourRates.operatorRatePerHour":
+    "Internal labour cost per hour. Represents the labour buy/cost basis such as wage and employment cost assumptions. This is not the customer sell rate.",
+  "labourRates.shopRatePerHour":
+    "Commercial labour sell rate per hour. Used to convert production allowance minutes into sell value. Should reflect skilled labour recovery, labour margin, and commercial labour burden.",
+  "machine.hourlyMachineRate":
+    "Commercial hourly sell rate for machine cutting time. Covers machine ownership/recovery, depreciation or finance, power, servicing, maintenance, rent allocation, technology value, and machine profit. Operator attendance treatment must be defined by the business and must not be double-counted elsewhere.",
+  "machine.machineBuyCostPerHour":
+    "Internal hourly cost basis for the machine before commercial margin. Should represent the estimated cost of owning and operating the machine, including relevant machine costs and allocated burden.",
+  "tier.fixedBatchMinutes":
+    "One-off production time applied once to the line item, regardless of quantity. Covers job setup, drawing/program review, nesting/pre-flight, first-off check, paperwork, and batch preparation. Does not cover per-sheet loading, per-part sorting, or secondary operations.",
+  "tier.perSheetHandlingMinutes":
+    "Minutes added per estimated sheet. Covers sheet loading, unloading, sheet changeover, material movement, skeleton handling, sheet staging, and sheet-level checks. Formula: estimated sheets × per-sheet minutes.",
+  "tier.perPartHandlingSeconds":
+    "Touch time per part in seconds. Covers part removal, sorting, counting, binning, light handling, and transfer from laser to the next process. Does not cover folding, welding, finishing, or other secondary operations.",
+  "tier.perPartHandlingCapMinutes":
+    "Maximum charged minutes for the per-part touch-time component. Leave blank/no cap if every part should be charged at the full per-part handling rate. Use a cap only where large-batch handling efficiencies mean the full raw per-part time would overstate real work.",
+  "tier.qaPackingMinutes":
+    "Fixed minutes for quality checks, count verification, packing, labelling, pallet/carton preparation, and dispatch readiness for the line. Does not include customer delivery or secondary operations unless explicitly intended.",
+  "tier.productionOverheadPercent":
+    "Commercial/factory overhead recovery applied to the LL line. Covers admin, quoting burden, supervision, software, rent allocation, insurance, non-productive time, production risk, and general commercial recovery. Do not use this to hide direct operations that belong in machine, production allowance, or manual procedures.",
+  "commercialPolicy.defaultMaterialMarkupPercent":
+    "Markup applied to material buy cost to recover procurement handling, stock risk, waste, supplier variance, and material margin. Does not replace production allowance or machine recovery.",
+  "commercialPolicy.defaultConsumablesMarkupPercent":
+    "Markup applied to consumable buy cost. Covers consumable handling, supply risk, and recovery margin. Gas remains pass-through unless separately configured.",
+  "commercialPolicy.minimumLineCharge":
+    "Minimum sell value for an LL line. Protects against uneconomic small jobs where calculated material, machine, and allowance values are below the minimum practical charge.",
+  "commercialPolicy.defaultRatePerMmCut":
+    "Fallback or policy rate per millimetre where used by the pricing model. Confirm whether this applies to the active governed calculation path before relying on it.",
+  "commercialPolicy.defaultRatePerPierce":
+    "Fallback or policy rate per pierce where used by the pricing model. Pierce time is also represented in machine time, so avoid double-counting unless this field is explicitly part of the active pricing method.",
+  "nestingDefaults.kerfWidthMm":
+    "Cut width allowance used in nesting/material usage calculations. Affects parts per sheet and material utilisation.",
+  "nestingDefaults.partGapMm":
+    "Spacing between parts used in nesting/material usage calculations. Affects parts per sheet and material utilisation.",
+  "nestingDefaults.edgeTrimMm":
+    "Edge trim allowance used around the sheet for nesting/material usage. Affects usable sheet area and parts per sheet.",
+  "nestingDefaults.defaultUtilisationFactor":
+    "Material utilisation factor used in nesting/material estimation. Lower utilisation increases estimated sheet requirement and material recovery.",
+};
+
+function helpForPath(path: string): string | null {
+  const normalised = path
+    .replace(/^productionAllowanceTiers\.\d+\./, "tier.")
+    .replace(/^machineProfiles\.\d+\./, "machine.");
+  return LL_FIELD_HELP[normalised] ?? null;
+}
+
+function HelpHint({ text, testId }: { text: string; testId?: string }) {
+  return (
+    <span
+      className="inline-flex items-center text-muted-foreground/70 hover:text-foreground cursor-help"
+      title={text}
+      aria-label={text}
+      data-testid={testId}
+    >
+      <Info className="h-3 w-3" />
+    </span>
+  );
+}
+
 function PricingSettingsEditor({
   settings,
   onChange,
@@ -483,19 +547,25 @@ function PricingSettingsEditor({
     onChange(copy);
   };
 
-  const numField = (label: string, path: string, value: number, unit?: string) => (
-    <div>
-      <Label className="text-xs">{label}{unit ? ` (${unit})` : ""}</Label>
-      <Input
-        type="number"
-        step="any"
-        value={value}
-        onChange={e => update(path, parseFloat(e.target.value) || 0)}
-        className="h-8 text-sm"
-        data-testid={`input-${path.replace(/\./g, "-")}`}
-      />
-    </div>
-  );
+  const numField = (label: string, path: string, value: number, unit?: string) => {
+    const help = helpForPath(path);
+    return (
+      <div>
+        <Label className="text-xs inline-flex items-center gap-1">
+          <span>{label}{unit ? ` (${unit})` : ""}</span>
+          {help && <HelpHint text={help} testId={`help-${path.replace(/\./g, "-")}`} />}
+        </Label>
+        <Input
+          type="number"
+          step="any"
+          value={value}
+          onChange={e => update(path, parseFloat(e.target.value) || 0)}
+          className="h-8 text-sm"
+          data-testid={`input-${path.replace(/\./g, "-")}`}
+        />
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -528,12 +598,12 @@ function PricingSettingsEditor({
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Setup & Handling Defaults">
-        <div className="grid grid-cols-2 gap-3">
-          {numField("Default Setup", "setupHandlingDefaults.defaultSetupMinutes", settings.setupHandlingDefaults.defaultSetupMinutes, "min")}
-          {numField("Default Handling", "setupHandlingDefaults.defaultHandlingMinutes", settings.setupHandlingDefaults.defaultHandlingMinutes, "min")}
-        </div>
-      </SettingsSection>
+      {/* Phase 5H.4 — Setup & Handling Defaults removed from normal editor UI.
+          Underlying fields (settings.setupHandlingDefaults.*) remain in the schema for
+          backward compatibility but are no longer normal LL pricing inputs. Setup,
+          sheet handling, sorting, QA and packing are governed by Production Allowance
+          Tiers (below). Legacy values on individual line items still surface as a
+          legacy override warning in the LL builder. */}
 
       <SettingsSection title="Commercial Policy">
         <div className="grid grid-cols-3 gap-3">
@@ -673,7 +743,10 @@ function PricingSettingsEditor({
               {numField("Per Sheet", `productionAllowanceTiers.${idx}.perSheetHandlingMinutes`, tier.perSheetHandlingMinutes, "min/sheet")}
               {numField("Per Part", `productionAllowanceTiers.${idx}.perPartHandlingSeconds`, tier.perPartHandlingSeconds, "sec/part")}
               <div>
-                <Label className="text-xs">Per-Part Cap (min, blank = none)</Label>
+                <Label className="text-xs inline-flex items-center gap-1">
+                  <span>Per-Part Cap (max charged touch min, blank = none)</span>
+                  <HelpHint text={LL_FIELD_HELP["tier.perPartHandlingCapMinutes"]} testId={`help-tier-per-part-cap-${idx}`} />
+                </Label>
                 <Input
                   type="number"
                   step="any"
@@ -880,13 +953,16 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
         </SettingsSection>
       )}
 
-      {setup && (
-        <SettingsSection title="Setup & Handling">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-muted-foreground">Setup:</span> {setup.defaultSetupMinutes} min</div>
-          <div><span className="text-muted-foreground">Handling:</span> {setup.defaultHandlingMinutes} min</div>
-        </div>
-      </SettingsSection>
+      {/* Phase 5H.4 — Setup & Handling viewer block hidden by default.
+          Only shown if a legacy non-zero default still exists on the profile
+          so admins can see and clean it up. Setup, sheet handling, sorting,
+          QA and packing are now governed by Production Allowance Tiers. */}
+      {setup && ((setup.defaultSetupMinutes ?? 0) > 0 || (setup.defaultHandlingMinutes ?? 0) > 0) && (
+        <SettingsSection title="Setup & Handling (legacy)">
+          <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-2 py-1.5 text-[11px] text-amber-800 dark:text-amber-300 leading-snug" data-testid="legacy-setup-handling-viewer">
+            Legacy profile defaults present — Setup {setup.defaultSetupMinutes} min, Handling {setup.defaultHandlingMinutes} min. Setup/handling is now governed by Production Allowance Tiers below; these legacy defaults no longer flow into new LL items. Duplicate this profile and clear these fields to remove the legacy reference.
+          </div>
+        </SettingsSection>
       )}
 
       {settings.commercialPolicy && (
@@ -957,7 +1033,7 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
                     <th className="text-right p-1">Batch (min)</th>
                     <th className="text-right p-1">Per Sheet</th>
                     <th className="text-right p-1">Per Part</th>
-                    <th className="text-right p-1">Cap</th>
+                    <th className="text-right p-1">Per-Part Cap</th>
                     <th className="text-right p-1">QA/Pack</th>
                     <th className="text-right p-1">OH %</th>
                     <th className="text-right p-1">Review &gt;</th>

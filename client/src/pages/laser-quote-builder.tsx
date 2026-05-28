@@ -1048,12 +1048,20 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
             </div>
           )}
 
-          <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Labour</div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Setup</span><span className="font-mono" data-testid="detail-setup-min">{(Number(breakdown.setupMinutes) || 0).toFixed(1)} min</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Handling</span><span className="font-mono" data-testid="detail-handling-min">{(Number(breakdown.handlingMinutes) || 0).toFixed(1)} min</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Operator buy / Shop sell</span><span className="font-mono">${breakdown.operatorRatePerHour.toFixed(0)} / ${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
-          </div>
+          {/* Phase 5H.4 — Labour detail card only renders when a legacy non-zero
+              setup or handling minute value is present. Setup/handling is governed
+              by Production Allowance Tiers; this card surfaces only legacy overrides. */}
+          {((Number(breakdown.setupMinutes) || 0) > 0 || (Number(breakdown.handlingMinutes) || 0) > 0) && (
+            <div className="rounded-md border border-amber-300 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 p-2 space-y-0.5" data-testid="detail-legacy-labour-card">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">Legacy Setup/Handling Override</div>
+              <div className="text-[9px] text-amber-700 dark:text-amber-300 italic leading-snug mb-1">
+                Legacy setup/handling override exists. Production Allowance is the canonical setup/handling recovery method. Clear if not intentional.
+              </div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Setup</span><span className="font-mono" data-testid="detail-setup-min">{(Number(breakdown.setupMinutes) || 0).toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Handling</span><span className="font-mono" data-testid="detail-handling-min">{(Number(breakdown.handlingMinutes) || 0).toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Operator buy / Shop sell</span><span className="font-mono">${breakdown.operatorRatePerHour.toFixed(0)} / ${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
+            </div>
+          )}
 
           <div className="text-[9px] text-muted-foreground italic leading-snug px-1">
             Sell = Buy × (1 + bucket markup). Gas passes through at cost. Machine sell uses governed sell rate; machine buy uses governed buy rate.
