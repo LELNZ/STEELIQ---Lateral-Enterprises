@@ -183,6 +183,11 @@ export interface LLPricingBreakdown {
   productionAllowanceFixedBatchMinutes: number;
   productionAllowancePerSheetMinutes: number;
   productionAllowancePerPartMinutes: number;
+  // Phase 5H.8c — surface the configured per-part touch-time cap (in minutes)
+  // when the active tier has one. Undefined means "no cap configured" so the
+  // pricing-breakdown detail card can render "Per-part cap: none applied" vs.
+  // "Per-part cap applied: X min" without inferring from value comparisons.
+  productionAllowancePerPartCapMinutes?: number;
   productionAllowanceQaPackingMinutes: number;
   productionAllowanceBuyCost: number;
   productionAllowanceSellCost: number;
@@ -805,6 +810,7 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   let productionAllowanceReviewFlagged = false;
   let productionAllowanceTierKey: string | undefined;
   let productionAllowanceTierName: string | undefined;
+  let productionAllowancePerPartCapMinutes: number | undefined;
 
   if (selectedTier) {
     productionAllowanceTierKey = selectedTier.tierKey;
@@ -812,10 +818,12 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     allowanceFixedBatchMin = Math.max(selectedTier.fixedBatchMinutes || 0, 0);
     allowancePerSheetMin = estimatedSheets * Math.max(selectedTier.perSheetHandlingMinutes || 0, 0);
     const perPartRaw = (safeQty * Math.max(selectedTier.perPartHandlingSeconds || 0, 0)) / 60;
-    allowancePerPartMin =
-      selectedTier.perPartHandlingCapMinutes != null && selectedTier.perPartHandlingCapMinutes > 0
-        ? Math.min(perPartRaw, selectedTier.perPartHandlingCapMinutes)
-        : perPartRaw;
+    if (selectedTier.perPartHandlingCapMinutes != null && selectedTier.perPartHandlingCapMinutes > 0) {
+      productionAllowancePerPartCapMinutes = selectedTier.perPartHandlingCapMinutes;
+      allowancePerPartMin = Math.min(perPartRaw, selectedTier.perPartHandlingCapMinutes);
+    } else {
+      allowancePerPartMin = perPartRaw;
+    }
     allowanceQaPackingMin = Math.max(selectedTier.qaPackingMinutes || 0, 0);
     productionAllowanceMinutes =
       allowanceFixedBatchMin + allowancePerSheetMin + allowancePerPartMin + allowanceQaPackingMin;
@@ -950,6 +958,7 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     productionAllowanceFixedBatchMinutes: allowanceFixedBatchMin,
     productionAllowancePerSheetMinutes: allowancePerSheetMin,
     productionAllowancePerPartMinutes: allowancePerPartMin,
+    productionAllowancePerPartCapMinutes,
     productionAllowanceQaPackingMinutes: allowanceQaPackingMin,
     productionAllowanceBuyCost,
     productionAllowanceSellCost,
