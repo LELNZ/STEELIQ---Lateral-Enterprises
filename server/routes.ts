@@ -1146,6 +1146,18 @@ export async function registerRoutes(
 
       if (!settingsJson) return res.status(400).json({ error: "llPricingSettingsJson is required" });
 
+      // Phase 5H.4-Final — zero out any carried-forward setup/handling defaults.
+      // Production Allowance Tiers are the canonical source for setup/handling
+      // recovery; new and duplicated profiles must not surface legacy values.
+      if (settingsJson && typeof settingsJson === "object") {
+        if (!settingsJson.setupHandlingDefaults || typeof settingsJson.setupHandlingDefaults !== "object") {
+          settingsJson.setupHandlingDefaults = { defaultSetupMinutes: 0, defaultHandlingMinutes: 0 };
+        } else {
+          settingsJson.setupHandlingDefaults.defaultSetupMinutes = 0;
+          settingsJson.setupHandlingDefaults.defaultHandlingMinutes = 0;
+        }
+      }
+
       const profile = await storage.createLLPricingProfile({
         divisionKey: "LL",
         profileName,
@@ -7649,9 +7661,12 @@ async function seedLlPricingSettings() {
       operatorRatePerHour: 45.00,
       shopRatePerHour: 95.00,
     },
+    // Phase 5H.4-Final — setup/handling defaults seeded at zero. Production
+    // Allowance Tiers are the canonical source. Field retained dormant only
+    // for back-compat with the schema type.
     setupHandlingDefaults: {
-      defaultSetupMinutes: 15,
-      defaultHandlingMinutes: 10,
+      defaultSetupMinutes: 0,
+      defaultHandlingMinutes: 0,
     },
     commercialPolicy: {
       defaultMarkupPercent: 35,

@@ -953,17 +953,11 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
         </SettingsSection>
       )}
 
-      {/* Phase 5H.4 — Setup & Handling viewer block hidden by default.
-          Only shown if a legacy non-zero default still exists on the profile
-          so admins can see and clean it up. Setup, sheet handling, sorting,
-          QA and packing are now governed by Production Allowance Tiers. */}
-      {setup && ((setup.defaultSetupMinutes ?? 0) > 0 || (setup.defaultHandlingMinutes ?? 0) > 0) && (
-        <SettingsSection title="Setup & Handling (legacy)">
-          <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-2 py-1.5 text-[11px] text-amber-800 dark:text-amber-300 leading-snug" data-testid="legacy-setup-handling-viewer">
-            Legacy profile defaults present — Setup {setup.defaultSetupMinutes} min, Handling {setup.defaultHandlingMinutes} min. Setup/handling is now governed by Production Allowance Tiers below; these legacy defaults no longer flow into new LL items. Duplicate this profile and clear these fields to remove the legacy reference.
-          </div>
-        </SettingsSection>
-      )}
+      {/* Phase 5H.4-Final — Setup & Handling removed from the normal LL Pricing
+          Model viewer entirely. Underlying schema fields (settings.setupHandlingDefaults.*)
+          remain dormant for back-compat replay of old snapshots, but are no longer
+          surfaced in any normal profile UI. Setup, sheet handling, sorting, QA and
+          packing are governed by Production Allowance Tiers (canonical). */}
 
       {settings.commercialPolicy && (
         <SettingsSection title="Commercial Policy">

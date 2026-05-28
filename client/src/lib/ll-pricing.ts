@@ -419,8 +419,12 @@ export const LL_PRICING_DEFAULTS = {
   DEFAULT_MARKUP_PERCENT: 35,
   DEFAULT_MATERIAL_MARKUP_PERCENT: 20,
   DEFAULT_CONSUMABLES_MARKUP_PERCENT: 25,
-  DEFAULT_SETUP_MINUTES: 10,
-  DEFAULT_HANDLING_MINUTES: 5,
+  // Phase 5H.4-Final — setup/handling defaults are zero. Production Allowance
+  // Tiers are the canonical source of setup, sheet handling, sorting, QA, and
+  // packing recovery. These constants remain only for back-compat with the
+  // dormant schema fields.
+  DEFAULT_SETUP_MINUTES: 0,
+  DEFAULT_HANDLING_MINUTES: 0,
   MINIMUM_MATERIAL_CHARGE: 25.00,
   MINIMUM_LINE_CHARGE: 50.00,
 } as const;
