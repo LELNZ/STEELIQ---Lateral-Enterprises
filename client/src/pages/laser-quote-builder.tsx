@@ -885,7 +885,7 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
       {breakdown.productionAllowanceTierKey && (
         <div className="border-t pt-1 mt-1 space-y-0.5" data-testid="production-allowance-block">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span className="font-semibold">Production Allowance <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(labour / production recovery)</span></span>
+            <span className="font-semibold">Production Allowance <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">— governed line recovery</span></span>
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800" data-testid="allowance-tier-badge">
               Tier: {breakdown.productionAllowanceTierName}
             </Badge>
@@ -896,22 +896,27 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
               calculation details. Values, math, snapshot, and tier badge are
               unchanged — this is a display-only relocation. */}
           <div className="flex justify-between text-[10px] text-muted-foreground" data-testid="allowance-minutes-summary">
-            <span>Allowance</span>
+            <span>Allowance time</span>
             <span className="font-mono font-semibold">{breakdown.productionAllowanceMinutes.toFixed(0)} min</span>
           </div>
           <BucketRow
-            label="Allowance (operator→shop)"
+            label="Production allowance labour recovery"
             buy={`$${breakdown.productionAllowanceBuyCost.toFixed(2)}`}
             sell={`$${breakdown.productionAllowanceSellCost.toFixed(2)}`}
             margin={`$${(breakdown.productionAllowanceSellCost - breakdown.productionAllowanceBuyCost).toFixed(2)}`}
           />
           {breakdown.productionOverheadPercent > 0 && (
-            <BucketRow
-              label={`Overhead (${breakdown.productionOverheadPercent}% of governed base)`}
-              buy="$0.00"
-              sell={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
-              margin={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
-            />
+            <>
+              <BucketRow
+                label="Production overhead recovery"
+                buy="$0.00"
+                sell={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
+                margin={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
+              />
+              <div className="text-[9px] text-muted-foreground/80 -mt-0.5 pl-1" data-testid="overhead-rate-subtext">
+                {breakdown.productionOverheadPercent}% of governed base (see calculation details)
+              </div>
+            </>
           )}
           {breakdown.productionAllowanceReviewFlagged && (
             <div className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-2 py-1 mt-1" data-testid="allowance-review-flag">
