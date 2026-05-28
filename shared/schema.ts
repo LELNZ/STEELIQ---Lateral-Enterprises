@@ -1184,6 +1184,47 @@ export interface LLNestingDefaults {
   defaultUtilisationFactor: number;
 }
 
+/**
+ * Phase 5H.3 — Production Allowance Tier (additive extension of LLPricingSettings).
+ *
+ * Optional, profile-driven allowance applied INSIDE the LL parent laser/base
+ * pricing only. Does NOT alter attached manual child-operation formulas.
+ * Profiles without this field behave exactly as before (allowance = 0).
+ *
+ * Tier selection: filter where minQty <= qty <= (maxQty ?? ∞) AND, if set,
+ * minSheets/maxSheets bracket estimatedSheets; prefer highest minQty, then
+ * highest minSheets. If no tier matches, allowance = 0.
+ *
+ * Calculation (engine-side):
+ *   allowanceMin   = fixedBatchMinutes
+ *                  + estimatedSheets × perSheetHandlingMinutes
+ *                  + min(qty × perPartHandlingSeconds / 60, perPartHandlingCapMinutes ?? ∞)
+ *                  + qaPackingMinutes
+ *   allowanceBuy   = allowanceMin/60 × operatorRatePerHour
+ *   allowanceSell  = allowanceMin/60 × shopRatePerHour
+ *   overheadAmount = sellBeforeAllowanceAndOverhead × productionOverheadPercent/100
+ *   finalLaserBaseSell = sellBeforeAllowanceAndOverhead + allowanceSell + overheadAmount
+ *
+ * Internal-only: tier + allowance fields surface in the admin breakdown panel.
+ * NEVER exposed to customer Preview/PDF.
+ */
+export interface LLProductionAllowanceTier {
+  tierKey: string;
+  tierName: string;
+  minQty: number;
+  maxQty?: number | null;
+  minSheets?: number | null;
+  maxSheets?: number | null;
+  fixedBatchMinutes: number;
+  perSheetHandlingMinutes: number;
+  perPartHandlingSeconds: number;
+  perPartHandlingCapMinutes?: number | null;
+  qaPackingMinutes?: number;
+  productionOverheadPercent?: number;
+  reviewRequiredAboveQty?: number | null;
+  internalNotes?: string;
+}
+
 export interface LLPricingSettings {
   version: number;
   machineProfiles: LLMachineProfile[];
@@ -1194,4 +1235,6 @@ export interface LLPricingSettings {
   setupHandlingDefaults: LLSetupHandlingDefaults;
   commercialPolicy: LLCommercialPolicy;
   nestingDefaults: LLNestingDefaults;
+  // Phase 5H.3 — optional. Profiles without this field behave exactly as before.
+  productionAllowanceTiers?: LLProductionAllowanceTier[];
 }

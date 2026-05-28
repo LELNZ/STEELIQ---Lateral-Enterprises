@@ -38,8 +38,113 @@ import type {
   LLMachineProfile,
   LLProcessRateEntry,
   LLProcessRateSource,
+  LLProductionAllowanceTier,
   DivisionSettings,
 } from "@shared/schema";
+
+// Phase 5H.3 — approved seed defaults for production allowance tiers.
+// Used when an existing profile is opened for edit and has no tiers defined,
+// so the user can seed-and-edit instead of typing five rows from scratch.
+const SEED_PRODUCTION_ALLOWANCE_TIERS: LLProductionAllowanceTier[] = [
+  {
+    tierKey: "prototype",
+    tierName: "Prototype (1–9)",
+    minQty: 1,
+    maxQty: 9,
+    fixedBatchMinutes: 20,
+    perSheetHandlingMinutes: 5,
+    perPartHandlingSeconds: 30,
+    perPartHandlingCapMinutes: 15,
+    qaPackingMinutes: 5,
+    productionOverheadPercent: 8,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Short setup, manual inspection, one-off documentation.",
+  },
+  {
+    tierKey: "small-batch",
+    tierName: "Small Batch (10–49)",
+    minQty: 10,
+    maxQty: 49,
+    fixedBatchMinutes: 30,
+    perSheetHandlingMinutes: 6,
+    perPartHandlingSeconds: 25,
+    perPartHandlingCapMinutes: 30,
+    qaPackingMinutes: 8,
+    productionOverheadPercent: 6,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Routine job — fixturing and break-up time still significant.",
+  },
+  {
+    tierKey: "medium-batch",
+    tierName: "Medium Batch (50–199)",
+    minQty: 50,
+    maxQty: 199,
+    fixedBatchMinutes: 40,
+    perSheetHandlingMinutes: 7,
+    perPartHandlingSeconds: 20,
+    perPartHandlingCapMinutes: 60,
+    qaPackingMinutes: 12,
+    productionOverheadPercent: 5,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Multi-sheet, batched QA sampling.",
+  },
+  {
+    tierKey: "large-batch",
+    tierName: "Large Batch (200–999)",
+    minQty: 200,
+    maxQty: 999,
+    fixedBatchMinutes: 60,
+    perSheetHandlingMinutes: 8,
+    perPartHandlingSeconds: 15,
+    perPartHandlingCapMinutes: 120,
+    qaPackingMinutes: 20,
+    productionOverheadPercent: 4,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Pallet handling, AQL-style QA, packaging amortised.",
+  },
+  {
+    tierKey: "high-volume",
+    tierName: "High Volume (1000+)",
+    minQty: 1000,
+    maxQty: null,
+    fixedBatchMinutes: 90,
+    perSheetHandlingMinutes: 10,
+    perPartHandlingSeconds: 10,
+    perPartHandlingCapMinutes: 240,
+    qaPackingMinutes: 40,
+    productionOverheadPercent: 3,
+    reviewRequiredAboveQty: 5000,
+    internalNotes: "Production run — review required above 5,000 parts.",
+  },
+];
+
+/**
+ * Phase 5H.3 — Validate tier coverage. Returns ordered warnings for the
+ * admin UI (overlap, gap, missing entry-point at qty=1, etc.). Pure / read-only.
+ */
+function analyseTierCoverage(tiers: LLProductionAllowanceTier[] | undefined): string[] {
+  if (!tiers || tiers.length === 0) return [];
+  const warnings: string[] = [];
+  const sorted = [...tiers].sort((a, b) => a.minQty - b.minQty);
+  if (sorted[0].minQty > 1) {
+    warnings.push(`Quantities 1–${sorted[0].minQty - 1} are not covered by any tier (allowance = 0).`);
+  }
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const cur = sorted[i];
+    const next = sorted[i + 1];
+    const curMax = cur.maxQty ?? Infinity;
+    if (curMax >= next.minQty) {
+      warnings.push(`Tiers "${cur.tierName}" and "${next.tierName}" overlap (${cur.minQty}–${curMax} vs ${next.minQty}–${next.maxQty ?? "∞"}).`);
+    } else if (curMax + 1 < next.minQty) {
+      warnings.push(`Gap between "${cur.tierName}" (ends ${curMax}) and "${next.tierName}" (starts ${next.minQty}) — quantities in between will use the lower tier.`);
+    }
+  }
+  const last = sorted[sorted.length - 1];
+  if (last.maxQty != null) {
+    warnings.push(`Top tier "${last.tierName}" has a finite max (${last.maxQty}). Quantities above ${last.maxQty} will get zero allowance.`);
+  }
+  return warnings;
+}
 import { useLocation, Link } from "wouter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -451,6 +556,195 @@ function PricingSettingsEditor({
         </div>
       </SettingsSection>
 
+      <SettingsSection title={`Production Allowance Tiers (${settings.productionAllowanceTiers?.length ?? 0})`}>
+        <div className="px-3 py-2 mb-2 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded text-xs text-purple-800 dark:text-purple-300 flex items-start gap-1.5" data-testid="allowance-tier-notice">
+          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <div>
+            <strong>Internal-only.</strong> Adds batch setup, per-sheet handling, per-part touch time, QA/packing, and a production overhead % to each LL line. Selected by qty (and optionally sheet count). Customer-facing Preview and PDF are not changed.
+          </div>
+        </div>
+
+        {(!settings.productionAllowanceTiers || settings.productionAllowanceTiers.length === 0) && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 mb-2" data-testid="empty-allowance-tiers-warning">
+            <div className="text-xs text-orange-700 dark:text-orange-400">
+              <p className="font-medium">No tiers defined</p>
+              <p className="mt-0.5 text-[10px]">All quantities get zero allowance — engine behaves as pre-5H.3.</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const copy = JSON.parse(JSON.stringify(settings));
+                copy.productionAllowanceTiers = JSON.parse(JSON.stringify(SEED_PRODUCTION_ALLOWANCE_TIERS));
+                onChange(copy);
+              }}
+              data-testid="button-seed-allowance-tiers"
+            >
+              Seed approved defaults
+            </Button>
+          </div>
+        )}
+
+        {settings.productionAllowanceTiers && settings.productionAllowanceTiers.length > 0 && (() => {
+          const warnings = analyseTierCoverage(settings.productionAllowanceTiers);
+          if (warnings.length === 0) return null;
+          return (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-2 mb-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5" data-testid="allowance-tier-warnings">
+              {warnings.map((w, i) => (
+                <div key={i}>⚠ {w}</div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {(settings.productionAllowanceTiers ?? []).map((tier, idx) => (
+          <div key={`${tier.tierKey}-${idx}`} className="p-3 bg-muted/30 rounded mb-2 border" data-testid={`tier-editor-${idx}`}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Input
+                  value={tier.tierName}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.tierName`, e.target.value)}
+                  className="h-7 text-xs font-medium w-56"
+                  placeholder="Tier name"
+                  data-testid={`input-tier-name-${idx}`}
+                />
+                <Input
+                  value={tier.tierKey}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.tierKey`, e.target.value)}
+                  className="h-7 text-[10px] w-40 font-mono"
+                  placeholder="tier-key"
+                  data-testid={`input-tier-key-${idx}`}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] text-red-600 hover:text-red-700"
+                onClick={() => {
+                  const copy = JSON.parse(JSON.stringify(settings));
+                  copy.productionAllowanceTiers.splice(idx, 1);
+                  onChange(copy);
+                }}
+                data-testid={`button-remove-tier-${idx}`}
+              >
+                Remove
+              </Button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {numField("Min Qty", `productionAllowanceTiers.${idx}.minQty`, tier.minQty, "parts")}
+              <div>
+                <Label className="text-xs">Max Qty (blank = ∞)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.maxQty ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.maxQty`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-max-qty-${idx}`}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Min Sheets (optional)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.minSheets ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.minSheets`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-min-sheets-${idx}`}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Max Sheets (optional)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.maxSheets ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.maxSheets`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-max-sheets-${idx}`}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {numField("Fixed Batch", `productionAllowanceTiers.${idx}.fixedBatchMinutes`, tier.fixedBatchMinutes, "min")}
+              {numField("Per Sheet", `productionAllowanceTiers.${idx}.perSheetHandlingMinutes`, tier.perSheetHandlingMinutes, "min/sheet")}
+              {numField("Per Part", `productionAllowanceTiers.${idx}.perPartHandlingSeconds`, tier.perPartHandlingSeconds, "sec/part")}
+              <div>
+                <Label className="text-xs">Per-Part Cap (min, blank = none)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.perPartHandlingCapMinutes ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.perPartHandlingCapMinutes`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-per-part-cap-${idx}`}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {numField("QA / Packing", `productionAllowanceTiers.${idx}.qaPackingMinutes`, tier.qaPackingMinutes ?? 0, "min")}
+              {numField("Overhead", `productionAllowanceTiers.${idx}.productionOverheadPercent`, tier.productionOverheadPercent ?? 0, "%")}
+              <div>
+                <Label className="text-xs">Review Above (parts, blank = never)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.reviewRequiredAboveQty ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.reviewRequiredAboveQty`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-review-above-${idx}`}
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Internal Notes</Label>
+              <Textarea
+                value={tier.internalNotes ?? ""}
+                onChange={e => update(`productionAllowanceTiers.${idx}.internalNotes`, e.target.value)}
+                rows={1}
+                className="text-xs"
+                data-testid={`input-tier-notes-${idx}`}
+              />
+            </div>
+          </div>
+        ))}
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-1"
+          onClick={() => {
+            const copy = JSON.parse(JSON.stringify(settings));
+            const existing: LLProductionAllowanceTier[] = copy.productionAllowanceTiers ?? [];
+            const nextIdx = existing.length + 1;
+            existing.push({
+              tierKey: `tier-${Date.now()}`,
+              tierName: `New Tier ${nextIdx}`,
+              minQty: 1,
+              maxQty: null,
+              minSheets: null,
+              maxSheets: null,
+              fixedBatchMinutes: 0,
+              perSheetHandlingMinutes: 0,
+              perPartHandlingSeconds: 0,
+              perPartHandlingCapMinutes: null,
+              qaPackingMinutes: 0,
+              productionOverheadPercent: 0,
+              reviewRequiredAboveQty: null,
+              internalNotes: "",
+            });
+            copy.productionAllowanceTiers = existing;
+            onChange(copy);
+          }}
+          data-testid="button-add-tier"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add Tier
+        </Button>
+      </SettingsSection>
+
       <SettingsSection title={`Machine Profiles (${settings.machineProfiles.length})`}>
         <p className="text-[10px] text-muted-foreground mb-2">Each machine defines a laser cutter's physical bed size and hourly rate. These are used in estimate calculations.</p>
         {settings.machineProfiles.map((mp, idx) => (
@@ -632,6 +926,62 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
           ))}
         </SettingsSection>
       )}
+
+      <SettingsSection title={`Production Allowance Tiers (${settings.productionAllowanceTiers?.length ?? 0})`}>
+        {!settings.productionAllowanceTiers || settings.productionAllowanceTiers.length === 0 ? (
+          <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400" data-testid="viewer-empty-allowance-tiers">
+            <p className="font-medium">No tiers configured</p>
+            <p className="mt-0.5 text-[10px]">All quantities get zero allowance — engine behaves as pre-5H.3.</p>
+          </div>
+        ) : (
+          <>
+            {(() => {
+              const warnings = analyseTierCoverage(settings.productionAllowanceTiers);
+              if (warnings.length === 0) return null;
+              return (
+                <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-2 mb-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5" data-testid="viewer-allowance-tier-warnings">
+                  {warnings.map((w, i) => (<div key={i}>⚠ {w}</div>))}
+                </div>
+              );
+            })()}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs" data-testid="viewer-allowance-tiers">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-1">Tier</th>
+                    <th className="text-left p-1">Qty</th>
+                    <th className="text-left p-1">Sheets</th>
+                    <th className="text-right p-1">Batch (min)</th>
+                    <th className="text-right p-1">Per Sheet</th>
+                    <th className="text-right p-1">Per Part</th>
+                    <th className="text-right p-1">Cap</th>
+                    <th className="text-right p-1">QA/Pack</th>
+                    <th className="text-right p-1">OH %</th>
+                    <th className="text-right p-1">Review &gt;</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settings.productionAllowanceTiers.map((t, i) => (
+                    <tr key={i} className="border-b border-muted">
+                      <td className="p-1 font-medium">{t.tierName}<div className="text-[9px] font-mono text-muted-foreground">{t.tierKey}</div></td>
+                      <td className="p-1">{t.minQty}–{t.maxQty ?? "∞"}</td>
+                      <td className="p-1">{t.minSheets != null || t.maxSheets != null ? `${t.minSheets ?? "0"}–${t.maxSheets ?? "∞"}` : "—"}</td>
+                      <td className="p-1 text-right">{t.fixedBatchMinutes}</td>
+                      <td className="p-1 text-right">{t.perSheetHandlingMinutes} min</td>
+                      <td className="p-1 text-right">{t.perPartHandlingSeconds}s</td>
+                      <td className="p-1 text-right">{t.perPartHandlingCapMinutes ?? "—"}</td>
+                      <td className="p-1 text-right">{t.qaPackingMinutes ?? 0}</td>
+                      <td className="p-1 text-right">{t.productionOverheadPercent ?? 0}%</td>
+                      <td className="p-1 text-right">{t.reviewRequiredAboveQty ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">Internal-only. Adds batch setup, per-sheet handling, per-part touch time, QA/packing, and a production overhead % to LL lines based on quantity.</p>
+          </>
+        )}
+      </SettingsSection>
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables?.length ?? 0} entries)`}>
         {!settings.processRateTables || settings.processRateTables.length === 0 ? (

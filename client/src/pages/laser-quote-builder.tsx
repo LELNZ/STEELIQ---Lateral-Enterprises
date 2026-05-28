@@ -865,6 +865,47 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         margin={`$${breakdown.labourMargin.toFixed(2)}`}
       />
 
+      {/* Phase 5H.3 — Production allowance + overhead (internal-only). Only renders when a tier matched. */}
+      {breakdown.productionAllowanceTierKey && (
+        <div className="border-t pt-1 mt-1 space-y-0.5" data-testid="production-allowance-block">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span className="font-semibold">Production Allowance</span>
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800" data-testid="allowance-tier-badge">
+              Tier: {breakdown.productionAllowanceTierName}
+            </Badge>
+          </div>
+          <div className="text-[10px] text-muted-foreground" data-testid="allowance-minutes-detail">
+            {breakdown.productionAllowanceFixedBatchMinutes.toFixed(1)} batch + {breakdown.productionAllowancePerSheetMinutes.toFixed(1)} per-sheet + {breakdown.productionAllowancePerPartMinutes.toFixed(1)} per-part + {breakdown.productionAllowanceQaPackingMinutes.toFixed(1)} QA = <span className="font-mono font-semibold">{breakdown.productionAllowanceMinutes.toFixed(1)} min</span>
+          </div>
+          <BucketRow
+            label="Allowance (operator→shop)"
+            buy={`$${breakdown.productionAllowanceBuyCost.toFixed(2)}`}
+            sell={`$${breakdown.productionAllowanceSellCost.toFixed(2)}`}
+            margin={`$${(breakdown.productionAllowanceSellCost - breakdown.productionAllowanceBuyCost).toFixed(2)}`}
+          />
+          {breakdown.productionOverheadPercent > 0 && (
+            <BucketRow
+              label={`Overhead (${breakdown.productionOverheadPercent}% of $${breakdown.sellBeforeAllowanceAndOverhead.toFixed(2)})`}
+              buy="$0.00"
+              sell={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
+              margin={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
+            />
+          )}
+          {breakdown.productionAllowanceReviewFlagged && (
+            <div className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-2 py-1 mt-1" data-testid="allowance-review-flag">
+              <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <span className="text-[10px] text-amber-800 dark:text-amber-200">Quantity exceeds tier review threshold — review allowance before sending.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!breakdown.productionAllowanceTierKey && (
+        <div className="border-t pt-1 mt-1 text-[10px] text-muted-foreground italic" data-testid="production-allowance-none">
+          No production allowance tier matched for this qty / sheet count.
+        </div>
+      )}
+
       <div className="border-t pt-1 mt-1">
         <BucketRow
           label="TOTAL"

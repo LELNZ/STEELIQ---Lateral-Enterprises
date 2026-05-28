@@ -48,7 +48,7 @@
  *   LL_PRICING_DEFAULTS retained as fallback for safety only.
  */
 
-import type { LLPricingSettings, LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
+import type { LLPricingSettings, LLGasCostInput, LLConsumablesCostInput, LLProductionAllowanceTier } from "@shared/schema";
 
 export interface LLMaterialTruth {
   id: string;
@@ -170,9 +170,62 @@ export interface LLPricingBreakdown {
   gasBuyCost: number;
   gasSellCost: number;
 
+  // Phase 5H.3 — Production allowance (internal-only). Zero / undefined when no
+  // tier matches or no productionAllowanceTiers are configured on the profile.
+  productionAllowanceTierKey?: string;
+  productionAllowanceTierName?: string;
+  productionAllowanceMinutes: number;
+  productionAllowanceFixedBatchMinutes: number;
+  productionAllowancePerSheetMinutes: number;
+  productionAllowancePerPartMinutes: number;
+  productionAllowanceQaPackingMinutes: number;
+  productionAllowanceBuyCost: number;
+  productionAllowanceSellCost: number;
+  productionOverheadPercent: number;
+  productionOverheadAmount: number;
+  sellBeforeAllowanceAndOverhead: number;
+  productionAllowanceReviewFlagged: boolean;
+  // Phase 5H.3 — material allocation provenance (internal-only).
+  materialAllocationMode: "whole-sheets" | "area-fallback" | "coil" | "none";
+
   totalBuyCost: number;
   totalMargin: number;
   totalMarginPercent: number;
+}
+
+/**
+ * Phase 5H.3 — Tier selection for production allowance.
+ *
+ * Returns the most specific matching tier or null. Tiers are matched on
+ * quantity (required) and, if populated on the tier, on estimated sheets.
+ * Among matches, the tier with the highest minQty wins (then highest minSheets).
+ *
+ * Returns null when no tiers are configured or no tier matches — in that case
+ * the engine applies zero allowance and behaves exactly as before.
+ */
+export function selectProductionAllowanceTier(
+  settings: LLPricingSettings | null | undefined,
+  qty: number,
+  estimatedSheets: number,
+): LLProductionAllowanceTier | null {
+  const tiers = settings?.productionAllowanceTiers;
+  if (!tiers || !Array.isArray(tiers) || tiers.length === 0) return null;
+  const safeQty = Math.max(qty || 0, 1);
+  const safeSheets = Math.max(estimatedSheets || 0, 0);
+  const candidates = tiers.filter(t => {
+    if (!t) return false;
+    if (typeof t.minQty !== "number" || safeQty < t.minQty) return false;
+    if (t.maxQty != null && safeQty > t.maxQty) return false;
+    if (t.minSheets != null && safeSheets < t.minSheets) return false;
+    if (t.maxSheets != null && safeSheets > t.maxSheets) return false;
+    return true;
+  });
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => {
+    if (b.minQty !== a.minQty) return b.minQty - a.minQty;
+    return (b.minSheets ?? 0) - (a.minSheets ?? 0);
+  });
+  return candidates[0];
 }
 
 /**
@@ -618,7 +671,11 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     if (partsPerSheet > 0) {
       estimatedSheets = Math.ceil(safeQty / partsPerSheet);
-      materialBuyCost = (material.pricePerSheetExGst / partsPerSheet) * safeQty;
+      // Phase 5H.3 — whole-sheet allocation. Supplier invoices charge per sheet,
+      // not per fractional part. Previous fractional formula understated cost
+      // when qty did not perfectly fill the final sheet (root cause of the
+      // material under-allocation surfaced in LL-EST-0035 / Te Mana).
+      materialBuyCost = estimatedSheets * material.pricePerSheetExGst;
     } else if (usableSheetArea > 0 && totalNetPartArea > 0) {
       estimatedSheets = Math.ceil(totalNetPartArea / usableSheetArea);
       materialBuyCost = estimatedSheets * material.pricePerSheetExGst;
@@ -715,9 +772,66 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   const labourSellCost = ((setupMinutes + handlingMinutes) / 60) * shopRatePerHour;
   const labourMargin = labourSellCost - labourBuyCost;
 
-  const totalBuyCost = materialBuyCost + machineBuyCost + gasBuyCost + consumablesBuyCost + labourBuyCost;
+  // Phase 5H.3 — Production allowance + overhead (internal-only, additive).
+  // Profiles without productionAllowanceTiers behave exactly as before.
+  const sellBeforeAllowanceAndOverhead =
+    materialSellCost + machineSellCost + gasSellCost + consumablesSellCost + labourSellCost;
 
-  const rawSellTotal = materialSellCost + machineSellCost + gasSellCost + consumablesSellCost + labourSellCost;
+  const selectedTier = selectProductionAllowanceTier(settings, safeQty, estimatedSheets);
+  let allowanceFixedBatchMin = 0;
+  let allowancePerSheetMin = 0;
+  let allowancePerPartMin = 0;
+  let allowanceQaPackingMin = 0;
+  let productionAllowanceMinutes = 0;
+  let productionAllowanceBuyCost = 0;
+  let productionAllowanceSellCost = 0;
+  let productionOverheadPercent = 0;
+  let productionOverheadAmount = 0;
+  let productionAllowanceReviewFlagged = false;
+  let productionAllowanceTierKey: string | undefined;
+  let productionAllowanceTierName: string | undefined;
+
+  if (selectedTier) {
+    productionAllowanceTierKey = selectedTier.tierKey;
+    productionAllowanceTierName = selectedTier.tierName;
+    allowanceFixedBatchMin = Math.max(selectedTier.fixedBatchMinutes || 0, 0);
+    allowancePerSheetMin = estimatedSheets * Math.max(selectedTier.perSheetHandlingMinutes || 0, 0);
+    const perPartRaw = (safeQty * Math.max(selectedTier.perPartHandlingSeconds || 0, 0)) / 60;
+    allowancePerPartMin =
+      selectedTier.perPartHandlingCapMinutes != null && selectedTier.perPartHandlingCapMinutes > 0
+        ? Math.min(perPartRaw, selectedTier.perPartHandlingCapMinutes)
+        : perPartRaw;
+    allowanceQaPackingMin = Math.max(selectedTier.qaPackingMinutes || 0, 0);
+    productionAllowanceMinutes =
+      allowanceFixedBatchMin + allowancePerSheetMin + allowancePerPartMin + allowanceQaPackingMin;
+    productionAllowanceBuyCost = (productionAllowanceMinutes / 60) * operatorRatePerHour;
+    productionAllowanceSellCost = (productionAllowanceMinutes / 60) * shopRatePerHour;
+    productionOverheadPercent = Math.max(selectedTier.productionOverheadPercent || 0, 0);
+    productionOverheadAmount = sellBeforeAllowanceAndOverhead * (productionOverheadPercent / 100);
+    if (selectedTier.reviewRequiredAboveQty != null && safeQty >= selectedTier.reviewRequiredAboveQty) {
+      productionAllowanceReviewFlagged = true;
+    }
+  }
+
+  const materialAllocationMode: "whole-sheets" | "area-fallback" | "coil" | "none" =
+    material?.stockBehaviour === "coil"
+      ? "coil"
+      : material && partsPerSheet > 0
+        ? "whole-sheets"
+        : material && estimatedSheets > 0
+          ? "area-fallback"
+          : "none";
+
+  const totalBuyCost =
+    materialBuyCost +
+    machineBuyCost +
+    gasBuyCost +
+    consumablesBuyCost +
+    labourBuyCost +
+    productionAllowanceBuyCost;
+
+  const rawSellTotal =
+    sellBeforeAllowanceAndOverhead + productionAllowanceSellCost + productionOverheadAmount;
 
   const minimumLineCharge = rates.minimumLineCharge;
   const minimumLineChargeApplied = rawSellTotal < minimumLineCharge;
@@ -812,6 +926,21 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     gasBuyCost,
     gasSellCost,
+
+    productionAllowanceTierKey,
+    productionAllowanceTierName,
+    productionAllowanceMinutes,
+    productionAllowanceFixedBatchMinutes: allowanceFixedBatchMin,
+    productionAllowancePerSheetMinutes: allowancePerSheetMin,
+    productionAllowancePerPartMinutes: allowancePerPartMin,
+    productionAllowanceQaPackingMinutes: allowanceQaPackingMin,
+    productionAllowanceBuyCost,
+    productionAllowanceSellCost,
+    productionOverheadPercent,
+    productionOverheadAmount,
+    sellBeforeAllowanceAndOverhead,
+    productionAllowanceReviewFlagged,
+    materialAllocationMode,
 
     totalBuyCost,
     totalMargin,
