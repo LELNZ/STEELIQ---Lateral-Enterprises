@@ -29,7 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle, Shield,
-  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info, Trash2,
+  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info, Trash2, EyeOff,
 } from "lucide-react";
 import type {
   LLPricingProfile,
@@ -567,6 +567,32 @@ function PricingSettingsEditor({
     setOrphanToDelete(null);
   };
 
+  // Phase 5H.6 — admin mark-inactive flow. Non-orphan rows get a "Mark inactive"
+  // action that flips dataSource → "orphaned_no_library_match" (preserving all
+  // material/thickness/rate values) so the existing orphan-delete workflow can
+  // then remove them. Non-orphan rows are never directly deletable; this two-
+  // step gate forces an explicit governance act. State remains draft-local
+  // until Save → Approve → Activate runs through the existing governance chain.
+  const [rowToMarkInactive, setRowToMarkInactive] = useState<number | null>(null);
+  const confirmMarkInactive = () => {
+    if (rowToMarkInactive === null) return;
+    const idx = rowToMarkInactive;
+    const row = settings.processRateTables?.[idx];
+    if (!row || row.dataSource === "orphaned_no_library_match") {
+      setRowToMarkInactive(null);
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(settings));
+    const target = copy.processRateTables?.[idx];
+    if (target) {
+      target.dataSource = "orphaned_no_library_match";
+      const priorNote = target.dataSourceNote ? ` (was: ${target.dataSourceNote})` : "";
+      target.dataSourceNote = `Marked inactive by admin in draft profile${priorNote}. Material/thickness no longer treated as a governed pricing rate. Existing estimate snapshots are unaffected. Remove from the table once confirmed not required.`;
+      onChange(copy);
+    }
+    setRowToMarkInactive(null);
+  };
+
   const numField = (label: string, path: string, value: number, unit?: string) => {
     const help = helpForPath(path);
     return (
@@ -888,8 +914,9 @@ function PricingSettingsEditor({
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
         <p className="text-[10px] text-muted-foreground mb-2">Defines cut speed, pierce time, and <strong>assist gas type</strong> for each material/thickness combination. The gas type here determines which gas source cost is used during pricing.</p>
-        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug" data-testid="orphan-helper-note-editor">
-          Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library. Remove only after confirming they are not required.
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug space-y-1" data-testid="orphan-helper-note-editor">
+          <p>Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library. Remove only after confirming they are not required.</p>
+          <p>Use <strong>Mark inactive</strong> to remove a governed rate from future pricing. Once inactive/orphaned, the row can be deleted from the draft. Existing estimates and snapshots are not changed.</p>
         </div>
         <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-xs">
@@ -902,7 +929,7 @@ function PricingSettingsEditor({
                 <th className="text-left p-1.5 font-medium">Assist Gas Type</th>
                 <th className="text-left p-1.5 font-medium">Gas (L/min)</th>
                 <th className="text-left p-1.5 font-medium">Source</th>
-                <th className="text-left p-1.5 font-medium w-8"></th>
+                <th className="text-left p-1.5 font-medium w-10">Admin</th>
               </tr>
             </thead>
             <tbody>
@@ -936,7 +963,7 @@ function PricingSettingsEditor({
                     <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
                     <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
                     <td className="p-1.5">
-                      {isOrphan && (
+                      {isOrphan ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -948,6 +975,18 @@ function PricingSettingsEditor({
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-amber-700 hover:text-amber-800 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                          title="Mark inactive (remove from governed rates)"
+                          onClick={() => setRowToMarkInactive(idx)}
+                          data-testid={`button-mark-inactive-${idx}`}
+                        >
+                          <EyeOff className="h-3.5 w-3.5" />
+                        </Button>
                       )}
                     </td>
                   </tr>
@@ -957,6 +996,31 @@ function PricingSettingsEditor({
           </table>
         </div>
       </SettingsSection>
+
+      <AlertDialog open={rowToMarkInactive !== null} onOpenChange={(o) => { if (!o) setRowToMarkInactive(null); }}>
+        <AlertDialogContent data-testid="dialog-confirm-mark-inactive">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark process rate inactive?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Mark this process rate inactive? It will no longer be treated as a governed rate in this draft profile. Existing estimates and snapshots are not changed. You must still Save → Approve → Activate for this to affect future pricing.
+              {rowToMarkInactive !== null && settings.processRateTables?.[rowToMarkInactive] && (
+                <span className="block mt-2 text-xs font-medium text-foreground">
+                  {settings.processRateTables[rowToMarkInactive].materialFamily} · {settings.processRateTables[rowToMarkInactive].thickness}mm
+                </span>
+              )}
+              <span className="block mt-2 text-[11px] text-muted-foreground">
+                After marking inactive, the row will appear with the Orphaned badge and can be deleted from the draft using the trash action.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-mark-inactive">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMarkInactive} data-testid="button-confirm-mark-inactive" className="bg-amber-600 hover:bg-amber-700">
+              Mark inactive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={orphanToDelete !== null} onOpenChange={(o) => { if (!o) setOrphanToDelete(null); }}>
         <AlertDialogContent data-testid="dialog-confirm-remove-orphan">
@@ -1124,8 +1188,9 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
       </SettingsSection>
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables?.length ?? 0} entries)`}>
-        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug" data-testid="orphan-helper-note-viewer">
-          Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library. Remove only after confirming they are not required. To remove, duplicate this profile and edit the draft.
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug space-y-1" data-testid="orphan-helper-note-viewer">
+          <p>Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library.</p>
+          <p>To remove a governed rate from future pricing: duplicate this profile and edit the draft, then <strong>Mark inactive</strong>. Once orphaned, the row can be deleted from the draft and the profile re-Saved → Approved → Activated. Existing estimates and snapshots are not changed.</p>
         </div>
         {!settings.processRateTables || settings.processRateTables.length === 0 ? (
           <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400" data-testid="empty-process-rates-warning">
