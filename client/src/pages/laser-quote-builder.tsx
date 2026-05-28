@@ -859,7 +859,7 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         margin={`$${breakdown.consumablesMargin.toFixed(2)}`}
       />
       <BucketRow
-        label={`Labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
+        label={`Line setup/handling labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
         buy={`$${breakdown.labourBuyCost.toFixed(2)}`}
         sell={`$${breakdown.labourSellCost.toFixed(2)}`}
         margin={`$${breakdown.labourMargin.toFixed(2)}`}
@@ -869,7 +869,7 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
       {breakdown.productionAllowanceTierKey && (
         <div className="border-t pt-1 mt-1 space-y-0.5" data-testid="production-allowance-block">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-            <span className="font-semibold">Production Allowance</span>
+            <span className="font-semibold">Production Allowance <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(labour / production recovery)</span></span>
             <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800" data-testid="allowance-tier-badge">
               Tier: {breakdown.productionAllowanceTierName}
             </Badge>
@@ -905,6 +905,39 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
           No production allowance tier matched for this qty / sheet count.
         </div>
       )}
+
+      {/* Phase 5H.3-Display — Internal-only labour + production recovery summary.
+          Sums line setup/handling labour sell + production allowance sell.
+          Manual child procedure totals are not available in this panel's props
+          and would require a builder-level refactor to include — shown as note. */}
+      <div className="border-t pt-1 mt-1 rounded-sm bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 space-y-0.5" data-testid="labour-recovery-summary">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Total labour + production recovery <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(internal only)</span>
+        </div>
+        <div className="flex justify-between text-[10px]">
+          <span className="text-muted-foreground">Line setup/handling labour sell</span>
+          <span className="font-mono" data-testid="recovery-line-labour-sell">${breakdown.labourSellCost.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-[10px]">
+          <span className="text-muted-foreground">Production allowance sell</span>
+          <span className="font-mono" data-testid="recovery-allowance-sell">${breakdown.productionAllowanceSellCost.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-[11px] font-semibold border-t border-purple-200/60 dark:border-purple-800/60 pt-1 mt-1">
+          <span>Total labour + production recovery</span>
+          <span className="font-mono" data-testid="recovery-total-sell">
+            ${(breakdown.labourSellCost + breakdown.productionAllowanceSellCost).toFixed(2)}
+          </span>
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground">
+          <span>Machine sell recovery <span className="text-[9px]">(separate bucket)</span></span>
+          <span className="font-mono" data-testid="recovery-machine-sell">${breakdown.machineSellCost.toFixed(2)}</span>
+        </div>
+        <div className="text-[9px] text-muted-foreground/90 italic pt-1 border-t border-purple-200/60 dark:border-purple-800/60 mt-1 leading-snug" data-testid="recovery-notes">
+          Machine attendance treatment: governed by machine rate definition on the active profile — operator attendance during the {breakdown.machineTimeMinutes.toFixed(1)} min cut window is charged via the machine sell rate (${breakdown.machineSellRatePerHour.toFixed(0)}/hr), not via this labour summary.
+          <br />
+          Manual child procedures are shown separately below the parent line and are not included in this internal labour summary.
+        </div>
+      </div>
 
       <div className="border-t pt-1 mt-1">
         <BucketRow
