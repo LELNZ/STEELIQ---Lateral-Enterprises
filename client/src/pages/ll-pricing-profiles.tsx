@@ -29,7 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle, Shield,
-  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info, Trash2, EyeOff,
+  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info, Trash2, EyeOff, RotateCcw,
 } from "lucide-react";
 import type {
   LLPricingProfile,
@@ -494,7 +494,9 @@ const LL_FIELD_HELP: Record<string, string> = {
   "commercialPolicy.defaultMaterialMarkupPercent":
     "Markup applied to material buy cost to recover procurement handling, stock risk, waste, supplier variance, and material margin. Does not replace production allowance or machine recovery.",
   "commercialPolicy.defaultConsumablesMarkupPercent":
-    "Markup applied to consumable buy cost. Covers consumable handling, supply risk, and recovery margin. Gas remains pass-through unless separately configured.",
+    "Markup applied to consumable buy cost. Covers consumable handling, supply risk, and recovery margin. Assist gas is governed separately by Gas Markup %.",
+  "gasCosts.gasMarkupPercent":
+    "Markup applied to assist gas cost. Covers gas supply risk, bottle/rental/admin burden, waste, pressure/setup variance, and commercial recovery. Gas is a required production consumable and is governed separately from general consumables.",
   "commercialPolicy.minimumLineCharge":
     "Minimum sell value for an LL line. Protects against uneconomic small jobs where calculated material, machine, and allowance values are below the minimum practical charge.",
   "commercialPolicy.defaultRatePerMmCut":
@@ -573,6 +575,32 @@ function PricingSettingsEditor({
   // then remove them. Non-orphan rows are never directly deletable; this two-
   // step gate forces an explicit governance act. State remains draft-local
   // until Save → Approve → Activate runs through the existing governance chain.
+  // Phase 5H.7 — admin restore flow. Orphaned rows get a Restore action that
+  // flips dataSource back to "manual_override" (an existing non-orphan source
+  // already rendered by ProvenanceBadge as the red "Override" badge). All
+  // material/thickness/rate values are preserved; dataSourceNote is appended
+  // with a "Restored by admin in draft" audit line. State remains draft-local
+  // until the standard Save → Approve → Activate governance chain runs.
+  const [rowToRestore, setRowToRestore] = useState<number | null>(null);
+  const confirmRestore = () => {
+    if (rowToRestore === null) return;
+    const idx = rowToRestore;
+    const row = settings.processRateTables?.[idx];
+    if (!row || row.dataSource !== "orphaned_no_library_match") {
+      setRowToRestore(null);
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(settings));
+    const target = copy.processRateTables?.[idx];
+    if (target) {
+      target.dataSource = "manual_override";
+      const priorNote = target.dataSourceNote ? ` (was: ${target.dataSourceNote})` : "";
+      target.dataSourceNote = `Restored by admin in draft profile${priorNote}. Material/thickness re-instated as a governed pricing rate. Existing estimate snapshots are unaffected.`;
+      onChange(copy);
+    }
+    setRowToRestore(null);
+  };
+
   const [rowToMarkInactive, setRowToMarkInactive] = useState<number | null>(null);
   const confirmMarkInactive = () => {
     if (rowToMarkInactive === null) return;
@@ -625,6 +653,10 @@ function PricingSettingsEditor({
           {numField("N2 (fallback)", "gasCosts.n2PricePerLitre", settings.gasCosts.n2PricePerLitre, "$/L")}
           {numField("Air (fallback)", "gasCosts.compressedAirPricePerLitre", settings.gasCosts.compressedAirPricePerLitre, "$/L")}
         </div>
+        <div className="grid grid-cols-3 gap-3 mt-2 pt-2 border-t">
+          {numField("Gas Markup", "gasCosts.gasMarkupPercent", settings.gasCosts.gasMarkupPercent ?? 0, "%")}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-1">Applied to assist gas sell only; gas buy cost is unchanged. Existing profiles without this field default to 0% (pass-through) until duplicated and re-activated.</p>
       </SettingsSection>
 
       <SettingsSection title="Consumable Costs">
@@ -916,7 +948,7 @@ function PricingSettingsEditor({
         <p className="text-[10px] text-muted-foreground mb-2">Defines cut speed, pierce time, and <strong>assist gas type</strong> for each material/thickness combination. The gas type here determines which gas source cost is used during pricing.</p>
         <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug space-y-1" data-testid="orphan-helper-note-editor">
           <p>Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library. Remove only after confirming they are not required.</p>
-          <p>Use <strong>Mark inactive</strong> to remove a governed rate from future pricing. Once inactive/orphaned, the row can be deleted from the draft. Existing estimates and snapshots are not changed.</p>
+          <p>Use <strong>Mark inactive</strong> to remove a governed rate from future pricing, or <strong>Restore</strong> to bring an orphaned row back into governance. Once inactive/orphaned, the row can be deleted from the draft. Existing estimates and snapshots are not changed.</p>
         </div>
         <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-xs">
@@ -929,7 +961,7 @@ function PricingSettingsEditor({
                 <th className="text-left p-1.5 font-medium">Assist Gas Type</th>
                 <th className="text-left p-1.5 font-medium">Gas (L/min)</th>
                 <th className="text-left p-1.5 font-medium">Source</th>
-                <th className="text-left p-1.5 font-medium w-10">Admin</th>
+                <th className="text-left p-1.5 font-medium w-16">Admin</th>
               </tr>
             </thead>
             <tbody>
@@ -964,17 +996,30 @@ function PricingSettingsEditor({
                     <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
                     <td className="p-1.5">
                       {isOrphan ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                          title="Remove orphaned process rate"
-                          onClick={() => setOrphanToDelete(idx)}
-                          data-testid={`button-remove-orphan-${idx}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                            title="Restore to governed rates"
+                            onClick={() => setRowToRestore(idx)}
+                            data-testid={`button-restore-orphan-${idx}`}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            title="Remove orphaned process rate"
+                            onClick={() => setOrphanToDelete(idx)}
+                            data-testid={`button-remove-orphan-${idx}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       ) : (
                         <Button
                           type="button"
@@ -996,6 +1041,31 @@ function PricingSettingsEditor({
           </table>
         </div>
       </SettingsSection>
+
+      <AlertDialog open={rowToRestore !== null} onOpenChange={(o) => { if (!o) setRowToRestore(null); }}>
+        <AlertDialogContent data-testid="dialog-confirm-restore">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore process rate?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Restore this process rate to governed rates? It will become available for future pricing in this draft profile. Existing estimates and snapshots are not changed. You must still Save → Approve → Activate for this to affect future pricing.
+              {rowToRestore !== null && settings.processRateTables?.[rowToRestore] && (
+                <span className="block mt-2 text-xs font-medium text-foreground">
+                  {settings.processRateTables[rowToRestore].materialFamily} · {settings.processRateTables[rowToRestore].thickness}mm
+                </span>
+              )}
+              <span className="block mt-2 text-[11px] text-muted-foreground">
+                The row will be re-classified as a manual override (audit-trail note appended). Mark inactive can be used again later if it should be removed from governance.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-restore">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRestore} data-testid="button-confirm-restore" className="bg-emerald-600 hover:bg-emerald-700">
+              Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={rowToMarkInactive !== null} onOpenChange={(o) => { if (!o) setRowToMarkInactive(null); }}>
         <AlertDialogContent data-testid="dialog-confirm-mark-inactive">
@@ -1063,6 +1133,12 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
             <div><span className="text-muted-foreground">O2:</span> ${gas.o2PricePerLitre}/L</div>
             <div><span className="text-muted-foreground">N2:</span> ${gas.n2PricePerLitre}/L</div>
             <div><span className="text-muted-foreground">Air:</span> ${gas.compressedAirPricePerLitre}/L</div>
+          </div>
+          <div className="text-sm mt-2 pt-2 border-t">
+            <span className="text-muted-foreground">Gas Markup:</span>{" "}
+            {gas.gasMarkupPercent != null
+              ? <span data-testid="viewer-gas-markup">{gas.gasMarkupPercent}%</span>
+              : <span className="text-muted-foreground italic" data-testid="viewer-gas-markup-passthrough">not set (pass-through)</span>}
           </div>
         </SettingsSection>
       )}

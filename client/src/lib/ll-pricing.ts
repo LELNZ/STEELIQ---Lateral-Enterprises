@@ -169,6 +169,11 @@ export interface LLPricingBreakdown {
 
   gasBuyCost: number;
   gasSellCost: number;
+  // Phase 5H.7 — gas markup is governed by the active LL pricing profile
+  // (settings.gasCosts.gasMarkupPercent). Profiles without the field fall
+  // back to 0 (pass-through, bit-identical to pre-5H.7 behaviour).
+  gasMarkupPercent: number;
+  gasMargin: number;
 
   // Phase 5H.3 — Production allowance (internal-only). Zero / undefined when no
   // tier matches or no productionAllowanceTiers are configured on the profile.
@@ -770,7 +775,13 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   const consumablesSellCost = consumablesBuyCost * (1 + consumablesMarkupPercent / 100);
   const consumablesMargin = consumablesSellCost - consumablesBuyCost;
 
-  const gasSellCost = gasBuyCost;
+  // Phase 5H.7 — gas sell = gas buy × (1 + gas markup %). Fallback to 0%
+  // (pass-through) when the active profile has no gasMarkupPercent field,
+  // preserving pre-5H.7 totals for profiles that were activated before
+  // gas markup became a governed concept.
+  const gasMarkupPercent = Math.max(Number((settings?.gasCosts as any)?.gasMarkupPercent) || 0, 0);
+  const gasSellCost = gasBuyCost * (1 + gasMarkupPercent / 100);
+  const gasMargin = gasSellCost - gasBuyCost;
 
   const labourBuyCost = ((setupMinutes + handlingMinutes) / 60) * operatorRatePerHour;
   const labourSellCost = ((setupMinutes + handlingMinutes) / 60) * shopRatePerHour;
@@ -930,6 +941,8 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     gasBuyCost,
     gasSellCost,
+    gasMarkupPercent,
+    gasMargin,
 
     productionAllowanceTierKey,
     productionAllowanceTierName,

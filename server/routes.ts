@@ -1156,6 +1156,17 @@ export async function registerRoutes(
           settingsJson.setupHandlingDefaults.defaultSetupMinutes = 0;
           settingsJson.setupHandlingDefaults.defaultHandlingMinutes = 0;
         }
+
+        // Phase 5H.7 — seed Gas Markup % on new/duplicated draft profiles when
+        // the source profile/body did not specify one. This makes Gas Markup
+        // governed by profile activation: admin reviews → Saves → Approves →
+        // Activates. Active profiles in the database are not mutated; only
+        // the JSON about to be inserted as a new draft profile is touched.
+        if (settingsJson.gasCosts && typeof settingsJson.gasCosts === "object") {
+          if (settingsJson.gasCosts.gasMarkupPercent == null) {
+            settingsJson.gasCosts.gasMarkupPercent = 20;
+          }
+        }
       }
 
       const profile = await storage.createLLPricingProfile({

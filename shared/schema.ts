@@ -1144,6 +1144,13 @@ export interface LLGasCosts {
   o2PricePerLitre: number;
   n2PricePerLitre: number;
   compressedAirPricePerLitre: number;
+  // Phase 5H.7 — governed markup applied to assist gas sell price. Optional /
+  // back-compat: profiles without this field behave as pass-through (engine
+  // falls back to 0). New and duplicated draft profiles are scrubbed to 20%
+  // by the server on POST /api/ll-pricing-profiles so admins can review and
+  // intentionally activate through the standard Save → Approve → Activate
+  // governance chain.
+  gasMarkupPercent?: number;
 }
 
 export interface LLConsumableCosts {

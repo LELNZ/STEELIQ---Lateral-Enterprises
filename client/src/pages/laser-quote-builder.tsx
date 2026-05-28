@@ -848,9 +848,18 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         margin={`$${breakdown.machineMargin.toFixed(2)}`}
       />
       <BucketRow
-        label="Gas (pass-through)"
+        label={
+          (breakdown.gasMarkupPercent ?? 0) > 0
+            ? `Gas (${breakdown.gasMarkupPercent}% mkp)`
+            : "Gas (pass-through)"
+        }
         buy={`$${breakdown.gasBuyCost.toFixed(2)}`}
         sell={`$${breakdown.gasSellCost.toFixed(2)}`}
+        margin={
+          (breakdown.gasMarkupPercent ?? 0) > 0
+            ? `$${(breakdown.gasMargin ?? 0).toFixed(2)}`
+            : undefined
+        }
       />
       <BucketRow
         label={`Consumables (${breakdown.consumablesMarkupPercent}% mkp)`}
