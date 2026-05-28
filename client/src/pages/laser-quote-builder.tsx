@@ -890,8 +890,14 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
               Tier: {breakdown.productionAllowanceTierName}
             </Badge>
           </div>
-          <div className="text-[10px] text-muted-foreground" data-testid="allowance-minutes-detail">
-            {breakdown.productionAllowanceFixedBatchMinutes.toFixed(1)} batch + {breakdown.productionAllowancePerSheetMinutes.toFixed(1)} per-sheet + {breakdown.productionAllowancePerPartMinutes.toFixed(1)} per-part + {breakdown.productionAllowanceQaPackingMinutes.toFixed(1)} QA = <span className="font-mono font-semibold">{breakdown.productionAllowanceMinutes.toFixed(1)} min</span>
+          {/* Phase 5H.8 — main view shows clean commercial summary only.
+              The detailed component formula ("X batch + Y per-sheet + …") has
+              moved into the Production Allowance & Overhead card inside Show
+              calculation details. Values, math, snapshot, and tier badge are
+              unchanged — this is a display-only relocation. */}
+          <div className="flex justify-between text-[10px] text-muted-foreground" data-testid="allowance-minutes-summary">
+            <span>Allowance</span>
+            <span className="font-mono font-semibold">{breakdown.productionAllowanceMinutes.toFixed(0)} min</span>
           </div>
           <BucketRow
             label="Allowance (operator→shop)"
@@ -901,7 +907,7 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
           />
           {breakdown.productionOverheadPercent > 0 && (
             <BucketRow
-              label={`Overhead (${breakdown.productionOverheadPercent}% of $${breakdown.sellBeforeAllowanceAndOverhead.toFixed(2)})`}
+              label={`Overhead (${breakdown.productionOverheadPercent}% of governed base)`}
               buy="$0.00"
               sell={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
               margin={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
@@ -1054,6 +1060,39 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
               {breakdown.consumablesSource && (
                 <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Consumables source</span><span className="font-mono text-[9px] text-right truncate max-w-[60%]">{breakdown.consumablesSource}</span></div>
               )}
+            </div>
+          )}
+
+          {/* Phase 5H.8 — Production Allowance & Overhead detail card. Surfaces
+              the per-component allowance breakdown that previously rendered as
+              a single long line in the main panel. Values are read-only views
+              of the existing breakdown object — no engine refactor. Per-sheet
+              and per-part profile rates (e.g. 15 min/sheet, 10 s/part) are not
+              exposed in the breakdown object today; they live on the active
+              profile's productionAllowanceTiers and would require a breakdown-
+              shape change to surface here, so we display the derived per-bucket
+              totals only and note the source in the card footer. */}
+          {breakdown.productionAllowanceTierKey && (
+            <div className="rounded-md border bg-background/60 p-2 space-y-0.5" data-testid="detail-production-allowance-card">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Production Allowance &amp; Overhead</div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Selected tier</span><span className="font-mono" data-testid="detail-allowance-tier">{breakdown.productionAllowanceTierName}</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Fixed batch</span><span className="font-mono" data-testid="detail-allowance-batch">{breakdown.productionAllowanceFixedBatchMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Per sheet ({breakdown.estimatedSheets || 0} sheets)</span><span className="font-mono" data-testid="detail-allowance-per-sheet">{breakdown.productionAllowancePerSheetMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Per part (capped/total)</span><span className="font-mono" data-testid="detail-allowance-per-part">{breakdown.productionAllowancePerPartMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">QA / Packing</span><span className="font-mono" data-testid="detail-allowance-qa">{breakdown.productionAllowanceQaPackingMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px] font-semibold border-t pt-0.5 mt-0.5"><span className="text-muted-foreground">Total allowance</span><span className="font-mono" data-testid="detail-allowance-total-min">{breakdown.productionAllowanceMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Shop labour sell rate</span><span className="font-mono">${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
+              <div className="flex justify-between text-[10px] font-semibold"><span className="text-muted-foreground">Production allowance sell</span><span className="font-mono" data-testid="detail-allowance-sell">${breakdown.productionAllowanceSellCost.toFixed(2)}</span></div>
+              {breakdown.productionOverheadPercent > 0 && (
+                <>
+                  <div className="flex justify-between text-[10px] border-t pt-0.5 mt-0.5"><span className="text-muted-foreground">Overhead base <span className="text-[9px] italic">(sell before allowance/overhead)</span></span><span className="font-mono" data-testid="detail-overhead-base">${breakdown.sellBeforeAllowanceAndOverhead.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Overhead rate</span><span className="font-mono" data-testid="detail-overhead-rate">{breakdown.productionOverheadPercent}%</span></div>
+                  <div className="flex justify-between text-[10px] font-semibold"><span className="text-muted-foreground">Overhead sell</span><span className="font-mono" data-testid="detail-overhead-sell">${breakdown.productionOverheadAmount.toFixed(2)}</span></div>
+                </>
+              )}
+              <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
+                Tier rates (per-sheet min, per-part sec, per-part cap, QA/packing min, overhead %) are governed by the active LL pricing profile's Production Allowance Tiers — see Settings → Divisions → LL → Pricing Model.
+              </div>
             </div>
           )}
 
