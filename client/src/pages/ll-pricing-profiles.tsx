@@ -929,9 +929,12 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
 
       <SettingsSection title={`Production Allowance Tiers (${settings.productionAllowanceTiers?.length ?? 0})`}>
         {!settings.productionAllowanceTiers || settings.productionAllowanceTiers.length === 0 ? (
-          <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400" data-testid="viewer-empty-allowance-tiers">
-            <p className="font-medium">No tiers configured</p>
-            <p className="mt-0.5 text-[10px]">All quantities get zero allowance — engine behaves as pre-5H.3.</p>
+          <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400 space-y-1" data-testid="viewer-empty-allowance-tiers">
+            <p className="font-medium">No tiers configured on this profile</p>
+            <p className="text-[10px]">All quantities get zero production allowance — engine behaves as pre-5H.3 for this profile.</p>
+            <p className="text-[10px] mt-1">
+              <strong>To add tiers:</strong> click <em>Duplicate</em> above → open the new draft for edit → in the Production Allowance Tiers section click <strong>Seed approved defaults</strong> → Save → Approve → Activate.
+            </p>
           </div>
         ) : (
           <>
