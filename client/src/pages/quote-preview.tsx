@@ -970,6 +970,7 @@ function ManualBlankPreviewSvg({
   template,
   itemIndex,
   showCaption = true,
+  showDimensionText = true,
 }: {
   lengthMm: number;
   widthMm: number;
@@ -980,6 +981,13 @@ function ManualBlankPreviewSvg({
   // customer-facing schedule (visual clutter / Preview-vs-PDF parity).
   // Default true preserves the existing LJ joinery card behaviour.
   showCaption?: boolean;
+  // Phase 5H.9C — the LL hybrid schedule table call site passes false so
+  // the inner "L x Wmm" dimension text is suppressed inside the image
+  // cell. This matches the PDF (renderLaserScheduleTable draws a clean
+  // rounded-rectangle outline with NO text inside) and removes the
+  // "size text inside the image box" defect. Size remains in the Size
+  // column. Default true preserves the existing LJ joinery card behaviour.
+  showDimensionText?: boolean;
 }) {
   const scale = Math.min(
     MANUAL_BLANK_PREVIEW_MAX_W_PX / lengthMm,
@@ -1014,17 +1022,19 @@ function ManualBlankPreviewSvg({
           rx={2}
           ry={2}
         />
-        <text
-          x={totalW / 2}
-          y={padPx + rectH / 2 + 3}
-          textAnchor="middle"
-          fontSize={9}
-          fontFamily="sans-serif"
-          fill={template.colors.bodyText}
-          data-testid={`text-blank-dimensions-${itemIndex}`}
-        >
-          {`${lengthMm} x ${widthMm}mm`}
-        </text>
+        {showDimensionText && (
+          <text
+            x={totalW / 2}
+            y={padPx + rectH / 2 + 3}
+            textAnchor="middle"
+            fontSize={9}
+            fontFamily="sans-serif"
+            fill={template.colors.bodyText}
+            data-testid={`text-blank-dimensions-${itemIndex}`}
+          >
+            {`${lengthMm} x ${widthMm}mm`}
+          </text>
+        )}
         {showCaption && (
           <text
             x={totalW / 2}
@@ -1457,6 +1467,7 @@ function LaserScheduleTable({
                           template={template}
                           itemIndex={item.index}
                           showCaption={false}
+                          showDimensionText={false}
                         />
                       ) : (
                         <span style={{ fontSize: "10px", color: template.colors.headingMuted }}>—</span>
