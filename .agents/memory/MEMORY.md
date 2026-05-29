@@ -1,0 +1,2 @@
+- [LL line-policy legacy-safety](ll-allocation-legacy-safety.md) — new optional per-line LL pricing fields must default to legacy IN the engine; never read profile default for a missing line field (estimates live-recompute).
+- [LL Preview/PDF parity](ll-preview-pdf-parity.md) — LL customer schedule has twin renderers (quote-preview LaserScheduleTable + pdf-engine renderLaserScheduleTable); mirror cell changes; manual-blank image cell stays text-free, size lives only in Size column.

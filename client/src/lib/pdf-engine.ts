@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import type { QuoteRenderModel, RenderScheduleItem, RenderTotalsLine, RenderSpecEntry } from "./quote-renderer";
+import { extractLaserTableRow } from "./quote-renderer";
 import { isSectionVisible, LOGO_SCALE_PRESETS, COMPANY_MASTER_TEMPLATE } from "./quote-template";
 import { parseRichText, isAllBold, tokensToPlainText, type InlineToken } from "./rich-text-parser";
 import type { QuoteTemplate, ScheduleLayoutVariant, TotalsLayoutVariant } from "./quote-template";
@@ -303,6 +304,20 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// Phase 5F.4 — the legacy "compact pricing block" no longer occupies
+// any vertical space on the customer-facing PDF. All Pricing / Detail
+// / Operations content has moved into the spec table as appended
+// RenderSpecEntry rows (added by finaliseParentDisplay() in
+// quote-renderer.ts), so it is naturally counted by every place that
+// already does `visibleSpecs.length * DENSITY_SPEC_ROW_H`. This
+// function is preserved as a stable extension point and now always
+// returns 0; drawCompactItemPricing is also a no-op for the same
+// reason. Both sides of the engine (Preview and PDF) use the same
+// zero-block formula → perfect pagination parity.
+function pricingBlockHeightMm(_item: RenderScheduleItem): number {
+  return 0;
 }
 
 function getImageDimensions(dataUrl: string): Promise<{ w: number; h: number }> {
@@ -915,10 +930,47 @@ async function renderSchedule(
   let firstItemEstH = 0;
   if (model.scheduleItems.length > 0) {
     const fi = model.scheduleItems[0];
-    const fiDrawH = fi.media.drawingUrl && imageCache.has(`draw-${fi.index}`) ? DENSITY_DRAWING_MAX_H + 2 : 0;
-    const fiSpecH = fi.visibleSpecs.length * DENSITY_SPEC_ROW_H;
-    const fiPhotoH = fi.media.customerPhotos.filter((p) => imageCache.has(p.key)).length > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
-    firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiSpecH) + fiPhotoH + 4;
+    if (model.domainType === "laser") {
+      // Phase 5H.0 — laser schedules render via renderLaserScheduleTable
+      // (7-column hybrid). Per-row footprint is the table header
+      // (~7mm) + a single capped image-row (~24mm; bumped from 22mm
+      // for the additional Item / Description text line) + an
+      // optional ~5mm Pricing detail sub-row. Mirrors the preview's
+      // estimateScheduleItemMm laser branch so cross-surface
+      // pagination decisions agree.
+      const TABLE_HEADER_H = 7;
+      const ROW_H = 24;
+      const pd = fi.pricingDisplay;
+      const detailH =
+        pd?.showOperationPricing
+        && fi.attachedOperations.length > 0
+        && (pd.showUnitPriceColumn || pd.showLineTotalColumn)
+          ? 5
+          : 0;
+      firstItemEstH = TABLE_HEADER_H + ROW_H + detailH + 2;
+    } else {
+      const fiDrawH = fi.media.drawingUrl && imageCache.has(`draw-${fi.index}`) ? DENSITY_DRAWING_MAX_H + 2 : 0;
+      // Phase 5F card-tightening — manual blank placeholder is now a
+      // strictly bounded ~22mm tall compact box (max 32mm wide). It no
+      // longer borrows the full drawingMaxH (40mm), so the page-1
+      // first-item estimator correctly recognises that LL items with
+      // bounded blanks fit on page 1 alongside subsequent items.
+      const BLANK_PREVIEW_MM = 22;
+      const fiBlankH = fi.manualBlankPreview ? BLANK_PREVIEW_MM : 0;
+      const fiSpecH = fi.visibleSpecs.length * DENSITY_SPEC_ROW_H;
+      const fiPhotoH = fi.media.customerPhotos.filter((p) => imageCache.has(p.key)).length > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
+      // Phase 5F polish parity — pane specs and attached-operations rows
+      // are part of the rendered card but were previously omitted from the
+      // first-item start-page estimator. Mirror the preview's
+      // estimateScheduleItemMm formula so the page-1 placement decision
+      // aligns with where preview actually breaks.
+      const fiPaneH = fi.paneGlassSpecs.length > 0 ? 6 + fi.paneGlassSpecs.length * 3.5 : 0;
+      // Phase 5F.1 — grouped commercial pricing table replaces the prior
+      // separate pricing row + operations block. Same height formula used
+      // by Preview's estimateScheduleItemMm so cross-page parity holds.
+      const fiPricingBlockH = pricingBlockHeightMm(fi);
+      firstItemEstH = DENSITY_ITEM_HEADER_H + Math.max(fiDrawH, fiBlankH, fiSpecH) + fiPricingBlockH + fiPaneH + fiPhotoH + 4;
+    }
   }
 
   const neededOnCurrentPage = SECTION_GAP + SCHEDULE_HEADING_H + firstItemEstH;
@@ -947,6 +999,12 @@ async function renderSchedule(
     y += 6;
   }
 
+  // Phase 5G — laser quotes render the schedule as an enterprise table.
+  // Joinery / estimator quotes keep the per-item card path below.
+  if (model.domainType === "laser") {
+    return await renderLaserScheduleTable(pdf, y, model, imageCache, onProgress);
+  }
+
   for (let si = 0; si < model.scheduleItems.length; si++) {
     const item = model.scheduleItems[si];
     onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
@@ -958,13 +1016,306 @@ async function renderSchedule(
     const hasItemDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
     const itemSpecH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
     const itemDrawH = hasItemDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
+    // Phase 5F card-tightening — bounded ~22mm blank box (see comment
+    // in firstItemEstH).
+    const ITEM_BLANK_PREVIEW_MM = 22;
+    const itemBlankH = item.manualBlankPreview ? ITEM_BLANK_PREVIEW_MM : 0;
     const itemPhotoH = loadablePhotoCount > 0 ? DENSITY_PHOTO_ROW_H + 5 : 0;
     const paneSpecH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemSpecH) + paneSpecH + itemPhotoH + 4;
+    // Phase 5F.1 — grouped commercial pricing table (parent + ops + footer).
+    const itemPricingBlockH = pricingBlockHeightMm(item);
+    const estimatedH = DENSITY_ITEM_HEADER_H + Math.max(itemDrawH, itemBlankH, itemSpecH) + itemPricingBlockH + paneSpecH + itemPhotoH + 4;
     y = ensureSpace(pdf, y, Math.min(estimatedH, MAX_Y - TOP_MARGIN - 5));
 
     y = await renderScheduleItem(pdf, y, item, imageCache);
     y += ITEM_GAP;
+  }
+
+  return y;
+}
+
+// Phase 5G — enterprise schedule TABLE for the LL customer-facing PDF.
+// Mirrors the React `LaserScheduleTable` in quote-preview.tsx so the
+// preview and the exported PDF render the same 8-column schedule with
+// the same toggle-driven column visibility:
+//
+//   Image | Item | Material/Spec | Dimensions | Operations | Qty |
+//   Unit Price (toggle) | Line Total (toggle).
+//
+// Pricing values are sourced ONLY from `pricingDisplay` (combined
+// labels) which respect `showUnitPriceColumn` / `showLineTotalColumn`.
+// No cost / margin / supplier / internal-notes data is ever surfaced.
+//
+// Pagination: per-row `ensureSpace`. When a page break occurs the
+// header row is redrawn at the top of the new page so the customer
+// always sees column labels.
+//
+// All text is run through `sanitizeForPdfText()` because jsPDF's
+// helvetica is Latin-1 only.
+async function renderLaserScheduleTable(
+  pdf: Pdf,
+  y: number,
+  model: QuoteRenderModel,
+  imageCache: Map<string, string>,
+  onProgress?: (status: string) => void,
+): Promise<number> {
+  // Phase 5H.0 — 7-column hybrid: Image · Item / Description ·
+  // Material / Spec · Size · Qty · Unit (toggle) · Total (toggle).
+  // Operations are nested inside Item / Description as a third
+  // stacked text line (see drawWrappedCellLines below).
+
+  // Determine column visibility from the first item that carries
+  // pricingDisplay (all laser parents share the same toggles).
+  const sampleWithPricing = model.scheduleItems.find(it => !!it.pricingDisplay);
+  const showUnit = sampleWithPricing?.pricingDisplay?.showUnitPriceColumn ?? false;
+  const showLT = sampleWithPricing?.pricingDisplay?.showLineTotalColumn ?? false;
+
+  // Column widths in mm — total = CONTENT_WIDTH (180mm). Image / Size /
+  // Qty are fixed; Unit / Total are gated by toggles. Remaining budget
+  // is split 60% Item / Description, 40% Material / Spec — identical
+  // to the preview LaserScheduleTable so both surfaces look the same.
+  const W_IMAGE = 22;
+  const W_SIZE = 24;
+  const W_QTY = 8;
+  const W_UNIT = showUnit ? 14 : 0;
+  const W_TOTAL = showLT ? 18 : 0;
+  const remainingForText = CONTENT_WIDTH - W_IMAGE - W_SIZE - W_QTY - W_UNIT - W_TOTAL;
+  const W_ITEM = Math.floor(remainingForText * 0.60);
+  const W_MATERIAL = remainingForText - W_ITEM;
+
+  // Column x offsets (left edge of each cell).
+  const X_IMAGE = LEFT_MARGIN;
+  const X_ITEM = X_IMAGE + W_IMAGE;
+  const X_MATERIAL = X_ITEM + W_ITEM;
+  const X_SIZE = X_MATERIAL + W_MATERIAL;
+  const X_QTY = X_SIZE + W_SIZE;
+  const X_UNIT = X_QTY + W_QTY;
+  const X_TOTAL = X_UNIT + W_UNIT;
+
+  const HEADER_H = 6;
+  const ROW_H = 24;       // image-capped row height (Phase 5H.0)
+  const DETAIL_H = 4.5;   // optional Pricing detail sub-row height
+  const CELL_PAD_X = 1.5;
+  const HEADER_FONT = 7;
+  const BODY_FONT = 7.5;
+  const SMALL_FONT = 6.8;
+  const DETAIL_FONT = 6.5;
+
+  const drawHeader = (yy: number): number => {
+    pdf.setFillColor(COLOR_BG_MUTED);
+    pdf.rect(LEFT_MARGIN, yy, CONTENT_WIDTH, HEADER_H, "F");
+    pdf.setDrawColor(COLOR_BORDER);
+    pdf.setLineWidth(0.2);
+    pdf.line(LEFT_MARGIN, yy + HEADER_H, LEFT_MARGIN + CONTENT_WIDTH, yy + HEADER_H);
+
+    pdf.setFont(FONT_NORMAL, "bold");
+    pdf.setFontSize(HEADER_FONT);
+    pdf.setTextColor(COLOR_BLACK);
+    const baseline = yy + 4;
+    pdf.text("Image", X_IMAGE + CELL_PAD_X, baseline);
+    pdf.text("Item / Description", X_ITEM + CELL_PAD_X, baseline);
+    pdf.text("Material / Spec", X_MATERIAL + CELL_PAD_X, baseline);
+    pdf.text("Size", X_SIZE + CELL_PAD_X, baseline);
+    // Right-aligned numeric headers.
+    const qtyLbl = "Qty";
+    pdf.text(qtyLbl, X_QTY + W_QTY - CELL_PAD_X - pdf.getTextWidth(qtyLbl), baseline);
+    if (showUnit) {
+      const ul = "Unit";
+      pdf.text(ul, X_UNIT + W_UNIT - CELL_PAD_X - pdf.getTextWidth(ul), baseline);
+    }
+    if (showLT) {
+      const ll = "Total";
+      pdf.text(ll, X_TOTAL + W_TOTAL - CELL_PAD_X - pdf.getTextWidth(ll), baseline);
+    }
+    return yy + HEADER_H;
+  };
+
+  // Initial header row (immediately after the SCHEDULE heading).
+  y = drawHeader(y);
+
+  // Helper — draw a single line of text inside a cell at (x, y).
+  // Right-aligns numeric values when align==="right".
+  const drawLine = (
+    text: string,
+    x: number,
+    w: number,
+    yLine: number,
+    opts?: { bold?: boolean; italic?: boolean; align?: "left" | "right"; muted?: boolean; font?: number },
+  ) => {
+    const safe = sanitizeForPdfText(text);
+    pdf.setFont(FONT_NORMAL, opts?.italic ? "italic" : (opts?.bold ? "bold" : "normal"));
+    pdf.setFontSize(opts?.font ?? BODY_FONT);
+    pdf.setTextColor(opts?.muted ? COLOR_MUTED : COLOR_BLACK);
+    if (opts?.align === "right") {
+      const tw = pdf.getTextWidth(safe);
+      pdf.text(safe, x + w - CELL_PAD_X - tw, yLine);
+    } else {
+      pdf.text(safe, x + CELL_PAD_X, yLine);
+    }
+  };
+
+  // Helper — draw multiple wrapped lines starting at (x, yStart) and
+  // return the number of lines drawn.
+  const drawWrappedLines = (
+    text: string,
+    x: number,
+    w: number,
+    yStart: number,
+    opts?: { bold?: boolean; align?: "left" | "right"; muted?: boolean; maxLines?: number; font?: number },
+  ): number => {
+    if (!text) return 0;
+    const fontSize = opts?.font ?? BODY_FONT;
+    pdf.setFont(FONT_NORMAL, opts?.bold ? "bold" : "normal");
+    pdf.setFontSize(fontSize);
+    pdf.setTextColor(opts?.muted ? COLOR_MUTED : COLOR_BLACK);
+    const maxLines = opts?.maxLines ?? 3;
+    const innerW = w - CELL_PAD_X * 2;
+    const lines = wrapText(pdf, sanitizeForPdfText(text), innerW).slice(0, maxLines);
+    const lineSpacingMm = fontSize * 1.15 * 0.352778;
+    lines.forEach((ln, i) => {
+      const ly = yStart + i * lineSpacingMm;
+      if (opts?.align === "right") {
+        const tw = pdf.getTextWidth(ln);
+        pdf.text(ln, x + w - CELL_PAD_X - tw, ly);
+      } else {
+        pdf.text(ln, x + CELL_PAD_X, ly);
+      }
+    });
+    return lines.length;
+  };
+
+  for (let si = 0; si < model.scheduleItems.length; si++) {
+    const item = model.scheduleItems[si];
+    onProgress?.(`Rendering item ${si + 1} of ${model.scheduleItems.length}...`);
+    if (si > 0 && si % 2 === 0) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    const row = extractLaserTableRow(item);
+    const needsDetail = !!row.detailPdf;
+    const totalRowH = ROW_H + (needsDetail ? DETAIL_H : 0);
+
+    // Page-break handling — redraw the header on every new page so the
+    // customer always sees column labels above the data.
+    if (y + totalRowH > MAX_Y) {
+      pdf.addPage();
+      y = TOP_MARGIN;
+      y = drawHeader(y);
+    }
+
+    const rowTopY = y;
+
+    // --- Image cell ---------------------------------------------------
+    const hasDrawing = !!item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
+    const imgBoxX = X_IMAGE + CELL_PAD_X;
+    const imgBoxY = y + 1;
+    const imgBoxW = W_IMAGE - CELL_PAD_X * 2;
+    const imgBoxH = ROW_H - 2;
+    if (hasDrawing) {
+      const drawingData = imageCache.get(`draw-${item.index}`)!;
+      try {
+        const dims = await getImageDimensions(drawingData);
+        const scale = Math.min(imgBoxW / dims.w, imgBoxH / dims.h, 1);
+        const dw = dims.w * scale;
+        const dh = dims.h * scale;
+        const dx = imgBoxX + (imgBoxW - dw) / 2;
+        const dy = imgBoxY + (imgBoxH - dh) / 2;
+        pdf.addImage(drawingData, dx, dy, dw, dh);
+      } catch { /* skip */ }
+    } else if (item.manualBlankPreview) {
+      const lengthMm = item.manualBlankPreview.lengthMm;
+      const widthMm = item.manualBlankPreview.widthMm;
+      const scale = Math.min(imgBoxW / lengthMm, imgBoxH / widthMm);
+      const rectW = Math.max(4, lengthMm * scale * 0.85);
+      const rectH = Math.max(3, widthMm * scale * 0.85);
+      const rx = imgBoxX + (imgBoxW - rectW) / 2;
+      const ry = imgBoxY + (imgBoxH - rectH) / 2;
+      pdf.setDrawColor(COLOR_BORDER);
+      pdf.setLineWidth(0.25);
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(rx, ry, rectW, rectH, 0.4, 0.4, "FD");
+    } else {
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(BODY_FONT);
+      pdf.setTextColor(COLOR_MUTED);
+      pdf.text("-", imgBoxX + imgBoxW / 2, y + ROW_H / 2 + 1);
+    }
+
+    // --- Item / Description cell (3 stacked lines) -------------------
+    // Line 1: ref (small, muted) — "Item 001 - LC-001"
+    // Line 2: title (bold) — "Laser cut blank"
+    // Line 3 (optional): "Ops: <summary>"
+    const itemBaseY = y + 3;
+    const refLineSp = SMALL_FONT * 1.15 * 0.352778;
+    drawLine(row.itemRefLinePdf, X_ITEM, W_ITEM, itemBaseY, {
+      muted: true,
+      font: SMALL_FONT,
+    });
+    const titleY = itemBaseY + refLineSp + 0.5;
+    const titleLines = drawWrappedLines(row.title, X_ITEM, W_ITEM, titleY, {
+      bold: true,
+      maxLines: 2,
+    });
+    if (row.opsSummaryPdf) {
+      const titleSp = BODY_FONT * 1.15 * 0.352778;
+      const opsY = titleY + titleLines * titleSp + 0.5;
+      drawWrappedLines(`Ops: ${row.opsSummaryPdf}`, X_ITEM, W_ITEM, opsY, {
+        font: SMALL_FONT,
+        maxLines: 2,
+      });
+    }
+
+    // --- Material / Spec cell (2 stacked lines) ----------------------
+    const matBaseY = y + 3.5;
+    drawLine(row.materialPrimary || "-", X_MATERIAL, W_MATERIAL, matBaseY);
+    if (row.materialSecondary) {
+      const matSp = BODY_FONT * 1.15 * 0.352778;
+      drawLine(row.materialSecondaryPdf, X_MATERIAL, W_MATERIAL, matBaseY + matSp + 0.5, {
+        muted: true,
+        font: SMALL_FONT,
+      });
+    }
+
+    // --- Size / Qty / Unit / Total -----------------------------------
+    drawLine(row.dimensions || "-", X_SIZE, W_SIZE, y + 3.5);
+    drawLine(String(row.qty), X_QTY, W_QTY, y + 3.5, { align: "right" });
+    if (showUnit) {
+      drawLine(row.unitPriceLabel ?? "-", X_UNIT, W_UNIT, y + 3.5, { align: "right" });
+    }
+    if (showLT) {
+      drawLine(row.lineTotalLabel ?? "-", X_TOTAL, W_TOTAL, y + 3.5, {
+        align: "right",
+        bold: true,
+      });
+    }
+
+    y += ROW_H;
+
+    // --- Optional Pricing detail sub-row -----------------------------
+    if (needsDetail) {
+      pdf.setFont(FONT_NORMAL, "italic");
+      pdf.setFontSize(DETAIL_FONT);
+      pdf.setTextColor(COLOR_MUTED);
+      const detailText = sanitizeForPdfText(row.detailPdf!);
+      const detailW = CONTENT_WIDTH - W_IMAGE;
+      const detailLine = wrapText(pdf, detailText, detailW - CELL_PAD_X * 2)[0] || detailText;
+      pdf.text(detailLine, X_ITEM + CELL_PAD_X, y + 2.8);
+      y += DETAIL_H;
+    }
+
+    // --- Row separator ------------------------------------------------
+    pdf.setDrawColor(COLOR_BORDER);
+    pdf.setLineWidth(0.15);
+    pdf.line(LEFT_MARGIN, y, LEFT_MARGIN + CONTENT_WIDTH, y);
+
+    // TODO Phase 5H — reserved sub-row slot for "Qty Breaks" tier
+    // pricing. When data exists, render here directly under the
+    // Pricing detail row spanning all columns and advance y by its
+    // height. No DB / calc / mock output in this phase.
+
+    // Touch the rowTopY var so lint doesn't trip; also useful for
+    // future row-background fills.
+    void rowTopY;
   }
 
   return y;
@@ -980,11 +1331,13 @@ async function renderScheduleItem(
   const hasDrawing = item.media.drawingUrl && imageCache.has(`draw-${item.index}`);
   const hasPhotos = loadablePhotos.length > 0;
 
-  // Phase 5F — attached-procedure visual grouping in the PDF. Indent the
-  // entire card ~6mm right and shrink content width accordingly. The actual
-  // schedule item title already includes the sub-numbered displayNumber
-  // (001a/001b…) from the renderer, so no extra string work is required —
-  // we only add the "↳ Attached operation —" affordance prefix.
+  // Phase 5F polish — attached procedures now collapse into the parent's
+  // `attachedOperations` block (rendered as compact rows inside the parent
+  // card). Children no longer render as their own card. We keep a small
+  // defensive indent for orphan attached rows whose parent could not be
+  // resolved, but we DO NOT prefix the title with the `↳` glyph because
+  // jsPDF's helvetica is Latin-1 only and U+21B3 was being mangled into
+  // `!³` on export.
   const ATTACHED_INDENT_MM = 6;
   const indent = item.isAttachedChild ? ATTACHED_INDENT_MM : 0;
   const cardLeft = LEFT_MARGIN + indent;
@@ -993,9 +1346,17 @@ async function renderScheduleItem(
   const headerH = DENSITY_ITEM_HEADER_H;
   const specH = item.visibleSpecs.length * DENSITY_SPEC_ROW_H;
   const drawingH = hasDrawing ? DENSITY_DRAWING_MAX_H + 2 : 0;
+  // Phase 5F card-tightening — bounded ~22mm blank box (mirrors the
+  // firstItemEstH / estimatedH change so the pre-render minItemH
+  // ensureSpace check stays consistent with the bounded box actually
+  // drawn in the placeholder branch below).
+  const MIN_BLANK_PREVIEW_MM = 22;
+  const blankH = item.manualBlankPreview ? MIN_BLANK_PREVIEW_MM : 0;
   const photosH = hasPhotos ? DENSITY_PHOTO_ROW_H : 0;
   const paneH = item.paneGlassSpecs.length > 0 ? 6 + item.paneGlassSpecs.length * 3.5 : 0;
-  const minItemH = headerH + Math.max(drawingH, specH) + paneH + photosH + SECTION_GAP;
+  // Phase 5F.1 — grouped commercial pricing table (parent + ops + footer).
+  const pricingBlkH = pricingBlockHeightMm(item);
+  const minItemH = headerH + Math.max(drawingH, blankH, specH) + pricingBlkH + paneH + photosH + SECTION_GAP;
 
   y = ensureSpace(pdf, y, Math.min(minItemH, MAX_Y - TOP_MARGIN - 5));
   const itemStartPage = pdf.getNumberOfPages();
@@ -1009,8 +1370,8 @@ async function renderScheduleItem(
   pdf.setFont(FONT_NORMAL, "bold");
   pdf.setFontSize(mmSize(T.typography.itemTitleSize));
   pdf.setTextColor(COLOR_BLACK);
-  const titleText = item.isAttachedChild ? `↳ ${item.title}` : item.title;
-  pdf.text(titleText, cardLeft + pad, y + 3.5);
+  // Phase 5F polish — Latin-1-only PDF text. Never inject U+21B3 here.
+  pdf.text(item.title, cardLeft + pad, y + 3.5);
 
   const subtitleText = `${item.quantityLabel}  \u00B7  ${item.dimensionLabel}${item.openingDirectionLabel ? `  \u00B7  ${item.openingDirectionLabel}` : ""}`;
   pdf.setFont(FONT_NORMAL, "normal");
@@ -1045,9 +1406,23 @@ async function renderScheduleItem(
     }
   } else {
     const drawWPct = DRAWING_MAX_W_PCT / 100;
-    const leftColW = cardWidth * drawWPct - 2;
-    const rightColX = cardLeft + cardWidth * drawWPct + 2;
-    const rightColW = cardWidth * (1 - drawWPct) - 5;
+    // Phase 5F card-tightening — when there's no uploaded drawing but
+    // we DO have a manual blank placeholder, narrow the left column to
+    // a compact ~35mm so the spec table on the right has the full
+    // remaining card width. This restores readability when Unit Price
+    // / Line Total / Operations rows widen the spec table content.
+    // Items with a real drawing keep the original ~45% column.
+    const BLANK_LEFT_COL_MM = 35;
+    const useNarrowBlankCol = !hasDrawing && !!item.manualBlankPreview;
+    const leftColW = useNarrowBlankCol
+      ? BLANK_LEFT_COL_MM
+      : cardWidth * drawWPct - 2;
+    const rightColX = useNarrowBlankCol
+      ? cardLeft + BLANK_LEFT_COL_MM + 2
+      : cardLeft + cardWidth * drawWPct + 2;
+    const rightColW = useNarrowBlankCol
+      ? cardWidth - BLANK_LEFT_COL_MM - pad - 5
+      : cardWidth * (1 - drawWPct) - 5;
 
     let drawingBottomY = y;
     if (hasDrawing) {
@@ -1063,6 +1438,49 @@ async function renderScheduleItem(
         pdf.addImage(drawingData, drawX, y, dw, dh);
         drawingBottomY = y + dh + 2;
       } catch { /* skip */ }
+    } else if (item.manualBlankPreview) {
+      // Phase 5F card-tightening — bounded compact blank placeholder.
+      // Strict caps ~32mm wide × 14mm tall regardless of the surrounding
+      // column so the placeholder never dominates the card. Aspect ratio
+      // is preserved within those bounds. Indicative geometry only —
+      // never holes, folds, cutouts, or any manufacturing detail.
+      // ASCII / Latin-1 only ("x") so jsPDF helvetica cannot mangle it.
+      const BLANK_BOX_MAX_W_MM = 32;
+      const BLANK_BOX_MAX_H_MM = 14;
+      const lengthMm = item.manualBlankPreview.lengthMm;
+      const widthMm = item.manualBlankPreview.widthMm;
+      const scale = Math.min(BLANK_BOX_MAX_W_MM / lengthMm, BLANK_BOX_MAX_H_MM / widthMm);
+      const rectW = Math.max(6, lengthMm * scale);
+      const rectH = Math.max(4, widthMm * scale);
+      // Centre the bounded box within the (now narrow) left column.
+      const colInnerW = leftColW - pad * 2;
+      const rectX = cardLeft + pad + (colInnerW - rectW) / 2;
+      const rectY = y + 1;
+      pdf.setDrawColor(COLOR_BORDER);
+      pdf.setLineWidth(0.3);
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(rectX, rectY, rectW, rectH, 0.6, 0.6, "FD");
+      // Centred dimension label inside the bounded rectangle. Smaller
+      // font (6.5pt) so it fits the new compact box.
+      pdf.setFont(FONT_NORMAL, "normal");
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(COLOR_BLACK);
+      const dimText = `${lengthMm} x ${widthMm}mm`;
+      const dimTextW = pdf.getTextWidth(dimText);
+      const dimX = rectX + (rectW - dimTextW) / 2;
+      const dimY = rectY + rectH / 2 + 1;
+      pdf.text(dimText, dimX, dimY);
+      // Italic muted caption beneath the rectangle, centred under the
+      // bounded blank box (not the full left column).
+      pdf.setFont(FONT_NORMAL, "italic");
+      pdf.setFontSize(5.5);
+      pdf.setTextColor(COLOR_MUTED);
+      const captionText = "Indicative blank only";
+      const captionW = pdf.getTextWidth(captionText);
+      const captionX = rectX + (rectW - captionW) / 2;
+      const captionY = rectY + rectH + 3;
+      pdf.text(captionText, captionX, captionY);
+      drawingBottomY = captionY + 1;
     }
 
     let specY = y;
@@ -1073,6 +1491,16 @@ async function renderScheduleItem(
   }
 
   y += 2;
+
+  // Phase 5F.2 — compact, supplier-style customer pricing block (LL
+  // parent items only). Renders an optional small nested operation
+  // breakdown ("- Laser cut blank: $X", "- Folding: $X") only when the
+  // showOperationPricing toggle is ON, then a right-aligned compact
+  // "UNIT PRICE / LINE TOTAL" pair using the COMBINED values
+  // (parent + Σ ops). Operations themselves are summarised as part of
+  // the spec block above (synthesized "Operations" row added by
+  // quote-renderer.ts → finaliseParentDisplay). ASCII / Latin-1 only.
+  y = drawCompactItemPricing(pdf, y, item, cardLeft, cardWidth, pad);
 
   if (item.gosNote || item.catDoorNote) {
     pdf.setFont(FONT_NORMAL, "italic");
@@ -1104,6 +1532,9 @@ async function renderScheduleItem(
       y += 3.5;
     }
   }
+
+  // Phase 5F.1 — attached operations are now rendered as rows inside the
+  // grouped pricing table above; no separate Operations block here.
 
   if (hasPhotos) {
     const renderedPhotosResult = await tryRenderPhotos(pdf, y, loadablePhotos, imageCache, item.title, pad, startY, itemStartPage, cardLeft, cardWidth);
@@ -1229,6 +1660,65 @@ function cleanWrappedLines(lines: string[]): string[] {
   return lines.map(line => line.replace(/ -$/, "").replace(/ \/$/, "").replace(/ \/\/$/, "").trimEnd());
 }
 
+// Phase 5F.2 — compact, supplier-style customer pricing block.
+// Replaces the prior bulky grouped table with:
+//   1. (optional) small nested op breakdown ("- Laser cut blank: $X",
+//      "- Folding: $X") shown only when showOperationPricing is ON
+//      and at least one price toggle is ON.
+//   2. Right-aligned compact summary lines:
+//        UNIT PRICE   $205.13 ea
+//        LINE TOTAL   $1,025.64
+//      using the COMBINED values (parent + Σ ops) so the customer sees
+//      a single price per item.
+//
+// ASCII / Latin-1 only — uses "-" as bullet, " - " between procedure
+// type and description, "$" for currency. No em-dash, no `↳`, no
+// glyphs outside Latin-1 (jsPDF helvetica-only safe).
+//
+// Mirror of CompactItemPricing in client/src/pages/quote-preview.tsx.
+// Snapshot subtotal/GST/total are NOT recomputed here — they are
+// rendered upstream from snapshot.totalsBreakdown.
+// Phase 5F.4 — no-op. The Pricing / Detail / Operations content has
+// moved into the spec table as appended RenderSpecEntry rows
+// (added by finaliseParentDisplay() in quote-renderer.ts), so the
+// rows render through renderSpecTableNoPageBreak above. Both the
+// y-advance and the visible content come from the spec-table render
+// path, giving Preview/PDF perfect parity. The function is preserved
+// as a stable extension point in case future phases reintroduce a
+// dedicated supplier-style block; it currently returns y unchanged.
+function drawCompactItemPricing(
+  _pdf: Pdf,
+  y: number,
+  _item: RenderScheduleItem,
+  _cardLeft: number,
+  _cardWidth: number,
+  _pad: number,
+): number {
+  return y;
+}
+
+// Phase 5F.2 — defensive ASCII / Latin-1 sanitizer for spec values
+// rendered into jsPDF helvetica (Latin-1 only). Replaces common
+// "smart" punctuation that callers may forget to convert: em-dash,
+// en-dash, smart quotes, ellipsis. Spec entries may also opt in
+// explicitly via `pdfValue`, which takes precedence.
+// Phase 5F.3 — extracted shared sanitizer so price-detail strings
+// (which embed user-entered procedureType) get the same defensive
+// normalization as spec values.
+function sanitizeForPdfText(raw: string): string {
+  return raw
+    .replace(/\u2014/g, " - ")  // em-dash
+    .replace(/\u2013/g, "-")    // en-dash
+    .replace(/[\u2018\u2019]/g, "'")  // smart single quotes
+    .replace(/[\u201C\u201D]/g, '"')  // smart double quotes
+    .replace(/\u2026/g, "...")  // ellipsis
+    .replace(/\u21B3/g, "->");  // turn-down right arrow (legacy `↳`)
+}
+
+function specValueForPdf(entry: RenderSpecEntry): string {
+  return sanitizeForPdfText(entry.pdfValue ?? entry.value);
+}
+
 function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[], x: number, w: number): number {
   const rowH = DENSITY_SPEC_ROW_H;
   const labelW = w * 0.45;
@@ -1243,7 +1733,7 @@ function renderSpecTableNoPageBreak(pdf: Pdf, y: number, specs: RenderSpecEntry[
     const labelLines = wrapText(pdf, specs[i].label, labelW - 2);
 
     pdf.setFontSize(valueFontPt);
-    const rawValLines = wrapText(pdf, specs[i].value, valueW);
+    const rawValLines = wrapText(pdf, specValueForPdf(specs[i]), valueW);
     const valLines = cleanWrappedLines(rawValLines);
 
     const nLines = Math.max(labelLines.length, valLines.length);

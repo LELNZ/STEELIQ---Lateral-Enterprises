@@ -44,34 +44,32 @@ import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProf
 import { LL_MANUAL_PROCEDURE_TYPES } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
 import {
-  computeLLPricing,
   resolveRatesFromSettings,
   applyCommercialOverride,
-  type LLMaterialTruth,
   type LLPricingBreakdown,
   type LLGovernedInputs,
-  type LLCommercialResult,
-  type LLOverrideInputs,
 } from "@/lib/ll-pricing";
 import type { LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
-
-interface SheetMaterialRef {
-  id: string;
-  supplierName: string;
-  materialFamily: string;
-  grade: string;
-  finish: string;
-  thickness: string;
-  sheetLength: string;
-  sheetWidth: string;
-  pricePerSheetExGst: string;
-  pricePerKg: string | null;
-  supplierSku: string;
-  supplierCategory: string;
-  formType: string;
-  stockBehaviour: string;
-  densityKgM3: string | null;
-}
+// Phase 5H.9E — the reusable LL row-pricing helpers and types now live in a
+// neutral LL library module (client/src/lib/ll-estimate-totals.ts) so the LL
+// Estimates List can consume them without importing from this page. They are
+// re-imported here so the builder's behaviour is byte-for-byte unchanged.
+import {
+  type SheetMaterialRef,
+  type LLItemReadiness,
+  type AttachedProcedurePricing,
+  type AttachedProceduresRollup,
+  type LLRowPricing,
+  isItemQuoteReady,
+  buildOverrideInputs,
+  computeManualProcedureFinal,
+  computeAttachedProcedureFinal,
+  rollupAttachedProcedures,
+  findMatchingMaterial,
+  materialToTruth,
+  computeItemPricing,
+  computeRowPricing,
+} from "@/lib/ll-estimate-totals";
 
 function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<LaserQuoteItem, "id"> {
   const rates = resolveRatesFromSettings(settings);
@@ -92,8 +90,8 @@ function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<Las
     coilLengthMm: 0,
     cutLengthMm: 0,
     pierceCount: 0,
-    setupMinutes: rates.defaultSetupMinutes,
-    handlingMinutes: rates.defaultHandlingMinutes,
+    setupMinutes: 0,
+    handlingMinutes: 0,
     markupPercent: rates.defaultMarkupPercent,
     materialMarkupPercent: rates.defaultMaterialMarkupPercent,
     consumablesMarkupPercent: rates.defaultConsumablesMarkupPercent,
@@ -102,6 +100,13 @@ function makeEmptyItem(settings: LLPricingSettings | null | undefined): Omit<Las
     pricingOverrideEnabled: false,
     pricingOverrideMode: "none",
     isManualProcedure: false,
+    // Phase 5H.9A — seed material allocation from the ACTIVE profile default for
+    // NEW lines only. This is the ONLY place the profile default is consulted;
+    // the engine never uses it as a fallback for existing lines. Absent profile
+    // default → whole-sheets (legacy-safe).
+    materialAllocationMode: settings?.defaultMaterialAllocationMode ?? "whole-sheets",
+    yieldMinimumSheetChargePercent: settings?.defaultYieldMinimumSheetChargePercent ?? 25,
+    recoverableRemnantPercent: settings?.defaultRecoverableRemnantPercent ?? 75,
   };
 }
 
@@ -139,356 +144,6 @@ function makeEmptyManualProcedure(): Omit<LaserQuoteItem, "id"> {
   };
 }
 
-// Phase 5E hardening — gate that decides whether a regular LL laser item is
-// commercially quote-ready. Until ready:
-//   * final calculated/override sell must NOT be presented as a quoteable value
-//   * minimum-line-charge / setup-handling labour must NOT be billed as final
-//   * commercial override must NOT be enabled
-//   * Save/Add must be blocked
-// Manual procedure rows are exempt (they bypass material/process pricing).
-export interface LLItemReadiness {
-  ready: boolean;
-  isManualProcedure: boolean;
-  missing: string[];
-}
-
-function isItemQuoteReady(
-  item: Pick<LaserQuoteItem, "itemRef" | "title" | "quantity" | "materialType" | "materialGrade" | "finish" | "thickness" | "length" | "width" | "cutLengthMm" | "llSheetMaterialId" | "coilLengthMm" | "isManualProcedure" | "procedureType" | "manualUnitCost" | "manualUnitSell" | "manualTargetMarginPercent">,
-  materials: SheetMaterialRef[],
-): LLItemReadiness {
-  if (item.isManualProcedure) {
-    const missing: string[] = [];
-    if (!item.itemRef?.trim()) missing.push("Item reference");
-    if (!item.title?.trim()) missing.push("Title");
-    if (!Number.isFinite(item.quantity) || item.quantity <= 0) missing.push("Quantity > 0");
-    if (!item.procedureType) missing.push("Procedure type");
-    const proc = computeManualProcedureFinal(item);
-    if (proc.invalid) missing.push("Valid unit sell or target margin");
-    return { ready: missing.length === 0, isManualProcedure: true, missing };
-  }
-  const missing: string[] = [];
-  if (!item.itemRef?.trim()) missing.push("Item reference");
-  if (!item.title?.trim()) missing.push("Title");
-  if (!Number.isFinite(item.quantity) || item.quantity <= 0) missing.push("Quantity > 0");
-  const matched = findMatchingMaterial(materials, item);
-  if (!matched) {
-    missing.push("Material selection (family / grade / finish / thickness / sheet)");
-  } else {
-    const isCoil = (matched.stockBehaviour || "sheet") === "coil";
-    if (isCoil) {
-      if (!Number.isFinite(item.coilLengthMm) || (item.coilLengthMm ?? 0) <= 0) {
-        missing.push("Coil cut length (mm)");
-      }
-    } else {
-      if (!Number.isFinite(item.length) || item.length <= 0) missing.push("Part length (mm)");
-      if (!Number.isFinite(item.width) || item.width <= 0) missing.push("Part width (mm)");
-    }
-    if (!Number.isFinite(item.cutLengthMm) || item.cutLengthMm <= 0) {
-      missing.push("Cut length (mm)");
-    }
-  }
-  return { ready: missing.length === 0, isManualProcedure: false, missing };
-}
-
-function buildOverrideInputs(item: Pick<LaserQuoteItem, "pricingOverrideEnabled" | "pricingOverrideMode" | "manualSellPrice" | "targetMarginPercent" | "markupOnCostPercent">): LLOverrideInputs {
-  return {
-    enabled: !!item.pricingOverrideEnabled,
-    mode: (item.pricingOverrideMode ?? "none") as LLPricingOverrideMode,
-    manualSellPrice: item.manualSellPrice,
-    targetMarginPercent: item.targetMarginPercent,
-    markupOnCostPercent: item.markupOnCostPercent,
-  };
-}
-
-function computeManualProcedureFinal(item: Pick<LaserQuoteItem, "manualUnitCost" | "manualUnitSell" | "manualTargetMarginPercent" | "quantity">): {
-  unitCost: number;
-  unitSell: number;
-  lineSell: number;
-  lineMargin: number;
-  marginPercent: number;
-  invalid: boolean;
-  warning?: string;
-} {
-  const qtyRaw = Number(item.quantity ?? 0);
-  const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.max(1, Math.floor(qtyRaw)) : 1;
-  const unitCostRaw = Number(item.manualUnitCost ?? 0);
-  const unitCost = Number.isFinite(unitCostRaw) && unitCostRaw > 0 ? unitCostRaw : 0;
-  const unitSellRaw = Number(item.manualUnitSell ?? 0);
-  let unitSell = Number.isFinite(unitSellRaw) && unitSellRaw > 0 ? unitSellRaw : 0;
-  let warning: string | undefined;
-  let invalid = false;
-  const tmRaw = item.manualTargetMarginPercent;
-  if (tmRaw != null) {
-    const tm = Number(tmRaw);
-    if (!Number.isFinite(tm)) {
-      invalid = true;
-      warning = "Target margin % is not a valid number. Using manual unit sell instead.";
-    } else if (tm < 0 || tm >= 100) {
-      invalid = true;
-      warning = "Target margin % must be between 0 and 100. Using manual unit sell instead.";
-    } else if (unitCost > 0) {
-      unitSell = unitCost / (1 - tm / 100);
-    } else {
-      invalid = true;
-      warning = "Cannot apply target margin: unit cost is zero.";
-    }
-  }
-  if (!Number.isFinite(unitSell) || unitSell <= 0) {
-    invalid = true;
-    unitSell = Number.isFinite(unitSell) && unitSell > 0 ? unitSell : 0;
-    warning = warning ?? "Manual unit sell must be greater than zero.";
-  }
-  const lineSell = unitSell * qty;
-  const lineMargin = lineSell - unitCost * qty;
-  const marginPercent = lineSell > 0 ? (lineMargin / lineSell) * 100 : 0;
-  return { unitCost, unitSell, lineSell, lineMargin, marginPercent, invalid, warning };
-}
-
-// Phase 5E (Attached Manual Procedures) — price a single attached procedure.
-// Identical math to standalone manual procedure pricing. The procedure carries
-// its own quantity (defaults to parent quantity at creation time).
-export interface AttachedProcedurePricing {
-  procedureId: string;
-  procedureType: LLManualProcedureType;
-  description: string;
-  quantity: number;
-  unitCost: number;
-  unitSell: number;
-  lineSell: number;
-  lineCost: number;
-  lineMargin: number;
-  marginPercent: number;
-  invalid: boolean;
-  warning?: string;
-}
-
-function computeAttachedProcedureFinal(
-  proc: AttachedManualProcedure,
-  parentQuantity: number,
-): AttachedProcedurePricing {
-  const qtyRaw = Number(proc.quantity ?? parentQuantity ?? 0);
-  const qty = Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.max(1, Math.floor(qtyRaw)) : 1;
-  const unitCostRaw = Number(proc.unitCost ?? 0);
-  const unitCost = Number.isFinite(unitCostRaw) && unitCostRaw > 0 ? unitCostRaw : 0;
-  let unitSell = Number(proc.unitSell ?? 0);
-  if (!Number.isFinite(unitSell) || unitSell < 0) unitSell = 0;
-  let warning: string | undefined;
-  let invalid = false;
-  const tmRaw = proc.targetMarginPercent;
-  if (tmRaw != null) {
-    const tm = Number(tmRaw);
-    if (!Number.isFinite(tm) || tm < 0 || tm >= 100) {
-      invalid = true;
-      warning = "Target margin % must be between 0 and 100. Using manual unit sell instead.";
-    } else if (unitCost > 0) {
-      unitSell = unitCost / (1 - tm / 100);
-    } else {
-      invalid = true;
-      warning = "Cannot apply target margin: unit cost is zero.";
-    }
-  }
-  if (!Number.isFinite(unitSell) || unitSell <= 0) {
-    invalid = true;
-    warning = warning ?? "Unit sell must be greater than zero.";
-    unitSell = 0;
-  }
-  const lineSell = unitSell * qty;
-  const lineCost = unitCost * qty;
-  const lineMargin = lineSell - lineCost;
-  const marginPercent = lineSell > 0 ? (lineMargin / lineSell) * 100 : 0;
-  return {
-    procedureId: proc.id,
-    procedureType: proc.procedureType,
-    description: proc.description ?? "",
-    quantity: qty,
-    unitCost,
-    unitSell,
-    lineSell,
-    lineCost,
-    lineMargin,
-    marginPercent,
-    invalid,
-    warning,
-  };
-}
-
-export interface AttachedProceduresRollup {
-  pricings: AttachedProcedurePricing[];
-  totalSell: number;
-  totalCost: number;
-  totalMargin: number;
-  anyInvalid: boolean;
-  count: number;
-}
-
-function rollupAttachedProcedures(
-  item: Pick<LaserQuoteItem, "attachedManualProcedures" | "quantity">,
-): AttachedProceduresRollup {
-  const list = item.attachedManualProcedures ?? [];
-  const pricings = list.map(p => computeAttachedProcedureFinal(p, item.quantity || 1));
-  const totalSell = pricings.reduce((s, p) => s + p.lineSell, 0);
-  const totalCost = pricings.reduce((s, p) => s + p.lineCost, 0);
-  const totalMargin = totalSell - totalCost;
-  const anyInvalid = pricings.some(p => p.invalid);
-  return { pricings, totalSell, totalCost, totalMargin, anyInvalid, count: pricings.length };
-}
-
-function findMatchingMaterial(
-  materials: SheetMaterialRef[],
-  item: { materialType: string; materialGrade: string; finish: string; thickness: number; llSheetMaterialId: string }
-): SheetMaterialRef | undefined {
-  if (item.llSheetMaterialId) {
-    const byId = materials.find(m => m.id === item.llSheetMaterialId);
-    if (byId) return byId;
-  }
-  const candidates = materials.filter(
-    m =>
-      m.materialFamily === item.materialType &&
-      m.grade === item.materialGrade &&
-      m.finish === item.finish &&
-      parseFloat(m.thickness) === item.thickness
-  );
-  if (candidates.length === 1) return candidates[0];
-  return undefined;
-}
-
-function materialToTruth(m: SheetMaterialRef): LLMaterialTruth {
-  return {
-    id: m.id,
-    supplierName: m.supplierName,
-    materialFamily: m.materialFamily,
-    grade: m.grade,
-    finish: m.finish,
-    thickness: parseFloat(m.thickness),
-    sheetLength: parseFloat(m.sheetLength),
-    sheetWidth: parseFloat(m.sheetWidth),
-    pricePerSheetExGst: parseFloat(m.pricePerSheetExGst),
-    stockBehaviour: m.stockBehaviour || "sheet",
-    pricePerKg: parseFloat(m.pricePerKg || "0"),
-    densityKgM3: parseFloat(m.densityKgM3 || "0"),
-  };
-}
-
-function computeItemPricing(
-  item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
-  materials: SheetMaterialRef[],
-  settings?: LLPricingSettings | null,
-  governed?: LLGovernedInputs,
-): LLPricingBreakdown {
-  const matched = findMatchingMaterial(materials, item);
-  const rates = resolveRatesFromSettings(settings);
-  return computeLLPricing({
-    material: matched ? materialToTruth(matched) : null,
-    partLengthMm: item.length,
-    partWidthMm: item.width,
-    quantity: item.quantity,
-    cutLengthMm: item.cutLengthMm,
-    pierceCount: item.pierceCount,
-    setupMinutes: item.setupMinutes,
-    handlingMinutes: item.handlingMinutes,
-    markupPercent: item.markupPercent,
-    materialMarkupPercent: item.materialMarkupPercent ?? rates.defaultMaterialMarkupPercent,
-    consumablesMarkupPercent: item.consumablesMarkupPercent ?? rates.defaultConsumablesMarkupPercent,
-    utilisationFactor: item.utilisationFactor,
-    coilLengthMm: item.coilLengthMm || 0,
-  }, settings, governed);
-}
-
-// Phase 5E — final commercial pricing per row.
-// Manual procedure rows bypass the bucketed pricing engine entirely.
-// Laser-cut rows use computeLLPricing then apply the optional commercial override.
-export interface LLRowPricing {
-  isManualProcedure: boolean;
-  breakdown: LLPricingBreakdown | null;
-  commercial: LLCommercialResult | null;
-  manual: ReturnType<typeof computeManualProcedureFinal> | null;
-  // Laser-base final values (after commercial override). Excludes attached procedures.
-  laserFinalLineSell: number;
-  laserFinalLineCost: number;
-  // Attached manual procedures rollup (Phase 5E). Empty for manual-procedure rows.
-  attachedRollup: AttachedProceduresRollup;
-  // Combined values: laser-base + attached procedures. These are what feeds
-  // the parent line total in the items table and the estimate subtotal.
-  finalUnitSell: number;
-  finalLineSell: number;
-  finalLineCost: number;
-  finalMarginAmount: number;
-  finalMarginPercent: number;
-}
-
-function computeRowPricing(
-  item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
-  materials: SheetMaterialRef[],
-  settings?: LLPricingSettings | null,
-  governed?: LLGovernedInputs,
-): LLRowPricing {
-  if (item.isManualProcedure) {
-    const m = computeManualProcedureFinal(item);
-    const qty = Math.max(item.quantity || 0, 1);
-    return {
-      isManualProcedure: true,
-      breakdown: null,
-      commercial: null,
-      manual: m,
-      laserFinalLineSell: m.lineSell,
-      laserFinalLineCost: m.unitCost * qty,
-      attachedRollup: { pricings: [], totalSell: 0, totalCost: 0, totalMargin: 0, anyInvalid: false, count: 0 },
-      finalUnitSell: m.unitSell,
-      finalLineSell: m.lineSell,
-      finalLineCost: m.unitCost * qty,
-      finalMarginAmount: m.lineMargin,
-      finalMarginPercent: m.marginPercent,
-    };
-  }
-  const breakdown = computeItemPricing(item, materials, settings, governed);
-  const commercial = applyCommercialOverride(breakdown, item.quantity, buildOverrideInputs(item));
-  const readiness = isItemQuoteReady(item, materials);
-  // Attached procedures: priced INDEPENDENTLY of the laser bucketed engine.
-  // Commercial override applies only to the laser base, not to procedures.
-  const attachedRollup = rollupAttachedProcedures(item);
-  // Defensive: if a regular laser item is not quote-ready (legacy data, etc.),
-  // do NOT report a final commercial sell. Final values are zero so subtotal
-  // and quote totals never absorb non-quoteable diagnostic numbers. Attached
-  // procedures are still reported so the operator sees their value separately.
-  if (!readiness.ready) {
-    const qty = Math.max(item.quantity || 0, 1);
-    return {
-      isManualProcedure: false,
-      breakdown,
-      commercial,
-      manual: null,
-      laserFinalLineSell: 0,
-      laserFinalLineCost: 0,
-      attachedRollup,
-      finalUnitSell: attachedRollup.totalSell / qty,
-      finalLineSell: attachedRollup.totalSell,
-      finalLineCost: attachedRollup.totalCost,
-      finalMarginAmount: attachedRollup.totalMargin,
-      finalMarginPercent: attachedRollup.totalSell > 0 ? (attachedRollup.totalMargin / attachedRollup.totalSell) * 100 : 0,
-    };
-  }
-  const laserFinalLineSell = commercial.finalSellPrice;
-  const laserFinalLineCost = commercial.calculatedBuyCost;
-  const combinedLineSell = laserFinalLineSell + attachedRollup.totalSell;
-  const combinedLineCost = laserFinalLineCost + attachedRollup.totalCost;
-  const combinedMargin = combinedLineSell - combinedLineCost;
-  const combinedMarginPercent = combinedLineSell > 0 ? (combinedMargin / combinedLineSell) * 100 : 0;
-  const qty = Math.max(item.quantity || 0, 1);
-  return {
-    isManualProcedure: false,
-    breakdown,
-    commercial,
-    manual: null,
-    laserFinalLineSell,
-    laserFinalLineCost,
-    attachedRollup,
-    finalUnitSell: combinedLineSell / qty,
-    finalLineSell: combinedLineSell,
-    finalLineCost: combinedLineCost,
-    finalMarginAmount: combinedMargin,
-    finalMarginPercent: combinedMarginPercent,
-  };
-}
 
 function itemToSnapshotItem(
   item: LaserQuoteItem,
@@ -745,8 +400,8 @@ function snapshotItemToItem(si: LaserSnapshotItem, settings?: LLPricingSettings 
     cutLengthMm: si.cutLengthMm ?? 0,
     coilLengthMm: si.coilLengthMm ?? 0,
     pierceCount: si.pierceCount ?? 0,
-    setupMinutes: si.setupMinutes ?? rates.defaultSetupMinutes,
-    handlingMinutes: si.handlingMinutes ?? rates.defaultHandlingMinutes,
+    setupMinutes: si.setupMinutes ?? 0,
+    handlingMinutes: si.handlingMinutes ?? 0,
     markupPercent: si.markupPercent ?? rates.defaultMarkupPercent,
     materialMarkupPercent: (si as any).materialMarkupPercent ?? rates.defaultMaterialMarkupPercent,
     consumablesMarkupPercent: (si as any).consumablesMarkupPercent ?? rates.defaultConsumablesMarkupPercent,
@@ -841,6 +496,19 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         sell={`$${breakdown.materialSellCost.toFixed(2)}`}
         margin={`$${breakdown.materialMargin.toFixed(2)}`}
       />
+      {/* Phase 5H.9B — always-visible (no edit modal) internal material allocation
+          basis indicator. Line-level wording ("this line"). Not on customer surfaces. */}
+      <div className="flex items-center -mt-0.5 mb-0.5 pl-1" data-testid="material-allocation-basis">
+        {breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? (
+          <span className="inline-flex items-center rounded bg-purple-100 dark:bg-purple-950/40 px-1.5 py-0.5 text-[9px] font-medium text-purple-700 dark:text-purple-300">
+            Material allocation: Estimated yield-based (this line)
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-medium text-slate-700 dark:text-slate-300">
+            Material allocation: Whole sheet (this line)
+          </span>
+        )}
+      </div>
       <BucketRow
         label={`Machine ($${breakdown.machineBuyRatePerHour.toFixed(0)}→$${breakdown.machineSellRatePerHour.toFixed(0)}/hr)`}
         buy={`$${breakdown.machineBuyCost.toFixed(2)}`}
@@ -848,9 +516,18 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         margin={`$${breakdown.machineMargin.toFixed(2)}`}
       />
       <BucketRow
-        label="Gas (pass-through)"
+        label={
+          (breakdown.gasMarkupPercent ?? 0) > 0
+            ? `Gas (${breakdown.gasMarkupPercent}% mkp)`
+            : "Gas (pass-through)"
+        }
         buy={`$${breakdown.gasBuyCost.toFixed(2)}`}
         sell={`$${breakdown.gasSellCost.toFixed(2)}`}
+        margin={
+          (breakdown.gasMarkupPercent ?? 0) > 0
+            ? `$${(breakdown.gasMargin ?? 0).toFixed(2)}`
+            : undefined
+        }
       />
       <BucketRow
         label={`Consumables (${breakdown.consumablesMarkupPercent}% mkp)`}
@@ -858,12 +535,109 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         sell={`$${breakdown.consumablesSellCost.toFixed(2)}`}
         margin={`$${breakdown.consumablesMargin.toFixed(2)}`}
       />
-      <BucketRow
-        label={`Labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
-        buy={`$${breakdown.labourBuyCost.toFixed(2)}`}
-        sell={`$${breakdown.labourSellCost.toFixed(2)}`}
-        margin={`$${breakdown.labourMargin.toFixed(2)}`}
-      />
+      {breakdown.labourSellCost > 0 && (
+        <div data-testid="legacy-line-labour-row">
+          <BucketRow
+            label={`Legacy line setup/handling labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
+            buy={`$${breakdown.labourBuyCost.toFixed(2)}`}
+            sell={`$${breakdown.labourSellCost.toFixed(2)}`}
+            margin={`$${breakdown.labourMargin.toFixed(2)}`}
+          />
+          <div className="text-[9px] text-amber-700 dark:text-amber-300 italic leading-snug pl-1">
+            Legacy per-line setup/handling — setup &amp; handling are now governed by the Production Allowance Tier. Clear on this item's Commercial Settings to remove.
+          </div>
+        </div>
+      )}
+
+      {/* Phase 5H.3 — Production allowance + overhead (internal-only). Only renders when a tier matched. */}
+      {breakdown.productionAllowanceTierKey && (
+        <div className="border-t pt-1 mt-1 space-y-0.5" data-testid="production-allowance-block">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span className="font-semibold">Production Allowance <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">— governed line recovery</span></span>
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800" data-testid="allowance-tier-badge">
+              Tier: {breakdown.productionAllowanceTierName}
+            </Badge>
+          </div>
+          {/* Phase 5H.8 — main view shows clean commercial summary only.
+              The detailed component formula ("X batch + Y per-sheet + …") has
+              moved into the Production Allowance & Overhead card inside Show
+              calculation details. Values, math, snapshot, and tier badge are
+              unchanged — this is a display-only relocation. */}
+          <div className="flex justify-between text-[10px] text-muted-foreground" data-testid="allowance-minutes-summary">
+            <span>Allowance time</span>
+            <span className="font-mono font-semibold">{breakdown.productionAllowanceMinutes.toFixed(0)} min</span>
+          </div>
+          <BucketRow
+            label="Production allowance labour recovery"
+            buy={`$${breakdown.productionAllowanceBuyCost.toFixed(2)}`}
+            sell={`$${breakdown.productionAllowanceSellCost.toFixed(2)}`}
+            margin={`$${(breakdown.productionAllowanceSellCost - breakdown.productionAllowanceBuyCost).toFixed(2)}`}
+          />
+          {breakdown.productionOverheadPercent > 0 && (
+            <>
+              <BucketRow
+                label="Production overhead recovery"
+                buy="$0.00"
+                sell={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
+                margin={`$${breakdown.productionOverheadAmount.toFixed(2)}`}
+              />
+              <div className="text-[9px] text-muted-foreground/80 -mt-0.5 pl-1" data-testid="overhead-rate-subtext">
+                {breakdown.productionOverheadPercent}% of governed base (see calculation details)
+              </div>
+            </>
+          )}
+          {breakdown.productionAllowanceReviewFlagged && (
+            <div className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-2 py-1 mt-1" data-testid="allowance-review-flag">
+              <AlertTriangle className="h-3 w-3 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <span className="text-[10px] text-amber-800 dark:text-amber-200">Quantity exceeds tier review threshold — review allowance before sending.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!breakdown.productionAllowanceTierKey && (
+        <div className="border-t pt-1 mt-1 text-[10px] text-muted-foreground italic" data-testid="production-allowance-none">
+          No production allowance tier matched for this qty / sheet count.
+        </div>
+      )}
+
+      {/* Phase 5H.3-Display — Internal-only labour + production recovery summary.
+          Sums line setup/handling labour sell + production allowance sell.
+          Manual child procedure totals are not available in this panel's props
+          and would require a builder-level refactor to include — shown as note. */}
+      <div className="border-t pt-1 mt-1 rounded-sm bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 space-y-0.5" data-testid="labour-recovery-summary">
+        <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span>Total labour + production recovery <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(internal only)</span></span>
+          <span
+            className="inline-flex cursor-help flex-shrink-0"
+            data-testid="info-labour-recovery"
+            aria-label="How labour and production recovery is treated"
+            title="Machine time is recovered separately through the machine sell rate. Production allowance recovers governed line handling, QA, packing, touch time, and production overhead. Manual child procedures are priced separately."
+          >
+            <Info className="h-3 w-3 text-muted-foreground/70" />
+          </span>
+        </div>
+        {breakdown.labourSellCost > 0 && (
+          <div className="flex justify-between text-[10px]">
+            <span className="text-muted-foreground">Legacy line setup/handling sell</span>
+            <span className="font-mono" data-testid="recovery-line-labour-sell">${breakdown.labourSellCost.toFixed(2)}</span>
+          </div>
+        )}
+        <div className="flex justify-between text-[10px]">
+          <span className="text-muted-foreground">Production allowance sell <span className="text-[9px]">(canonical)</span></span>
+          <span className="font-mono" data-testid="recovery-allowance-sell">${breakdown.productionAllowanceSellCost.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between text-[11px] font-semibold border-t border-purple-200/60 dark:border-purple-800/60 pt-1 mt-1">
+          <span>Total labour + production recovery</span>
+          <span className="font-mono" data-testid="recovery-total-sell">
+            ${(breakdown.labourSellCost + breakdown.productionAllowanceSellCost).toFixed(2)}
+          </span>
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground">
+          <span>Machine sell recovery <span className="text-[9px]">(separate bucket)</span></span>
+          <span className="font-mono" data-testid="recovery-machine-sell">${breakdown.machineSellCost.toFixed(2)}</span>
+        </div>
+      </div>
 
       <div className="border-t pt-1 mt-1">
         <BucketRow
@@ -904,20 +678,55 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-2 mt-2" data-testid="breakdown-details">
           <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Material</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Material</div>
+              {breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? (
+                <span className="inline-flex items-center rounded bg-purple-100 dark:bg-purple-950/40 px-1.5 py-0.5 text-[9px] font-medium text-purple-700 dark:text-purple-300" data-testid="badge-material-allocation">Estimated yield-based (line setting)</span>
+              ) : (
+                <span className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-medium text-slate-700 dark:text-slate-300" data-testid="badge-material-allocation">Whole sheet (legacy/current)</span>
+              )}
+            </div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Allocation mode</span><span className="font-mono" data-testid="detail-allocation-mode">{breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? "Estimated yield-based" : "Whole sheet"}</span></div>
             {breakdown.sheetPricePerSheet ? (
-              <div className="flex justify-between text-[10px]" title="Supplier buy price per sheet (ex-GST). This is the procurement basis; material sell = (sheet buy ÷ parts per sheet) × qty × (1 + material markup%).">
+              <div className="flex justify-between text-[10px]" title="Supplier buy price per sheet (ex-GST).">
                 <span className="text-muted-foreground">Supplier sheet buy (ex-GST)</span>
                 <span className="font-mono" data-testid="detail-sheet-price">${breakdown.sheetPricePerSheet.toFixed(2)}</span>
               </div>
             ) : null}
             <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Parts per sheet</span><span className="font-mono">{breakdown.partsPerSheet || "—"}</span></div>
-            <div className="flex justify-between text-[10px]" title="Procurement guidance only — sheets you would order. Material billing uses yield-based allocation (per-part), not whole sheets."><span className="text-muted-foreground">Estimated sheets <span className="text-[9px] italic">(procurement)</span></span><span className="font-mono">{breakdown.estimatedSheets || "—"}</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Qty</span><span className="font-mono" data-testid="detail-material-qty">{breakdown.quantity || "—"}</span></div>
+            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Material markup %</span><span className="font-mono">{breakdown.materialMarkupPercent}%</span></div>
             <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Sheet utilisation</span><span className="font-mono">{(breakdown.utilisationFactor * 100).toFixed(0)}%</span></div>
-            <div className="flex justify-between text-[10px]" title="Yield-based per-part buy = sheet buy ÷ parts per sheet."><span className="text-muted-foreground">Effective material buy / part</span><span className="font-mono">${breakdown.materialCostPerUnit.toFixed(2)}</span></div>
-            <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
-              Material billing is yield-based: line buy = (sheet buy ÷ parts per sheet) × qty, before any minimum material charge. Estimated sheets is procurement only.
-            </div>
+
+            {breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? (
+              <>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Estimated sheet usage</span><span className="font-mono" data-testid="detail-yield-usage">{breakdown.estimatedSheetUsagePercent != null ? (breakdown.estimatedSheetUsagePercent * 100).toFixed(1) : "—"}%</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Minimum sheet charge</span><span className="font-mono">{breakdown.yieldMinimumSheetChargePercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Recoverable remnant</span><span className="font-mono">{breakdown.recoverableRemnantPercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Non-recoverable remnant</span><span className="font-mono">{breakdown.nonRecoverableRemnantPercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Allocated sheet %</span><span className="font-mono" data-testid="detail-allocated-percent">{breakdown.allocatedSheetPercent?.toFixed(1) ?? "—"}%</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Allocated material buy</span><span className="font-mono" data-testid="detail-allocated-buy">${(breakdown.allocatedMaterialBuy ?? breakdown.materialBuyCost).toFixed(2)}</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Material sell</span><span className="font-mono" data-testid="detail-material-sell">${breakdown.materialSellCost.toFixed(2)}</span></div>
+                <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
+                  Estimated from rectangular blank size, not actual nest geometry.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Estimated sheets</span><span className="font-mono">{breakdown.estimatedSheets || "—"}</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Allocated sheet basis</span><span className="font-mono" data-testid="detail-allocated-percent">Whole sheet (100%)</span></div>
+                <div className="flex justify-between text-[10px] font-medium"><span className="text-muted-foreground">Material buy</span><span className="font-mono" data-testid="detail-allocated-buy">${breakdown.materialBuyCost.toFixed(2)}</span></div>
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Material sell</span><span className="font-mono" data-testid="detail-material-sell">${breakdown.materialSellCost.toFixed(2)}</span></div>
+                <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
+                  Legacy/current full-sheet recovery — charges the full estimated sheet cost to this line.
+                </div>
+              </>
+            )}
+            {breakdown.yieldMultiSheetFallback && (
+              <div className="text-[10px] text-amber-600 dark:text-amber-400 leading-snug" data-testid="detail-multi-sheet-fallback">
+                Multi-sheet job: yield allocation preserved as whole-sheet (ambiguous without true nest).
+              </div>
+            )}
             {breakdown.minimumMaterialChargeApplied && (
               <div className="text-[10px] text-amber-600 dark:text-amber-400" data-testid="min-material-notice">
                 Min. material charge applied (${breakdown.minimumMaterialCharge.toFixed(2)})
@@ -965,12 +774,58 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
             </div>
           )}
 
-          <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Labour</div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Setup</span><span className="font-mono" data-testid="detail-setup-min">{(Number(breakdown.setupMinutes) || 0).toFixed(1)} min</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Handling</span><span className="font-mono" data-testid="detail-handling-min">{(Number(breakdown.handlingMinutes) || 0).toFixed(1)} min</span></div>
-            <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Operator buy / Shop sell</span><span className="font-mono">${breakdown.operatorRatePerHour.toFixed(0)} / ${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
-          </div>
+          {/* Phase 5H.8 — Production Allowance & Overhead detail card. Surfaces
+              the per-component allowance breakdown that previously rendered as
+              a single long line in the main panel. Values are read-only views
+              of the existing breakdown object — no engine refactor. Per-sheet
+              and per-part profile rates (e.g. 15 min/sheet, 10 s/part) are not
+              exposed in the breakdown object today; they live on the active
+              profile's productionAllowanceTiers and would require a breakdown-
+              shape change to surface here, so we display the derived per-bucket
+              totals only and note the source in the card footer. */}
+          {breakdown.productionAllowanceTierKey && (
+            <div className="rounded-md border bg-background/60 p-2 space-y-0.5" data-testid="detail-production-allowance-card">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Production Allowance &amp; Overhead</div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Selected tier</span><span className="font-mono" data-testid="detail-allowance-tier">{breakdown.productionAllowanceTierName}</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Fixed batch</span><span className="font-mono" data-testid="detail-allowance-batch">{breakdown.productionAllowanceFixedBatchMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Per sheet ({breakdown.estimatedSheets || 0} sheets)</span><span className="font-mono" data-testid="detail-allowance-per-sheet">{breakdown.productionAllowancePerSheetMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Per-part touch time</span><span className="font-mono" data-testid="detail-allowance-per-part">{breakdown.productionAllowancePerPartMinutes.toFixed(1)} min</span></div>
+              {breakdown.productionAllowancePerPartCapMinutes != null && breakdown.productionAllowancePerPartCapMinutes > 0 ? (
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Per-part cap applied</span><span className="font-mono" data-testid="detail-allowance-per-part-cap">{breakdown.productionAllowancePerPartCapMinutes.toFixed(0)} min</span></div>
+              ) : (
+                <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Per-part cap</span><span className="font-mono italic text-muted-foreground/80" data-testid="detail-allowance-per-part-cap-none">none applied</span></div>
+              )}
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">QA / Packing</span><span className="font-mono" data-testid="detail-allowance-qa">{breakdown.productionAllowanceQaPackingMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px] font-semibold border-t pt-0.5 mt-0.5"><span className="text-muted-foreground">Total allowance</span><span className="font-mono" data-testid="detail-allowance-total-min">{breakdown.productionAllowanceMinutes.toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Shop labour sell rate</span><span className="font-mono">${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
+              <div className="flex justify-between text-[10px] font-semibold"><span className="text-muted-foreground">Production allowance sell</span><span className="font-mono" data-testid="detail-allowance-sell">${breakdown.productionAllowanceSellCost.toFixed(2)}</span></div>
+              {breakdown.productionOverheadPercent > 0 && (
+                <>
+                  <div className="flex justify-between text-[10px] border-t pt-0.5 mt-0.5"><span className="text-muted-foreground">Overhead base <span className="text-[9px] italic">(sell before allowance/overhead)</span></span><span className="font-mono" data-testid="detail-overhead-base">${breakdown.sellBeforeAllowanceAndOverhead.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Overhead rate</span><span className="font-mono" data-testid="detail-overhead-rate">{breakdown.productionOverheadPercent}%</span></div>
+                  <div className="flex justify-between text-[10px] font-semibold"><span className="text-muted-foreground">Overhead sell</span><span className="font-mono" data-testid="detail-overhead-sell">${breakdown.productionOverheadAmount.toFixed(2)}</span></div>
+                </>
+              )}
+              <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
+                Tier rates (per-sheet min, per-part sec, per-part cap, QA/packing min, overhead %) are governed by the active LL pricing profile's Production Allowance Tiers — see Settings → Divisions → LL → Pricing Model.
+              </div>
+            </div>
+          )}
+
+          {/* Phase 5H.4 — Labour detail card only renders when a legacy non-zero
+              setup or handling minute value is present. Setup/handling is governed
+              by Production Allowance Tiers; this card surfaces only legacy overrides. */}
+          {((Number(breakdown.setupMinutes) || 0) > 0 || (Number(breakdown.handlingMinutes) || 0) > 0) && (
+            <div className="rounded-md border border-amber-300 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 p-2 space-y-0.5" data-testid="detail-legacy-labour-card">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">Legacy Setup/Handling Override</div>
+              <div className="text-[9px] text-amber-700 dark:text-amber-300 italic leading-snug mb-1">
+                Legacy setup/handling override exists. Production Allowance is the canonical setup/handling recovery method. Clear if not intentional.
+              </div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Setup</span><span className="font-mono" data-testid="detail-setup-min">{(Number(breakdown.setupMinutes) || 0).toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Handling</span><span className="font-mono" data-testid="detail-handling-min">{(Number(breakdown.handlingMinutes) || 0).toFixed(1)} min</span></div>
+              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Operator buy / Shop sell</span><span className="font-mono">${breakdown.operatorRatePerHour.toFixed(0)} / ${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
+            </div>
+          )}
 
           <div className="text-[9px] text-muted-foreground italic leading-snug px-1">
             Sell = Buy × (1 + bucket markup). Gas passes through at cost. Machine sell uses governed sell rate; machine buy uses governed buy rate.
@@ -1908,6 +1763,12 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
       materialMarkupPercent: item.materialMarkupPercent,
       consumablesMarkupPercent: item.consumablesMarkupPercent,
       utilisationFactor: item.utilisationFactor,
+      // Phase 5H.9A — preserve the line's stored allocation policy as-is. Do NOT
+      // substitute a profile default here: an existing line with no stored mode
+      // stays undefined and the engine resolves it to "whole-sheets" (legacy).
+      materialAllocationMode: item.materialAllocationMode,
+      yieldMinimumSheetChargePercent: item.yieldMinimumSheetChargePercent,
+      recoverableRemnantPercent: item.recoverableRemnantPercent,
       geometrySource: item.geometrySource ?? "manual",
       pricingOverrideEnabled: item.pricingOverrideEnabled ?? false,
       pricingOverrideMode: item.pricingOverrideMode ?? "none",
@@ -2908,34 +2769,27 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="w-full justify-start text-xs text-muted-foreground" data-testid="button-toggle-advanced">
                   <ChevronRight className="h-3 w-3 mr-1" />
-                  Setup, Handling &amp; Commercial Settings
+                  Commercial Settings
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="border rounded-md p-3 space-y-3 bg-muted/20 mt-1">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="setupMinutes">Setup Minutes</Label>
-                      <Input
-                        id="setupMinutes"
-                        type="number"
-                        min={0}
-                        value={formData.setupMinutes}
-                        onChange={(e) => setFormData(prev => ({ ...prev, setupMinutes: parseFloat(e.target.value) || 0 }))}
-                        data-testid="input-setup-minutes"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="handlingMinutes">Handling Minutes</Label>
-                      <Input
-                        id="handlingMinutes"
-                        type="number"
-                        min={0}
-                        value={formData.handlingMinutes}
-                        onChange={(e) => setFormData(prev => ({ ...prev, handlingMinutes: parseFloat(e.target.value) || 0 }))}
-                        data-testid="input-handling-minutes"
-                      />
-                    </div>
+                  <div className="rounded-sm border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 text-[11px] text-muted-foreground leading-snug" data-testid="setup-handling-policy-note">
+                    Setup, sheet handling, sorting, QA and packing are governed by the active Production Allowance Tier — they are no longer entered per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
+                    {(formData.setupMinutes > 0 || formData.handlingMinutes > 0) && (
+                      <span className="block mt-1 text-amber-700 dark:text-amber-300" data-testid="legacy-setup-handling-warning">
+                        Legacy values present on this item: setup {formData.setupMinutes.toFixed(1)} min, handling {formData.handlingMinutes.toFixed(1)} min. These will continue to charge until cleared.
+                        {" "}
+                        <button
+                          type="button"
+                          className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
+                          onClick={() => setFormData(prev => ({ ...prev, setupMinutes: 0, handlingMinutes: 0 }))}
+                          data-testid="button-clear-legacy-setup-handling"
+                        >
+                          Clear legacy values
+                        </button>
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
@@ -2979,6 +2833,118 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       />
                       <p className="text-[10px] text-muted-foreground mt-0.5">Sheet utilisation (0.75 = 75%)</p>
                     </div>
+                  </div>
+
+                  {/* Phase 5H.9A — Material Allocation (internal-only). Not shown
+                      on customer Preview/PDF. Controls how the sheet buy cost is
+                      apportioned to this line. */}
+                  <div className="mt-3 rounded-md border border-border bg-muted/30 p-3 space-y-3" data-testid="section-material-allocation">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Material Allocation (internal)</Label>
+                      <span className="text-[10px] text-muted-foreground italic">Not shown to customer</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 items-start">
+                      <div>
+                        <Label htmlFor="materialAllocationMode" className="text-[11px]">Allocation mode</Label>
+                        <Select
+                          value={formData.materialAllocationMode ?? "whole-sheets"}
+                          onValueChange={(v) => setFormData(prev => ({
+                            ...prev,
+                            materialAllocationMode: v as "whole-sheets" | "yield-based",
+                            // Seed yield params with safe defaults when first switching to yield.
+                            yieldMinimumSheetChargePercent: v === "yield-based"
+                              ? (prev.yieldMinimumSheetChargePercent ?? 25) : prev.yieldMinimumSheetChargePercent,
+                            recoverableRemnantPercent: v === "yield-based"
+                              ? (prev.recoverableRemnantPercent ?? 75) : prev.recoverableRemnantPercent,
+                          }))}
+                        >
+                          <SelectTrigger id="materialAllocationMode" className="h-8 text-xs" data-testid="select-material-allocation-mode">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="whole-sheets">Whole sheet</SelectItem>
+                            <SelectItem value="yield-based">Estimated yield-based</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-end h-full">
+                        {(formData.materialAllocationMode ?? "whole-sheets") === "whole-sheets" ? (
+                          <span className="inline-flex items-center rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:text-slate-300" data-testid="badge-allocation-mode">
+                            Material allocation: Whole sheet (legacy/current)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-md bg-purple-100 dark:bg-purple-950/40 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-300" data-testid="badge-allocation-mode">
+                            Material allocation: Estimated yield-based (line setting)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {(formData.materialAllocationMode ?? "whole-sheets") === "whole-sheets" ? (
+                      <p className="text-[10px] text-muted-foreground leading-snug" data-testid="help-whole-sheet">
+                        Charges the full estimated sheet cost to this line. Use for special-order material, dedicated stock, poor remnant, traceability, uncommon material, or where the job should carry the full sheet.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-muted-foreground leading-snug" data-testid="help-yield-based">
+                          Uses rectangular blank size and estimated sheet yield. This is not a true nest. Use for common stocked material where the remaining sheet/remnant is commercially reusable.
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <Label htmlFor="yieldMinimumSheetChargePercent" className="text-[11px]">Minimum sheet charge %</Label>
+                            <Input
+                              id="yieldMinimumSheetChargePercent"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              className="h-8 text-xs"
+                              value={formData.yieldMinimumSheetChargePercent ?? 25}
+                              onChange={(e) => setFormData(prev => ({ ...prev, yieldMinimumSheetChargePercent: e.target.value === "" ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))}
+                              data-testid="input-yield-min-sheet-charge"
+                            />
+                            <p className="text-[9px] text-muted-foreground mt-0.5 leading-snug">Minimum portion of a sheet charged to the job even when estimated usage is lower. Covers handling, stock risk, and remnant management.</p>
+                          </div>
+                          <div>
+                            <Label htmlFor="recoverableRemnantPercent" className="text-[11px]">Recoverable remnant %</Label>
+                            <Input
+                              id="recoverableRemnantPercent"
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              className="h-8 text-xs"
+                              value={formData.recoverableRemnantPercent ?? 75}
+                              onChange={(e) => setFormData(prev => ({ ...prev, recoverableRemnantPercent: e.target.value === "" ? undefined : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) }))}
+                              data-testid="input-recoverable-remnant"
+                            />
+                            <p className="text-[9px] text-muted-foreground mt-0.5 leading-snug">Estimated percentage of the unused sheet/remnant that is commercially reusable. Lower recoverability increases the material portion charged to this job.</p>
+                          </div>
+                          <div>
+                            <Label className="text-[11px]">Calculated allocated sheet %</Label>
+                            <div className="h-8 flex items-center font-mono text-xs" data-testid="text-allocated-sheet-percent">
+                              {dialogPricing.yieldApplied && dialogPricing.allocatedSheetPercent != null
+                                ? `${dialogPricing.allocatedSheetPercent.toFixed(1)}%`
+                                : dialogPricing.yieldMultiSheetFallback
+                                  ? "Whole sheet (multi-sheet)"
+                                  : "—"}
+                            </div>
+                            {dialogPricing.yieldApplied && dialogPricing.estimatedSheetUsagePercent != null && (
+                              <p className="text-[9px] text-muted-foreground mt-0.5">Est. usage {(dialogPricing.estimatedSheetUsagePercent * 100).toFixed(1)}% · non-recoverable {dialogPricing.nonRecoverableRemnantPercent?.toFixed(1)}%</p>
+                            )}
+                          </div>
+                        </div>
+                        {dialogPricing.yieldMultiSheetFallback && (
+                          <div className="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2 py-1.5" data-testid="notice-multi-sheet-fallback">
+                            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                            <span className="text-[10px] text-amber-800 dark:text-amber-300 leading-snug">Multi-sheet job: estimated yield allocation is ambiguous without true nest geometry. Whole-sheet recovery has been preserved for safety. Use manual judgement where remnant recovery is uncertain.</span>
+                          </div>
+                        )}
+                        <p className="text-[9px] text-muted-foreground italic leading-snug" data-testid="note-yield-estimate">
+                          Estimated from rectangular blank size, not actual nest geometry. Adjust recoverable remnant % where remnant recovery is uncertain.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CollapsibleContent>

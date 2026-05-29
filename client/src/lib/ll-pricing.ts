@@ -48,7 +48,7 @@
  *   LL_PRICING_DEFAULTS retained as fallback for safety only.
  */
 
-import type { LLPricingSettings, LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
+import type { LLPricingSettings, LLGasCostInput, LLConsumablesCostInput, LLProductionAllowanceTier } from "@shared/schema";
 
 export interface LLMaterialTruth {
   id: string;
@@ -79,6 +79,14 @@ export interface LLPricingInputs {
   consumablesMarkupPercent: number;
   utilisationFactor: number;
   coilLengthMm?: number;
+  // Phase 5H.9A — LL material allocation policy (internal-only, additive).
+  // LEGACY-SAFE: when materialAllocationMode is undefined the engine treats the
+  // line as "whole-sheets" (current/legacy behaviour). The engine never reads a
+  // profile default here — the builder seeds new lines from the profile default,
+  // but existing lines that never stored a mode always remain whole-sheets.
+  materialAllocationMode?: "whole-sheets" | "yield-based";
+  yieldMinimumSheetChargePercent?: number;
+  recoverableRemnantPercent?: number;
 }
 
 export interface LLGovernedInputs {
@@ -87,6 +95,7 @@ export interface LLGovernedInputs {
 }
 
 export interface LLPricingBreakdown {
+  quantity: number;
   sheetAreaMm2: number;
   partAreaMm2: number;
   totalNetPartArea: number;
@@ -151,6 +160,20 @@ export interface LLPricingBreakdown {
   materialSellCost: number;
   materialMargin: number;
 
+  // Phase 5H.9A — material allocation policy + yield breakdown (internal-only).
+  // materialAllocationPolicy is the line's resolved policy ("whole-sheets" when
+  // no mode was stored — the legacy-safe fallback). Yield fields are populated
+  // only when the resolved policy is "yield-based" and it was actually applied.
+  materialAllocationPolicy: "whole-sheets" | "yield-based";
+  yieldApplied: boolean;
+  yieldMultiSheetFallback: boolean;
+  estimatedSheetUsagePercent?: number;
+  yieldMinimumSheetChargePercent?: number;
+  recoverableRemnantPercent?: number;
+  nonRecoverableRemnantPercent?: number;
+  allocatedSheetPercent?: number;
+  allocatedMaterialBuy?: number;
+
   labourBuyCost: number;
   labourSellCost: number;
   labourMargin: number;
@@ -169,10 +192,73 @@ export interface LLPricingBreakdown {
 
   gasBuyCost: number;
   gasSellCost: number;
+  // Phase 5H.7 — gas markup is governed by the active LL pricing profile
+  // (settings.gasCosts.gasMarkupPercent). Profiles without the field fall
+  // back to 0 (pass-through, bit-identical to pre-5H.7 behaviour).
+  gasMarkupPercent: number;
+  gasMargin: number;
+
+  // Phase 5H.3 — Production allowance (internal-only). Zero / undefined when no
+  // tier matches or no productionAllowanceTiers are configured on the profile.
+  productionAllowanceTierKey?: string;
+  productionAllowanceTierName?: string;
+  productionAllowanceMinutes: number;
+  productionAllowanceFixedBatchMinutes: number;
+  productionAllowancePerSheetMinutes: number;
+  productionAllowancePerPartMinutes: number;
+  // Phase 5H.8c — surface the configured per-part touch-time cap (in minutes)
+  // when the active tier has one. Undefined means "no cap configured" so the
+  // pricing-breakdown detail card can render "Per-part cap: none applied" vs.
+  // "Per-part cap applied: X min" without inferring from value comparisons.
+  productionAllowancePerPartCapMinutes?: number;
+  productionAllowanceQaPackingMinutes: number;
+  productionAllowanceBuyCost: number;
+  productionAllowanceSellCost: number;
+  productionOverheadPercent: number;
+  productionOverheadAmount: number;
+  sellBeforeAllowanceAndOverhead: number;
+  productionAllowanceReviewFlagged: boolean;
+  // Phase 5H.3 — material allocation provenance (internal-only).
+  materialAllocationMode: "whole-sheets" | "area-fallback" | "coil" | "none";
 
   totalBuyCost: number;
   totalMargin: number;
   totalMarginPercent: number;
+}
+
+/**
+ * Phase 5H.3 — Tier selection for production allowance.
+ *
+ * Returns the most specific matching tier or null. Tiers are matched on
+ * quantity (required) and, if populated on the tier, on estimated sheets.
+ * Among matches, the tier with the highest minQty wins (then highest minSheets).
+ *
+ * Returns null when no tiers are configured or no tier matches — in that case
+ * the engine applies zero allowance and behaves exactly as before.
+ */
+export function selectProductionAllowanceTier(
+  settings: LLPricingSettings | null | undefined,
+  qty: number,
+  estimatedSheets: number,
+): LLProductionAllowanceTier | null {
+  const tiers = settings?.productionAllowanceTiers;
+  if (!tiers || !Array.isArray(tiers) || tiers.length === 0) return null;
+  const safeQty = Math.max(qty || 0, 1);
+  const safeSheets = Math.max(estimatedSheets || 0, 0);
+  const candidates = tiers.filter(t => {
+    if (!t) return false;
+    if (typeof t.minQty !== "number" || safeQty < t.minQty) return false;
+    if (t.maxQty != null && safeQty > t.maxQty) return false;
+    if (t.minSheets != null && safeSheets < t.minSheets) return false;
+    if (t.maxSheets != null && safeSheets > t.maxSheets) return false;
+    return true;
+  });
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => {
+    if (b.minQty !== a.minQty) return b.minQty - a.minQty;
+    return (b.minSheets ?? 0) - (a.minSheets ?? 0);
+  });
+  return candidates[0];
 }
 
 /**
@@ -366,8 +452,12 @@ export const LL_PRICING_DEFAULTS = {
   DEFAULT_MARKUP_PERCENT: 35,
   DEFAULT_MATERIAL_MARKUP_PERCENT: 20,
   DEFAULT_CONSUMABLES_MARKUP_PERCENT: 25,
-  DEFAULT_SETUP_MINUTES: 10,
-  DEFAULT_HANDLING_MINUTES: 5,
+  // Phase 5H.4-Final — setup/handling defaults are zero. Production Allowance
+  // Tiers are the canonical source of setup, sheet handling, sorting, QA, and
+  // packing recovery. These constants remain only for back-compat with the
+  // dormant schema fields.
+  DEFAULT_SETUP_MINUTES: 0,
+  DEFAULT_HANDLING_MINUTES: 0,
   MINIMUM_MATERIAL_CHARGE: 25.00,
   MINIMUM_LINE_CHARGE: 50.00,
 } as const;
@@ -575,6 +665,17 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     coilLengthMm,
   } = inputs;
 
+  // Phase 5H.9A — resolve material allocation policy. LEGACY-SAFE: undefined
+  // mode resolves to "whole-sheets". The engine never reads the profile default.
+  const allocationPolicy: "whole-sheets" | "yield-based" =
+    inputs.materialAllocationMode === "yield-based" ? "yield-based" : "whole-sheets";
+  // Yield parameters only matter in yield mode; defaults are 25% / 75% when the
+  // line is in yield mode but did not store explicit values.
+  const yieldMinSheetChargeFraction =
+    Math.min(Math.max(Number(inputs.yieldMinimumSheetChargePercent ?? 25), 0), 100) / 100;
+  const recoverableRemnantFraction =
+    Math.min(Math.max(Number(inputs.recoverableRemnantPercent ?? 75), 0), 100) / 100;
+
   const safeQty = Math.max(quantity, 1);
   const safeUtilisation = Math.max(utilisationFactor, 0.1);
   const isCoil = material?.stockBehaviour === "coil";
@@ -589,6 +690,13 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
   let estimatedSheets = 0;
   let materialBuyCost = 0;
+  // Phase 5H.9A — yield allocation breakdown accumulators (display-only).
+  let yieldApplied = false;
+  let yieldMultiSheetFallback = false;
+  let estimatedSheetUsagePercent: number | undefined;
+  let nonRecoverableRemnantPercent: number | undefined;
+  let allocatedSheetPercent: number | undefined;
+  let allocatedMaterialBuy: number | undefined;
   let partsPerSheet = 0;
   let coilWeightKg = 0;
   let coilPricePerKgUsed = 0;
@@ -618,7 +726,37 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     if (partsPerSheet > 0) {
       estimatedSheets = Math.ceil(safeQty / partsPerSheet);
-      materialBuyCost = (material.pricePerSheetExGst / partsPerSheet) * safeQty;
+      // Phase 5H.9A — material allocation policy. LEGACY-SAFE fallback: if the
+      // line did not store a mode, allocationPolicy is "whole-sheets" and the
+      // calculation is bit-identical to pre-5H.9A. The engine NEVER reads a
+      // profile default here — undefined mode always means whole-sheets.
+      if (allocationPolicy === "yield-based" && estimatedSheets <= 1) {
+        // Single-sheet estimated yield-based allocation. Not a true nest — a
+        // commercial estimate from rectangular blank size + estimated yield.
+        estimatedSheetUsagePercent = safeQty / partsPerSheet; // < 1 for a single sheet
+        nonRecoverableRemnantPercent = 1 - recoverableRemnantFraction;
+        allocatedSheetPercent = Math.max(
+          estimatedSheetUsagePercent,
+          yieldMinSheetChargeFraction,
+          nonRecoverableRemnantPercent,
+        );
+        // Basis is one sheet (estimatedSheets === 1); allocatedSheetPercent is
+        // already the fraction of that sheet, so we do NOT multiply by
+        // estimatedSheets again (avoids double-charging).
+        materialBuyCost = material.pricePerSheetExGst * allocatedSheetPercent;
+        allocatedMaterialBuy = materialBuyCost;
+        yieldApplied = true;
+      } else {
+        // Phase 5H.3 — whole-sheet allocation. Supplier invoices charge per
+        // sheet, not per fractional part. Also the safe path for multi-sheet
+        // yield jobs (estimatedSheets > 1): true multi-sheet yield allocation
+        // is ambiguous without real nest geometry, so we preserve whole-sheet
+        // behaviour and flag the fallback for the internal breakdown.
+        materialBuyCost = estimatedSheets * material.pricePerSheetExGst;
+        if (allocationPolicy === "yield-based" && estimatedSheets > 1) {
+          yieldMultiSheetFallback = true;
+        }
+      }
     } else if (usableSheetArea > 0 && totalNetPartArea > 0) {
       estimatedSheets = Math.ceil(totalNetPartArea / usableSheetArea);
       materialBuyCost = estimatedSheets * material.pricePerSheetExGst;
@@ -709,15 +847,81 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   const consumablesSellCost = consumablesBuyCost * (1 + consumablesMarkupPercent / 100);
   const consumablesMargin = consumablesSellCost - consumablesBuyCost;
 
-  const gasSellCost = gasBuyCost;
+  // Phase 5H.7 — gas sell = gas buy × (1 + gas markup %). Fallback to 0%
+  // (pass-through) when the active profile has no gasMarkupPercent field,
+  // preserving pre-5H.7 totals for profiles that were activated before
+  // gas markup became a governed concept.
+  const gasMarkupPercent = Math.max(Number((settings?.gasCosts as any)?.gasMarkupPercent) || 0, 0);
+  const gasSellCost = gasBuyCost * (1 + gasMarkupPercent / 100);
+  const gasMargin = gasSellCost - gasBuyCost;
 
   const labourBuyCost = ((setupMinutes + handlingMinutes) / 60) * operatorRatePerHour;
   const labourSellCost = ((setupMinutes + handlingMinutes) / 60) * shopRatePerHour;
   const labourMargin = labourSellCost - labourBuyCost;
 
-  const totalBuyCost = materialBuyCost + machineBuyCost + gasBuyCost + consumablesBuyCost + labourBuyCost;
+  // Phase 5H.3 — Production allowance + overhead (internal-only, additive).
+  // Profiles without productionAllowanceTiers behave exactly as before.
+  const sellBeforeAllowanceAndOverhead =
+    materialSellCost + machineSellCost + gasSellCost + consumablesSellCost + labourSellCost;
 
-  const rawSellTotal = materialSellCost + machineSellCost + gasSellCost + consumablesSellCost + labourSellCost;
+  const selectedTier = selectProductionAllowanceTier(settings, safeQty, estimatedSheets);
+  let allowanceFixedBatchMin = 0;
+  let allowancePerSheetMin = 0;
+  let allowancePerPartMin = 0;
+  let allowanceQaPackingMin = 0;
+  let productionAllowanceMinutes = 0;
+  let productionAllowanceBuyCost = 0;
+  let productionAllowanceSellCost = 0;
+  let productionOverheadPercent = 0;
+  let productionOverheadAmount = 0;
+  let productionAllowanceReviewFlagged = false;
+  let productionAllowanceTierKey: string | undefined;
+  let productionAllowanceTierName: string | undefined;
+  let productionAllowancePerPartCapMinutes: number | undefined;
+
+  if (selectedTier) {
+    productionAllowanceTierKey = selectedTier.tierKey;
+    productionAllowanceTierName = selectedTier.tierName;
+    allowanceFixedBatchMin = Math.max(selectedTier.fixedBatchMinutes || 0, 0);
+    allowancePerSheetMin = estimatedSheets * Math.max(selectedTier.perSheetHandlingMinutes || 0, 0);
+    const perPartRaw = (safeQty * Math.max(selectedTier.perPartHandlingSeconds || 0, 0)) / 60;
+    if (selectedTier.perPartHandlingCapMinutes != null && selectedTier.perPartHandlingCapMinutes > 0) {
+      productionAllowancePerPartCapMinutes = selectedTier.perPartHandlingCapMinutes;
+      allowancePerPartMin = Math.min(perPartRaw, selectedTier.perPartHandlingCapMinutes);
+    } else {
+      allowancePerPartMin = perPartRaw;
+    }
+    allowanceQaPackingMin = Math.max(selectedTier.qaPackingMinutes || 0, 0);
+    productionAllowanceMinutes =
+      allowanceFixedBatchMin + allowancePerSheetMin + allowancePerPartMin + allowanceQaPackingMin;
+    productionAllowanceBuyCost = (productionAllowanceMinutes / 60) * operatorRatePerHour;
+    productionAllowanceSellCost = (productionAllowanceMinutes / 60) * shopRatePerHour;
+    productionOverheadPercent = Math.max(selectedTier.productionOverheadPercent || 0, 0);
+    productionOverheadAmount = sellBeforeAllowanceAndOverhead * (productionOverheadPercent / 100);
+    if (selectedTier.reviewRequiredAboveQty != null && safeQty >= selectedTier.reviewRequiredAboveQty) {
+      productionAllowanceReviewFlagged = true;
+    }
+  }
+
+  const materialAllocationMode: "whole-sheets" | "area-fallback" | "coil" | "none" =
+    material?.stockBehaviour === "coil"
+      ? "coil"
+      : material && partsPerSheet > 0
+        ? "whole-sheets"
+        : material && estimatedSheets > 0
+          ? "area-fallback"
+          : "none";
+
+  const totalBuyCost =
+    materialBuyCost +
+    machineBuyCost +
+    gasBuyCost +
+    consumablesBuyCost +
+    labourBuyCost +
+    productionAllowanceBuyCost;
+
+  const rawSellTotal =
+    sellBeforeAllowanceAndOverhead + productionAllowanceSellCost + productionOverheadAmount;
 
   const minimumLineCharge = rates.minimumLineCharge;
   const minimumLineChargeApplied = rawSellTotal < minimumLineCharge;
@@ -737,6 +941,7 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   const unitCost = totalBuyCost / safeQty;
 
   return {
+    quantity: safeQty,
     sheetAreaMm2,
     partAreaMm2,
     totalNetPartArea,
@@ -794,6 +999,18 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     materialSellCost,
     materialMargin,
 
+    // Phase 5H.9A — material allocation policy + yield breakdown (internal-only).
+    materialAllocationPolicy: allocationPolicy,
+    yieldApplied,
+    yieldMultiSheetFallback,
+    estimatedSheetUsagePercent,
+    yieldMinimumSheetChargePercent: yieldApplied ? yieldMinSheetChargeFraction * 100 : undefined,
+    recoverableRemnantPercent: yieldApplied ? recoverableRemnantFraction * 100 : undefined,
+    nonRecoverableRemnantPercent:
+      nonRecoverableRemnantPercent != null ? nonRecoverableRemnantPercent * 100 : undefined,
+    allocatedSheetPercent: allocatedSheetPercent != null ? allocatedSheetPercent * 100 : undefined,
+    allocatedMaterialBuy,
+
     labourBuyCost,
     labourSellCost,
     labourMargin,
@@ -812,6 +1029,24 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
 
     gasBuyCost,
     gasSellCost,
+    gasMarkupPercent,
+    gasMargin,
+
+    productionAllowanceTierKey,
+    productionAllowanceTierName,
+    productionAllowanceMinutes,
+    productionAllowanceFixedBatchMinutes: allowanceFixedBatchMin,
+    productionAllowancePerSheetMinutes: allowancePerSheetMin,
+    productionAllowancePerPartMinutes: allowancePerPartMin,
+    productionAllowancePerPartCapMinutes,
+    productionAllowanceQaPackingMinutes: allowanceQaPackingMin,
+    productionAllowanceBuyCost,
+    productionAllowanceSellCost,
+    productionOverheadPercent,
+    productionOverheadAmount,
+    sellBeforeAllowanceAndOverhead,
+    productionAllowanceReviewFlagged,
+    materialAllocationMode,
 
     totalBuyCost,
     totalMargin,

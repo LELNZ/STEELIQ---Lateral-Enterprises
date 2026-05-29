@@ -16,6 +16,14 @@ export interface TotalsDisplayConfig {
   // Customer-safe: shows only unit price and line total — never margin / cost.
   showLineUnitPrice?: boolean;
   showLineTotal?: boolean;
+  // Phase 5F card-tightening — independent control over attached
+  // operation (procedure) pricing visibility on the customer card. When
+  // false, operation descriptions still show but their unit/line price
+  // labels are suppressed (so the customer-facing parent item / subtotal
+  // implicitly absorbs the operation value — no math change). When true,
+  // operation pricing follows the standard showLineUnitPrice /
+  // showLineTotal toggles. Default false favours customer simplicity.
+  showOperationPricing?: boolean;
 }
 
 export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
@@ -29,6 +37,7 @@ export const DEFAULT_TOTALS_DISPLAY_CONFIG: TotalsDisplayConfig = {
   showCommercialRemarks: true,
   showLineUnitPrice: false,
   showLineTotal: false,
+  showOperationPricing: false,
 };
 
 export interface PreviewData {
@@ -223,18 +232,20 @@ function mapLaserSnapshotItem(li: LaserSnapshotItem, totalsCfg: TotalsDisplayCon
   const attachedToParent = (li as any).attachedToParentRef as string | undefined;
 
   if (isProc) {
-    resolvedSpecs["procedureKind"] = attachedToParent
-      ? "Attached Manual / Provisional Procedure"
-      : "Manual / Provisional Procedure";
-    if ((li as any).procedureType) {
-      resolvedSpecs["procedureType"] = String((li as any).procedureType);
-    }
-    const desc = ((li as any).procedureDescription as string | undefined) || "";
-    if (desc.trim()) {
-      resolvedSpecs["description"] = desc.trim();
-    }
-    if (attachedToParent) {
-      resolvedSpecs["attachedTo"] = attachedToParent;
+    // Phase 5F polish — drop verbose "Type Attached Manual / Provisional Procedure"
+    // and "Attached To" rows from customer output. Attached children no longer
+    // render as their own schedule cards (they collapse into the parent's
+    // Operations block in the renderer), so attachedTo is implicit by nesting.
+    // Standalone manual procedures still render as separate cards; the
+    // "Manual / Provisional" annotation lives in the card subtitle.
+    if (!attachedToParent) {
+      if ((li as any).procedureType) {
+        resolvedSpecs["procedureType"] = String((li as any).procedureType);
+      }
+      const desc = ((li as any).procedureDescription as string | undefined) || "";
+      if (desc.trim()) {
+        resolvedSpecs["description"] = desc.trim();
+      }
     }
   } else {
     if (li.materialType) resolvedSpecs["materialType"] = li.materialType;
@@ -302,6 +313,7 @@ function mapLaserSnapshotItem(li: LaserSnapshotItem, totalsCfg: TotalsDisplayCon
       procedureDescription: (li as any).procedureDescription,
       attachedToParentRef: attachedToParent,
       sellTotal: li.sellTotal,
+      manualUnitSell: (li as any).manualUnitSell,
     },
     resolvedSpecs,
   };

@@ -1146,6 +1146,44 @@ export async function registerRoutes(
 
       if (!settingsJson) return res.status(400).json({ error: "llPricingSettingsJson is required" });
 
+      // Phase 5H.4-Final — zero out any carried-forward setup/handling defaults.
+      // Production Allowance Tiers are the canonical source for setup/handling
+      // recovery; new and duplicated profiles must not surface legacy values.
+      if (settingsJson && typeof settingsJson === "object") {
+        if (!settingsJson.setupHandlingDefaults || typeof settingsJson.setupHandlingDefaults !== "object") {
+          settingsJson.setupHandlingDefaults = { defaultSetupMinutes: 0, defaultHandlingMinutes: 0 };
+        } else {
+          settingsJson.setupHandlingDefaults.defaultSetupMinutes = 0;
+          settingsJson.setupHandlingDefaults.defaultHandlingMinutes = 0;
+        }
+
+        // Phase 5H.7 — seed Gas Markup % on new/duplicated draft profiles when
+        // the source profile/body did not specify one. This makes Gas Markup
+        // governed by profile activation: admin reviews → Saves → Approves →
+        // Activates. Active profiles in the database are not mutated; only
+        // the JSON about to be inserted as a new draft profile is touched.
+        if (settingsJson.gasCosts && typeof settingsJson.gasCosts === "object") {
+          if (settingsJson.gasCosts.gasMarkupPercent == null) {
+            settingsJson.gasCosts.gasMarkupPercent = 20;
+          }
+        }
+
+        // Phase 5H.9A — seed material allocation defaults on new/duplicated draft
+        // profiles when the source/body did not specify them. The default mode is
+        // "whole-sheets" so activating a new profile NEVER changes existing
+        // quoting behaviour — these defaults only seed brand-new line items in the
+        // builder; the engine never uses them as a fallback for existing lines.
+        if (settingsJson.defaultMaterialAllocationMode == null) {
+          settingsJson.defaultMaterialAllocationMode = "whole-sheets";
+        }
+        if (settingsJson.defaultYieldMinimumSheetChargePercent == null) {
+          settingsJson.defaultYieldMinimumSheetChargePercent = 25;
+        }
+        if (settingsJson.defaultRecoverableRemnantPercent == null) {
+          settingsJson.defaultRecoverableRemnantPercent = 75;
+        }
+      }
+
       const profile = await storage.createLLPricingProfile({
         divisionKey: "LL",
         profileName,
@@ -3639,6 +3677,10 @@ export async function registerRoutes(
           // Phase 5E hardening — line-level pricing visibility (LL).
           showLineUnitPrice: z.boolean().optional(),
           showLineTotal: z.boolean().optional(),
+          // Phase 5F card-tightening — independent toggle for attached
+          // operation pricing visibility (LL). Default false on the
+          // client; persisted here so user choice survives reload.
+          showOperationPricing: z.boolean().optional(),
         }).optional(),
         commercialRemarks: z.string().nullable().optional(),
       }).parse(req.body);
@@ -7645,9 +7687,12 @@ async function seedLlPricingSettings() {
       operatorRatePerHour: 45.00,
       shopRatePerHour: 95.00,
     },
+    // Phase 5H.4-Final — setup/handling defaults seeded at zero. Production
+    // Allowance Tiers are the canonical source. Field retained dormant only
+    // for back-compat with the schema type.
     setupHandlingDefaults: {
-      defaultSetupMinutes: 15,
-      defaultHandlingMinutes: 10,
+      defaultSetupMinutes: 0,
+      defaultHandlingMinutes: 0,
     },
     commercialPolicy: {
       defaultMarkupPercent: 35,

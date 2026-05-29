@@ -29,7 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Plus, Copy, Pencil, Archive, ShieldCheck, CheckCircle, Shield,
-  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info,
+  ArrowLeft, Clock, Loader2, History, ChevronDown, ChevronRight, Info, Trash2, EyeOff, RotateCcw,
 } from "lucide-react";
 import type {
   LLPricingProfile,
@@ -38,8 +38,113 @@ import type {
   LLMachineProfile,
   LLProcessRateEntry,
   LLProcessRateSource,
+  LLProductionAllowanceTier,
   DivisionSettings,
 } from "@shared/schema";
+
+// Phase 5H.3 — approved seed defaults for production allowance tiers.
+// Used when an existing profile is opened for edit and has no tiers defined,
+// so the user can seed-and-edit instead of typing five rows from scratch.
+const SEED_PRODUCTION_ALLOWANCE_TIERS: LLProductionAllowanceTier[] = [
+  {
+    tierKey: "prototype",
+    tierName: "Prototype (1–9)",
+    minQty: 1,
+    maxQty: 9,
+    fixedBatchMinutes: 20,
+    perSheetHandlingMinutes: 5,
+    perPartHandlingSeconds: 30,
+    perPartHandlingCapMinutes: 15,
+    qaPackingMinutes: 5,
+    productionOverheadPercent: 8,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Short setup, manual inspection, one-off documentation.",
+  },
+  {
+    tierKey: "small-batch",
+    tierName: "Small Batch (10–49)",
+    minQty: 10,
+    maxQty: 49,
+    fixedBatchMinutes: 30,
+    perSheetHandlingMinutes: 6,
+    perPartHandlingSeconds: 25,
+    perPartHandlingCapMinutes: 30,
+    qaPackingMinutes: 8,
+    productionOverheadPercent: 6,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Routine job — fixturing and break-up time still significant.",
+  },
+  {
+    tierKey: "medium-batch",
+    tierName: "Medium Batch (50–199)",
+    minQty: 50,
+    maxQty: 199,
+    fixedBatchMinutes: 40,
+    perSheetHandlingMinutes: 7,
+    perPartHandlingSeconds: 20,
+    perPartHandlingCapMinutes: 60,
+    qaPackingMinutes: 12,
+    productionOverheadPercent: 5,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Multi-sheet, batched QA sampling.",
+  },
+  {
+    tierKey: "large-batch",
+    tierName: "Large Batch (200–999)",
+    minQty: 200,
+    maxQty: 999,
+    fixedBatchMinutes: 60,
+    perSheetHandlingMinutes: 8,
+    perPartHandlingSeconds: 15,
+    perPartHandlingCapMinutes: 120,
+    qaPackingMinutes: 20,
+    productionOverheadPercent: 4,
+    reviewRequiredAboveQty: null,
+    internalNotes: "Pallet handling, AQL-style QA, packaging amortised.",
+  },
+  {
+    tierKey: "high-volume",
+    tierName: "High Volume (1000+)",
+    minQty: 1000,
+    maxQty: null,
+    fixedBatchMinutes: 90,
+    perSheetHandlingMinutes: 10,
+    perPartHandlingSeconds: 10,
+    perPartHandlingCapMinutes: 240,
+    qaPackingMinutes: 40,
+    productionOverheadPercent: 3,
+    reviewRequiredAboveQty: 5000,
+    internalNotes: "Production run — review required above 5,000 parts.",
+  },
+];
+
+/**
+ * Phase 5H.3 — Validate tier coverage. Returns ordered warnings for the
+ * admin UI (overlap, gap, missing entry-point at qty=1, etc.). Pure / read-only.
+ */
+function analyseTierCoverage(tiers: LLProductionAllowanceTier[] | undefined): string[] {
+  if (!tiers || tiers.length === 0) return [];
+  const warnings: string[] = [];
+  const sorted = [...tiers].sort((a, b) => a.minQty - b.minQty);
+  if (sorted[0].minQty > 1) {
+    warnings.push(`Quantities 1–${sorted[0].minQty - 1} are not covered by any tier (allowance = 0).`);
+  }
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const cur = sorted[i];
+    const next = sorted[i + 1];
+    const curMax = cur.maxQty ?? Infinity;
+    if (curMax >= next.minQty) {
+      warnings.push(`Tiers "${cur.tierName}" and "${next.tierName}" overlap (${cur.minQty}–${curMax} vs ${next.minQty}–${next.maxQty ?? "∞"}).`);
+    } else if (curMax + 1 < next.minQty) {
+      warnings.push(`Gap between "${cur.tierName}" (ends ${curMax}) and "${next.tierName}" (starts ${next.minQty}) — quantities in between will use the lower tier.`);
+    }
+  }
+  const last = sorted[sorted.length - 1];
+  if (last.maxQty != null) {
+    warnings.push(`Top tier "${last.tierName}" has a finite max (${last.maxQty}). Quantities above ${last.maxQty} will get zero allowance.`);
+  }
+  return warnings;
+}
 import { useLocation, Link } from "wouter";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -362,6 +467,72 @@ function ProfileDetail({
   );
 }
 
+// Phase 5H.4 — admin tooltip text for LL Pricing Model fields.
+// Tier paths (productionAllowanceTiers.<n>.field) are normalised to "tier.field".
+// Machine paths (machineProfiles.<n>.field) are normalised to "machine.field".
+const LL_FIELD_HELP: Record<string, string> = {
+  "labourRates.operatorRatePerHour":
+    "Internal labour cost per hour. Represents the labour buy/cost basis such as wage and employment cost assumptions. This is not the customer sell rate.",
+  "labourRates.shopRatePerHour":
+    "Commercial labour sell rate per hour. Used to convert production allowance minutes into sell value. Should reflect skilled labour recovery, labour margin, and commercial labour burden.",
+  "machine.hourlyMachineRate":
+    "Commercial hourly sell rate for machine cutting time. Covers machine ownership/recovery, depreciation or finance, power, servicing, maintenance, rent allocation, technology value, and machine profit. Operator attendance treatment must be defined by the business and must not be double-counted elsewhere.",
+  "machine.machineBuyCostPerHour":
+    "Internal hourly cost basis for the machine before commercial margin. Should represent the estimated cost of owning and operating the machine, including relevant machine costs and allocated burden.",
+  "tier.fixedBatchMinutes":
+    "One-off production time applied once to the line item, regardless of quantity. Covers job setup, drawing/program review, nesting/pre-flight, first-off check, paperwork, and batch preparation. Does not cover per-sheet loading, per-part sorting, or secondary operations.",
+  "tier.perSheetHandlingMinutes":
+    "Minutes added per estimated sheet. Covers sheet loading, unloading, sheet changeover, material movement, skeleton handling, sheet staging, and sheet-level checks. Formula: estimated sheets × per-sheet minutes.",
+  "tier.perPartHandlingSeconds":
+    "Touch time per part in seconds. Covers part removal, sorting, counting, binning, light handling, and transfer from laser to the next process. Does not cover folding, welding, finishing, or other secondary operations.",
+  "tier.perPartHandlingCapMinutes":
+    "Maximum charged minutes for the per-part touch-time component. Leave blank/no cap if every part should be charged at the full per-part handling rate. Use a cap only where large-batch handling efficiencies mean the full raw per-part time would overstate real work.",
+  "tier.qaPackingMinutes":
+    "Fixed minutes for quality checks, count verification, packing, labelling, pallet/carton preparation, and dispatch readiness for the line. Does not include customer delivery or secondary operations unless explicitly intended.",
+  "tier.productionOverheadPercent":
+    "Commercial/factory overhead recovery applied to the LL line. Covers admin, quoting burden, supervision, software, rent allocation, insurance, non-productive time, production risk, and general commercial recovery. Do not use this to hide direct operations that belong in machine, production allowance, or manual procedures.",
+  "commercialPolicy.defaultMaterialMarkupPercent":
+    "Markup applied to material buy cost to recover procurement handling, stock risk, waste, supplier variance, and material margin. Does not replace production allowance or machine recovery.",
+  "commercialPolicy.defaultConsumablesMarkupPercent":
+    "Markup applied to consumable buy cost. Covers consumable handling, supply risk, and recovery margin. Assist gas is governed separately by Gas Markup %.",
+  "gasCosts.gasMarkupPercent":
+    "Markup applied to assist gas cost. Covers gas supply risk, bottle/rental/admin burden, waste, pressure/setup variance, and commercial recovery. Gas is a required production consumable and is governed separately from general consumables.",
+  "commercialPolicy.minimumLineCharge":
+    "Minimum sell value for an LL line. Protects against uneconomic small jobs where calculated material, machine, and allowance values are below the minimum practical charge.",
+  "commercialPolicy.defaultRatePerMmCut":
+    "Fallback or policy rate per millimetre where used by the pricing model. Confirm whether this applies to the active governed calculation path before relying on it.",
+  "commercialPolicy.defaultRatePerPierce":
+    "Fallback or policy rate per pierce where used by the pricing model. Pierce time is also represented in machine time, so avoid double-counting unless this field is explicitly part of the active pricing method.",
+  "nestingDefaults.kerfWidthMm":
+    "Cut width allowance used in nesting/material usage calculations. Affects parts per sheet and material utilisation.",
+  "nestingDefaults.partGapMm":
+    "Spacing between parts used in nesting/material usage calculations. Affects parts per sheet and material utilisation.",
+  "nestingDefaults.edgeTrimMm":
+    "Edge trim allowance used around the sheet for nesting/material usage. Affects usable sheet area and parts per sheet.",
+  "nestingDefaults.defaultUtilisationFactor":
+    "Material utilisation factor used in nesting/material estimation. Lower utilisation increases estimated sheet requirement and material recovery.",
+};
+
+function helpForPath(path: string): string | null {
+  const normalised = path
+    .replace(/^productionAllowanceTiers\.\d+\./, "tier.")
+    .replace(/^machineProfiles\.\d+\./, "machine.");
+  return LL_FIELD_HELP[normalised] ?? null;
+}
+
+function HelpHint({ text, testId }: { text: string; testId?: string }) {
+  return (
+    <span
+      className="inline-flex items-center text-muted-foreground/70 hover:text-foreground cursor-help"
+      title={text}
+      aria-label={text}
+      data-testid={testId}
+    >
+      <Info className="h-3 w-3" />
+    </span>
+  );
+}
+
 function PricingSettingsEditor({
   settings,
   onChange,
@@ -378,19 +549,97 @@ function PricingSettingsEditor({
     onChange(copy);
   };
 
-  const numField = (label: string, path: string, value: number, unit?: string) => (
-    <div>
-      <Label className="text-xs">{label}{unit ? ` (${unit})` : ""}</Label>
-      <Input
-        type="number"
-        step="any"
-        value={value}
-        onChange={e => update(path, parseFloat(e.target.value) || 0)}
-        className="h-8 text-sm"
-        data-testid={`input-${path.replace(/\./g, "-")}`}
-      />
-    </div>
-  );
+  // Phase 5H.5 — admin removal of orphaned process-rate rows. Only rows whose
+  // dataSource === "orphaned_no_library_match" may be removed (guard enforced
+  // again at click-time). Removal mutates the draft profile state only; the
+  // admin must still Save → Approve → Activate via the existing governed
+  // workflow for the change to take effect on live pricing.
+  const [orphanToDelete, setOrphanToDelete] = useState<number | null>(null);
+  const confirmRemoveOrphan = () => {
+    if (orphanToDelete === null) return;
+    const idx = orphanToDelete;
+    const row = settings.processRateTables?.[idx];
+    if (!row || row.dataSource !== "orphaned_no_library_match") {
+      setOrphanToDelete(null);
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(settings));
+    copy.processRateTables = (copy.processRateTables || []).filter((_: any, i: number) => i !== idx);
+    onChange(copy);
+    setOrphanToDelete(null);
+  };
+
+  // Phase 5H.6 — admin mark-inactive flow. Non-orphan rows get a "Mark inactive"
+  // action that flips dataSource → "orphaned_no_library_match" (preserving all
+  // material/thickness/rate values) so the existing orphan-delete workflow can
+  // then remove them. Non-orphan rows are never directly deletable; this two-
+  // step gate forces an explicit governance act. State remains draft-local
+  // until Save → Approve → Activate runs through the existing governance chain.
+  // Phase 5H.7 — admin restore flow. Orphaned rows get a Restore action that
+  // flips dataSource back to "manual_override" (an existing non-orphan source
+  // already rendered by ProvenanceBadge as the red "Override" badge). All
+  // material/thickness/rate values are preserved; dataSourceNote is appended
+  // with a "Restored by admin in draft" audit line. State remains draft-local
+  // until the standard Save → Approve → Activate governance chain runs.
+  const [rowToRestore, setRowToRestore] = useState<number | null>(null);
+  const confirmRestore = () => {
+    if (rowToRestore === null) return;
+    const idx = rowToRestore;
+    const row = settings.processRateTables?.[idx];
+    if (!row || row.dataSource !== "orphaned_no_library_match") {
+      setRowToRestore(null);
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(settings));
+    const target = copy.processRateTables?.[idx];
+    if (target) {
+      target.dataSource = "manual_override";
+      const priorNote = target.dataSourceNote ? ` (was: ${target.dataSourceNote})` : "";
+      target.dataSourceNote = `Restored by admin in draft profile${priorNote}. Material/thickness re-instated as a governed pricing rate. Existing estimate snapshots are unaffected.`;
+      onChange(copy);
+    }
+    setRowToRestore(null);
+  };
+
+  const [rowToMarkInactive, setRowToMarkInactive] = useState<number | null>(null);
+  const confirmMarkInactive = () => {
+    if (rowToMarkInactive === null) return;
+    const idx = rowToMarkInactive;
+    const row = settings.processRateTables?.[idx];
+    if (!row || row.dataSource === "orphaned_no_library_match") {
+      setRowToMarkInactive(null);
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(settings));
+    const target = copy.processRateTables?.[idx];
+    if (target) {
+      target.dataSource = "orphaned_no_library_match";
+      const priorNote = target.dataSourceNote ? ` (was: ${target.dataSourceNote})` : "";
+      target.dataSourceNote = `Marked inactive by admin in draft profile${priorNote}. Material/thickness no longer treated as a governed pricing rate. Existing estimate snapshots are unaffected. Remove from the table once confirmed not required.`;
+      onChange(copy);
+    }
+    setRowToMarkInactive(null);
+  };
+
+  const numField = (label: string, path: string, value: number, unit?: string) => {
+    const help = helpForPath(path);
+    return (
+      <div>
+        <Label className="text-xs inline-flex items-center gap-1">
+          <span>{label}{unit ? ` (${unit})` : ""}</span>
+          {help && <HelpHint text={help} testId={`help-${path.replace(/\./g, "-")}`} />}
+        </Label>
+        <Input
+          type="number"
+          step="any"
+          value={value}
+          onChange={e => update(path, parseFloat(e.target.value) || 0)}
+          className="h-8 text-sm"
+          data-testid={`input-${path.replace(/\./g, "-")}`}
+        />
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -404,6 +653,10 @@ function PricingSettingsEditor({
           {numField("N2 (fallback)", "gasCosts.n2PricePerLitre", settings.gasCosts.n2PricePerLitre, "$/L")}
           {numField("Air (fallback)", "gasCosts.compressedAirPricePerLitre", settings.gasCosts.compressedAirPricePerLitre, "$/L")}
         </div>
+        <div className="grid grid-cols-3 gap-3 mt-2 pt-2 border-t">
+          {numField("Gas Markup", "gasCosts.gasMarkupPercent", settings.gasCosts.gasMarkupPercent ?? 0, "%")}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-1">Applied to assist gas sell only; gas buy cost is unchanged. Existing profiles without this field default to 0% (pass-through) until duplicated and re-activated.</p>
       </SettingsSection>
 
       <SettingsSection title="Consumable Costs">
@@ -423,12 +676,12 @@ function PricingSettingsEditor({
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Setup & Handling Defaults">
-        <div className="grid grid-cols-2 gap-3">
-          {numField("Default Setup", "setupHandlingDefaults.defaultSetupMinutes", settings.setupHandlingDefaults.defaultSetupMinutes, "min")}
-          {numField("Default Handling", "setupHandlingDefaults.defaultHandlingMinutes", settings.setupHandlingDefaults.defaultHandlingMinutes, "min")}
-        </div>
-      </SettingsSection>
+      {/* Phase 5H.4 — Setup & Handling Defaults removed from normal editor UI.
+          Underlying fields (settings.setupHandlingDefaults.*) remain in the schema for
+          backward compatibility but are no longer normal LL pricing inputs. Setup,
+          sheet handling, sorting, QA and packing are governed by Production Allowance
+          Tiers (below). Legacy values on individual line items still surface as a
+          legacy override warning in the LL builder. */}
 
       <SettingsSection title="Commercial Policy">
         <div className="grid grid-cols-3 gap-3">
@@ -449,6 +702,198 @@ function PricingSettingsEditor({
           {numField("Edge Trim", "nestingDefaults.edgeTrimMm", settings.nestingDefaults.edgeTrimMm, "mm")}
           {numField("Utilisation", "nestingDefaults.defaultUtilisationFactor", settings.nestingDefaults.defaultUtilisationFactor, "0-1")}
         </div>
+      </SettingsSection>
+
+      <SettingsSection title={`Production Allowance Tiers (${settings.productionAllowanceTiers?.length ?? 0})`}>
+        <div className="px-3 py-2 mb-2 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded text-xs text-purple-800 dark:text-purple-300 flex items-start gap-1.5" data-testid="allowance-tier-notice">
+          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <div>
+            <strong>Internal-only.</strong> Adds batch setup, per-sheet handling, per-part touch time, QA/packing, and a production overhead % to each LL line. Selected by qty (and optionally sheet count). Customer-facing Preview and PDF are not changed.
+          </div>
+        </div>
+
+        {(!settings.productionAllowanceTiers || settings.productionAllowanceTiers.length === 0) && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 mb-2" data-testid="empty-allowance-tiers-warning">
+            <div className="text-xs text-orange-700 dark:text-orange-400">
+              <p className="font-medium">No tiers defined</p>
+              <p className="mt-0.5 text-[10px]">All quantities get zero allowance — engine behaves as pre-5H.3.</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const copy = JSON.parse(JSON.stringify(settings));
+                copy.productionAllowanceTiers = JSON.parse(JSON.stringify(SEED_PRODUCTION_ALLOWANCE_TIERS));
+                onChange(copy);
+              }}
+              data-testid="button-seed-allowance-tiers"
+            >
+              Seed approved defaults
+            </Button>
+          </div>
+        )}
+
+        {settings.productionAllowanceTiers && settings.productionAllowanceTiers.length > 0 && (() => {
+          const warnings = analyseTierCoverage(settings.productionAllowanceTiers);
+          if (warnings.length === 0) return null;
+          return (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-2 mb-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5" data-testid="allowance-tier-warnings">
+              {warnings.map((w, i) => (
+                <div key={i}>⚠ {w}</div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {(settings.productionAllowanceTiers ?? []).map((tier, idx) => (
+          <div key={`${tier.tierKey}-${idx}`} className="p-3 bg-muted/30 rounded mb-2 border" data-testid={`tier-editor-${idx}`}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Input
+                  value={tier.tierName}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.tierName`, e.target.value)}
+                  className="h-7 text-xs font-medium w-56"
+                  placeholder="Tier name"
+                  data-testid={`input-tier-name-${idx}`}
+                />
+                <Input
+                  value={tier.tierKey}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.tierKey`, e.target.value)}
+                  className="h-7 text-[10px] w-40 font-mono"
+                  placeholder="tier-key"
+                  data-testid={`input-tier-key-${idx}`}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] text-red-600 hover:text-red-700"
+                onClick={() => {
+                  const copy = JSON.parse(JSON.stringify(settings));
+                  copy.productionAllowanceTiers.splice(idx, 1);
+                  onChange(copy);
+                }}
+                data-testid={`button-remove-tier-${idx}`}
+              >
+                Remove
+              </Button>
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {numField("Min Qty", `productionAllowanceTiers.${idx}.minQty`, tier.minQty, "parts")}
+              <div>
+                <Label className="text-xs">Max Qty (blank = ∞)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.maxQty ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.maxQty`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-max-qty-${idx}`}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Min Sheets (optional)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.minSheets ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.minSheets`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-min-sheets-${idx}`}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Max Sheets (optional)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.maxSheets ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.maxSheets`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-max-sheets-${idx}`}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {numField("Fixed Batch", `productionAllowanceTiers.${idx}.fixedBatchMinutes`, tier.fixedBatchMinutes, "min")}
+              {numField("Per Sheet", `productionAllowanceTiers.${idx}.perSheetHandlingMinutes`, tier.perSheetHandlingMinutes, "min/sheet")}
+              {numField("Per Part", `productionAllowanceTiers.${idx}.perPartHandlingSeconds`, tier.perPartHandlingSeconds, "sec/part")}
+              <div>
+                <Label className="text-xs inline-flex items-center gap-1">
+                  <span>Per-Part Cap (max charged touch min, blank = none)</span>
+                  <HelpHint text={LL_FIELD_HELP["tier.perPartHandlingCapMinutes"]} testId={`help-tier-per-part-cap-${idx}`} />
+                </Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.perPartHandlingCapMinutes ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.perPartHandlingCapMinutes`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-per-part-cap-${idx}`}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {numField("QA / Packing", `productionAllowanceTiers.${idx}.qaPackingMinutes`, tier.qaPackingMinutes ?? 0, "min")}
+              {numField("Overhead", `productionAllowanceTiers.${idx}.productionOverheadPercent`, tier.productionOverheadPercent ?? 0, "%")}
+              <div>
+                <Label className="text-xs">Review Above (parts, blank = never)</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  value={tier.reviewRequiredAboveQty ?? ""}
+                  onChange={e => update(`productionAllowanceTiers.${idx}.reviewRequiredAboveQty`, e.target.value === "" ? null : (parseFloat(e.target.value) || 0))}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-review-above-${idx}`}
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Internal Notes</Label>
+              <Textarea
+                value={tier.internalNotes ?? ""}
+                onChange={e => update(`productionAllowanceTiers.${idx}.internalNotes`, e.target.value)}
+                rows={1}
+                className="text-xs"
+                data-testid={`input-tier-notes-${idx}`}
+              />
+            </div>
+          </div>
+        ))}
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-1"
+          onClick={() => {
+            const copy = JSON.parse(JSON.stringify(settings));
+            const existing: LLProductionAllowanceTier[] = copy.productionAllowanceTiers ?? [];
+            const nextIdx = existing.length + 1;
+            existing.push({
+              tierKey: `tier-${Date.now()}`,
+              tierName: `New Tier ${nextIdx}`,
+              minQty: 1,
+              maxQty: null,
+              minSheets: null,
+              maxSheets: null,
+              fixedBatchMinutes: 0,
+              perSheetHandlingMinutes: 0,
+              perPartHandlingSeconds: 0,
+              perPartHandlingCapMinutes: null,
+              qaPackingMinutes: 0,
+              productionOverheadPercent: 0,
+              reviewRequiredAboveQty: null,
+              internalNotes: "",
+            });
+            copy.productionAllowanceTiers = existing;
+            onChange(copy);
+          }}
+          data-testid="button-add-tier"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add Tier
+        </Button>
       </SettingsSection>
 
       <SettingsSection title={`Machine Profiles (${settings.machineProfiles.length})`}>
@@ -501,6 +946,10 @@ function PricingSettingsEditor({
 
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables.length} entries)`}>
         <p className="text-[10px] text-muted-foreground mb-2">Defines cut speed, pierce time, and <strong>assist gas type</strong> for each material/thickness combination. The gas type here determines which gas source cost is used during pricing.</p>
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug space-y-1" data-testid="orphan-helper-note-editor">
+          <p>Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library. Remove only after confirming they are not required.</p>
+          <p>Use <strong>Mark inactive</strong> to remove a governed rate from future pricing, or <strong>Restore</strong> to bring an orphaned row back into governance. Once inactive/orphaned, the row can be deleted from the draft. Existing estimates and snapshots are not changed.</p>
+        </div>
         <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-background">
@@ -512,42 +961,161 @@ function PricingSettingsEditor({
                 <th className="text-left p-1.5 font-medium">Assist Gas Type</th>
                 <th className="text-left p-1.5 font-medium">Gas (L/min)</th>
                 <th className="text-left p-1.5 font-medium">Source</th>
+                <th className="text-left p-1.5 font-medium w-16">Admin</th>
               </tr>
             </thead>
             <tbody>
-              {settings.processRateTables.map((entry, idx) => (
-                <tr key={idx} className="border-b border-muted hover:bg-muted/30">
-                  <td className="p-1.5">{entry.materialFamily}</td>
-                  <td className="p-1.5">{entry.thickness}mm</td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      step="any"
-                      value={entry.cutSpeedMmPerMin}
-                      onChange={e => update(`processRateTables.${idx}.cutSpeedMmPerMin`, parseFloat(e.target.value) || 0)}
-                      className="h-6 text-xs w-20"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      step="any"
-                      value={entry.pierceTimeSec}
-                      onChange={e => update(`processRateTables.${idx}.pierceTimeSec`, parseFloat(e.target.value) || 0)}
-                      className="h-6 text-xs w-16"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Badge variant="outline" className="text-[10px]">{entry.assistGasType}</Badge>
-                  </td>
-                  <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
-                  <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
-                </tr>
-              ))}
+              {settings.processRateTables.map((entry, idx) => {
+                const isOrphan = entry.dataSource === "orphaned_no_library_match";
+                return (
+                  <tr key={idx} className="border-b border-muted hover:bg-muted/30">
+                    <td className="p-1.5">{entry.materialFamily}</td>
+                    <td className="p-1.5">{entry.thickness}mm</td>
+                    <td className="p-1.5">
+                      <Input
+                        type="number"
+                        step="any"
+                        value={entry.cutSpeedMmPerMin}
+                        onChange={e => update(`processRateTables.${idx}.cutSpeedMmPerMin`, parseFloat(e.target.value) || 0)}
+                        className="h-6 text-xs w-20"
+                      />
+                    </td>
+                    <td className="p-1.5">
+                      <Input
+                        type="number"
+                        step="any"
+                        value={entry.pierceTimeSec}
+                        onChange={e => update(`processRateTables.${idx}.pierceTimeSec`, parseFloat(e.target.value) || 0)}
+                        className="h-6 text-xs w-16"
+                      />
+                    </td>
+                    <td className="p-1.5">
+                      <Badge variant="outline" className="text-[10px]">{entry.assistGasType}</Badge>
+                    </td>
+                    <td className="p-1.5">{entry.gasConsumptionLPerMin}</td>
+                    <td className="p-1.5"><ProvenanceBadge source={entry.dataSource} note={entry.dataSourceNote} /></td>
+                    <td className="p-1.5">
+                      {isOrphan ? (
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                            title="Restore to governed rates"
+                            onClick={() => setRowToRestore(idx)}
+                            data-testid={`button-restore-orphan-${idx}`}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            title="Remove orphaned process rate"
+                            onClick={() => setOrphanToDelete(idx)}
+                            data-testid={`button-remove-orphan-${idx}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-amber-700 hover:text-amber-800 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+                          title="Mark inactive (remove from governed rates)"
+                          onClick={() => setRowToMarkInactive(idx)}
+                          data-testid={`button-mark-inactive-${idx}`}
+                        >
+                          <EyeOff className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </SettingsSection>
+
+      <AlertDialog open={rowToRestore !== null} onOpenChange={(o) => { if (!o) setRowToRestore(null); }}>
+        <AlertDialogContent data-testid="dialog-confirm-restore">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore process rate?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Restore this process rate to governed rates? It will become available for future pricing in this draft profile. Existing estimates and snapshots are not changed. You must still Save → Approve → Activate for this to affect future pricing.
+              {rowToRestore !== null && settings.processRateTables?.[rowToRestore] && (
+                <span className="block mt-2 text-xs font-medium text-foreground">
+                  {settings.processRateTables[rowToRestore].materialFamily} · {settings.processRateTables[rowToRestore].thickness}mm
+                </span>
+              )}
+              <span className="block mt-2 text-[11px] text-muted-foreground">
+                The row will be re-classified as a manual override (audit-trail note appended). Mark inactive can be used again later if it should be removed from governance.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-restore">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRestore} data-testid="button-confirm-restore" className="bg-emerald-600 hover:bg-emerald-700">
+              Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={rowToMarkInactive !== null} onOpenChange={(o) => { if (!o) setRowToMarkInactive(null); }}>
+        <AlertDialogContent data-testid="dialog-confirm-mark-inactive">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark process rate inactive?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Mark this process rate inactive? It will no longer be treated as a governed rate in this draft profile. Existing estimates and snapshots are not changed. You must still Save → Approve → Activate for this to affect future pricing.
+              {rowToMarkInactive !== null && settings.processRateTables?.[rowToMarkInactive] && (
+                <span className="block mt-2 text-xs font-medium text-foreground">
+                  {settings.processRateTables[rowToMarkInactive].materialFamily} · {settings.processRateTables[rowToMarkInactive].thickness}mm
+                </span>
+              )}
+              <span className="block mt-2 text-[11px] text-muted-foreground">
+                After marking inactive, the row will appear with the Orphaned badge and can be deleted from the draft using the trash action.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-mark-inactive">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMarkInactive} data-testid="button-confirm-mark-inactive" className="bg-amber-600 hover:bg-amber-700">
+              Mark inactive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={orphanToDelete !== null} onOpenChange={(o) => { if (!o) setOrphanToDelete(null); }}>
+        <AlertDialogContent data-testid="dialog-confirm-remove-orphan">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove orphaned process rate?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove this orphaned process rate? This only removes the obsolete profile row and does not change existing estimate snapshots.
+              {orphanToDelete !== null && settings.processRateTables?.[orphanToDelete] && (
+                <span className="block mt-2 text-xs font-medium text-foreground">
+                  {settings.processRateTables[orphanToDelete].materialFamily} · {settings.processRateTables[orphanToDelete].thickness}mm
+                </span>
+              )}
+              <span className="block mt-2 text-[11px] text-muted-foreground">
+                You must still Save → Approve → Activate this draft profile for the cleanup to become active.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-remove-orphan">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveOrphan} data-testid="button-confirm-remove-orphan" className="bg-red-600 hover:bg-red-700">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -565,6 +1133,12 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
             <div><span className="text-muted-foreground">O2:</span> ${gas.o2PricePerLitre}/L</div>
             <div><span className="text-muted-foreground">N2:</span> ${gas.n2PricePerLitre}/L</div>
             <div><span className="text-muted-foreground">Air:</span> ${gas.compressedAirPricePerLitre}/L</div>
+          </div>
+          <div className="text-sm mt-2 pt-2 border-t">
+            <span className="text-muted-foreground">Gas Markup:</span>{" "}
+            {gas.gasMarkupPercent != null
+              ? <span data-testid="viewer-gas-markup">{gas.gasMarkupPercent}%</span>
+              : <span className="text-muted-foreground italic" data-testid="viewer-gas-markup-passthrough">not set (pass-through)</span>}
           </div>
         </SettingsSection>
       )}
@@ -586,14 +1160,11 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
         </SettingsSection>
       )}
 
-      {setup && (
-        <SettingsSection title="Setup & Handling">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-muted-foreground">Setup:</span> {setup.defaultSetupMinutes} min</div>
-          <div><span className="text-muted-foreground">Handling:</span> {setup.defaultHandlingMinutes} min</div>
-        </div>
-      </SettingsSection>
-      )}
+      {/* Phase 5H.4-Final — Setup & Handling removed from the normal LL Pricing
+          Model viewer entirely. Underlying schema fields (settings.setupHandlingDefaults.*)
+          remain dormant for back-compat replay of old snapshots, but are no longer
+          surfaced in any normal profile UI. Setup, sheet handling, sorting, QA and
+          packing are governed by Production Allowance Tiers (canonical). */}
 
       {settings.commercialPolicy && (
         <SettingsSection title="Commercial Policy">
@@ -633,7 +1204,70 @@ function PricingSettingsViewer({ settings }: { settings: LLPricingSettings }) {
         </SettingsSection>
       )}
 
+      <SettingsSection title={`Production Allowance Tiers (${settings.productionAllowanceTiers?.length ?? 0})`}>
+        {!settings.productionAllowanceTiers || settings.productionAllowanceTiers.length === 0 ? (
+          <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400 space-y-1" data-testid="viewer-empty-allowance-tiers">
+            <p className="font-medium">No tiers configured on this profile</p>
+            <p className="text-[10px]">All quantities get zero production allowance — engine behaves as pre-5H.3 for this profile.</p>
+            <p className="text-[10px] mt-1">
+              <strong>To add tiers:</strong> click <em>Duplicate</em> above → open the new draft for edit → in the Production Allowance Tiers section click <strong>Seed approved defaults</strong> → Save → Approve → Activate.
+            </p>
+          </div>
+        ) : (
+          <>
+            {(() => {
+              const warnings = analyseTierCoverage(settings.productionAllowanceTiers);
+              if (warnings.length === 0) return null;
+              return (
+                <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-2 mb-2 text-[11px] text-amber-800 dark:text-amber-300 space-y-0.5" data-testid="viewer-allowance-tier-warnings">
+                  {warnings.map((w, i) => (<div key={i}>⚠ {w}</div>))}
+                </div>
+              );
+            })()}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs" data-testid="viewer-allowance-tiers">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-1">Tier</th>
+                    <th className="text-left p-1">Qty</th>
+                    <th className="text-left p-1">Sheets</th>
+                    <th className="text-right p-1">Batch (min)</th>
+                    <th className="text-right p-1">Per Sheet</th>
+                    <th className="text-right p-1">Per Part</th>
+                    <th className="text-right p-1">Per-Part Cap</th>
+                    <th className="text-right p-1">QA/Pack</th>
+                    <th className="text-right p-1">OH %</th>
+                    <th className="text-right p-1">Review &gt;</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settings.productionAllowanceTiers.map((t, i) => (
+                    <tr key={i} className="border-b border-muted">
+                      <td className="p-1 font-medium">{t.tierName}<div className="text-[9px] font-mono text-muted-foreground">{t.tierKey}</div></td>
+                      <td className="p-1">{t.minQty}–{t.maxQty ?? "∞"}</td>
+                      <td className="p-1">{t.minSheets != null || t.maxSheets != null ? `${t.minSheets ?? "0"}–${t.maxSheets ?? "∞"}` : "—"}</td>
+                      <td className="p-1 text-right">{t.fixedBatchMinutes}</td>
+                      <td className="p-1 text-right">{t.perSheetHandlingMinutes} min</td>
+                      <td className="p-1 text-right">{t.perPartHandlingSeconds}s</td>
+                      <td className="p-1 text-right">{t.perPartHandlingCapMinutes ?? "—"}</td>
+                      <td className="p-1 text-right">{t.qaPackingMinutes ?? 0}</td>
+                      <td className="p-1 text-right">{t.productionOverheadPercent ?? 0}%</td>
+                      <td className="p-1 text-right">{t.reviewRequiredAboveQty ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">Internal-only. Adds batch setup, per-sheet handling, per-part touch time, QA/packing, and a production overhead % to LL lines based on quantity.</p>
+          </>
+        )}
+      </SettingsSection>
+
       <SettingsSection title={`Process Rate Tables (${settings.processRateTables?.length ?? 0} entries)`}>
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 px-2 py-1.5 mb-2 text-[10px] text-amber-800 dark:text-amber-300 leading-snug space-y-1" data-testid="orphan-helper-note-viewer">
+          <p>Orphaned rows are legacy process rates for materials/thicknesses no longer present in the governed material library.</p>
+          <p>To remove a governed rate from future pricing: duplicate this profile and edit the draft, then <strong>Mark inactive</strong>. Once orphaned, the row can be deleted from the draft and the profile re-Saved → Approved → Activated. Existing estimates and snapshots are not changed.</p>
+        </div>
         {!settings.processRateTables || settings.processRateTables.length === 0 ? (
           <div className="rounded-md border border-dashed border-orange-300 bg-orange-50 dark:bg-orange-950/20 p-3 text-xs text-orange-700 dark:text-orange-400" data-testid="empty-process-rates-warning">
             <p className="font-medium">No process rate entries defined</p>
