@@ -27,7 +27,9 @@ import type { LLGovernedInputs } from "@/lib/ll-pricing";
 // value columns match the builder subtotal and customer Preview/PDF totals.
 // computeRowPricing is the same function the builder sums into its subtotal
 // (totalValue). No new pricing formula is introduced here.
-import { computeRowPricing, type SheetMaterialRef } from "@/pages/laser-quote-builder";
+// Phase 5H.9E — imported from the neutral LL library module instead of the
+// builder page, so this list no longer couples to laser-quote-builder.tsx.
+import { computeRowPricing, type SheetMaterialRef } from "@/lib/ll-estimate-totals";
 
 type EnrichedLaserEstimate = LaserEstimate & {
   linkedQuote?: { id: string; number: string; status: string } | null;
