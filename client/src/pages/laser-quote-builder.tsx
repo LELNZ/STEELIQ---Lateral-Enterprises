@@ -854,6 +854,19 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         sell={`$${breakdown.materialSellCost.toFixed(2)}`}
         margin={`$${breakdown.materialMargin.toFixed(2)}`}
       />
+      {/* Phase 5H.9B — always-visible (no edit modal) internal material allocation
+          basis indicator. Line-level wording ("this line"). Not on customer surfaces. */}
+      <div className="flex items-center -mt-0.5 mb-0.5 pl-1" data-testid="material-allocation-basis">
+        {breakdown.materialAllocationPolicy === "yield-based" && breakdown.yieldApplied ? (
+          <span className="inline-flex items-center rounded bg-purple-100 dark:bg-purple-950/40 px-1.5 py-0.5 text-[9px] font-medium text-purple-700 dark:text-purple-300">
+            Material allocation: Estimated yield-based (this line)
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[9px] font-medium text-slate-700 dark:text-slate-300">
+            Material allocation: Whole sheet (this line)
+          </span>
+        )}
+      </div>
       <BucketRow
         label={`Machine ($${breakdown.machineBuyRatePerHour.toFixed(0)}→$${breakdown.machineSellRatePerHour.toFixed(0)}/hr)`}
         buy={`$${breakdown.machineBuyCost.toFixed(2)}`}
@@ -951,8 +964,16 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
           Manual child procedure totals are not available in this panel's props
           and would require a builder-level refactor to include — shown as note. */}
       <div className="border-t pt-1 mt-1 rounded-sm bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 space-y-0.5" data-testid="labour-recovery-summary">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Total labour + production recovery <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(internal only)</span>
+        <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span>Total labour + production recovery <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(internal only)</span></span>
+          <span
+            className="inline-flex cursor-help flex-shrink-0"
+            data-testid="info-labour-recovery"
+            aria-label="How labour and production recovery is treated"
+            title="Machine time is recovered separately through the machine sell rate. Production allowance recovers governed line handling, QA, packing, touch time, and production overhead. Manual child procedures are priced separately."
+          >
+            <Info className="h-3 w-3 text-muted-foreground/70" />
+          </span>
         </div>
         {breakdown.labourSellCost > 0 && (
           <div className="flex justify-between text-[10px]">
@@ -973,11 +994,6 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         <div className="flex justify-between text-[10px] text-muted-foreground">
           <span>Machine sell recovery <span className="text-[9px]">(separate bucket)</span></span>
           <span className="font-mono" data-testid="recovery-machine-sell">${breakdown.machineSellCost.toFixed(2)}</span>
-        </div>
-        <div className="text-[9px] text-muted-foreground/90 italic pt-1 border-t border-purple-200/60 dark:border-purple-800/60 mt-1 leading-snug" data-testid="recovery-notes">
-          Machine attendance treatment: governed by machine rate definition on the active profile — operator attendance during the {breakdown.machineTimeMinutes.toFixed(1)} min cut window is charged via the machine sell rate (${breakdown.machineSellRatePerHour.toFixed(0)}/hr), not via this labour summary.
-          <br />
-          Manual child procedures are shown separately below the parent line and are not included in this internal labour summary.
         </div>
       </div>
 
