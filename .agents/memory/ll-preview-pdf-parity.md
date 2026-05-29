@@ -30,3 +30,6 @@ the defaults — that would change LJ.
 **How to apply:** when touching either LL schedule renderer's cells, check the twin
 renderer for the same change. For the image cell specifically, keep the manual-blank
 render text-free in both surfaces; dimensions stay in the Size column only.
+
+## LL estimate total source (for any non-builder surface)
+The authoritative LL estimate value = Σ `computeRowPricing(item, sheetMaterials, llPricingSettings, governedInputs).finalLineSell` over `itemsJson` (== builder `totalValue` / snapshot `subtotalExclGst`). GST: excl×0.15 = gstAmount, excl×1.15 = totalInclGst. Estimates store NO total column — totals are LIVE-recomputed from the ACTIVE pricing profile/sheet-materials/gas/consumable inputs (not the estimate's stored pricingProfileId). Reuse `computeRowPricing` + `SheetMaterialRef` (exported from `laser-quote-builder.tsx`); never re-derive a new formula. **Why:** prevents drift between the estimates list, builder subtotal, and customer Preview/PDF. **Caveat:** exporting non-component fns from the builder page disables React Fast Refresh for that file in dev only (harmless).

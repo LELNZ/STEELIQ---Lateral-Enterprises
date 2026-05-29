@@ -55,7 +55,7 @@ import {
 } from "@/lib/ll-pricing";
 import type { LLGasCostInput, LLConsumablesCostInput } from "@shared/schema";
 
-interface SheetMaterialRef {
+export interface SheetMaterialRef {
   id: string;
   supplierName: string;
   materialFamily: string;
@@ -429,7 +429,7 @@ export interface LLRowPricing {
   finalMarginPercent: number;
 }
 
-function computeRowPricing(
+export function computeRowPricing(
   item: Omit<LaserQuoteItem, "id"> | LaserQuoteItem,
   materials: SheetMaterialRef[],
   settings?: LLPricingSettings | null,
