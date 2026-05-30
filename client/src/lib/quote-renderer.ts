@@ -408,7 +408,7 @@ function buildScheduleItem(
   const showOps = !!(totalsCfg?.showOperationPricing);
   const pricingDisplay: RenderPricingDisplay | null = isParentLaserItem
     ? {
-        description: "Laser cut blank",
+        description: "Fibre laser cut component",
         quantity: parentQty,
         unitPrice: parentUnitPrice,
         lineTotal: parentLineTotal,
@@ -763,15 +763,27 @@ export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
     .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
     .join("; ");
 
-  // Phase 5H.0 — concise comma-separated ops summary for the
-  // Item / Description cell. Includes brief description when present.
+  // Phase 5H.10 — customer-facing operations label for the
+  // Item / Description cell. Internal terms ("Ops", procedure
+  // descriptions, manual/child/attached) must NOT appear in customer
+  // Preview/PDF. We emit a concise, professional single line:
+  // "Additional operation: Folding" (singular) or
+  // "Additional operations: Folding, Deburring" (plural). Preview and
+  // PDF share this exact string so wording parity is guaranteed.
   // Empty string when no ops so callers can branch cleanly.
-  // Phase 5H.1 — both surfaces use the same ASCII " - " separator
-  // when an op has a brief description, so Preview and PDF render
-  // identical text inside the Item / Description cell.
-  const opsSummaryPreview = ops.length === 0 ? "" : ops
-    .map(op => op.description ? `${op.procedureType} - ${op.description}` : op.procedureType)
-    .join(", ");
+  const friendlyOpName = (raw: string): string => {
+    const s = (raw || "").toString().trim();
+    if (!s) return "Operation";
+    // A label that already carries an uppercase letter is treated as a
+    // friendly display name and used as-is; otherwise fall back to a
+    // safe title-cased rendering of the code (e.g. "edge_deburr").
+    if (/[A-Z]/.test(s)) return s;
+    return s.replace(/[_-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  };
+  const opNames = ops.map(op => friendlyOpName(op.procedureType));
+  const opsSummaryPreview = opNames.length === 0
+    ? ""
+    : `Additional operation${opNames.length > 1 ? "s" : ""}: ${opNames.join(", ")}`;
   const opsSummaryPdf = opsSummaryPreview;
 
   const fmtMoney = (n: number) => `$${fmtCurrency(n)}`;
@@ -824,7 +836,7 @@ export function extractLaserTableRow(item: RenderScheduleItem): LaserTableRow {
   // buildScheduleItem() / applyAttachedProcedureNumbering() as
   // "Item NNN — REF" (i.e. the same content as itemRefLine), so we
   // can NOT use it as the description. The real description lives on
-  // `pricingDisplay.description` (e.g. "Laser cut blank") for laser
+  // `pricingDisplay.description` (e.g. "Fibre laser cut component") for laser
   // parents. Fallback to the customer notes or the bare ref so the
   // cell never collapses to a duplicate identifier.
   const description = (pd?.description || "").toString().trim()

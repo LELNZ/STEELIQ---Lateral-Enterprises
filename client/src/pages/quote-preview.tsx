@@ -1505,7 +1505,7 @@ function LaserScheduleTable({
                         style={{ fontSize: "10.5px", color: template.colors.bodyText, marginTop: "2px" }}
                         data-testid={`text-item-ops-${item.index}`}
                       >
-                        Ops: {row.opsSummaryPreview}
+                        {row.opsSummaryPreview}
                       </div>
                     )}
                     {/* Phase 5H.0 — customer notes are intentionally NOT
