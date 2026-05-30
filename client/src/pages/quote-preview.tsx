@@ -971,6 +971,8 @@ function ManualBlankPreviewSvg({
   itemIndex,
   showCaption = true,
   showDimensionText = true,
+  maxWidthPx = MANUAL_BLANK_PREVIEW_MAX_W_PX,
+  maxHeightPx = MANUAL_BLANK_PREVIEW_MAX_H_PX,
 }: {
   lengthMm: number;
   widthMm: number;
@@ -988,10 +990,19 @@ function ManualBlankPreviewSvg({
   // "size text inside the image box" defect. Size remains in the Size
   // column. Default true preserves the existing LJ joinery card behaviour.
   showDimensionText?: boolean;
+  // Phase 5H.9F — optional max-size overrides for the rendered blank. The LL
+  // hybrid schedule image column is only ~22mm/~88px wide, but the defaults
+  // (130x80px) let the rect grow far wider than the cell, so the surrounding
+  // overflow:hidden clipped the centred rounded rectangle into a thin sliver
+  // ("only a line"). The LL call site now passes cell-fitting values so the
+  // placeholder renders as a clean, fully-visible rounded rectangle that
+  // mirrors the PDF schedule placeholder. Defaults preserve LJ joinery sizing.
+  maxWidthPx?: number;
+  maxHeightPx?: number;
 }) {
   const scale = Math.min(
-    MANUAL_BLANK_PREVIEW_MAX_W_PX / lengthMm,
-    MANUAL_BLANK_PREVIEW_MAX_H_PX / widthMm,
+    maxWidthPx / lengthMm,
+    maxHeightPx / widthMm,
   );
   const rectW = Math.max(16, Math.round(lengthMm * scale));
   const rectH = Math.max(12, Math.round(widthMm * scale));
@@ -1468,6 +1479,8 @@ function LaserScheduleTable({
                           itemIndex={item.index}
                           showCaption={false}
                           showDimensionText={false}
+                          maxWidthPx={64}
+                          maxHeightPx={68}
                         />
                       ) : (
                         <span style={{ fontSize: "10px", color: template.colors.headingMuted }}>—</span>
