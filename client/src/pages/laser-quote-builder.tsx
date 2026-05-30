@@ -435,6 +435,300 @@ function BucketRow({ label, buy, sell, margin, bold }: { label: string; buy: str
   );
 }
 
+// Phase 5I — Benchmark Calibration (internal only).
+// A collapsible, internal-only calibration aid that compares the SteelIQ
+// engine-CALCULATED line result against a manually entered supplier/competitor
+// benchmark. It changes NO pricing math, totals, snapshots, customer Preview,
+// PDF, LJ or LE. Benchmark inputs are LOCAL COMPONENT STATE ONLY (not persisted
+// to item JSON, the estimate, or the DB) for this first phase. The panel never
+// renders on any customer-facing surface — it lives inside the LL builder's
+// internal pricing calculation area.
+function BenchmarkCalibrationPanel({
+  quantity,
+  breakdown,
+  attachedTotalSell,
+  attachedCount,
+}: {
+  quantity: number;
+  breakdown: LLPricingBreakdown;
+  attachedTotalSell: number;
+  attachedCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [unitStr, setUnitStr] = useState("");
+  const [totalStr, setTotalStr] = useState("");
+  const [notes, setNotes] = useState("");
+  const [includeChildren, setIncludeChildren] = useState(false);
+
+  const money = (n: number) => `$${n.toFixed(2)}`;
+  const qty = Math.max(quantity || 0, 1);
+
+  // SteelIQ calculated result. Uses the engine breakdown sell (pre commercial
+  // override) so bucket contributions reconcile cleanly against the line sell.
+  const parentSell = breakdown.sellTotal;
+  const combinedSell = parentSell + attachedTotalSell;
+  const scopeChildren = includeChildren && attachedCount > 0;
+  const steelIqLineSell = scopeChildren ? combinedSell : parentSell;
+  const steelIqUnitSell = steelIqLineSell / qty;
+
+  // Benchmark inputs. Either value may be blank; the other is derived.
+  const unitNum = parseFloat(unitStr);
+  const totalNum = parseFloat(totalStr);
+  const unitValid = Number.isFinite(unitNum) && unitNum > 0;
+  const totalValid = Number.isFinite(totalNum) && totalNum > 0;
+  let benchUnit: number | null = null;
+  let benchTotal: number | null = null;
+  let benchTotalDerived = false;
+  let benchUnitDerived = false;
+  if (unitValid && totalValid) {
+    benchUnit = unitNum;
+    benchTotal = totalNum;
+  } else if (unitValid) {
+    benchUnit = unitNum;
+    benchTotal = unitNum * qty;
+    benchTotalDerived = true;
+  } else if (totalValid) {
+    benchTotal = totalNum;
+    benchUnit = totalNum / qty;
+    benchUnitDerived = true;
+  }
+  const hasBenchmark = benchUnit != null && benchTotal != null;
+
+  const diffUnit = hasBenchmark ? steelIqUnitSell - (benchUnit as number) : 0;
+  const diffTotal = hasBenchmark ? steelIqLineSell - (benchTotal as number) : 0;
+  const diffPct = hasBenchmark && (benchTotal as number) !== 0
+    ? (diffTotal / (benchTotal as number)) * 100
+    : null;
+
+  let status: "below" | "near" | "above" | null = null;
+  if (diffPct != null) {
+    if (Math.abs(diffPct) <= 5) status = "near";
+    else if (diffPct > 5) status = "above";
+    else status = "below";
+  }
+
+  const buckets: Array<{ key: string; label: string; sell: number }> = [
+    { key: "material", label: "Material sell", sell: breakdown.materialSellCost },
+    { key: "machine", label: "Machine sell", sell: breakdown.machineSellCost },
+    { key: "gas", label: "Gas sell", sell: breakdown.gasSellCost },
+    { key: "consumables", label: "Consumables sell", sell: breakdown.consumablesSellCost },
+    { key: "allowance", label: "Production allowance labour recovery", sell: breakdown.productionAllowanceSellCost },
+    { key: "overhead", label: "Production overhead recovery", sell: breakdown.productionOverheadAmount },
+  ];
+  // Only contribute the child-procedure bucket when children are in scope, so
+  // bucket percentages stay consistent with the SteelIQ line sell denominator.
+  if (scopeChildren) {
+    buckets.push({ key: "child", label: "Manual child procedure total", sell: attachedTotalSell });
+  }
+  const bucketPct = (sell: number) =>
+    steelIqLineSell > 0 ? (sell / steelIqLineSell) * 100 : 0;
+
+  return (
+    <div className="border border-dashed border-sky-300 dark:border-sky-800 rounded-md bg-sky-50/40 dark:bg-sky-950/20" data-testid="benchmark-calibration-panel">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center gap-1.5 px-3 py-2"
+        data-testid="button-toggle-benchmark-calibration"
+      >
+        <FlaskConical className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+        <span className="text-xs font-semibold text-sky-800 dark:text-sky-300 uppercase tracking-wide">
+          Benchmark Calibration
+        </span>
+        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 bg-sky-100 text-sky-700 border-sky-300 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800">
+          internal
+        </Badge>
+        {status && (
+          <Badge
+            variant="outline"
+            className={`text-[9px] px-1.5 py-0 h-4 ${
+              status === "near"
+                ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-300"
+                : status === "above"
+                  ? "bg-red-50 text-red-700 border-red-300 dark:bg-red-950/30 dark:text-red-300"
+                  : "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300"
+            }`}
+            data-testid="badge-benchmark-status-collapsed"
+          >
+            {status === "near" ? "Near benchmark" : status === "above" ? "Above benchmark" : "Below benchmark"}
+          </Badge>
+        )}
+        <span className="ml-auto">
+          {open ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-3" data-testid="benchmark-calibration-body">
+          <p className="text-[10px] text-muted-foreground italic leading-snug">
+            Internal calibration aid only. Does not change pricing, totals, snapshots, or any customer document. Inputs are not saved.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Benchmark name / source</Label>
+              <Input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Hi-Tech Metals quote 61569"
+                className="h-7 text-xs"
+                data-testid="input-benchmark-name"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Notes (optional)</Label>
+              <Input
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Optional"
+                className="h-7 text-xs"
+                data-testid="input-benchmark-notes"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Benchmark unit price (ex GST)</Label>
+              <Input
+                value={unitStr}
+                onChange={e => setUnitStr(e.target.value)}
+                inputMode="decimal"
+                placeholder="e.g. 1.97"
+                className="h-7 text-xs font-mono"
+                data-testid="input-benchmark-unit-price"
+              />
+              {benchUnitDerived && (
+                <span className="text-[9px] text-muted-foreground" data-testid="text-benchmark-unit-derived">
+                  Implied from total ÷ qty
+                </span>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Benchmark total (ex GST, optional)</Label>
+              <Input
+                value={totalStr}
+                onChange={e => setTotalStr(e.target.value)}
+                inputMode="decimal"
+                placeholder="auto = unit × qty"
+                className="h-7 text-xs font-mono"
+                data-testid="input-benchmark-total"
+              />
+              {benchTotalDerived && (
+                <span className="text-[9px] text-muted-foreground" data-testid="text-benchmark-total-derived">
+                  Auto = unit × {qty} qty
+                </span>
+              )}
+            </div>
+          </div>
+
+          {attachedCount > 0 && (
+            <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer" data-testid="label-benchmark-include-children">
+              <input
+                type="checkbox"
+                checked={includeChildren}
+                onChange={e => setIncludeChildren(e.target.checked)}
+                className="h-3.5 w-3.5"
+                data-testid="checkbox-benchmark-include-children"
+              />
+              Include {attachedCount} attached manual child procedure{attachedCount === 1 ? "" : "s"} in comparison
+            </label>
+          )}
+          <div className="flex items-center gap-1.5 text-[10px]" data-testid="text-benchmark-scope">
+            <Info className="h-3 w-3 text-muted-foreground" />
+            <span className="text-muted-foreground">
+              Comparing: <span className="font-medium text-foreground">
+                {scopeChildren ? "Parent laser line + attached manual child procedures" : "Parent laser line only"}
+              </span>
+              {attachedCount > 0 && !scopeChildren ? " (tick above to include child procedures)" : ""}
+            </span>
+          </div>
+
+          {/* Comparison */}
+          <div className="rounded-md border bg-background/60 p-2 space-y-1">
+            <div className="grid grid-cols-[1fr_90px_90px] gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b pb-1">
+              <span></span>
+              <span className="text-right">Unit (ex GST)</span>
+              <span className="text-right">Line (ex GST)</span>
+            </div>
+            <div className="grid grid-cols-[1fr_90px_90px] gap-1 text-[11px]">
+              <span className="text-muted-foreground">SteelIQ calculated</span>
+              <span className="text-right font-mono" data-testid="text-benchmark-steeliq-unit">{money(steelIqUnitSell)}</span>
+              <span className="text-right font-mono" data-testid="text-benchmark-steeliq-line">{money(steelIqLineSell)}</span>
+            </div>
+            <div className="grid grid-cols-[1fr_90px_90px] gap-1 text-[11px]">
+              <span className="text-muted-foreground">Benchmark</span>
+              <span className="text-right font-mono" data-testid="text-benchmark-unit">{hasBenchmark ? money(benchUnit as number) : "—"}</span>
+              <span className="text-right font-mono" data-testid="text-benchmark-total">{hasBenchmark ? money(benchTotal as number) : "—"}</span>
+            </div>
+            {hasBenchmark && (
+              <>
+                <div className="grid grid-cols-[1fr_90px_90px] gap-1 text-[11px] border-t pt-1 mt-0.5">
+                  <span className="text-muted-foreground">Difference (SteelIQ − benchmark)</span>
+                  <span className={`text-right font-mono ${diffUnit > 0 ? "text-red-700 dark:text-red-400" : diffUnit < 0 ? "text-blue-700 dark:text-blue-400" : ""}`} data-testid="text-benchmark-diff-unit">
+                    {diffUnit >= 0 ? "+" : "−"}{money(Math.abs(diffUnit))}
+                  </span>
+                  <span className={`text-right font-mono ${diffTotal > 0 ? "text-red-700 dark:text-red-400" : diffTotal < 0 ? "text-blue-700 dark:text-blue-400" : ""}`} data-testid="text-benchmark-diff-total">
+                    {diffTotal >= 0 ? "+" : "−"}{money(Math.abs(diffTotal))}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] pt-1">
+                  <span className="text-muted-foreground">Difference %</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono" data-testid="text-benchmark-diff-percent">
+                      {diffPct != null ? `${diffPct >= 0 ? "+" : "−"}${Math.abs(diffPct).toFixed(1)}%` : "—"}
+                    </span>
+                    {status && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] px-1.5 py-0 h-4 ${
+                          status === "near"
+                            ? "bg-green-50 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-300"
+                            : status === "above"
+                              ? "bg-red-50 text-red-700 border-red-300 dark:bg-red-950/30 dark:text-red-300"
+                              : "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300"
+                        }`}
+                        data-testid="badge-benchmark-status"
+                      >
+                        {status === "near" ? "Near benchmark" : status === "above" ? "Above benchmark" : "Below benchmark"}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+            {!hasBenchmark && (
+              <p className="text-[10px] text-muted-foreground italic pt-1" data-testid="text-benchmark-empty">
+                Enter a benchmark unit price or total to see the comparison.
+              </p>
+            )}
+          </div>
+
+          {/* Bucket contribution */}
+          <div className="rounded-md border bg-background/60 p-2 space-y-0.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b pb-1 mb-1">
+              SteelIQ bucket contribution
+            </div>
+            {buckets.map(b => (
+              <div key={b.key} className="grid grid-cols-[1fr_80px_56px] gap-1 text-[10px]" data-testid={`row-benchmark-bucket-${b.key}`}>
+                <span className="text-muted-foreground truncate">{b.label}</span>
+                <span className="text-right font-mono">{money(b.sell)}</span>
+                <span className="text-right font-mono text-muted-foreground">{bucketPct(b.sell).toFixed(1)}%</span>
+              </div>
+            ))}
+            <div className="grid grid-cols-[1fr_80px_56px] gap-1 text-[10px] font-semibold border-t pt-1 mt-1">
+              <span>SteelIQ line sell</span>
+              <span className="text-right font-mono" data-testid="text-benchmark-bucket-total">{money(steelIqLineSell)}</span>
+              <span className="text-right font-mono text-muted-foreground">100%</span>
+            </div>
+            <p className="text-[9px] text-muted-foreground italic pt-1 leading-snug">
+              Bucket sells are the engine-calculated line values (pre commercial override). Percentages are of the SteelIQ line sell shown above.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPricingBreakdown; supplierName: string }) {
   const isTimeBased = breakdown.processMode === "time-based";
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -1208,6 +1502,12 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
   const dialogCommercial = useMemo(() => {
     return applyCommercialOverride(dialogPricing, formData.quantity, buildOverrideInputs(formData));
   }, [dialogPricing, formData]);
+
+  // Phase 5I — attached manual child procedure rollup for the live edit dialog,
+  // consumed only by the internal Benchmark Calibration panel. No pricing impact.
+  const dialogAttachedRollup = useMemo(() => {
+    return rollupAttachedProcedures(formData);
+  }, [formData]);
 
   const dialogReadiness = useMemo(() => {
     const materialId = selectedMaterialRow?.id || formData.llSheetMaterialId;
@@ -2986,6 +3286,19 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                 </p>
               )}
             </div>
+
+            {/* Phase 5I — internal-only Benchmark Calibration panel. Lives in the
+                LL builder edit dialog beside the live pricing breakdown so the
+                comparison updates as allocation mode / inputs change. Never on
+                customer Preview/PDF; no pricing/snapshot impact. */}
+            {!formData.isManualProcedure && (
+              <BenchmarkCalibrationPanel
+                quantity={formData.quantity}
+                breakdown={dialogPricing}
+                attachedTotalSell={dialogAttachedRollup.totalSell}
+                attachedCount={dialogAttachedRollup.count}
+              />
+            )}
 
             {/* Phase 5E — Commercial Override Layer */}
             <Collapsible open={!!formData.pricingOverrideEnabled || (formData.pricingOverrideMode != null && formData.pricingOverrideMode !== "none")}>
