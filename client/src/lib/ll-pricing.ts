@@ -117,6 +117,9 @@ export interface LLPricingBreakdown {
   processCostTotal: number;
   processMode: "time-based" | "flat-rate";
 
+  // Operationally retired. The engine always emits 0 for these — setup,
+  // handling, picking, sorting, QA, packing and production recovery are governed
+  // solely by Production Allowance tiers. Kept for snapshot/back-compat only.
   setupHandlingCost: number;
   setupMinutes: number;
   handlingMinutes: number;
@@ -657,8 +660,6 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     quantity,
     cutLengthMm,
     pierceCount,
-    setupMinutes,
-    handlingMinutes,
     materialMarkupPercent,
     consumablesMarkupPercent,
     utilisationFactor,
@@ -855,9 +856,15 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   const gasSellCost = gasBuyCost * (1 + gasMarkupPercent / 100);
   const gasMargin = gasSellCost - gasBuyCost;
 
-  const labourBuyCost = ((setupMinutes + handlingMinutes) / 60) * operatorRatePerHour;
-  const labourSellCost = ((setupMinutes + handlingMinutes) / 60) * shopRatePerHour;
-  const labourMargin = labourSellCost - labourBuyCost;
+  // Loose per-line setup/handling is operationally retired. The LL pricing
+  // engine no longer consumes line-level setupMinutes/handlingMinutes — setup,
+  // handling, picking, sorting, QA, packing and production recovery are governed
+  // exclusively by Production Allowance tiers. These fields remain in the
+  // schema/inputs/breakdown for data + snapshot compatibility but contribute
+  // $0 to current LL pricing.
+  const labourBuyCost = 0;
+  const labourSellCost = 0;
+  const labourMargin = 0;
 
   // Phase 5H.3 — Production allowance + overhead (internal-only, additive).
   // Profiles without productionAllowanceTiers behave exactly as before.
@@ -935,7 +942,7 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
   const effectiveMarkupPercent = totalBuyCost > 0 ? ((sellTotal - totalBuyCost) / totalBuyCost) * 100 : 0;
   const markupAmount = sellTotal - totalBuyCost;
 
-  const setupHandlingCost = labourSellCost;
+  const setupHandlingCost = 0;
 
   const unitSell = sellTotal / safeQty;
   const unitCost = totalBuyCost / safeQty;
@@ -962,8 +969,8 @@ export function computeLLPricing(inputs: LLPricingInputs, settings?: LLPricingSe
     processCostTotal,
     processMode,
     setupHandlingCost,
-    setupMinutes: Number(setupMinutes) || 0,
-    handlingMinutes: Number(handlingMinutes) || 0,
+    setupMinutes: 0,
+    handlingMinutes: 0,
     internalCostSubtotal: totalBuyCost,
     minimumLineChargeApplied,
     minimumLineCharge: rates.minimumLineCharge,

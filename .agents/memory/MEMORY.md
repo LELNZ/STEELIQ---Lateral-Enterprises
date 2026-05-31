@@ -1,3 +1,5 @@
 - [LL line-policy legacy-safety](ll-allocation-legacy-safety.md) — new optional per-line LL pricing fields must default to legacy IN the engine; never read profile default for a missing line field (estimates live-recompute).
+- [LL setup/handling retired](ll-setup-handling-retired.md) — loose per-line setup/handling no longer affects LL pricing; Production Allowance tiers are canonical; fields kept 0/hidden for back-compat only, don't reintroduce.
 - [LL Preview/PDF parity](ll-preview-pdf-parity.md) — LL customer schedule has twin renderers (quote-preview LaserScheduleTable + pdf-engine renderLaserScheduleTable); mirror cell changes; manual-blank image cell stays text-free, size lives only in Size column.
 - [TS release-gate](ts-release-gate.md) — `npm run check` = bare tsc; tsconfig needed `target: ES2020` (Map/Set iter), drizzle-zod widens jsonb `.$type` so storage inserts need `as $inferInsert`, Express5 params need `as string`.
+- [Badge in Radix asChild triggers](badge-radix-trigger.md) — shadcn Badge has no forwardRef; wrap it in a span before TooltipTrigger/PopoverTrigger asChild or you get a runtime ref warning (build still passes).
