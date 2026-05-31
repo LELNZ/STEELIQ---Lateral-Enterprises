@@ -207,6 +207,7 @@ function getLayoutSummary(config: QuoteItem) {
 function makeDefaultColumns(count: number): CustomColumn[] {
   return Array.from({ length: count }, () => ({
     width: 0,
+    heightOverride: 0,
     rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const, hingeSide: "left" as const, openDirection: "out" as const }],
   }));
 }
@@ -1270,7 +1271,7 @@ export default function QuoteBuilder() {
     const current = w.customColumns || [];
     const next: CustomColumn[] = Array.from({ length: count }, (_, i) => {
       if (i < current.length) return current[i];
-      return { width: 0, rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const, hingeSide: "left" as const, openDirection: "out" as const }] };
+      return { width: 0, heightOverride: 0, rows: [{ height: 0, type: "fixed" as const, slideDirection: "right" as const, hingeSide: "left" as const, openDirection: "out" as const }] };
     });
     form.setValue("customColumns", next);
     setExpandedCols(new Set([0]));

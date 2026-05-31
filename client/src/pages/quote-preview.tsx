@@ -588,7 +588,7 @@ export default function QuotePreview() {
                 <div style={{ display: "flex", flexDirection: "column", gap: sectionGap, marginBottom: `${Math.round(T.density.itemGapMm * 3.78)}px` }}>
                   <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: T.colors.accent }}>Schedule of Items</h3>
                   {!isLaserQuote && (
-                    <p className="text-xs italic" style={{ color: T.colors.body }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
+                    <p className="text-xs italic" style={{ color: T.colors.bodyText }} data-testid="text-orientation-note">All joinery is viewed from outside.</p>
                   )}
                 </div>
                 {isLaserQuote ? (
@@ -1148,7 +1148,7 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
     rakedRightHeight: di.rakedRightHeight || 0,
     rakedSplitEnabled: Boolean(sv.rakedSplitEnabled),
     rakedSplitPosition: Number(sv.rakedSplitPosition) || 0,
-    sidelightEnabled: sv.sidelightEnabled ?? true,
+    sidelightEnabled: Boolean(sv.sidelightEnabled ?? true),
     sidelightSide: (sv.sidelightSide || "right") as any,
     sidelightWidth: Number(sv.sidelightWidth) || 400,
     bayAngle: Number(sv.bayAngle) || 135,
@@ -1177,6 +1177,7 @@ function docItemToDrawingConfig(di: QuoteDocumentItem): InsertQuoteItem {
     glassIguType: String(sv.iguType || ""),
     glassType: String(sv.glassType || ""),
     glassThickness: String(sv.glassThickness || ""),
+    paneGlassSpecs: [],
     wanzBar: Boolean(sv.wanzBarEnabled),
     wanzBarSource: (sv.wanzBarSource || "") as any,
     wanzBarSize: String(sv.wanzBarSize || ""),
@@ -1505,7 +1506,7 @@ function LaserScheduleTable({
                         style={{ fontSize: "10.5px", color: template.colors.bodyText, marginTop: "2px" }}
                         data-testid={`text-item-ops-${item.index}`}
                       >
-                        Ops: {row.opsSummaryPreview}
+                        {row.opsSummaryPreview}
                       </div>
                     )}
                     {/* Phase 5H.0 — customer notes are intentionally NOT

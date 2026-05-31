@@ -692,7 +692,7 @@ function renderCommercialRemarks(pdf: Pdf, y: number, model: QuoteRenderModel): 
   // Heading: "DETAILS"
   y += PAD_V;
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(mmSize(6.5));
+  pdf.setFontSize(mmSize("6.5"));
   pdf.setTextColor(COLOR_MUTED);
   pdf.text("DETAILS", innerLeft, y + 2);
   y += 6;
@@ -1243,8 +1243,9 @@ async function renderLaserScheduleTable(
 
     // --- Item / Description cell (3 stacked lines) -------------------
     // Line 1: ref (small, muted) — "Item 001 - LC-001"
-    // Line 2: title (bold) — "Laser cut blank"
-    // Line 3 (optional): "Ops: <summary>"
+    // Line 2: title (bold) — "Fibre laser cut component"
+    // Line 3 (optional): "Additional operation(s): <summary>" — the
+    // full customer-facing label is built in extractLaserTableRow.
     const itemBaseY = y + 3;
     const refLineSp = SMALL_FONT * 1.15 * 0.352778;
     drawLine(row.itemRefLinePdf, X_ITEM, W_ITEM, itemBaseY, {
@@ -1259,7 +1260,7 @@ async function renderLaserScheduleTable(
     if (row.opsSummaryPdf) {
       const titleSp = BODY_FONT * 1.15 * 0.352778;
       const opsY = titleY + titleLines * titleSp + 0.5;
-      drawWrappedLines(`Ops: ${row.opsSummaryPdf}`, X_ITEM, W_ITEM, opsY, {
+      drawWrappedLines(row.opsSummaryPdf, X_ITEM, W_ITEM, opsY, {
         font: SMALL_FONT,
         maxLines: 2,
       });

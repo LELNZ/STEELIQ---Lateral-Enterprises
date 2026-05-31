@@ -1502,13 +1502,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLLPricingProfile(data: InsertLLPricingProfile): Promise<LLPricingProfile> {
-    const [created] = await db.insert(llPricingProfiles).values(data).returning();
+    const [created] = await db.insert(llPricingProfiles).values(data as typeof llPricingProfiles.$inferInsert).returning();
     return created;
   }
 
   async updateLLPricingProfile(id: string, data: Partial<InsertLLPricingProfile>): Promise<LLPricingProfile | undefined> {
     const [updated] = await db.update(llPricingProfiles)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...data, updatedAt: new Date() } as Partial<typeof llPricingProfiles.$inferInsert>)
       .where(eq(llPricingProfiles.id, id))
       .returning();
     return updated;
@@ -1589,7 +1589,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLaserEstimate(data: InsertLaserEstimate): Promise<LaserEstimate> {
-    const [created] = await db.insert(laserEstimates).values(data).returning();
+    const [created] = await db.insert(laserEstimates).values(data as typeof laserEstimates.$inferInsert).returning();
     return created;
   }
 
@@ -1606,7 +1606,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateLaserEstimate(id: string, data: Partial<InsertLaserEstimate>): Promise<LaserEstimate | undefined> {
     const [updated] = await db.update(laserEstimates)
-      .set({ ...data, updatedAt: new Date() })
+      .set({ ...data, updatedAt: new Date() } as Partial<typeof laserEstimates.$inferInsert>)
       .where(eq(laserEstimates.id, id))
       .returning();
     return updated;

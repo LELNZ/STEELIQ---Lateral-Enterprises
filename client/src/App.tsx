@@ -114,8 +114,8 @@ function Router() {
       <Route path="/laser-estimates" component={LaserEstimatesList} />
       <Route path="/laser-estimate/new">{() => <LaserQuoteBuilder estimateMode />}</Route>
       <Route path="/laser-estimate/:id">{() => <LaserQuoteBuilder estimateMode />}</Route>
-      <Route path="/laser-quote/new" component={LaserQuoteBuilder} />
-      <Route path="/laser-quote/:id" component={LaserQuoteBuilder} />
+      <Route path="/laser-quote/new">{() => <LaserQuoteBuilder />}</Route>
+      <Route path="/laser-quote/:id">{() => <LaserQuoteBuilder />}</Route>
       <Route path="/quotes/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id/preview" component={QuotePreview} />
       <Route path="/quote/:id" component={QuoteDetail} />

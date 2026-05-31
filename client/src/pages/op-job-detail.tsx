@@ -570,7 +570,7 @@ export default function OpJobDetail() {
         <>
           <Separator />
           <LLLifecycleStripFromJob
-            jobId={jobId}
+            jobId={jobId!}
             sourceQuoteId={job.sourceQuoteId}
             customerId={job.customerId}
             projectId={job.projectId}
