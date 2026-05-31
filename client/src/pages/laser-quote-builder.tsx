@@ -829,20 +829,6 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         sell={`$${breakdown.consumablesSellCost.toFixed(2)}`}
         margin={`$${breakdown.consumablesMargin.toFixed(2)}`}
       />
-      {breakdown.labourSellCost > 0 && (
-        <div data-testid="legacy-line-labour-row">
-          <BucketRow
-            label={`Legacy line setup/handling labour ($${breakdown.operatorRatePerHour.toFixed(0)}→$${breakdown.shopRatePerHour.toFixed(0)}/hr)`}
-            buy={`$${breakdown.labourBuyCost.toFixed(2)}`}
-            sell={`$${breakdown.labourSellCost.toFixed(2)}`}
-            margin={`$${breakdown.labourMargin.toFixed(2)}`}
-          />
-          <div className="text-[9px] text-amber-700 dark:text-amber-300 italic leading-snug pl-1">
-            Legacy per-line setup/handling — setup &amp; handling are now governed by the Production Allowance Tier. Clear on this item's Commercial Settings to remove.
-          </div>
-        </div>
-      )}
-
       {/* Phase 5H.3 — Production allowance + overhead (internal-only). Only renders when a tier matched. */}
       {breakdown.productionAllowanceTierKey && (
         <div className="border-t pt-1 mt-1 space-y-0.5" data-testid="production-allowance-block">
@@ -895,13 +881,12 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
         </div>
       )}
 
-      {/* Phase 5H.3-Display — Internal-only labour + production recovery summary.
-          Sums line setup/handling labour sell + production allowance sell.
-          Manual child procedure totals are not available in this panel's props
-          and would require a builder-level refactor to include — shown as note. */}
+      {/* Internal-only production recovery summary. Setup, handling, picking,
+          sorting, QA, packing and production recovery are governed exclusively
+          by Production Allowance tiers — loose per-line setup/handling is retired. */}
       <div className="border-t pt-1 mt-1 rounded-sm bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 space-y-0.5" data-testid="labour-recovery-summary">
         <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <span>Total labour + production recovery <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(internal only)</span></span>
+          <span>Total production recovery <span className="font-normal normal-case tracking-normal text-[9px] text-muted-foreground/80">(internal only)</span></span>
           <span
             className="inline-flex cursor-help flex-shrink-0"
             data-testid="info-labour-recovery"
@@ -911,20 +896,14 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
             <Info className="h-3 w-3 text-muted-foreground/70" />
           </span>
         </div>
-        {breakdown.labourSellCost > 0 && (
-          <div className="flex justify-between text-[10px]">
-            <span className="text-muted-foreground">Legacy line setup/handling sell</span>
-            <span className="font-mono" data-testid="recovery-line-labour-sell">${breakdown.labourSellCost.toFixed(2)}</span>
-          </div>
-        )}
         <div className="flex justify-between text-[10px]">
           <span className="text-muted-foreground">Production allowance sell <span className="text-[9px]">(canonical)</span></span>
           <span className="font-mono" data-testid="recovery-allowance-sell">${breakdown.productionAllowanceSellCost.toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-[11px] font-semibold border-t border-purple-200/60 dark:border-purple-800/60 pt-1 mt-1">
-          <span>Total labour + production recovery</span>
+          <span>Total production recovery</span>
           <span className="font-mono" data-testid="recovery-total-sell">
-            ${(breakdown.labourSellCost + breakdown.productionAllowanceSellCost).toFixed(2)}
+            ${breakdown.productionAllowanceSellCost.toFixed(2)}
           </span>
         </div>
         <div className="flex justify-between text-[10px] text-muted-foreground">
@@ -1103,21 +1082,6 @@ function PricingBreakdownPanel({ breakdown, supplierName }: { breakdown: LLPrici
               <div className="text-[9px] text-muted-foreground italic leading-snug pt-0.5">
                 Tier rates (per-sheet min, per-part sec, per-part cap, QA/packing min, overhead %) are governed by the active LL pricing profile's Production Allowance Tiers — see Settings → Divisions → LL → Pricing Model.
               </div>
-            </div>
-          )}
-
-          {/* Phase 5H.4 — Labour detail card only renders when a legacy non-zero
-              setup or handling minute value is present. Setup/handling is governed
-              by Production Allowance Tiers; this card surfaces only legacy overrides. */}
-          {((Number(breakdown.setupMinutes) || 0) > 0 || (Number(breakdown.handlingMinutes) || 0) > 0) && (
-            <div className="rounded-md border border-amber-300 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-800 p-2 space-y-0.5" data-testid="detail-legacy-labour-card">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">Legacy Setup/Handling Override</div>
-              <div className="text-[9px] text-amber-700 dark:text-amber-300 italic leading-snug mb-1">
-                Legacy setup/handling override exists. Production Allowance is the canonical setup/handling recovery method. Clear if not intentional.
-              </div>
-              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Setup</span><span className="font-mono" data-testid="detail-setup-min">{(Number(breakdown.setupMinutes) || 0).toFixed(1)} min</span></div>
-              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Handling</span><span className="font-mono" data-testid="detail-handling-min">{(Number(breakdown.handlingMinutes) || 0).toFixed(1)} min</span></div>
-              <div className="flex justify-between text-[10px]"><span className="text-muted-foreground">Operator buy / Shop sell</span><span className="font-mono">${breakdown.operatorRatePerHour.toFixed(0)} / ${breakdown.shopRatePerHour.toFixed(0)} /hr</span></div>
             </div>
           )}
 
@@ -3075,21 +3039,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               <CollapsibleContent>
                 <div className="border rounded-md p-3 space-y-3 bg-muted/20 mt-1">
                   <div className="rounded-sm border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 text-[11px] text-muted-foreground leading-snug" data-testid="setup-handling-policy-note">
-                    Setup, sheet handling, sorting, QA and packing are governed by the active Production Allowance Tier — they are no longer entered per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
-                    {(formData.setupMinutes > 0 || formData.handlingMinutes > 0) && (
-                      <span className="block mt-1 text-amber-700 dark:text-amber-300" data-testid="legacy-setup-handling-warning">
-                        Legacy values present on this item: setup {formData.setupMinutes.toFixed(1)} min, handling {formData.handlingMinutes.toFixed(1)} min. These will continue to charge until cleared.
-                        {" "}
-                        <button
-                          type="button"
-                          className="underline font-medium hover:text-amber-900 dark:hover:text-amber-100"
-                          onClick={() => setFormData(prev => ({ ...prev, setupMinutes: 0, handlingMinutes: 0 }))}
-                          data-testid="button-clear-legacy-setup-handling"
-                        >
-                          Clear legacy values
-                        </button>
-                      </span>
-                    )}
+                    Setup, handling, picking, sorting, QA, packing and production recovery are governed by the active Production Allowance Tier — they are not entered per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
