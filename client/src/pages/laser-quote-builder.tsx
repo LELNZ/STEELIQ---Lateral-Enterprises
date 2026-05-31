@@ -2257,10 +2257,9 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       title={`${activePricingProfile.profileName} (${activePricingProfile.versionLabel})`}
                     >
                       <ShieldCheck className="h-3 w-3 mr-1 shrink-0" />
-                      <span className="hidden xl:inline truncate">{activePricingProfile.profileName} ({activePricingProfile.versionLabel})</span>
-                      <span className="hidden sm:inline xl:hidden">Pricing model</span>
+                      <span className="hidden sm:inline">Pricing model</span>
                       <span className="inline sm:hidden">Pricing</span>
-                      <Info className="h-3 w-3 ml-1 shrink-0 xl:hidden" />
+                      <Info className="h-3 w-3 ml-1 shrink-0" />
                     </Badge>
                   </span>
                 </TooltipTrigger>
@@ -2285,10 +2284,9 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
                       data-testid="badge-source-costs-active"
                       title={`${activeGasInputs.length} gas sources, ${activeConsumableInputs.length} consumable sources active`}
                     >
-                      <span className="hidden xl:inline truncate">Source Costs: {activeGasInputs.length} gas, {activeConsumableInputs.length} consumable</span>
-                      <span className="hidden sm:inline xl:hidden">Source costs</span>
+                      <span className="hidden sm:inline">Source costs</span>
                       <span className="inline sm:hidden">Costs</span>
-                      <Info className="h-3 w-3 ml-1 shrink-0 xl:hidden" />
+                      <Info className="h-3 w-3 ml-1 shrink-0" />
                     </Badge>
                   </span>
                 </TooltipTrigger>
