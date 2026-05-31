@@ -2597,12 +2597,12 @@ function InvoiceSection({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Total invoiced (all types)</span>
-                      <span className="font-medium">{fmt(allocation.standardInvoicedExcl)} excl.</span>
+                      <span className="font-medium">{fmt(allocation.standardInvoicedExcl ?? allocation.totalInvoicedExcl)} excl.</span>
                     </div>
                     <div className="flex justify-between border-t pt-0.5 mt-0.5">
                       <span className="text-muted-foreground">Remaining invoiceable</span>
                       <span className="font-semibold text-green-600 dark:text-green-400">
-                        {fmt(allocation.standardRemainingExcl)} excl.
+                        {fmt(allocation.standardRemainingExcl ?? allocation.remainingExcl)} excl.
                       </span>
                     </div>
                     <p className="text-muted-foreground pt-1">Fixed amount mode — enter the actual deposit received. Capped at remaining contract value, not the {allocation.depositAllowancePct}% default.</p>

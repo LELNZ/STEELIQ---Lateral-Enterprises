@@ -117,6 +117,7 @@ export function snapshotItemToDrawingConfig(
     glassIguType: String(sv.iguType || ""),
     glassType: String(sv.glassType || ""),
     glassThickness: String(sv.glassThickness || ""),
+    paneGlassSpecs: [],
     wanzBar: Boolean(sv.wanzBarEnabled),
     wanzBarSource: (sv.wanzBarSource || "") as any,
     wanzBarSize: String(sv.wanzBarSize || ""),

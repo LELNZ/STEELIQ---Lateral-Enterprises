@@ -692,7 +692,7 @@ function renderCommercialRemarks(pdf: Pdf, y: number, model: QuoteRenderModel): 
   // Heading: "DETAILS"
   y += PAD_V;
   pdf.setFont(FONT_NORMAL, "bold");
-  pdf.setFontSize(mmSize(6.5));
+  pdf.setFontSize(mmSize("6.5"));
   pdf.setTextColor(COLOR_MUTED);
   pdf.text("DETAILS", innerLeft, y + 2);
   y += 6;

@@ -62,6 +62,7 @@ interface OrgSettings {
   quoteNumberUseDivisionSuffix: boolean | null;
   jobNumberPrefix: string | null;
   jobNumberUseDivisionSuffix: boolean | null;
+  invoiceNumberPrefix: string | null;
 }
 
 interface DivisionSettings {
@@ -1891,7 +1892,10 @@ type GovernanceSummary = {
   opJobs: Array<{ id: string; jobNumber: string; title: string; isDemoRecord: boolean; archivedAt: string | null; _chain: { sourceQuote: { id: string; number: string; isDemoRecord: boolean } | null } }>;
   projects: Array<{ id: string; name: string; isDemoRecord: boolean; archivedAt: string | null; createdAt: string }>;
   invoices: Array<{ id: string; number: string; type: string; status: string; amountInclGst: number | null; isDemoRecord: boolean; _xeroLinked: boolean; _xeroNumber: string | null }>;
-  counts: { estimates: number; quotes: number; opJobs: number; projects: number; invoices: number };
+  customers?: any[];
+  contacts?: any[];
+  laserEstimates?: any[];
+  counts: { estimates: number; quotes: number; opJobs: number; projects: number; invoices: number; customers?: number; contacts?: number; laserEstimates?: number };
 };
 
 type EnvInfo = {

@@ -739,7 +739,7 @@ export async function registerRoutes(
             contactId = existingContact.id;
           } else {
             const nameParts = clientName.trim().split(" ");
-            const newContact = await storage.createCustomerContact(customerId, {
+            const newContact = await storage.createCustomerContact({
               customerId,
               firstName: nameParts[0] || clientName.trim(),
               lastName: nameParts.slice(1).join(" ") || undefined,
@@ -3348,7 +3348,7 @@ export async function registerRoutes(
     if (req.user?.role !== "admin" && req.user?.role !== "owner") {
       return res.status(403).json({ error: "Admin or owner role required" });
     }
-    const key = req.params.key;
+    const key = req.params.key as string;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
       return res.status(400).json({ error: "Invalid key" });
     }
@@ -6747,7 +6747,7 @@ export async function registerRoutes(
   // Body: { stageKey: string; taskKey: string; completed: boolean; note?: string }
   app.patch("/api/lifecycle-instances/:instanceId/tasks", requireAuth, async (req, res) => {
     try {
-      const { instanceId } = req.params;
+      const instanceId = req.params.instanceId as string;
       const { stageKey, taskKey, completed, note } = req.body;
       if (!stageKey || !taskKey || typeof completed !== "boolean") {
         return res.status(400).json({ error: "stageKey, taskKey, and completed are required" });
