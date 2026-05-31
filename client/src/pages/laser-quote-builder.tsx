@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Plus, Pencil, Trash2, Save, Eye, ArrowLeft, ArrowRightCircle, Loader2, ChevronDown, ChevronRight, Calculator, ShieldCheck, AlertTriangle, FlaskConical, Info, DollarSign, Wrench } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import type { LaserQuoteItem, LLPricingSettings, DivisionSettings, LLPricingProfile, LLPricingOverrideMode, LLManualProcedureType, AttachedManualProcedure } from "@shared/schema";
 import { LL_MANUAL_PROCEDURE_TYPES } from "@shared/schema";
 import type { LaserSnapshotItem } from "@shared/estimate-snapshot";
@@ -2224,42 +2225,87 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between border-b px-4 py-3 bg-background" data-testid="laser-builder-header">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-4 py-3 bg-background" data-testid="laser-builder-header">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate(backPath)}
             data-testid="button-back"
+            className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <h1 className="text-lg font-semibold" data-testid="text-page-title">{pageTitle}</h1>
-            <p className="text-xs text-muted-foreground">{pageSubtitle}</p>
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold truncate" data-testid="text-page-title">{pageTitle}</h1>
+            <p className="text-xs text-muted-foreground truncate">{pageSubtitle}</p>
           </div>
-          {activePricingProfile ? (
-            <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700 border-green-300" data-testid="badge-pricing-profile">
-              <ShieldCheck className="h-3 w-3 mr-1" />
-              {activePricingProfile.profileName} ({activePricingProfile.versionLabel})
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300" data-testid="badge-pricing-fallback">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              Fallback Pricing
-            </Badge>
-          )}
-          {activeGasInputs.length > 0 || activeConsumableInputs.length > 0 ? (
-            <Badge variant="outline" className="ml-1 text-xs bg-blue-50 text-blue-700 border-blue-300" data-testid="badge-source-costs-active">
-              Source Costs: {activeGasInputs.length} gas, {activeConsumableInputs.length} consumable
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="ml-1 text-xs bg-gray-50 text-gray-500 border-gray-300" data-testid="badge-source-costs-none">
-              Source Costs: fallback
-            </Badge>
-          )}
+          <TooltipProvider delayDuration={150}>
+            {/* Phase 5J — responsive header badges. The label text collapses at
+                narrower widths (full → "Pricing model"/"Source costs" →
+                "Pricing"/"Costs") so the header never forces page-level
+                horizontal scroll. The full text stays available via tooltip and
+                the native title attribute. Pricing math/data unchanged. */}
+            {activePricingProfile ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex max-w-full" tabIndex={0}>
+                    <Badge
+                      variant="outline"
+                      className="text-xs bg-green-50 text-green-700 border-green-300 cursor-default max-w-full"
+                      data-testid="badge-pricing-profile"
+                      title={`${activePricingProfile.profileName} (${activePricingProfile.versionLabel})`}
+                    >
+                      <ShieldCheck className="h-3 w-3 mr-1 shrink-0" />
+                      <span className="hidden xl:inline truncate">{activePricingProfile.profileName} ({activePricingProfile.versionLabel})</span>
+                      <span className="hidden sm:inline xl:hidden">Pricing model</span>
+                      <span className="inline sm:hidden">Pricing</span>
+                      <Info className="h-3 w-3 ml-1 shrink-0 xl:hidden" />
+                    </Badge>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs font-medium">{activePricingProfile.profileName} ({activePricingProfile.versionLabel})</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-300" data-testid="badge-pricing-fallback" title="Fallback Pricing">
+                <AlertTriangle className="h-3 w-3 mr-1 shrink-0" />
+                <span className="hidden sm:inline">Fallback Pricing</span>
+                <span className="inline sm:hidden">Fallback</span>
+              </Badge>
+            )}
+            {activeGasInputs.length > 0 || activeConsumableInputs.length > 0 ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex max-w-full" tabIndex={0}>
+                    <Badge
+                      variant="outline"
+                      className="text-xs bg-blue-50 text-blue-700 border-blue-300 cursor-default max-w-full"
+                      data-testid="badge-source-costs-active"
+                      title={`${activeGasInputs.length} gas sources, ${activeConsumableInputs.length} consumable sources active`}
+                    >
+                      <span className="hidden xl:inline truncate">Source Costs: {activeGasInputs.length} gas, {activeConsumableInputs.length} consumable</span>
+                      <span className="hidden sm:inline xl:hidden">Source costs</span>
+                      <span className="inline sm:hidden">Costs</span>
+                      <Info className="h-3 w-3 ml-1 shrink-0 xl:hidden" />
+                    </Badge>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs font-medium">{activeGasInputs.length} gas sources, {activeConsumableInputs.length} consumable sources active</p>
+                  <p className="text-[11px] text-muted-foreground">Active source costs are used by the LL pricing engine where applicable.</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Badge variant="outline" className="text-xs bg-gray-50 text-gray-500 border-gray-300" data-testid="badge-source-costs-none" title="Source Costs: fallback">
+                <span className="hidden sm:inline">Source Costs: fallback</span>
+                <span className="inline sm:hidden">Costs: fallback</span>
+              </Badge>
+            )}
+          </TooltipProvider>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
           {isEditMode && !estimateMode && (
             <Button
               variant="outline"
@@ -3039,7 +3085,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               <CollapsibleContent>
                 <div className="border rounded-md p-3 space-y-3 bg-muted/20 mt-1">
                   <div className="rounded-sm border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 text-[11px] text-muted-foreground leading-snug" data-testid="setup-handling-policy-note">
-                    Setup, handling, picking, sorting, QA, packing and production recovery are governed by the active Production Allowance Tier — they are not entered per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
+                    Setup, handling, picking, sorting, QA, packing and production recovery are governed by the active Production Allowance Tier — they are not entered separately per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
