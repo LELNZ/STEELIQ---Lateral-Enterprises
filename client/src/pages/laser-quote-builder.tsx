@@ -3083,7 +3083,7 @@ export default function LaserQuoteBuilder({ estimateMode }: { estimateMode?: boo
               <CollapsibleContent>
                 <div className="border rounded-md p-3 space-y-3 bg-muted/20 mt-1">
                   <div className="rounded-sm border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/40 dark:bg-purple-950/20 px-2 py-1.5 text-[11px] text-muted-foreground leading-snug" data-testid="setup-handling-policy-note">
-                    Setup, handling, picking, sorting, QA, packing and production recovery are governed by the active Production Allowance Tier — they are not entered separately per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
+                    Production Allowance covers setup, handling, picking, sorting, QA, packing, and production recovery. These are not entered separately per line item. Manual procedures (folding, deburring, finishing, etc.) remain separate child items beneath the parent.
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
