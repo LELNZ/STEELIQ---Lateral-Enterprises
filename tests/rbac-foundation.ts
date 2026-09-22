@@ -84,7 +84,7 @@ const grants: Record<string, Partial<Record<Resource, Action>>> = {
 const rank: Record<Action, number> = { view: 1, edit: 2, full: 3 };
 
 function expectedCan(role: string | null | undefined, resource: Resource, action: Action) {
-  const normalized = role === "estimator"
+  const normalized = role === "estimator" || role === "finance" || role === "production" || role === "viewer"
     ? "qs"
     : ROLES.includes(role as (typeof ROLES)[number])
       ? role!
