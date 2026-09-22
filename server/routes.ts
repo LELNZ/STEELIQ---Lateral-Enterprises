@@ -10,6 +10,7 @@ import {
   VALID_STATUS_TRANSITIONS, QUOTE_STATUSES, type QuoteStatus,
   VALID_INVOICE_TRANSITIONS, type InvoiceStatus,
   VARIATION_STATUSES,
+  USER_ROLES,
 } from "@shared/schema";
 import { z } from "zod";
 import { estimateSnapshotSchema } from "@shared/estimate-snapshot";
@@ -34,6 +35,7 @@ import {
   type QuoteCascadeAction,
 } from "./quote-lifecycle";
 import { requireAuth } from "./auth";
+import { requirePermission } from "./authorize";
 
 async function seedLibraryDefaults() {
   const existing = await storage.getLibraryEntries();
@@ -2884,12 +2886,9 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/settings/system-mode", async (req, res) => {
+  app.patch("/api/settings/system-mode", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const reqUser = (req as any).user;
-      if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
       const { systemMode } = z.object({
         systemMode: z.enum(VALID_SYSTEM_MODES),
       }).parse(req.body);
@@ -2938,12 +2937,7 @@ export async function registerRoutes(
   // Initiates the Authorization Code flow. Redirects the browser to Xero's
   // authorization endpoint. A random state parameter is stored server-side for
   // CSRF validation when the callback arrives.
-  app.get("/api/xero/connect", (req, res) => {
-    const reqUser = (req as any).user;
-    if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
-      return res.status(403).json({ error: "Admin access required" });
-    }
-
+  app.get("/api/xero/connect", requirePermission("settings_users", "full"), (req, res) => {
     const clientId = process.env.XERO_CLIENT_ID;
 
     if (!clientId) {
@@ -3077,11 +3071,7 @@ export async function registerRoutes(
   });
 
   // ─── Xero Configuration Status ───────────────────────────────────────────
-  app.get("/api/settings/xero-status", async (req, res) => {
-    const reqUser = (req as any).user;
-    if (!reqUser || (reqUser.role !== "admin" && reqUser.role !== "owner")) {
-      return res.status(403).json({ error: "Admin access required" });
-    }
+  app.get("/api/settings/xero-status", requirePermission("settings_users", "full"), async (req, res) => {
     const REQUIRED_FIELDS = ["XERO_CLIENT_ID", "XERO_CLIENT_SECRET", "XERO_ACCESS_TOKEN", "XERO_TENANT_ID"];
     const OPTIONAL_FIELDS = ["XERO_REFRESH_TOKEN"];
     const allEnvFields = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
@@ -3344,10 +3334,7 @@ export async function registerRoutes(
   const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   // ─── Drawing Recovery: Admin-only, restores missing canonical asset to DB — skips if already canonical ───
-  app.put("/api/drawing-images/:key", requireAuth, drawingUpload.single("file"), async (req, res) => {
-    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
-      return res.status(403).json({ error: "Admin or owner role required" });
-    }
+  app.put("/api/drawing-images/:key", requireAuth, requirePermission("settings_users", "full"), drawingUpload.single("file"), async (req, res) => {
     const key = req.params.key as string;
     if (!/^[a-f0-9-]+\.png$/.test(key)) {
       return res.status(400).json({ error: "Invalid key" });
@@ -3384,10 +3371,7 @@ export async function registerRoutes(
   });
 
   // ─── Drawing Integrity Check: Admin-only, identifies keys missing from canonical DB store ───
-  app.post("/api/drawing-images/check-missing", requireAuth, async (req, res) => {
-    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
-      return res.status(403).json({ error: "Admin or owner role required" });
-    }
+  app.post("/api/drawing-images/check-missing", requireAuth, requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const { keys } = req.body;
       if (!Array.isArray(keys)) return res.status(400).json({ error: "keys must be an array" });
@@ -3412,10 +3396,7 @@ export async function registerRoutes(
   });
 
   // ─── Drawing Regeneration: Admin-only, explicit headless re-render for missing canonical assets ───
-  app.post("/api/drawing-images/regenerate", requireAuth, async (req, res) => {
-    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
-      return res.status(403).json({ error: "Admin or owner role required" });
-    }
+  app.post("/api/drawing-images/regenerate", requireAuth, requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const { quoteId } = req.body;
       if (!quoteId || typeof quoteId !== "string") {
@@ -3764,16 +3745,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/users", requireAuth, async (req, res) => {
-    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
-      return res.status(403).json({ error: "Forbidden" });
-    }
+  app.post("/api/auth/users", requireAuth, requirePermission("settings_users", "full"), async (req, res) => {
     const schema = z.object({
       username: z.string().min(2),
       password: z.string().min(6),
       email: z.string().email().optional(),
       displayName: z.string().optional(),
-      role: z.enum(["owner", "admin", "estimator", "finance", "production", "viewer"]).default("estimator"),
+      role: z.enum(USER_ROLES).default("estimator"),
       divisionCode: z.string().optional(),
       divisionCodes: z.array(z.string()).optional(),
     });
@@ -3810,14 +3788,11 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/auth/users/:id", requireAuth, async (req, res) => {
-    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
-      return res.status(403).json({ error: "Forbidden" });
-    }
+  app.patch("/api/auth/users/:id", requireAuth, requirePermission("settings_users", "full"), async (req, res) => {
     const schema = z.object({
       displayName: z.string().optional(),
       email: z.string().email().optional().nullable(),
-      role: z.enum(["owner", "admin", "estimator", "finance", "production", "viewer"]).optional(),
+      role: z.enum(USER_ROLES).optional(),
       divisionCode: z.string().optional().nullable(),
       divisionCodes: z.array(z.string()).optional().nullable(),
       isActive: z.boolean().optional(),
@@ -3844,10 +3819,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/users/:id/reset-password", requireAuth, async (req, res) => {
-    if (req.user?.role !== "admin" && req.user?.role !== "owner") {
-      return res.status(403).json({ error: "Forbidden" });
-    }
+  app.post("/api/auth/users/:id/reset-password", requireAuth, requirePermission("settings_users", "full"), async (req, res) => {
     const schema = z.object({ password: z.string().min(6) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -4820,7 +4792,7 @@ export async function registerRoutes(
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const invoice = await storage.getInvoice(req.params.id);
+      const invoice = await storage.getInvoice(req.params.id as string);
       if (!invoice) return res.status(404).json({ error: "Not found" });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
       if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
@@ -4957,7 +4929,7 @@ export async function registerRoutes(
   // On live failure: invoice is NOT updated — left in ready_for_xero for retry.
   app.post("/api/invoices/:id/push-to-xero", async (req, res) => {
     try {
-      const invoice = await storage.getInvoice(req.params.id);
+      const invoice = await storage.getInvoice(req.params.id as string);
       if (!invoice) return res.status(404).json({ error: "Invoice not found." });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
       if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
@@ -5118,13 +5090,10 @@ export async function registerRoutes(
 
   const XERO_RESET_SAFE_STATUSES = new Set(["DELETED", "VOIDED"]);
 
-  app.post("/api/invoices/:id/reset-xero-link", async (req, res) => {
+  app.post("/api/invoices/:id/reset-xero-link", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Only admin or owner users can reset Xero linkage." });
-      }
-      const invoice = await storage.getInvoice(req.params.id);
+      const invoice = await storage.getInvoice(req.params.id as string);
       if (!invoice) return res.status(404).json({ error: "Invoice not found." });
       if (invoice.isDemoRecord && !isPrivilegedUser(req)) return res.status(404).json({ error: "Not found" });
       if (!userCanAccessDivision(req, invoice.divisionCode || null)) return res.status(403).json({ error: "Access denied: different division" });
@@ -5162,7 +5131,7 @@ export async function registerRoutes(
 
       await storage.createAuditLog({
         entityType: "invoice",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: "xero_link_reset_for_reissue",
         performedByUserId: user.id,
         metadataJson: {
@@ -5171,10 +5140,10 @@ export async function registerRoutes(
         },
       });
 
-      await storage.clearInvoiceXeroLink(req.params.id);
+      await storage.clearInvoiceXeroLink(req.params.id as string);
 
       if (!EDITABLE_INVOICE_STATUSES.has(invoice.status)) {
-        await storage.updateInvoice(req.params.id, { status: "draft" } as any);
+        await storage.updateInvoice(req.params.id as string, { status: "draft" } as any);
       }
 
       logActivity("xero_link_reset", "invoice", invoice.id, user.id, {
@@ -5183,7 +5152,7 @@ export async function registerRoutes(
         priorXeroStatus: priorLinkage.xeroStatus,
       });
 
-      const finalInvoice = await storage.getInvoice(req.params.id);
+      const finalInvoice = await storage.getInvoice(req.params.id as string);
       return res.json({
         success: true,
         message: `Xero link reset for ${invoice.number}. Previous Xero reference: ${priorLinkage.xeroInvoiceNumber || priorLinkage.xeroInvoiceId}. This invoice can now be marked ready and pushed to Xero again.`,
@@ -5494,12 +5463,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/number-sequences", async (req, res) => {
+  app.get("/api/admin/number-sequences", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin only" });
-      }
       const sequences = await storage.getNumberSequences();
       res.json(sequences);
     } catch (e: any) {
@@ -5507,13 +5473,10 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/admin/number-sequences/:id", async (req, res) => {
+  app.patch("/api/admin/number-sequences/:id", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin only" });
-      }
-      const { id } = req.params;
+      const { id } = req.params as { id: string };
       if (!["quote", "op_job"].includes(id)) {
         return res.status(400).json({ error: "Invalid sequence id. Must be 'quote' or 'op_job'." });
       }
@@ -5533,12 +5496,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/cleanup-demo", async (req, res) => {
+  app.post("/api/admin/cleanup-demo", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
 
       const results = {
         estimates: { archived: 0, skipped: 0, skipReasons: [] as string[] },
@@ -5693,19 +5653,16 @@ export async function registerRoutes(
   });
 
 
-  app.patch("/api/quotes/:id/demo-flag", async (req, res) => {
+  app.patch("/api/quotes/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const quote = await storage.getQuote(req.params.id);
+      const quote = await storage.getQuote(req.params.id as string);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateQuote(req.params.id, { isDemoRecord } as any);
+      const updated = await storage.updateQuote(req.params.id as string, { isDemoRecord } as any);
       await storage.createAuditLog({
         entityType: "quote",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, number: quote.number },
@@ -5716,19 +5673,16 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/op-jobs/:id/demo-flag", async (req, res) => {
+  app.patch("/api/op-jobs/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const job = await storage.getOpJob(req.params.id);
+      const job = await storage.getOpJob(req.params.id as string);
       if (!job) return res.status(404).json({ error: "Job not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateOpJob(req.params.id, { isDemoRecord } as any);
+      const updated = await storage.updateOpJob(req.params.id as string, { isDemoRecord } as any);
       await storage.createAuditLog({
         entityType: "op_job",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, jobNumber: job.jobNumber },
@@ -5740,18 +5694,15 @@ export async function registerRoutes(
   });
 
   // ─── Governance: Demo-flag estimates (jobs) ────────────────────────────────
-  app.patch("/api/jobs/:id/demo-flag", async (req, res) => {
+  app.patch("/api/jobs/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateJobDemoFlag(req.params.id, isDemoRecord);
+      const updated = await storage.updateJobDemoFlag(req.params.id as string, isDemoRecord);
       if (!updated) return res.status(404).json({ error: "Estimate not found" });
       await storage.createAuditLog({
         entityType: "job",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, name: updated.name },
@@ -5763,18 +5714,15 @@ export async function registerRoutes(
   });
 
   // ─── Governance: Demo-flag projects ───────────────────────────────────────
-  app.patch("/api/projects/:id/demo-flag", async (req, res) => {
+  app.patch("/api/projects/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateProjectDemoFlag(req.params.id, isDemoRecord);
+      const updated = await storage.updateProjectDemoFlag(req.params.id as string, isDemoRecord);
       if (!updated) return res.status(404).json({ error: "Project not found" });
       await storage.createAuditLog({
         entityType: "project",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, name: updated.name },
@@ -5786,19 +5734,16 @@ export async function registerRoutes(
   });
 
   // ─── Governance: Demo-flag invoices ───────────────────────────────────────
-  app.patch("/api/invoices/:id/demo-flag", async (req, res) => {
+  app.patch("/api/invoices/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const invoice = await storage.getInvoice(req.params.id);
+      const invoice = await storage.getInvoice(req.params.id as string);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateInvoiceDemoFlag(req.params.id, isDemoRecord);
+      const updated = await storage.updateInvoiceDemoFlag(req.params.id as string, isDemoRecord);
       await storage.createAuditLog({
         entityType: "invoice",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, number: invoice.number, xeroInvoiceId: invoice.xeroInvoiceId },
@@ -5809,19 +5754,16 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/customers/:id/demo-flag", async (req, res) => {
+  app.patch("/api/customers/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const cust = await storage.getCustomer(req.params.id);
+      const cust = await storage.getCustomer(req.params.id as string);
       if (!cust) return res.status(404).json({ error: "Customer not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateCustomerDemoFlag(req.params.id, isDemoRecord);
+      const updated = await storage.updateCustomerDemoFlag(req.params.id as string, isDemoRecord);
       await storage.createAuditLog({
         entityType: "customer",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, name: cust.name, xeroContactId: cust.xeroContactId },
@@ -5832,19 +5774,16 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/customer-contacts/:id/demo-flag", async (req, res) => {
+  app.patch("/api/customer-contacts/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const contact = await storage.getContact(req.params.id);
+      const contact = await storage.getContact(req.params.id as string);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateContactDemoFlag(req.params.id, isDemoRecord);
+      const updated = await storage.updateContactDemoFlag(req.params.id as string, isDemoRecord);
       await storage.createAuditLog({
         entityType: "customerContact",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, name: `${contact.firstName ?? ""} ${contact.lastName ?? ""}`.trim(), customerId: contact.customerId },
@@ -5855,19 +5794,16 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/laser-estimates/:id/demo-flag", async (req, res) => {
+  app.patch("/api/laser-estimates/:id/demo-flag", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const estimate = await storage.getLaserEstimate(req.params.id);
+      const estimate = await storage.getLaserEstimate(req.params.id as string);
       if (!estimate) return res.status(404).json({ error: "Laser estimate not found" });
       const { isDemoRecord } = z.object({ isDemoRecord: z.boolean() }).parse(req.body);
-      const updated = await storage.updateLaserEstimateDemoFlag(req.params.id, isDemoRecord);
+      const updated = await storage.updateLaserEstimateDemoFlag(req.params.id as string, isDemoRecord);
       await storage.createAuditLog({
         entityType: "laserEstimate",
-        entityId: req.params.id,
+        entityId: req.params.id as string,
         action: isDemoRecord ? "demo_flagged" : "demo_unflagged",
         performedByUserId: user.id,
         metadataJson: { isDemoRecord, estimateNumber: estimate.estimateNumber },
@@ -5879,12 +5815,9 @@ export async function registerRoutes(
   });
 
   // ─── Governance: Summary of all flagged records ────────────────────────────
-  app.get("/api/admin/governance/summary", async (req, res) => {
+  app.get("/api/admin/governance/summary", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
       const [demoQuotes, demoOpJobs, demoJobs, demoProjects, demoInvoices, demoCustomers, demoContacts, demoLaserEstimates] = await Promise.all([
         storage.getDemoQuotes(),
         storage.getDemoOpJobs(),
@@ -6152,12 +6085,9 @@ export async function registerRoutes(
   });
 
   // ─── Governance: Recent governance audit history (Owner/Admin only) ──────────
-  app.get("/api/settings/governance/audit-history", async (req, res) => {
+  app.get("/api/settings/governance/audit-history", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
       const limitParam = parseInt(String(req.query.limit ?? "50"), 10);
       const limit = Math.min(Math.max(limitParam, 1), 200);
 
@@ -6234,12 +6164,9 @@ export async function registerRoutes(
   });
 
   // ─── Governance: Archive a single flagged record ──────────────────────────
-  app.post("/api/admin/governance/archive", async (req, res) => {
+  app.post("/api/admin/governance/archive", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
       const { entityType, entityId } = z.object({
         entityType: z.enum(["estimate", "quote", "opJob", "project", "invoice", "customer", "contact", "laserEstimate"]),
         entityId: z.string(),
@@ -6370,13 +6297,10 @@ export async function registerRoutes(
   // Allows admin/owner to clear xeroInvoiceId/xeroInvoiceNumber/xeroStatus
   // on a demo/test invoice after the corresponding Xero invoice has been
   // voided or deleted on the Xero side. This unblocks archive/delete.
-  app.post("/api/admin/governance/clear-xero-link/:invoiceId", async (req, res) => {
+  app.post("/api/admin/governance/clear-xero-link/:invoiceId", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const { invoiceId } = req.params;
+      const { invoiceId } = req.params as { invoiceId: string };
       const inv = await storage.getInvoice(invoiceId);
       if (!inv) return res.status(404).json({ error: "Invoice not found" });
       if (!inv.isDemoRecord) {
@@ -6427,13 +6351,10 @@ export async function registerRoutes(
   //   1. The record is explicitly flagged as isDemoRecord=true
   //   2. No Xero-linked invoices are downstream (or it IS the invoice and has no xeroInvoiceId)
   //   3. User is Owner/Admin
-  app.delete("/api/admin/governance/record/:entityType/:entityId", async (req, res) => {
+  app.delete("/api/admin/governance/record/:entityType/:entityId", requirePermission("settings_users", "full"), async (req, res) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== "admin" && user.role !== "owner")) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      const { entityType, entityId } = req.params;
+      const { entityType, entityId } = req.params as { entityType: string; entityId: string };
 
       if (entityType === "invoice") {
         const inv = await storage.getInvoice(entityId);

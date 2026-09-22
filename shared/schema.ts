@@ -9,7 +9,7 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   fromDriver(value: Buffer): Buffer { return Buffer.from(value); },
 });
 
-export const USER_ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer"] as const;
+export const USER_ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer", "qs", "project_manager", "workshop_manager", "site_supervisor", "client"] as const;
 export type UserRole = typeof USER_ROLES[number];
 
 export const DOMAIN_TYPES = ["joinery", "engineering", "laser", "general"] as const;
@@ -27,7 +27,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   email: text("email"),
   displayName: text("display_name"),
-  role: text("role").notNull().default("estimator"),
+  role: text("role", { enum: USER_ROLES }).notNull().default("estimator"),
   divisionCode: text("division_code"),
   divisionCodes: text("division_codes").array(),
   isActive: boolean("is_active").notNull().default(true),

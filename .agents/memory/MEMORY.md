@@ -4,3 +4,4 @@
 - [LL markup field disambiguation](ll-markup-fields.md) — commercialPolicy.defaultMarkupPercent (35) is general markup; material markup is defaultMaterialMarkupPercent (often null → 20 fallback). Don't conflate.
 - [TS release-gate](ts-release-gate.md) — `npm run check` = bare tsc; tsconfig needed `target: ES2020` (Map/Set iter), drizzle-zod widens jsonb `.$type` so storage inserts need `as $inferInsert`, Express5 params need `as string`.
 - [Badge in Radix asChild triggers](badge-radix-trigger.md) — shadcn Badge has no forwardRef; wrap it in a span before TooltipTrigger/PopoverTrigger asChild or you get a runtime ref warning (build still passes).
+- [RBAC foundation scope](rbac-foundation-scope.md) — user approved settings_users for legacy admin/owner-only operations; the supplied matrix must not broaden those gates.
