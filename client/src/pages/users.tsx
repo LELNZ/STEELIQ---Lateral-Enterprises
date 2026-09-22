@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 type SafeUser = Omit<User, "password">;
 
-const ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer"] as const;
+const ROLES = ["owner", "admin", "estimator", "finance", "production", "viewer", "qs", "project_manager", "workshop_manager", "site_supervisor", "client"] as const;
 type Role = typeof ROLES[number];
 
 const DIVISIONS = [
@@ -44,6 +44,11 @@ const ROLE_LABELS: Record<string, string> = {
   finance: "Finance",
   production: "Production",
   viewer: "Viewer",
+  qs: "Quantity Surveyor",
+  project_manager: "Project Manager",
+  workshop_manager: "Workshop Manager",
+  site_supervisor: "Site Supervisor",
+  client: "Client (future use)",
 };
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -53,6 +58,11 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   finance: "Access to invoice and commercial finance data. Does not manage users or settings.",
   production: "Operational access for jobs and production modules (current and future).",
   viewer: "Read-only access to relevant data. Cannot create or edit records.",
+  qs: "Quantity Surveyor. Equivalent to the existing Estimator role in the permission matrix.",
+  project_manager: "Project coordination role. Detailed access enforcement is future scope.",
+  workshop_manager: "Workshop coordination role. Detailed access enforcement is future scope.",
+  site_supervisor: "Site coordination role. Detailed access enforcement is future scope.",
+  client: "Reserved for future client portal use. Customer-specific access is not implemented.",
 };
 
 const ROLE_COLORS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
